@@ -40,6 +40,7 @@
   "dependencies": {
     "@hhh/domain": "0.1.0",
     "@hhh/ui": "0.1.0",
+    "@vercel/analytics": "^2.0.1",
     "firebase": "^12.16.0",
     "firebase-admin": "^14.2.0",
     "google-auth-library": "^10.9.1",

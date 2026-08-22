@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Analytics, type BeforeSendEvent } from '@vercel/analytics/react';
 import '../../../src/index.css';
 import EligibilityApp from '../../eligibility/src/EligibilityApp';
 import PaymentReturn from '../../../src/pages/PaymentReturn';
@@ -13,6 +14,18 @@ setApiSecurityTokenProvider(async () => {
   return token ? { 'X-Firebase-AppCheck': token } : {};
 });
 
+/** Drop query/hash so eligibility tokens and payment params never reach analytics. */
+function sanitisePublicAnalyticsEvent(event: BeforeSendEvent): BeforeSendEvent | null {
+  try {
+    const url = new URL(event.url);
+    url.search = '';
+    url.hash = '';
+    return { ...event, url: url.toString() };
+  } catch {
+    return null;
+  }
+}
+
 export function PublicApp() {
   const view = resolvePublicView(window.location.pathname, window.location.search);
   if (view === 'eligibility') return <EligibilityApp />;
@@ -25,5 +38,10 @@ const canonicalRedirect = canonicalEligibilityRedirect(window.location.hostname,
 if (canonicalRedirect) {
   window.location.replace(canonicalRedirect);
 } else {
-  createRoot(document.getElementById('root')!).render(<StrictMode><PublicApp /></StrictMode>);
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <PublicApp />
+      <Analytics beforeSend={sanitisePublicAnalyticsEvent} />
+    </StrictMode>,
+  );
 }
