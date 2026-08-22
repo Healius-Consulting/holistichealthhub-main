@@ -79,7 +79,9 @@ export const DEFAULT_ALLOWED_HOSTS = [
   'portal.holistichealthhub.cc',
   'portal.holistichealthhub.live',
   'holistichealthhub.cc',
+  'www.holistichealthhub.cc',
   'holistichealthhub.live',
+  'www.holistichealthhub.live',
   'localhost',
   '127.0.0.1',
 ];

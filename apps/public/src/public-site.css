@@ -3,6 +3,22 @@
    Editorial Motion, Fraunces + Outfit Typography, Quiet Luxury Aesthetic
    ========================================================================== */
 
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/fraunces-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/outfit-latin-wght-normal.woff2") format("woff2");
+}
+
 body.hhh-public-active {
   height: auto;
   min-height: 100%;

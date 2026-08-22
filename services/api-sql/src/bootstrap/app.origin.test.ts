@@ -15,14 +15,21 @@ function requestWith(headers: Record<string, string | undefined>): Request {
 describe('isOriginPermitted', () => {
   it('allows the live public and portal origins', () => {
     assert.equal(isOriginPermitted('https://holistichealthhub.cc'), true);
+    assert.equal(isOriginPermitted('https://www.holistichealthhub.cc'), true);
     assert.equal(isOriginPermitted('https://portal.holistichealthhub.cc'), true);
     assert.equal(isOriginPermitted('https://holistichealthhub.live'), true);
+    assert.equal(isOriginPermitted('https://www.holistichealthhub.live'), true);
     assert.equal(isOriginPermitted('https://portal.holistichealthhub.live'), true);
   });
 
   it('allows the printed pharmacy QR host', () => {
     assert.equal(isOriginPermitted('https://hhh.thinktimeless.co.uk'), true);
     assert.equal(isOriginPermitted('https://www.hhh.thinktimeless.co.uk'), true);
+  });
+
+  it('rejects a www sibling that is not the twin of an allowlisted host', () => {
+    assert.equal(isOriginPermitted('https://www.evil.holistichealthhub.cc'), false);
+    assert.equal(isOriginPermitted('https://www.portal.hhh.thinktimeless.co.uk'), false);
   });
 
   it('rejects sibling subdomains, retired staging, and preview hosts', () => {

@@ -37,12 +37,7 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
   // Polling function
   const checkStatus = async () => {
     if (!reference) {
-      // If no reference passed, but user arrived via payment success return URL, treat as cleared
-      if (status === 'complete') {
-        setTimeout(() => setClearanceState('cleared'), 1200);
-      } else {
-        setClearanceState('declined');
-      }
+      setClearanceState(status === 'complete' ? 'timeout' : 'declined');
       return;
     }
 
@@ -67,24 +62,14 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
       // If still pending, poll a couple times
       setPollCount(count => {
         if (count >= 3) {
-          if (status === 'complete') {
-            setClearanceState('cleared');
-          } else {
-            setClearanceState('timeout');
-          }
+          setClearanceState('timeout');
           return count;
         }
         return count + 1;
       });
     } catch {
       setPollCount(count => {
-        if (count >= 2) {
-          if (status === 'complete') {
-            setClearanceState('cleared');
-          } else {
-            setClearanceState('timeout');
-          }
-        }
+        if (count >= 2) setClearanceState('timeout');
         return count + 1;
       });
     }

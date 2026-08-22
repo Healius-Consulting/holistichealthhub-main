@@ -102,6 +102,17 @@ export function createApp(): Express {
     res.status(200).json({ status: 'ok', runtime: 'sql-connect', timestamp: new Date().toISOString() });
   });
 
+  function jsonNotFound(req: Request, res: Response) {
+    res.status(404).json({
+      code: 'NOT_FOUND',
+      message: 'Not found.',
+      requestId: req.requestId || 'unknown',
+    });
+  }
+
+  app.use('/v1', jsonNotFound);
+  app.use('/v2', jsonNotFound);
+
   // Global error handler (prevents information leakage)
   app.use((error: unknown, req: Request, res: Response, _next: NextFunction) => {
     const requestId = req.requestId || (req.headers['x-request-id'] as string) || 'unknown';

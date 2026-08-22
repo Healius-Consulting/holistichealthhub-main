@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 const schema = z.object({
   PORT: z.coerce.number().int().positive().default(8080),
-  ALLOWED_ORIGINS: z.string().default('https://holistichealthhub.cc,https://holistichealthhub.live,https://portal.holistichealthhub.cc,https://portal.holistichealthhub.live,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174'),
+  ALLOWED_ORIGINS: z.string().default('https://holistichealthhub.cc,https://www.holistichealthhub.cc,https://holistichealthhub.live,https://www.holistichealthhub.live,https://portal.holistichealthhub.cc,https://portal.holistichealthhub.live,http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174'),
   APP_BASE_URL: z.url().default('https://holistichealthhub.cc'),
   FIREBASE_PROJECT_ID: z.string().min(1).optional(),
   FIREBASE_STORAGE_BUCKET: z.string().min(1).optional(),
@@ -12,7 +12,7 @@ const schema = z.object({
   AUTH_MODE: z.enum(['bearer-observe', 'cookie-dual', 'cookie-enforced']).optional(),
   SESSION_COOKIE_SECURE: z.enum(['true', 'false']).optional(),
   PUBLIC_APP_ORIGIN: z.url().default('https://holistichealthhub.cc'),
-  PUBLIC_APP_ORIGINS: z.string().default('https://holistichealthhub.cc,https://holistichealthhub.live'),
+  PUBLIC_APP_ORIGINS: z.string().default('https://holistichealthhub.cc,https://www.holistichealthhub.cc,https://holistichealthhub.live,https://www.holistichealthhub.live'),
   PORTAL_APP_ORIGIN: z.url().default('https://portal.holistichealthhub.cc'),
   PORTAL_APP_ORIGINS: z.string().default('https://portal.holistichealthhub.cc,https://portal.holistichealthhub.live'),
   IP_HASH_SECRET: z.string().min(32).optional(),

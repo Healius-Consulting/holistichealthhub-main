@@ -3,10 +3,12 @@ import { describe, it } from 'node:test';
 import { appCheckIsRequired, isAppCheckExempt } from './app-check-policy.js';
 
 describe('appCheckIsRequired', () => {
-  it('stays off unless REQUIRE_APP_CHECK is explicitly enabled', () => {
-    assert.equal(appCheckIsRequired('true'), true);
-    assert.equal(appCheckIsRequired('false'), false);
-    assert.equal(appCheckIsRequired(undefined), false);
+  it('is on in production unless explicitly disabled', () => {
+    assert.equal(appCheckIsRequired('true', 'development'), true);
+    assert.equal(appCheckIsRequired('false', 'production'), false);
+    assert.equal(appCheckIsRequired(undefined, 'production'), true);
+    assert.equal(appCheckIsRequired(undefined, 'development'), false);
+    assert.equal(appCheckIsRequired(undefined, 'test'), false);
   });
 });
 

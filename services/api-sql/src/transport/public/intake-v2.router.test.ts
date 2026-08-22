@@ -73,6 +73,32 @@ describe('public SQL intake v2 validation', () => {
     assert.equal(parsed.success, true);
   });
 
+  it('rejects a clinical screening bypass', () => {
+    assert.equal(fixedPharmacyIntakeSchema.safeParse({ ...validInput(), tried2: false }).success, false);
+    assert.equal(fixedPharmacyIntakeSchema.safeParse({ ...validInput(), psychExclusion: true }).success, false);
+    assert.equal(intakeSchema.safeParse({
+      type: 'general_hhh_website',
+      searchId: '11111111-1111-4111-8111-111111111111',
+      selectedDirectoryProfileId: null,
+      firstName: 'Test',
+      surname: 'Applicant',
+      dob: '1990-01-01',
+      mobile: '07000000000',
+      email: 'test@example.test',
+      postcode: 'SW1A 1AA',
+      conditions: ['chronic-pain'],
+      primaryCondition: 'chronic-pain',
+      tried2: false,
+      psychExclusion: false,
+      consentReferral: true,
+      consentShare: true,
+      marketing: false,
+      heardAbout: 'Website',
+      consentVersion: 'general-public-v2.1',
+      idempotencyKey: '11111111-1111-4111-8111-111111111111',
+    }).success, false);
+  });
+
   it('creates a stable, non-PII case reference', () => {
     assert.equal(
       caseReference('12345678-1234-4123-8123-123456789012', '2026-08-17T00:00:00.000Z'),

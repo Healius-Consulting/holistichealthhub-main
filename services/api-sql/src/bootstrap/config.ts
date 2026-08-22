@@ -12,12 +12,14 @@ const configSchema = z.object({
   IP_HASH_SECRET: z.string().optional(),
   SECURE_SESSION_COOKIES: z.string().default('true'),
   ALLOWED_ORIGINS: z.string().default(
-    'https://holistichealthhub.cc,https://holistichealthhub.live,' +
+    'https://holistichealthhub.cc,https://www.holistichealthhub.cc,' +
+    'https://holistichealthhub.live,https://www.holistichealthhub.live,' +
     'https://portal.holistichealthhub.cc,https://portal.holistichealthhub.live,' +
     'https://hhh.thinktimeless.co.uk,https://www.hhh.thinktimeless.co.uk'
   ),
   ALLOWED_HOSTS: z.string().default(
-    'holistichealthhub.cc,holistichealthhub.live,' +
+    'holistichealthhub.cc,www.holistichealthhub.cc,' +
+    'holistichealthhub.live,www.holistichealthhub.live,' +
     'portal.holistichealthhub.cc,portal.holistichealthhub.live,' +
     'hhh.thinktimeless.co.uk,www.hhh.thinktimeless.co.uk,' +
     'localhost,127.0.0.1'
