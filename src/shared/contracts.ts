@@ -75,6 +75,8 @@ export interface PublicDirectoryResult {
   tradingName: string;
   gphcNumber: string;
   addressSummary: string;
+  publicPhone?: string | null;
+  website?: string | null;
   approximateMiles: number;
   deliveryCapability: 'none' | 'nationwide' | 'postcode_areas' | 'radius_miles';
   collectionAvailable: boolean;

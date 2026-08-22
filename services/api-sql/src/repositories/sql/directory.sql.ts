@@ -3,10 +3,11 @@ import { isPubliclyListedPharmacy } from '../../domain/directory/public-listing.
 import { parseLegacyAddressBlob } from '../../domain/geography/address.js';
 import { geocodePostcodes, normaliseUkPostcode } from '../../domain/geography/postcode.js';
 import { uuidKey } from '../../domain/common/uuid.js';
-import type {
-  DirectoryProfileRecord,
-  DirectoryRepositoryPort,
-  UpsertDirectoryProfileInput,
+import {
+  directoryWebsiteLabel,
+  type DirectoryProfileRecord,
+  type DirectoryRepositoryPort,
+  type UpsertDirectoryProfileInput,
 } from '../ports/directory.port.js';
 
 type DirectoryOrganisationRow = {
@@ -23,6 +24,7 @@ type DirectoryOrganisationRow = {
   longitude: number | null;
   mainContactEmail: string | null;
   mainContactPhone: string | null;
+  websiteDomains?: string[] | null;
   status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED';
   classification: 'STANDARD' | 'TRAINING' | 'ALLOCATION_HOLDING';
   archivedAt: string | null;
@@ -82,6 +84,7 @@ const LIST_DIRECTORY_ORGANISATIONS_GQL = `
       longitude
       mainContactEmail
       mainContactPhone
+      websiteDomains
       status
       classification
       archivedAt
@@ -155,6 +158,7 @@ function toListedProfile(
     postcode: address.postcode,
     publicEmail: profile?.publicEmail || organisation.mainContactEmail || '',
     publicPhone: profile?.publicPhone ?? organisation.mainContactPhone,
+    website: directoryWebsiteLabel(organisation.websiteDomains),
     deliveryCapability: profile?.deliveryCapability ?? 'NONE',
     collectionAvailable: profile?.collectionAvailable ?? true,
     deliverySummary: profile?.deliverySummary ?? null,

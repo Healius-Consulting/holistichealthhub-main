@@ -10817,6 +10817,7 @@ body.eligibility-active{
   --rust: #a84f35;
   --serif: "Fraunces", Georgia, "Times New Roman", serif;
   --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --eligibility-brand-height: 88px;
   min-height: 100vh;
   min-height: 100dvh;
   height: 100vh;
@@ -10835,7 +10836,7 @@ body.eligibility-active{
   display: block;
   width: 100%;
   max-width: none;
-  min-height: 88px;
+  min-height: var(--eligibility-brand-height);
   margin: 0 0 32px;
   padding: 0;
   background: rgba(247, 245, 240, 0.92);
@@ -10850,7 +10851,7 @@ body.eligibility-active{
   justify-content: space-between;
   gap: 16px;
   width: min(1160px, calc(100% - 48px));
-  min-height: 88px;
+  min-height: var(--eligibility-brand-height);
   margin: 0 auto;
 }
 
@@ -10932,7 +10933,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .eligibility-intro{
   position: sticky;
-  top: 28px;
+  top: calc(var(--eligibility-brand-height) + 16px);
   padding: 38px 34px;
   overflow: hidden;
   color: #edf8f3;
@@ -11238,7 +11239,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-finder form .input{ display: block; min-height: 48px; margin-top: 7px; background: #fbfdfb; border: 1px solid #b9cec3; border-radius: 9px; }
 .eligibility-finder .btn{ min-height: 48px; }
 .eligibility-directory-results{ display: grid; gap: 10px; }
-.eligibility-directory-results > button{ display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(130px, auto); min-height: 88px; align-items: center; gap: 13px; width: 100%; padding: 13px 14px; color: #244137; text-align: left; background: #f8fbf9; border: 1px solid #cfe0d6; border-radius: 12px; cursor: pointer; }
+.eligibility-directory-results > button{ display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(130px, auto); min-height: 104px; align-items: center; gap: 13px; width: 100%; padding: 13px 14px; color: #244137; text-align: left; background: #f8fbf9; border: 1px solid #cfe0d6; border-radius: 12px; cursor: pointer; }
 .eligibility-directory-results > button:hover{ background: #eef7f1; border-color: #689581; }
 .eligibility-directory-results > button.is-selected{ background: #e8f3ed; border-color: #176d55; box-shadow: inset 0 0 0 1px #176d55; }
 .eligibility-directory-results > button:focus-visible{ outline: 3px solid rgba(24, 112, 80, .28); outline-offset: 2px; }
@@ -11246,7 +11247,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-directory-results .eligibility-directory-number{ display: grid; width: 30px; height: 30px; place-items: center; color: #fff; background: #176d55; border-radius: 50%; font-size: 11px; font-weight: 800; }
 .eligibility-directory-results > button.is-selected .eligibility-directory-number{ background: #a9482a; }
 .eligibility-directory-results strong{ font-size: 15px; }
-.eligibility-directory-results small{ color: #63776e; }
+.eligibility-directory-results small{ color: #63776e; overflow-wrap: anywhere; }
 .eligibility-directory-results span:last-child{ max-width: 190px; color: #27634d; font-size: 11px; font-weight: 700; text-align: right; }
 .eligibility-directory-results span:last-child strong{ font-size: 11px; }
 .eligibility-directory-results span:last-child small{ font-size: 9px; font-weight: 600; }
@@ -12042,9 +12043,9 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 @media (max-width: 560px){
-  .eligibility-shell{ padding: 0 0 52px; }
-  .eligibility-brand{ min-height: 72px; margin-bottom: 14px; }
-  .eligibility-brand__inner{ min-height: 72px; width: min(100%, calc(100% - 24px)); flex-wrap: wrap; gap: 10px; }
+  .eligibility-shell{ --eligibility-brand-height: 72px; padding: 0 0 52px; }
+  .eligibility-brand{ min-height: var(--eligibility-brand-height); margin-bottom: 14px; }
+  .eligibility-brand__inner{ min-height: var(--eligibility-brand-height); width: min(100%, calc(100% - 24px)); flex-wrap: wrap; gap: 10px; }
   .eligibility-brand__mark{ width: 40px; height: 40px; }
   .eligibility-brand strong{ font-size: 16px; }
   .eligibility-brand__secure{ font-size: 0 !important; width: 36px; height: 36px; justify-content: center; }

@@ -1,12 +1,9 @@
 import { config } from '../bootstrap/config.js';
 
-export function appCheckIsRequired(
-  requirement = config.REQUIRE_APP_CHECK,
-  nodeEnv = config.NODE_ENV,
-): boolean {
-  if (requirement === 'false') return false;
-  if (requirement === 'true') return true;
-  return nodeEnv === 'production';
+export function appCheckIsRequired(requirement = config.REQUIRE_APP_CHECK): boolean {
+  // Opt-in only. Production-on takes down eligibility when reCAPTCHA
+  // Enterprise loads but does not mint a token Firebase will exchange.
+  return requirement === 'true';
 }
 
 export function isAppCheckExempt(method: string, path: string): boolean {

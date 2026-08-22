@@ -69,6 +69,8 @@ export function createPublicPostcodeSearchRouter(): Router {
           tradingName: profile.tradingName,
           gphcNumber: profile.gphcNumber,
           addressSummary: directoryAddressSummary(profile),
+          publicPhone: profile.publicPhone,
+          website: profile.website ?? null,
           approximateMiles: Math.round(miles * 10) / 10,
           deliveryCapability: lowerDeliveryCapability(profile.deliveryCapability),
           collectionAvailable: profile.collectionAvailable,

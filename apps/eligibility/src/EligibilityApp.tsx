@@ -51,6 +51,10 @@ function EligibilityBrand({
   </header>;
 }
 
+function directoryContactLine(result: PublicDirectoryResult) {
+  return [result.website, result.publicPhone].filter(value => value?.trim()).join(' · ');
+}
+
 function EligibilityShell({ themeStyle, children }: { themeStyle: CSSProperties; children: ReactNode }) {
   useEffect(() => {
     document.body.classList.add('eligibility-active');
@@ -248,17 +252,27 @@ export default function EligibilityApp() {
                 className={selectedDirectoryProfileId === result.id ? 'is-selected' : ''}
                 type="button"
                 style={{ left: `${result.mapPosition.xPercent}%`, top: `${result.mapPosition.yPercent}%` }}
-                aria-label={`${index + 1}. Select ${result.tradingName}, ${result.approximateMiles.toFixed(1)} miles away`}
+                aria-label={`${index + 1}. Select ${result.tradingName}, ${result.addressSummary}, ${result.approximateMiles.toFixed(1)} miles away`}
                 aria-pressed={selectedDirectoryProfileId === result.id}
                 onClick={() => choosePharmacy(result)}
               ><MapPin aria-hidden="true" /><span>{index + 1}</span></button>)}
             </div>
             <div className="eligibility-directory-results" role="group" aria-label="Choose a pharmacy">
-              {search.results.map((result, index) => <button type="button" aria-pressed={selectedDirectoryProfileId === result.id} className={selectedDirectoryProfileId === result.id ? 'is-selected' : ''} key={result.id} onClick={() => choosePharmacy(result)}>
-                <span className="eligibility-directory-number" aria-hidden="true">{index + 1}</span>
-                <span><strong>{result.tradingName}</strong><small>{result.addressSummary}</small><small>GPhC {result.gphcNumber} · {result.approximateMiles.toFixed(1)} miles away</small></span>
-                <span><strong>{selectedDirectoryProfileId === result.id ? 'Selected' : 'Choose'}</strong></span>
-              </button>)}
+              {search.results.map((result, index) => {
+                const contact = directoryContactLine(result);
+                return (
+                  <button type="button" aria-pressed={selectedDirectoryProfileId === result.id} className={selectedDirectoryProfileId === result.id ? 'is-selected' : ''} key={result.id} onClick={() => choosePharmacy(result)}>
+                    <span className="eligibility-directory-number" aria-hidden="true">{index + 1}</span>
+                    <span>
+                      <strong>{result.tradingName}</strong>
+                      <small>{result.addressSummary}</small>
+                      {contact ? <small>{contact}</small> : null}
+                      <small>{result.approximateMiles.toFixed(1)} miles away</small>
+                    </span>
+                    <span><strong>{selectedDirectoryProfileId === result.id ? 'Selected' : 'Choose'}</strong></span>
+                  </button>
+                );
+              })}
             </div>
             {selectedDirectoryProfileId ? <div className="banner banner-green" role="status"><CheckCircle2 size={17} /> {pharmacy.tradingName} recorded as your preference. Your application stays with HHH until the referral is completed.</div> : <div className="eligibility-location-required" role="status"><MapPin size={17} /><span><strong>Select one pharmacy to continue</strong><small>You can use a pin or the list. The form cannot be submitted until you choose.</small></span></div>}
           </div> : search ? <div className="eligibility-location-manual" aria-live="polite">

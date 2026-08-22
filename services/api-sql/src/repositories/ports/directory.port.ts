@@ -10,6 +10,7 @@ export interface DirectoryProfileRecord {
   postcode: string;
   publicEmail: string;
   publicPhone: string | null;
+  website?: string | null;
   deliveryCapability: 'NONE' | 'NATIONWIDE' | 'POSTCODE_AREAS' | 'RADIUS_MILES';
   collectionAvailable: boolean;
   deliverySummary: string | null;
@@ -42,6 +43,12 @@ export interface DirectoryRepositoryPort {
 
 export function directoryAddressSummary(profile: Pick<DirectoryProfileRecord, 'addressLine1' | 'locality' | 'postcode'>) {
   return [profile.addressLine1, profile.locality, profile.postcode].filter(Boolean).join(', ');
+}
+
+export function directoryWebsiteLabel(domains: string[] | null | undefined) {
+  const raw = domains?.find(domain => domain.trim())?.trim();
+  if (!raw) return null;
+  return raw.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
 }
 
 export function organisationAddressSummary(organisation: {
