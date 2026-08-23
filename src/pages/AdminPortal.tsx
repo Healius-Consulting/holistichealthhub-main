@@ -204,6 +204,30 @@ function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
 }
 
+function splitPharmacyAddress(organisation: PharmacyTenant) {
+  if (organisation.addressLine1 && organisation.locality && organisation.postcode) {
+    return {
+      addressLine1: organisation.addressLine1,
+      addressLine2: organisation.addressLine2 ?? '',
+      locality: organisation.locality,
+      postcode: organisation.postcode,
+    };
+  }
+  const raw = organisation.address?.trim() || '';
+  const postcodeMatch = raw.toUpperCase().match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/);
+  const postcode = (organisation.postcode || postcodeMatch?.[1] || '').toUpperCase();
+  const withoutPostcode = postcode
+    ? raw.replace(new RegExp(postcode.replace(/\s+/g, '\\s*'), 'i'), '').replace(/[,\s]+$/, '')
+    : raw;
+  const parts = withoutPostcode.split(',').map(part => part.trim()).filter(Boolean);
+  return {
+    addressLine1: organisation.addressLine1 || parts[0] || raw,
+    addressLine2: organisation.addressLine2 || (parts.length > 3 ? parts.slice(1, -2).join(', ') : ''),
+    locality: organisation.locality || (parts.length >= 2 ? parts.at(parts.length >= 3 ? -2 : -1) ?? '' : ''),
+    postcode,
+  };
+}
+
 function AdminHeader({ view, setView, pending = 0, onViewAdmins }: { view: AdminView; setView: (view: AdminView) => void; pending?: number; onViewAdmins: () => void }) {
   const { signOutStaff } = useAuth();
   const { state } = useApp();
@@ -294,7 +318,7 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
               <label>Registered pharmacy name<input className="input" value={name} onChange={event => setName(event.target.value)} required /></label>
               <label>Company name<input className="input" value={tradingName} onChange={event => setTradingName(event.target.value)} required /></label>
               <div className="form-grid-two"><label>GPhC number<input className="input" value={gphcNumber} onChange={event => setGphcNumber(event.target.value)} required /></label><label>Superintendent pharmacist<input className="input" value={superintendent} onChange={event => setSuperintendent(event.target.value)} required /></label></div>
-              <label>Company registration number<input className="input" value={companyNumber} onChange={event => setCompanyNumber(event.target.value)} required /></label>
+              <label>Company registration number<input className="input" value={companyNumber} onChange={event => setCompanyNumber(event.target.value)} /><small>Optional. This sits on the linked company record, not the pharmacy premises row.</small></label>
             </section>
 
             <section className="admin-onboard-section">
@@ -359,10 +383,14 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
   const [mainContactName, setMainContactName] = useState(organisation.mainContactName ?? organisation.superintendent);
   const [mainContactPhone, setMainContactPhone] = useState(organisation.mainContactPhone ?? '');
   const [mainContactEmail, setMainContactEmail] = useState(organisation.mainContactEmail ?? '');
-  const [address, setAddress] = useState(organisation.address);
+  const initialAddress = splitPharmacyAddress(organisation);
+  const [addressLine1, setAddressLine1] = useState(initialAddress.addressLine1);
+  const [addressLine2, setAddressLine2] = useState(initialAddress.addressLine2);
+  const [addressLocality, setAddressLocality] = useState(initialAddress.locality);
+  const [addressPostcode, setAddressPostcode] = useState(initialAddress.postcode);
   const [domains, setDomains] = useState(organisation.websiteDomains.join('\n'));
   const [status, setStatus] = useState(organisation.status);
-  const [logoText] = useState(organisation.logoText);
+  const logoText = (tradingName || name).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || organisation.logoText;
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(organisation.emailLogoUrl ?? null);
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
@@ -386,7 +414,10 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
       const normalised = await normalisePharmacyLogo(source);
       setPendingLogo(normalised);
       setRemoveLogo(false);
-      setLogoPreviewUrl(URL.createObjectURL(normalised));
+      setLogoPreviewUrl(current => {
+        if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+        return URL.createObjectURL(normalised);
+      });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The logo could not be prepared.');
     }
@@ -403,12 +434,15 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
     setBusy(true);
     setError(null);
     const websiteDomains = [...new Set(domains.split(/[\n,]+/).map(value => value.trim().replace(/^https?:\/\//i, '').split('/')[0].toLowerCase()).filter(Boolean))];
+    const address = [addressLine1, addressLine2, addressLocality, addressPostcode.toUpperCase()].map(value => value.trim()).filter(Boolean).join(', ');
     const input: UpdateOrganisationInput = {
-      name, tradingName, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, address, websiteDomains, status, logoText: logoText.toUpperCase(),
+      name, tradingName, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail,
+      address, addressLine1, addressLine2, locality: addressLocality, postcode: addressPostcode,
+      websiteDomains, status, logoText: logoText.toUpperCase(),
       primaryColour, portalName: name.trim(),
     };
     try {
-      if (!isLocalPortalPreview) await updateOrganisation(organisation.id, input);
+      const saved = isLocalPortalPreview ? null : await updateOrganisation(organisation.id, input);
       let logoUpdates: Partial<PharmacyTenant> = {};
       if (isLocalPortalPreview) {
         if (removeLogo) {
@@ -430,10 +464,21 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
         logoUpdates = { emailLogoUrl: updated.emailLogoUrl ?? null, emailLogoStoragePath: updated.emailLogoStoragePath ?? null, emailLogoWidth: updated.emailLogoWidth ?? null, emailLogoHeight: updated.emailLogoHeight ?? null, emailLogoUpdatedAt: updated.emailLogoUpdatedAt ?? null };
       }
       onSaved({
-        name: name.trim(), tradingName: tradingName.trim(), gphcNumber: gphcNumber.trim(), superintendent: superintendent.trim(), companyNumber: companyNumber.trim(), mainContactName: mainContactName.trim(), mainContactPhone: mainContactPhone.trim(), mainContactEmail: mainContactEmail.trim(), address: address.trim(),
-        websiteDomains, status, logoText: logoText.trim().toUpperCase(),
+        name: name.trim(), tradingName: tradingName.trim(), gphcNumber: gphcNumber.trim(), superintendent: superintendent.trim(), companyNumber: companyNumber.trim() || undefined, mainContactName: mainContactName.trim(), mainContactPhone: mainContactPhone.trim(), mainContactEmail: mainContactEmail.trim(),
+        address: saved?.address ?? address.trim(),
+        addressLine1: saved?.addressLine1 ?? addressLine1.trim(),
+        addressLine2: saved?.addressLine2 ?? addressLine2.trim(),
+        locality: saved?.locality ?? addressLocality.trim(),
+        postcode: saved?.postcode ?? addressPostcode.trim().toUpperCase(),
+        websiteDomains: saved?.websiteDomains ?? websiteDomains,
+        status, logoText: logoText.trim().toUpperCase(),
         brand: { primary: primaryColour, portalName: name.trim() },
         slug: slugify(tradingName || name),
+        emailLogoUrl: logoUpdates.emailLogoUrl ?? saved?.emailLogoUrl ?? organisation.emailLogoUrl ?? null,
+        emailLogoStoragePath: logoUpdates.emailLogoStoragePath ?? saved?.emailLogoStoragePath ?? organisation.emailLogoStoragePath ?? null,
+        emailLogoWidth: logoUpdates.emailLogoWidth ?? saved?.emailLogoWidth ?? organisation.emailLogoWidth ?? null,
+        emailLogoHeight: logoUpdates.emailLogoHeight ?? saved?.emailLogoHeight ?? organisation.emailLogoHeight ?? null,
+        emailLogoUpdatedAt: logoUpdates.emailLogoUpdatedAt ?? saved?.emailLogoUpdatedAt ?? organisation.emailLogoUpdatedAt ?? null,
         ...logoUpdates,
       });
       onClose();
@@ -457,12 +502,17 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
         <form className="admin-onboard-form" onSubmit={submit}>
           <div className="drawer-body onboarding-form">
             <section className="admin-onboard-section">
-              <div className="form-section-heading"><span>01</span><div><strong>Registered organisation</strong><small>Corrections are saved to Firebase and added to the audit trail.</small></div></div>
+              <div className="form-section-heading"><span>01</span><div><strong>Registered organisation</strong><small>Corrections are saved to the pharmacy record and added to the audit trail.</small></div></div>
               <label>Registered pharmacy name<input className="input" value={name} onChange={event => setName(event.target.value)} required /></label>
-              <label>Company name<input className="input" value={tradingName} onChange={event => setTradingName(event.target.value)} required /></label>
+              <label>Trading name<input className="input" value={tradingName} onChange={event => setTradingName(event.target.value)} required /></label>
               <div className="form-grid-two"><label>GPhC number<input className="input" value={gphcNumber} onChange={event => setGphcNumber(event.target.value)} required /></label><label>Superintendent pharmacist<input className="input" value={superintendent} onChange={event => setSuperintendent(event.target.value)} required /></label></div>
-              <label>Company registration number<input className="input" value={companyNumber} onChange={event => setCompanyNumber(event.target.value)} required /></label>
-              <label>Registered office address<textarea className="input" value={address} onChange={event => setAddress(event.target.value)} required /></label>
+              <label>Company registration number<input className="input" value={companyNumber} onChange={event => setCompanyNumber(event.target.value)} /><small>Optional. This sits on the linked company record, not the pharmacy premises row.</small></label>
+              <div className="onboarding-address-grid">
+                <label>Address line 1<input className="input" value={addressLine1} onChange={event => setAddressLine1(event.target.value)} autoComplete="address-line1" required /></label>
+                <label>Address line 2<input className="input" value={addressLine2} onChange={event => setAddressLine2(event.target.value)} autoComplete="address-line2" /></label>
+                <label>Town or city<input className="input" value={addressLocality} onChange={event => setAddressLocality(event.target.value)} autoComplete="address-level2" required /></label>
+                <label>Postcode<input className="input" value={addressPostcode} onChange={event => setAddressPostcode(event.target.value.toUpperCase())} autoComplete="postal-code" required /></label>
+              </div>
               <div className="form-grid-two"><label>Main contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Main contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
               <label>Main contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
               <label>Approved website domains<textarea className="input" value={domains} onChange={event => setDomains(event.target.value)} placeholder={'pharmacy.cc\nanother-domain.cc'} /><small>Enter one domain per line. Protocols and page paths are removed automatically.</small></label>
@@ -470,7 +520,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
             </section>
 
             <section className="admin-onboard-section">
-              <div className="form-section-heading"><span>02</span><div><strong>Pharmacy workspace identity</strong><small>Logo and colour apply to their staff portal only. HHH admin does not change colour.</small></div></div>
+              <div className="form-section-heading"><span>02</span><div><strong>Pharmacy workspace identity</strong><small>Logo and colour apply to their staff portal. Replacing the logo archives the previous file.</small></div></div>
               <label>Pharmacy name<input className="input" value={name} readOnly /><small>Also used as the portal name.</small></label>
               <section className="pharmacy-logo-editor" aria-labelledby="pharmacy-logo-heading">
                 <div className={`pharmacy-logo-preview${logoPreviewUrl ? ' has-image' : ''}`}>

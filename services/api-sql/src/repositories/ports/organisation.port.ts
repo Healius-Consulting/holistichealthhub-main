@@ -35,6 +35,7 @@ export interface OrganisationRecord {
   pausedAt: string | null;
   version: number;
   archivedAt?: string | null;
+  companyNumber?: string | null;
 }
 
 export interface ReferralTokenRecord {
@@ -146,6 +147,7 @@ export interface OrganisationRepositoryPort {
   createOrganisation(input: CreateOrganisationRecordInput): Promise<void>;
   createOrganisationDomain(organisationId: string, hostname: string): Promise<void>;
   listOrganisationDomains(organisationId: string): Promise<OrganisationDomainRecord[]>;
+  listAllOrganisationDomains(): Promise<Array<OrganisationDomainRecord & { organisationId: string }>>;
   deleteOrganisationDomain(id: string): Promise<void>;
   listSetupTasks(organisationId: string): Promise<SetupTaskRecord[]>;
   upsertSetupTask(params: {

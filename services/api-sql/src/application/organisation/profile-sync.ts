@@ -1,4 +1,4 @@
-import { formatOrganisationAddress } from '../../domain/geography/address.js';
+import { formatOrganisationAddress, parseLegacyAddressBlob } from '../../domain/geography/address.js';
 import { geocodePostcode, normaliseUkPostcode } from '../../domain/geography/postcode.js';
 import type { DirectoryRepositoryPort } from '../../repositories/ports/directory.port.js';
 import type { OrganisationRecord, UpdateOrganisationProfileInput } from '../../repositories/ports/organisation.port.js';
@@ -21,11 +21,14 @@ export async function buildOrganisationProfileUpdate(
     mainContactEmail?: string;
   },
 ): Promise<UpdateOrganisationProfileInput> {
-  const addressLine1 = input.addressLine1?.trim() || current.addressLine1 || '';
-  const addressLine2 = input.addressLine2?.trim() || current.addressLine2 || null;
-  const locality = input.locality?.trim() || current.locality || '';
-  const county = input.county?.trim() || current.county || null;
-  const postcodeInput = input.postcode?.trim() || current.postcode || '';
+  const parsedAddress = input.address?.trim() && !input.addressLine1 && !input.postcode
+    ? parseLegacyAddressBlob(input.address)
+    : null;
+  const addressLine1 = input.addressLine1?.trim() || parsedAddress?.addressLine1 || current.addressLine1 || '';
+  const addressLine2 = input.addressLine2?.trim() || parsedAddress?.addressLine2 || current.addressLine2 || null;
+  const locality = input.locality?.trim() || parsedAddress?.locality || current.locality || '';
+  const county = input.county?.trim() || parsedAddress?.county || current.county || null;
+  const postcodeInput = input.postcode?.trim() || parsedAddress?.postcode || current.postcode || '';
   const postcode = postcodeInput ? normaliseUkPostcode(postcodeInput) : null;
   const shouldGeocode = Boolean(postcode) && postcode !== current.postcode;
   const geocode = shouldGeocode && postcode ? await geocodePostcode(postcode) : null;

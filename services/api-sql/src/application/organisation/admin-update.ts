@@ -17,6 +17,11 @@ export const updateOrganisationInputSchema = z.object({
   mainContactPhone: z.string().trim().max(40).optional(),
   mainContactEmail: z.string().trim().email().max(254).optional().or(z.literal('')),
   address: z.string().trim().min(5).max(500).optional(),
+  addressLine1: z.string().trim().min(1).max(250).optional(),
+  addressLine2: z.string().trim().max(250).optional(),
+  locality: z.string().trim().min(1).max(120).optional(),
+  county: z.string().trim().max(120).optional(),
+  postcode: z.string().trim().min(2).max(16).optional(),
   primaryColour: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   logoText: z.string().trim().min(1).max(4).regex(/^[A-Za-z0-9]+$/).optional(),
   websiteDomains: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
@@ -37,6 +42,11 @@ const PROFILE_FIELDS = [
   'mainContactPhone',
   'mainContactEmail',
   'address',
+  'addressLine1',
+  'addressLine2',
+  'locality',
+  'county',
+  'postcode',
 ] as const;
 
 const BRAND_FIELDS = ['primaryColour', 'logoText', 'portalName'] as const;

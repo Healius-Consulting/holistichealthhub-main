@@ -2,6 +2,13 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { updateAdminOrganisationDetails } from '../../application/organisation/admin-update.js';
+import {
+  authoriseBrandLogoUpload,
+  completeBrandLogoUpload,
+  removeBrandLogo,
+  resolveOrganisationLogo,
+  resolveOrganisationLogos,
+} from '../../application/organisation/brand-logo.js';
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { canAcceptPublicIntake } from '../../domain/organisation/access.js';
@@ -12,6 +19,7 @@ import {
   type PharmacySetupStatusView,
 } from '../../domain/organisation/operational-readiness.js';
 import type { OrganisationRecord, SetupTaskRecord } from '../../repositories/ports/organisation.port.js';
+import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { SqlDirectoryRepository } from '../../repositories/sql/directory.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
@@ -139,7 +147,19 @@ export function createPortalSetupRouter(): Router {
   const identityRepo = new SqlIdentityRepository();
   const integrationRepo = new SqlIntegrationRepository();
   const directoryRepo = new SqlDirectoryRepository();
+  const storage = new StorageProvider();
   const referralLinks = new ReferralLinkService(organisationRepo);
+
+  async function portalOrganisationView(organisation: OrganisationRecord) {
+    const [domains, logo] = await Promise.all([
+      organisationRepo.listOrganisationDomains(organisation.id),
+      resolveOrganisationLogo(storage, organisation.id),
+    ]);
+    return toPortalOrganisation(organisation, {
+      websiteDomains: domains.map(domain => domain.hostname),
+      ...logo,
+    });
+  }
 
   async function setupSnapshot(organisation: OrganisationRecord, records?: SetupTaskRecord[]): Promise<PharmacySetupStatusView> {
     const [taskRecords, staff, curaleaf, worldpay] = await Promise.all([
@@ -348,7 +368,20 @@ export function createPortalSetupRouter(): Router {
     try {
       assertPlatformScope(req.context!);
       const organisations = await organisationRepo.listOrganisations();
-      res.status(200).json(organisations.map(toPortalOrganisation));
+      const domains = await organisationRepo.listAllOrganisationDomains();
+      const logos = await resolveOrganisationLogos(storage, organisations.map(organisation => organisation.id)).catch(() => new Map());
+      const domainsByOrganisation = new Map<string, string[]>();
+      for (const domain of domains) {
+        const key = domain.organisationId.toLowerCase();
+        const list = domainsByOrganisation.get(key) ?? [];
+        list.push(domain.hostname);
+        domainsByOrganisation.set(key, list);
+      }
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(organisations.map(organisation => toPortalOrganisation(organisation, {
+        websiteDomains: domainsByOrganisation.get(organisation.id.toLowerCase()) ?? [],
+        ...logos.get(organisation.id),
+      })));
     } catch (error) {
       next(error);
     }
@@ -582,7 +615,100 @@ export function createPortalSetupRouter(): Router {
         });
       }
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json(toPortalOrganisation(organisation));
+      res.status(200).json(await portalOrganisationView(organisation));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/admin/organisations/:id/logo/upload-url', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const input = z.object({
+        filename: z.string().trim().min(1).max(180),
+        contentType: z.string().trim().min(1).max(80),
+        sizeBytes: z.number().int().positive(),
+      }).parse(req.body);
+      const target = await authoriseBrandLogoUpload(storage, organisationId, input);
+      await identityRepo.appendAudit({
+        organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.logo_upload_authorised',
+        recordType: 'Organisation',
+        recordId: organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: { storagePath: target.storagePath, sourceFilename: target.sourceFilename },
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({
+        uploadUrl: target.uploadUrl,
+        storagePath: target.storagePath,
+        requiredHeaders: target.requiredHeaders,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/admin/organisations/:id/logo/complete', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const input = z.object({ storagePath: z.string().trim().min(1).max(500) }).parse(req.body);
+      const logo = await completeBrandLogoUpload(storage, organisationId, input.storagePath);
+      await identityRepo.appendAudit({
+        organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.logo_updated',
+        recordType: 'Organisation',
+        recordId: organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: { storagePath: logo.emailLogoStoragePath },
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(toPortalOrganisation(organisation, {
+        websiteDomains: (await organisationRepo.listOrganisationDomains(organisationId)).map(domain => domain.hostname),
+        ...logo,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/portal/admin/organisations/:id/logo', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const logo = await removeBrandLogo(storage, organisationId);
+      await identityRepo.appendAudit({
+        organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.logo_removed',
+        recordType: 'Organisation',
+        recordId: organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(toPortalOrganisation(organisation, {
+        websiteDomains: (await organisationRepo.listOrganisationDomains(organisationId)).map(domain => domain.hostname),
+        ...logo,
+      }));
     } catch (error) {
       next(error);
     }

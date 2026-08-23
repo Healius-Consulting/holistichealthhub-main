@@ -126,6 +126,35 @@ export class StorageProvider {
     }
   }
 
+  async generateWriteUrl(storagePath: string, contentType: string, expiresInSeconds = 900): Promise<string> {
+    try {
+      const bucket = this.storage.bucket(this.bucketName);
+      const file = bucket.file(storagePath);
+      const [uploadUrl] = await file.getSignedUrl({
+        version: 'v4',
+        action: 'write',
+        expires: Date.now() + expiresInSeconds * 1000,
+        contentType,
+      });
+      return uploadUrl;
+    } catch (error) {
+      wrapStorageError(error, new HttpError(503, 'A secure upload location could not be created.', 'STORAGE_SIGN_FAILED'));
+    }
+  }
+
+  async listPaths(prefix: string): Promise<Array<{ storagePath: string; updatedAt: string | null }>> {
+    try {
+      const bucket = this.storage.bucket(this.bucketName);
+      const [files] = await bucket.getFiles({ prefix });
+      return files.map(file => ({
+        storagePath: file.name,
+        updatedAt: typeof file.metadata.updated === 'string' ? file.metadata.updated : null,
+      }));
+    } catch (error) {
+      wrapStorageError(error, new HttpError(503, 'Stored pharmacy files could not be listed.', 'STORAGE_LIST_FAILED'));
+    }
+  }
+
   async generateDownloadUrl(storagePath: string, expiresInSeconds = 300): Promise<string> {
     const bucket = this.storage.bucket(this.bucketName);
     const file = bucket.file(storagePath);

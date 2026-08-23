@@ -950,6 +950,11 @@ export interface UpdateOrganisationInput {
   mainContactPhone?: string;
   mainContactEmail?: string;
   address?: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  locality?: string;
+  county?: string;
+  postcode?: string;
   primaryColour?: string;
   logoText?: string;
   websiteDomains?: string[];

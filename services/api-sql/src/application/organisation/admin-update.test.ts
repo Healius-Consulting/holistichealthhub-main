@@ -194,7 +194,7 @@ describe('updateAdminOrganisationDetails', () => {
     assert.deepEqual(result.changedFields.includes('companyNumber'), false);
     assert.equal(deps.profileUpdates.length, 1);
     assert.equal((deps.profileUpdates[0] as { address: string }).address, '2 Market Street, Nottingham, NG1 1AA');
-    assert.equal((deps.profileUpdates[0] as { addressLine1: string }).addressLine1, '1 High Street');
+    assert.equal((deps.profileUpdates[0] as { addressLine1: string }).addressLine1, '2 Market Street');
     assert.equal(deps.brandUpdates.length, 1);
     assert.deepEqual(deps.deletedDomains, ['domain-1']);
     assert.deepEqual(deps.createdDomains, ['new.example']);

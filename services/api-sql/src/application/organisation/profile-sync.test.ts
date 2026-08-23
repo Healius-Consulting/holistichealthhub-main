@@ -49,7 +49,7 @@ describe('buildOrganisationProfileUpdate', () => {
       address: '2 Market Street, Nottingham, NG1 1AA',
     });
     assert.equal(update.address, '2 Market Street, Nottingham, NG1 1AA');
-    assert.equal(update.addressLine1, '1 High Street');
+    assert.equal(update.addressLine1, '2 Market Street');
     assert.equal(update.locality, 'Nottingham');
     assert.equal(update.postcode, 'NG1 1AA');
     assert.equal(update.latitude, 52.95);

@@ -138,15 +138,31 @@ function overviewOrderReference(order: { id: string; orderNumber?: string | null
   return `#${order.id.replaceAll('-', '').slice(0, 8).toUpperCase()}`;
 }
 
-export function toPortalOrganisation(organisation: OrganisationRecord) {
+export function toPortalOrganisation(
+  organisation: OrganisationRecord,
+  extras?: {
+    websiteDomains?: string[];
+    emailLogoUrl?: string | null;
+    emailLogoStoragePath?: string | null;
+    emailLogoWidth?: number | null;
+    emailLogoHeight?: number | null;
+    emailLogoUpdatedAt?: string | null;
+  },
+) {
   return {
     id: organisation.id,
     orgId: organisation.companyId ?? organisation.id,
     name: organisation.name,
     tradingName: organisation.tradingName,
     logoText: organisation.logoText,
+    emailLogoUrl: extras?.emailLogoUrl ?? null,
+    emailLogoStoragePath: extras?.emailLogoStoragePath ?? null,
+    emailLogoWidth: extras?.emailLogoWidth ?? null,
+    emailLogoHeight: extras?.emailLogoHeight ?? null,
+    emailLogoUpdatedAt: extras?.emailLogoUpdatedAt ?? null,
     gphcNumber: organisation.gphcNumber,
     superintendent: organisation.superintendentName,
+    companyNumber: organisation.companyNumber ?? undefined,
     mainContactName: organisation.mainContactName ?? undefined,
     mainContactPhone: organisation.mainContactPhone ?? undefined,
     mainContactEmail: organisation.mainContactEmail ?? undefined,
@@ -156,6 +172,7 @@ export function toPortalOrganisation(organisation: OrganisationRecord) {
     locality: organisation.locality ?? undefined,
     county: organisation.county ?? undefined,
     postcode: organisation.postcode ?? undefined,
+    websiteDomains: extras?.websiteDomains ?? [],
     primaryColour: organisation.primaryColour,
     status: portalAccountStatus(organisation.status),
     portalName: organisation.portalName,

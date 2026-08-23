@@ -53,6 +53,9 @@ const GET_ORGANISATION_BY_ID_GQL = `
       pausedAt
       version
       archivedAt
+      company {
+        companyNumber
+      }
     }
   }
 `;
@@ -99,6 +102,9 @@ const LIST_ORGANISATIONS_GQL = `
       pausedAt
       version
       archivedAt
+      company {
+        companyNumber
+      }
     }
   }
 `;
@@ -219,6 +225,16 @@ const LIST_ORGANISATION_DOMAINS_GQL = `
   query ListOrganisationDomains($organisationId: UUID!) {
     organisationDomains(where: { organisationId: { eq: $organisationId } }) {
       id
+      hostname
+    }
+  }
+`;
+
+const LIST_ALL_ORGANISATION_DOMAINS_GQL = `
+  query ListAllOrganisationDomains {
+    organisationDomains {
+      id
+      organisationId
       hostname
     }
   }
@@ -399,20 +415,34 @@ const UPDATE_STAFF_PREFERENCES_GQL = `
   }
 `;
 
+type OrganisationRow = OrganisationRecord & { company?: { companyNumber: string } | null };
+
+function mapOrganisation(row: OrganisationRow | null): OrganisationRecord | null {
+  if (!row) return null;
+  const { company, ...organisation } = row;
+  return {
+    ...organisation,
+    companyNumber: company?.companyNumber ?? organisation.companyNumber ?? null,
+  };
+}
+
 export class SqlOrganisationRepository implements OrganisationRepositoryPort {
   async findOrganisationById(id: string): Promise<OrganisationRecord | null> {
-    const result = await dataConnect.executeGraphql<{ organisation: OrganisationRecord | null }, any>(
+    const result = await dataConnect.executeGraphql<{ organisation: OrganisationRow | null }, any>(
       GET_ORGANISATION_BY_ID_GQL,
       { variables: { id: asUuid(id) } }
     );
-    return result.data.organisation ?? null;
+    return mapOrganisation(result.data.organisation);
   }
 
   async listOrganisations(): Promise<OrganisationRecord[]> {
-    const result = await dataConnect.executeGraphql<{ organisations: OrganisationRecord[] }, any>(
+    const result = await dataConnect.executeGraphql<{ organisations: OrganisationRow[] }, any>(
       LIST_ORGANISATIONS_GQL
     );
-    return result.data.organisations ?? [];
+    return (result.data.organisations ?? []).flatMap(row => {
+      const mapped = mapOrganisation(row);
+      return mapped ? [mapped] : [];
+    });
   }
 
   async updateOrganisationProfile(id: string, input: UpdateOrganisationProfileInput): Promise<void> {
@@ -586,6 +616,13 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
       LIST_ORGANISATION_DOMAINS_GQL,
       { variables: { organisationId: asUuid(organisationId) } },
     );
+    return result.data.organisationDomains ?? [];
+  }
+
+  async listAllOrganisationDomains(): Promise<Array<OrganisationDomainRecord & { organisationId: string }>> {
+    const result = await dataConnect.executeGraphql<{
+      organisationDomains: Array<OrganisationDomainRecord & { organisationId: string }>;
+    }, any>(LIST_ALL_ORGANISATION_DOMAINS_GQL);
     return result.data.organisationDomains ?? [];
   }
 
