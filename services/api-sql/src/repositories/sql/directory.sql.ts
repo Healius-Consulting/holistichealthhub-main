@@ -84,10 +84,18 @@ const LIST_DIRECTORY_ORGANISATIONS_GQL = `
       longitude
       mainContactEmail
       mainContactPhone
-      websiteDomains
       status
       classification
       archivedAt
+    }
+  }
+`;
+
+const LIST_DIRECTORY_DOMAINS_GQL = `
+  query ListDirectoryDomains {
+    organisationDomains(limit: 500) {
+      organisationId
+      hostname
     }
   }
 `;
@@ -191,19 +199,34 @@ export class SqlDirectoryRepository implements DirectoryRepositoryPort {
   }
 
   async listEligibleProfiles(): Promise<DirectoryProfileRecord[]> {
-    const [profileResult, organisationResult] = await Promise.all([
+    const [profileResult, organisationResult, domainResult] = await Promise.all([
       dataConnect.executeGraphql<{ pharmacyDirectoryProfiles: DirectoryProfileRecord[] }, any>(LIST_DIRECTORY_PROFILES_GQL),
       dataConnect.executeGraphql<{ organisations: DirectoryOrganisationRow[] }, any>(LIST_DIRECTORY_ORGANISATIONS_GQL),
+      dataConnect.executeGraphql<{ organisationDomains: Array<{ organisationId: string; hostname: string }> }, any>(LIST_DIRECTORY_DOMAINS_GQL),
     ]);
     const profilesByOrganisation = new Map(
       (profileResult.data.pharmacyDirectoryProfiles ?? []).map(profile => [uuidKey(profile.organisationId), profile]),
     );
+    const domainsByOrganisation = new Map<string, string[]>();
+    for (const domain of domainResult.data.organisationDomains ?? []) {
+      const key = uuidKey(domain.organisationId);
+      const list = domainsByOrganisation.get(key) ?? [];
+      list.push(domain.hostname);
+      domainsByOrganisation.set(key, list);
+    }
     const candidates = (organisationResult.data.organisations ?? [])
       .filter(isPubliclyListedPharmacy)
       .map(organisation => {
         const profile = profilesByOrganisation.get(uuidKey(organisation.id)) ?? null;
         if (profile?.lifecycle === 'PAUSED' || profile?.intakeState === 'FULL') return null;
-        return { organisation, profile, address: structuredAddress(organisation, profile) };
+        return {
+          organisation: {
+            ...organisation,
+            websiteDomains: domainsByOrganisation.get(uuidKey(organisation.id)) ?? [],
+          },
+          profile,
+          address: structuredAddress(organisation, profile),
+        };
       })
       .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
 

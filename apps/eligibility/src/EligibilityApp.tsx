@@ -232,8 +232,14 @@ export default function EligibilityApp() {
         {!token && <section className="eligibility-form-section eligibility-location-section" aria-labelledby="eligibility-location">
           <div className="eligibility-section-heading"><span>01</span><div><h3 id="eligibility-location">Choose your preferred pharmacy</h3><p>Search by postcode, then select a pin or a pharmacy from the list. HHH will confirm the final referral with you.</p></div></div>
           <div className="eligibility-location-search">
-            <label htmlFor="eligibility-postcode-search">UK postcode <em>*</em><input id="eligibility-postcode-search" className="input" name="postcode" value={searchPostcode} onChange={event => { setSearchPostcode(event.target.value); resetLocationChoice(); setError(''); }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void runPostcodeSearch(); } }} autoComplete="postal-code" required /></label>
-            <button className="btn btn-secondary" type="button" onClick={() => void runPostcodeSearch()} disabled={searching || !searchPostcode.trim()}>{searching ? <><LoaderCircle className="spin" size={16} /> Searching…</> : <><Search size={16} /> Find pharmacies</>}</button>
+            <label htmlFor="eligibility-postcode-search">UK postcode <em>*</em><input id="eligibility-postcode-search" className="input" name="postcode" value={searchPostcode} onChange={event => {
+              const next = event.target.value;
+              setSearchPostcode(next);
+              const compact = next.toUpperCase().replace(/\s+/g, '');
+              if (search && compact !== search.postcode.replace(/\s+/g, '')) resetLocationChoice();
+              setError('');
+            }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void runPostcodeSearch(); } }} autoComplete="postal-code" required /></label>
+            <button className="btn btn-primary" type="button" onClick={() => void runPostcodeSearch()} disabled={searching || !searchPostcode.trim()}>{searching ? <><LoaderCircle className="spin" size={16} /> Searching…</> : <><Search size={16} /> Find pharmacies</>}</button>
           </div>
           <p className="eligibility-location-privacy"><LockKeyhole size={13} /> Your postcode stays out of the page URL, browser storage and analytics.</p>
           {error && <div className="banner banner-red" role="alert"><AlertTriangle size={16} /> {error}</div>}
@@ -261,7 +267,7 @@ export default function EligibilityApp() {
                     <span>
                       <strong>{result.tradingName}</strong>
                       <small>{result.addressSummary}</small>
-                      {contact ? <small>{contact}</small> : null}
+                      {contact ? <small className="eligibility-directory-contact">{contact}</small> : null}
                       <small>{result.approximateMiles.toFixed(1)} miles away</small>
                     </span>
                     <span><strong>{selectedDirectoryProfileId === result.id ? 'Selected' : 'Choose'}</strong></span>

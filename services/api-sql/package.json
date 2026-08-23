@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "test": "tsx --test src/bootstrap/*.test.ts src/security/*.test.ts src/transport/portal/*.test.ts src/transport/public/*.test.ts src/application/**/*.test.ts src/domain/**/*.test.ts src/providers/**/*.test.ts",
+    "test": "tsx --test src/bootstrap/*.test.ts src/security/*.test.ts src/transport/portal/*.test.ts src/transport/public/*.test.ts src/application/**/*.test.ts src/domain/**/*.test.ts src/providers/**/*.test.ts src/repositories/**/*.test.ts",
     "seed:referral-links": "tsx src/migration/seed-referral-link-secrets.ts",
     "start": "node dist/index.js"
   },

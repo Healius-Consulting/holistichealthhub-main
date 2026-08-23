@@ -29,8 +29,17 @@ export function createPublicPostcodeSearchRouter(): Router {
     try {
       const { postcode } = z.object({ postcode: z.string().trim().min(2).max(16) }).parse(req.body);
       const geocode = await geocodePostcode(postcode);
-      const profiles = geocode.status === 'matched' ? await directoryRepo.listEligibleProfiles() : [];
-      const matches = geocode.status === 'matched'
+      let listingFailed = false;
+      let profiles: Awaited<ReturnType<SqlDirectoryRepository['listEligibleProfiles']>> = [];
+      if (geocode.status === 'matched') {
+        try {
+          profiles = await directoryRepo.listEligibleProfiles();
+        } catch (error) {
+          listingFailed = true;
+          console.error('Public pharmacy directory listing failed:', error instanceof Error ? error.message : 'unknown');
+        }
+      }
+      const matches = geocode.status === 'matched' && !listingFailed
         ? topFiveNearest(
           geocode,
           profiles.map(profile => ({
@@ -40,7 +49,13 @@ export function createPublicPostcodeSearchRouter(): Router {
           })),
         )
         : [];
-      const status = geocode.status !== 'matched' ? geocode.status : matches.length ? 'matched' : 'no_match';
+      const status = geocode.status !== 'matched'
+        ? geocode.status
+        : listingFailed
+          ? 'provider_unavailable'
+          : matches.length
+            ? 'matched'
+            : 'no_match';
       const searchId = randomUUID();
       const expiresAt = new Date(Date.now() + 30 * 60_000).toISOString();
       await searchRepo.createSession({

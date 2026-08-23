@@ -11080,28 +11080,28 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-form .input:disabled{ color: #8b9892 !important; background: #f1f4f2 !important; cursor: not-allowed; }
 .eligibility-form fieldset{ display: grid; gap: 9px; min-width: 0; border: 0; }
 
-.eligibility-location-section{ gap: 18px; }
-.eligibility-location-search{ display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; }
+.eligibility-location-section{ gap: 20px; }
+.eligibility-location-search{ display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
 .eligibility-location-search label{ min-width: 0; }
-.eligibility-location-search .btn{ min-height: 47px; padding-inline: 16px; }
-.eligibility-location-privacy{ display: flex; align-items: center; gap: 6px; margin-top: -9px; color: #718079; font-size: 9px; line-height: 1.45; }
-.eligibility-location-privacy svg{ flex: 0 0 auto; }
-.eligibility-location-results{ display: grid; gap: 12px; }
+.eligibility-location-search .btn{ min-height: 47px; padding-inline: 18px; border-radius: 10px; }
+.eligibility-location-privacy{ display: flex; align-items: center; gap: 8px; margin-top: -4px; color: #5f7269; font-size: 12px; line-height: 1.45; }
+.eligibility-location-privacy svg{ flex: 0 0 auto; color: #173f33; }
+.eligibility-location-results{ display: grid; gap: 14px; }
 .eligibility-location-copy{ display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.eligibility-location-copy strong{ color: #21352d; font-size: 12px; }
-.eligibility-location-copy span{ color: #718079; font-size: 9px; text-align: right; }
+.eligibility-location-copy strong{ color: #173f33; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 16px; font-weight: 500; }
+.eligibility-location-copy span{ color: #62726a; font-size: 12px; text-align: right; }
 .eligibility-location-map{
   position: relative;
   min-height: 280px;
   overflow: hidden;
-  background-color: #edf4ef;
-  background-image: linear-gradient(rgba(72, 116, 95, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(72, 116, 95, .055) 1px, transparent 1px), radial-gradient(circle at 77% 18%, rgba(255,255,255,.88), transparent 24%), radial-gradient(circle at 19% 78%, rgba(213,230,220,.8), transparent 27%);
+  background-color: #e9f1ed;
+  background-image: linear-gradient(rgba(23, 63, 51, .05) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 63, 51, .05) 1px, transparent 1px), radial-gradient(circle at 78% 16%, rgba(255,255,255,.92), transparent 26%), radial-gradient(circle at 18% 80%, rgba(211,226,218,.9), transparent 28%);
   background-size: 24px 24px, 24px 24px, auto, auto;
-  border: 1px solid #cbdcd3;
-  border-radius: 14px;
+  border: 1px solid #c5d5cc;
+  border-radius: 18px;
   isolation: isolate;
 }
-.eligibility-location-map::after{ content: 'Approximate map'; position: absolute; right: 10px; bottom: 8px; z-index: 1; padding: 4px 7px; color: #557067; background: rgba(255,255,255,.86); border: 1px solid rgba(198,216,207,.85); border-radius: 5px; font-size: 8px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.eligibility-location-map::after{ content: 'Approximate map'; position: absolute; right: 12px; bottom: 10px; z-index: 1; padding: 5px 8px; color: #557067; background: rgba(255,255,255,.86); border: 1px solid rgba(198,216,207,.85); border-radius: 8px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .eligibility-location-map > svg{ position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; }
 .eligibility-location-map > svg path{ fill: none; stroke: #fff; stroke-width: 3.5; vector-effect: non-scaling-stroke; }
 .eligibility-location-map > button{
@@ -11124,17 +11124,17 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-location-map > button:hover svg, .eligibility-location-map > button.is-selected svg{ color: #a9482a; fill: #a9482a; }
 .eligibility-location-map > button.is-selected{ z-index: 5; transform: translate(-50%, -50%) scale(1.16); }
 .eligibility-location-map > button:focus-visible{ outline: 3px solid rgba(169, 72, 42, .3); outline-offset: 3px; border-radius: 50%; }
-.eligibility-location-origin{ position: absolute; z-index: 2; display: grid; justify-items: center; gap: 4px; color: #304c40; font-size: 8px; font-weight: 750; white-space: nowrap; transform: translate(-50%, -50%); }
+.eligibility-location-origin{ position: absolute; z-index: 2; display: grid; justify-items: center; gap: 4px; color: #304c40; font-size: 10px; font-weight: 750; white-space: nowrap; transform: translate(-50%, -50%); }
 .eligibility-location-origin > span{ width: 14px; height: 14px; background: #fff; border: 4px solid #193e31; border-radius: 50%; box-shadow: 0 2px 7px rgba(25,62,49,.25); }
-.eligibility-location-required{ display: flex; min-height: 58px; align-items: flex-start; gap: 10px; padding: 12px 13px; color: #695022; background: #fffaf0; border: 1px solid #ead7ad; border-radius: 10px; }
+.eligibility-location-required{ display: flex; min-height: 58px; align-items: flex-start; gap: 10px; padding: 14px 16px; color: #695022; background: #fffaf0; border: 1px solid #ead7ad; border-radius: 16px; }
 .eligibility-location-required svg{ flex: 0 0 auto; margin-top: 2px; color: #9a6719; }
 .eligibility-location-required span, .eligibility-location-required strong, .eligibility-location-required small{ display: block; }
-.eligibility-location-required strong{ font-size: 11px; }
-.eligibility-location-required small{ margin-top: 3px; color: #7d6b49; font-size: 9px; font-weight: 500; line-height: 1.45; }
+.eligibility-location-required strong{ font-size: 13px; font-weight: 650; }
+.eligibility-location-required small{ margin-top: 4px; color: #7d6b49; font-size: 12px; font-weight: 500; line-height: 1.45; }
 .eligibility-location-manual{ display: grid; gap: 10px; }
 .eligibility-location-manual .btn{ width: fit-content; min-height: 44px; }
-.eligibility-hhh-allocation{ display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 10px 14px; padding: 14px; background: #f8fbf9; border: 1px solid #cfe0d6; border-radius: 14px; }
-.eligibility-hhh-allocation.is-selected{ background: #e8f3ed; border-color: #176d55; box-shadow: inset 0 0 0 1px #176d55; }
+.eligibility-hhh-allocation{ display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 10px 14px; padding: 16px; background: #f8fbf9; border: 1px solid #cfe0d6; border-radius: 16px; }
+.eligibility-hhh-allocation.is-selected{ background: #e8f3ed; border-color: #173f33; box-shadow: inset 0 0 0 1px #173f33; }
 .eligibility-hhh-allocation__mark{ display: grid; width: 52px; height: 52px; place-items: center; background: #edf5f1; border: 1px solid #cfe0d6; border-radius: 14px; }
 .eligibility-hhh-allocation__mark img{ width: 38px; height: 38px; object-fit: contain; }
 .eligibility-hhh-allocation > span:nth-child(2){ display: grid; gap: 4px; color: #244137; }
@@ -11263,18 +11263,20 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-finder form .input{ display: block; min-height: 48px; margin-top: 7px; background: #fbfdfb; border: 1px solid #b9cec3; border-radius: 9px; }
 .eligibility-finder .btn{ min-height: 48px; }
 .eligibility-directory-results{ display: grid; gap: 10px; }
-.eligibility-directory-results > button{ display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(130px, auto); min-height: 104px; align-items: center; gap: 13px; width: 100%; padding: 13px 14px; color: #244137; text-align: left; background: #f8fbf9; border: 1px solid #cfe0d6; border-radius: 12px; cursor: pointer; }
-.eligibility-directory-results > button:hover{ background: #eef7f1; border-color: #689581; }
-.eligibility-directory-results > button.is-selected{ background: #e8f3ed; border-color: #176d55; box-shadow: inset 0 0 0 1px #176d55; }
-.eligibility-directory-results > button:focus-visible{ outline: 3px solid rgba(24, 112, 80, .28); outline-offset: 2px; }
+.eligibility-directory-results > button{ display: grid; grid-template-columns: 36px minmax(0, 1fr) minmax(120px, auto); min-height: 104px; align-items: center; gap: 14px; width: 100%; padding: 15px 16px; color: #244137; text-align: left; background: #f7fbf9; border: 1px solid #d0ddd6; border-radius: 16px; cursor: pointer; }
+.eligibility-directory-results > button:hover{ background: #eef6f1; border-color: #173f33; }
+.eligibility-directory-results > button.is-selected{ background: #e8f3ed; border-color: #173f33; box-shadow: inset 0 0 0 1px #173f33; }
+.eligibility-directory-results > button:focus-visible{ outline: 3px solid rgba(23, 63, 51, .28); outline-offset: 2px; }
 .eligibility-directory-results span{ display: grid; gap: 4px; }
-.eligibility-directory-results .eligibility-directory-number{ display: grid; width: 30px; height: 30px; place-items: center; color: #fff; background: #176d55; border-radius: 50%; font-size: 11px; font-weight: 800; }
-.eligibility-directory-results > button.is-selected .eligibility-directory-number{ background: #a9482a; }
-.eligibility-directory-results strong{ font-size: 15px; }
-.eligibility-directory-results small{ color: #63776e; overflow-wrap: anywhere; }
-.eligibility-directory-results span:last-child{ max-width: 190px; color: #27634d; font-size: 11px; font-weight: 700; text-align: right; }
-.eligibility-directory-results span:last-child strong{ font-size: 11px; }
-.eligibility-directory-results span:last-child small{ font-size: 9px; font-weight: 600; }
+.eligibility-directory-results .eligibility-directory-number{ display: grid; width: 32px; height: 32px; place-items: center; color: #173f33; background: #e9f1ed; border: 1px solid #bfd2c8; border-radius: 10px; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 13px; font-weight: 600; }
+.eligibility-directory-results > button.is-selected .eligibility-directory-number{ color: #fff; background: #a84f35; border-color: #a84f35; }
+.eligibility-directory-results strong{ font-size: 16px; font-weight: 650; }
+.eligibility-directory-results span:nth-child(2) strong{ font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 17px; font-weight: 500; letter-spacing: -0.02em; }
+.eligibility-directory-results small{ color: #5f7269; overflow-wrap: anywhere; }
+.eligibility-directory-results .eligibility-directory-contact{ color: #173f33; font-weight: 600; }
+.eligibility-directory-results span:last-child{ max-width: 190px; color: #173f33; font-size: 12px; font-weight: 700; text-align: right; }
+.eligibility-directory-results span:last-child strong{ font-size: 12px; }
+.eligibility-directory-results span:last-child small{ font-size: 11px; font-weight: 600; }
 .eligibility-finder-actions{ display: flex; flex-wrap: wrap; gap: 10px; }
 
 .workspace-section-tabs{ display: flex; width: fit-content; gap: 4px; margin-bottom: 16px; padding: 4px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; }
