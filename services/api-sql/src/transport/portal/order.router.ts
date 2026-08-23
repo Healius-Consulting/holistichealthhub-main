@@ -1,8 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
-import { curaleafApiRequest, executeCuraleafOrderPlacement, fetchCuraleafPurchaseOrders, fetchCuraleafShipments, fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
-import { curaleafOwnsCancellation, curaleafRequiresSupplierCancel, stampCuraleafCancellationOnSnapshot, stripPrematureHhhCancellation } from '../../application/integrations/curaleaf-events.js';
+import { executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
+import { curaleafOwnsCancellation, curaleafRequiresSupplierCancel, stampCuraleafCancellationOnSnapshot } from '../../application/integrations/curaleaf-events.js';
 import {
   curaleafCancellationBlocksPlacement,
   evaluateQuoteReview,
@@ -16,21 +16,10 @@ import {
   recordCollectedDispense,
 } from '../../application/patient-finance/patient-finance.js';
 import {
-  advanceFulfilmentStatus,
   applyPharmacyHandout,
-  buildCuraleafSnapshot,
-  matchPurchaseOrder,
-  matchShipments,
-  mergePriorPharmacyLines,
   normalisedFulfilmentLines,
-  pharmacyCountsKey,
-  priorPurchaseOrderMatchesOrder,
-  resolveLivePurchaseOrder,
-  supplierFulfilmentStatus,
-  syncSnapshotLineItemsFromPurchaseOrder,
 } from '../../application/orders/curaleaf-fulfilment.js';
 import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
-import { SqlFulfilmentRepository } from '../../repositories/sql/fulfilment.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
@@ -42,7 +31,7 @@ import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
 import { purgeOrderPrescriptionFiles } from '../../application/prescriptions/prescription-file-purge.js';
 import { persistCuraleafPrescriptionIdentity } from '../../application/prescriptions/curaleaf-prescription-record.js';
-import type { OrderRecord, CreateOrderInput } from '../../repositories/ports/order.port.js';
+import type { OrderRecord } from '../../repositories/ports/order.port.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
@@ -162,181 +151,6 @@ const createOrderInputSchema = z.object({
   redoContext: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
-async function attachCuraleafToOrder(
-  order: OrderRecord,
-  purchaseOrders: any[],
-  shipments: any[],
-  repos?: { orderRepo: SqlOrderRepository; fulfilmentRepo: SqlFulfilmentRepository },
-) {
-  const snapshot = (order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot : {}) as Record<string, any>;
-  const prior = snapshot.curaleaf && typeof snapshot.curaleaf === 'object' ? snapshot.curaleaf : {};
-  const matchedPO = resolveLivePurchaseOrder(order, purchaseOrders, prior);
-  const matchedShipments = matchShipments(order, matchedPO, shipments);
-  const alignedSnapshot = syncSnapshotLineItemsFromPurchaseOrder(snapshot, matchedPO, order);
-  const requestedItems = (alignedSnapshot.lineItems || alignedSnapshot.items || []) as Array<{
-    packId?: string;
-    productId?: string;
-    quantity?: number;
-    qty?: number;
-    count?: number;
-  }>;
-  const liveShipments = matchedShipments.length ? matchedShipments : (Array.isArray(prior.shipments) ? prior.shipments : []);
-  const livePo = matchedPO;
-  const priorValid = priorPurchaseOrderMatchesOrder(prior, order);
-  const lines = normalisedFulfilmentLines({
-    purchaseOrder: livePo,
-    shipments: liveShipments,
-    requestedItems,
-    priorLines: mergePriorPharmacyLines(
-      prior.lines,
-      Object.values(snapshot.prescriptionFlow || {}).flatMap((flow: any) => Array.isArray(flow?.lines) ? flow.lines : []),
-    ),
-  });
-  const liveCancelled = String(matchedPO?.state || matchedPO?.purchaseOrderState || '').toUpperCase() === 'CANCELLED';
-  const snapshotCancelled = supplierOrderCancelled(snapshot);
-  if (liveCancelled || (snapshotCancelled && liveCancelled)) {
-    const nextSnapshot = stampCuraleafCancellationOnSnapshot(alignedSnapshot, {
-      action: 'confirmed',
-      purchaseOrderId: String(matchedPO?.id || prior.purchaseOrderId || prior.id || ''),
-      prescriptionId: typeof prior.prescriptionId === 'string' ? prior.prescriptionId : typeof matchedPO?.prescriptionId === 'string' ? matchedPO.prescriptionId : null,
-      prescriptionState: String(prior.prescriptionState || matchedPO?.prescriptionState || '') === 'CANCELLED' ? 'CANCELLED' : undefined,
-      reference: 'curaleaf_po_cancelled',
-      note: 'Curaleaf cancelled the purchase order after pharmacy contact.',
-    });
-    const nextCuraleaf = {
-      ...((nextSnapshot as { curaleaf?: Record<string, unknown> }).curaleaf || {}),
-      prescriptionId: prior.prescriptionId || matchedPO?.prescriptionId || null,
-      prescriberId: prior.prescriberId || matchedPO?.prescriberId || null,
-    };
-    const persisted = { ...(nextSnapshot as Record<string, unknown>), curaleaf: nextCuraleaf };
-    if (repos) {
-      await repos.orderRepo.updateQuoteSnapshot({
-        id: order.id,
-        organisationId: order.organisationId,
-        quoteSnapshot: persisted,
-        fulfilmentStatus: 'EXCEPTION',
-      }).catch(err => console.warn('Curaleaf cancelled snapshot persist warning:', err));
-      order.fulfilmentStatus = 'EXCEPTION';
-      order.quoteSnapshot = persisted;
-    }
-    return toPortalOrder(order as any);
-  }
-
-  const curaleaf = matchedPO || (priorValid && liveShipments.length)
-    ? {
-      ...(livePo || {}),
-      shipments: liveShipments,
-      shipmentIds: liveShipments.map((shipment: any) => shipment.id).filter(Boolean),
-      shipmentStates: prior.shipmentStates || {},
-      lines,
-    }
-    : null;
-
-  if (repos && (curaleaf || (!matchedPO && !priorValid && (prior.purchaseOrderId || prior.id)))) {
-    const nextStatus = curaleaf
-      ? advanceFulfilmentStatus(
-        order.fulfilmentStatus,
-        supplierFulfilmentStatus({ purchaseOrder: livePo, shipments: liveShipments, lines }),
-      )
-      : order.fulfilmentStatus;
-    const nextSnapshot = curaleaf
-      ? {
-        ...alignedSnapshot,
-        curaleaf: {
-          ...prior,
-          ...buildCuraleafSnapshot({
-            purchaseOrder: livePo,
-            shipments: liveShipments,
-            lines,
-            shipmentStates: prior.shipmentStates || {},
-            order,
-          }),
-          prescriptionId: prior.prescriptionId || livePo?.prescriptionId || null,
-          prescriberId: prior.prescriberId || livePo?.prescriberId || null,
-          prescriptionState: prior.prescriptionState || (livePo ? 'ACTIVE' : prior.prescriptionState) || null,
-          lines,
-          shipmentStates: prior.shipmentStates || {},
-        },
-      }
-      : (() => {
-        const { curaleaf: _removed, ...rest } = alignedSnapshot;
-        return rest;
-      })();
-    const previousKey = JSON.stringify({
-      status: order.fulfilmentStatus,
-      po: prior.purchaseOrderId || prior.id || null,
-      state: prior.purchaseOrderState || prior.state || null,
-      shipments: prior.shipmentIds || [],
-      shipped: (prior.lines || []).map((line: any) => [line.productId, line.shipped, line.allocated]),
-      pharmacy: pharmacyCountsKey(prior.lines || []),
-      shipmentStates: prior.shipmentStates || {},
-    });
-    const nextKey = JSON.stringify({
-      status: nextStatus,
-      po: curaleaf ? (matchedPO?.id || null) : null,
-      state: curaleaf ? (matchedPO?.state || null) : null,
-      shipments: curaleaf ? liveShipments.map((shipment: any) => shipment.id) : [],
-      shipped: curaleaf ? lines.map(line => [line.productId, line.shipped, line.allocated]) : [],
-      pharmacy: curaleaf ? pharmacyCountsKey(lines) : [],
-      shipmentStates: curaleaf ? (prior.shipmentStates || {}) : {},
-      lineItems: alignedSnapshot.lineItems || alignedSnapshot.items || [],
-    });
-    const liveSnapshot = curaleaf ? stripPrematureHhhCancellation(nextSnapshot) : nextSnapshot;
-    const snapshotRoot = order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot as Record<string, any> : {};
-    const hhhClosedPrematurely = Boolean(curaleaf) && (
-      order.status === 'CANCELLED'
-      || ['REFUNDED', 'REFUND_REQUIRED'].includes(String(order.paymentStatus || '').toUpperCase())
-      || Boolean(snapshotRoot.cancellation)
-      || (snapshotRoot.refund && snapshotRoot.refund.kind !== 'quote_difference')
-    );
-    if (previousKey !== nextKey || hhhClosedPrematurely) {
-      await repos.orderRepo.updateQuoteSnapshot({
-        id: order.id,
-        organisationId: order.organisationId,
-        quoteSnapshot: liveSnapshot,
-        fulfilmentStatus: curaleaf
-          ? nextStatus as CreateOrderInput['fulfilmentStatus']
-          : undefined,
-      }).catch(err => console.warn('Curaleaf snapshot persist warning:', err));
-      if (hhhClosedPrematurely) {
-        await repos.orderRepo.updateOrderStatus({
-          id: order.id,
-          organisationId: order.organisationId,
-          paymentStatus: 'PAID',
-          paidAt: order.paidAt || new Date().toISOString(),
-        }).catch(err => console.warn('Live Curaleaf order restore warning:', err));
-        await repos.orderRepo.updateOrderStatus({
-          id: order.id,
-          organisationId: order.organisationId,
-          fulfilmentStatus: nextStatus as CreateOrderInput['fulfilmentStatus'],
-        }).catch(err => console.warn('Live Curaleaf fulfilment restore warning:', err));
-        order.status = 'PROCESSING';
-        order.paymentStatus = 'PAID';
-        if (!order.paidAt) order.paidAt = new Date().toISOString();
-        order.cancelledAt = null;
-      }
-      order.fulfilmentStatus = nextStatus;
-      order.quoteSnapshot = liveSnapshot;
-    }
-    for (const shipment of liveShipments) {
-      if (!shipment?.id || !matchedPO?.id) continue;
-      await repos.fulfilmentRepo.upsertSupplierShipment({
-        organisationId: order.organisationId,
-        orderId: order.id,
-        supplierPurchaseOrderId: String(matchedPO.id),
-        supplierShipmentId: String(shipment.id),
-        supplierCustomerReference: shipment.purchaseOrderCustomerReference || matchedPO.customerReference || order.orderNumber,
-        dispatchedAt: shipment.createdAt || null,
-      }).catch(err => console.warn('Curaleaf shipment persist warning:', err));
-    }
-  }
-
-  return toPortalOrder({
-    ...order,
-    ...(curaleaf ? { curaleaf } : {}),
-  } as any);
-}
-
 export function createPortalOrderRouter(): Router {
   const router = Router();
   const orderRepo = new SqlOrderRepository();
@@ -344,7 +158,6 @@ export function createPortalOrderRouter(): Router {
   const paymentRepo = new SqlPaymentRepository();
   const integrationRepo = new SqlIntegrationRepository();
   const identityRepo = new SqlIdentityRepository();
-  const fulfilmentRepo = new SqlFulfilmentRepository();
   const notificationRepo = new SqlNotificationRepository();
   const organisationRepo = new SqlOrganisationRepository();
   const patientRepo = new SqlPatientRepository();
@@ -560,27 +373,6 @@ export function createPortalOrderRouter(): Router {
 
       if (!order) {
         throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
-      }
-
-      if (String(req.query.refresh || '') === '1') {
-        const connection = await integrationRepo.findConnection(scope.organisationId, 'CURALEAF').catch(() => null);
-        let curaleafPOs: unknown[] = [];
-        let curaleafShipments: unknown[] = [];
-        if (connection?.secretResourceName) {
-          [curaleafPOs, curaleafShipments] = await Promise.all([
-            fetchCuraleafPurchaseOrders(connection).catch(() => []),
-            fetchCuraleafShipments(connection).catch(() => []),
-          ]);
-        }
-        const mapped = await attachCuraleafToOrder(order, curaleafPOs, curaleafShipments, { orderRepo, fulfilmentRepo });
-        const overlay = await loadOrderChildren(order, paymentRepo, orderLineRepo);
-        const sqlMapped = mapPortalOrderFromSql(order, overlay);
-        res.status(200).json({
-          ...mapped,
-          refund: sqlMapped.refund ?? mapped.refund,
-          lineItems: sqlMapped.lineItems?.length ? sqlMapped.lineItems : mapped.lineItems,
-        });
-        return;
       }
 
       const overlay = await loadOrderChildren(order, paymentRepo, orderLineRepo);
@@ -899,15 +691,6 @@ export function createPortalOrderRouter(): Router {
       });
 
       res.status(200).json({ id: crypto.randomUUID(), supportCaseId });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  // GET /v1/portal/curaleaf/support-cases
-  router.get('/portal/curaleaf/support-cases', requireStaff('pharmacy'), async (_req: Request, res: Response, next: NextFunction) => {
-    try {
-      res.status(200).json([]);
     } catch (error) {
       next(error);
     }
@@ -1245,21 +1028,6 @@ export function createPortalOrderRouter(): Router {
       const orderId = String(req.params.id || '');
       const order = await orderRepo.findOrderById(orderId, scope.organisationId);
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
-
-      const connection = await integrationRepo.findConnection(scope.organisationId, 'CURALEAF').catch(() => null);
-      if (connection?.secretResourceName) {
-        try {
-          const pos = await fetchCuraleafPurchaseOrders(connection);
-          const po = resolveLivePurchaseOrder(order, pos, (order.quoteSnapshot as any)?.curaleaf);
-          if (po?.id) {
-            await curaleafApiRequest(connection, `/v1/purchase-orders/${po.id}`, {
-              method: 'DELETE',
-            });
-          }
-        } catch (err) {
-          console.warn('Failed to cancel Curaleaf order:', err);
-        }
-      }
 
       await orderRepo.updateOrderStatus({
         id: orderId,

@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
-import { fetchCuraleafCatalogue, fetchCuraleafQuote, fetchCuraleafActivity, curaleafApiRequest, maskCuraleafIdentifier, probeCuraleafConnection, scanClinicPrescriptionFromStoredFile, validateCuraleafCredentials, writeCuraleafCredential } from '../../application/integrations/curaleaf.service.js';
+import { fetchCuraleafCatalogue, fetchCuraleafQuote, maskCuraleafIdentifier, probeCuraleafConnection, scanClinicPrescriptionFromStoredFile, validateCuraleafCredentials, writeCuraleafCredential } from '../../application/integrations/curaleaf.service.js';
 import {
   mergeQuoteBankIntoCatalogue,
   upsertCuraleafQuoteBankFromQuote,
@@ -80,15 +80,13 @@ function worldpayEnvironmentFromValidation(environment: 'try' | 'live'): 'TEST' 
 
 function curaleafStatusPayload(
   connection: IntegrationConnectionRecord | null,
-  extras?: { message?: string; checkedAt?: string; sampleAvailable?: boolean },
+  extras?: { message?: string; checkedAt?: string },
 ) {
   const configured = Boolean(connection?.secretResourceName);
   const connected = connection?.status === 'ACTIVE';
   return {
     configured,
     connected,
-    writeConfigured: configured,
-    approved: connected,
     status: !configured ? 'not_configured' as const : connected ? 'connected' as const : connection?.status === 'PENDING_VALIDATION' ? 'validated' as const : 'attention' as const,
     environment: connection?.environment === 'PRODUCTION' ? 'production' as const : 'test' as const,
     checkedAt: extras?.checkedAt ?? new Date().toISOString(),
@@ -97,10 +95,8 @@ function curaleafStatusPayload(
       : connected
         ? 'The existing Curaleaf credential is securely linked.'
         : 'The existing Curaleaf credential is securely linked and awaiting re-validation.'),
-    activated: connected,
     maskedIdentifier: connection?.maskedCredential ?? undefined,
     customerId: connection?.externalCustomerId ?? undefined,
-    sampleAvailable: extras?.sampleAvailable,
   };
 }
 
@@ -174,7 +170,6 @@ export function createPortalIntegrationRouter(): Router {
       res.status(200).json(curaleafStatusPayload(restored, {
         message: validation.message,
         checkedAt: validation.checkedAt,
-        sampleAvailable: true,
       }));
     } catch (error) { next(error); }
   });
@@ -203,7 +198,6 @@ export function createPortalIntegrationRouter(): Router {
       res.status(200).json(curaleafStatusPayload(restored, {
         message: probe.message,
         checkedAt: probe.checkedAt,
-        sampleAvailable: true,
       }));
     } catch (error) { next(error); }
   });
@@ -283,13 +277,18 @@ export function createPortalIntegrationRouter(): Router {
     } catch (error) { next(error); }
   });
 
-  const getCatalogue = async (req: Request, res: Response, next: NextFunction) => {
+  async function requireCuraleafConnection(context: RequestContext | undefined, requestedOrganisationId: unknown) {
+    const organisationId = await authorisedOrganisationId(context, requestedOrganisationId, organisationRepo);
+    const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
+    if (!connection?.secretResourceName) {
+      throw new HttpError(503, 'Curaleaf is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
+    }
+    return { organisationId, connection };
+  }
+
+  router.get('/portal/integrations/curaleaf/catalog', requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const organisationId = await authorisedOrganisationId(req.context, req.query.organisationId, organisationRepo);
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection?.secretResourceName) {
-        throw new HttpError(503, 'Curaleaf is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-      }
+      const { connection } = await requireCuraleafConnection(req.context, req.query.organisationId);
       const catalogue = await fetchCuraleafCatalogue(connection);
       const quoteBank = await quoteBankRepo.listEntries(connection.environment);
       res.setHeader('Cache-Control', 'private, max-age=300');
@@ -298,13 +297,9 @@ export function createPortalIntegrationRouter(): Router {
         quoteBank,
       ));
     } catch (error) { next(error); }
-  };
+  });
 
-  router.get('/portal/integrations/curaleaf/catalog', requireStaff('any'), getCatalogue);
-  router.get('/portal/integrations/curaleaf/catalogue', requireStaff('any'), getCatalogue);
-  router.get('/portal/integrations/curaleaf/training/catalog', requireStaff('any'), getCatalogue);
-
-  const getQuote = async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/integrations/curaleaf/quote', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = z.object({
         organisationId: z.string().optional(),
@@ -314,12 +309,7 @@ export function createPortalIntegrationRouter(): Router {
         })).min(1),
       }).parse(req.body);
 
-      const organisationId = await authorisedOrganisationId(req.context, input.organisationId, organisationRepo);
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection?.secretResourceName) {
-        throw new HttpError(503, 'Curaleaf is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-      }
-
+      const { connection } = await requireCuraleafConnection(req.context, input.organisationId);
       const quote = await fetchCuraleafQuote(connection, input.items);
       try {
         await upsertCuraleafQuoteBankFromQuote(connection, quote, 'LIVE_QUOTE', quoteBankRepo);
@@ -328,64 +318,12 @@ export function createPortalIntegrationRouter(): Router {
       }
       res.status(200).json(quote);
     } catch (error) { next(error); }
-  };
-
-  router.post('/portal/integrations/curaleaf/quote', requireCsrf, requireStaff('any'), getQuote);
-  router.post('/portal/integrations/curaleaf/training/quote', requireCsrf, requireStaff('any'), getQuote);
-
-  router.get('/portal/integrations/curaleaf/activity', requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const organisationId = await authorisedOrganisationId(req.context, req.query.organisationId, organisationRepo);
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection?.secretResourceName) {
-        throw new HttpError(503, 'Curaleaf is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-      }
-      const activity = await fetchCuraleafActivity(connection);
-      res.status(200).json(activity);
-    } catch (error) { next(error); }
-  });
-
-  router.post('/portal/integrations/curaleaf/prescriptions/manual', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const organisationId = await authorisedOrganisationId(req.context, req.body?.organisationId, organisationRepo);
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection?.secretResourceName) {
-        throw new HttpError(503, 'Curaleaf is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-      }
-
-      const result = await curaleafApiRequest(connection, '/v1/prescriptions/', {
-        method: 'POST',
-        body: JSON.stringify(req.body),
-      });
-      res.status(200).json(result);
-    } catch (error) { next(error); }
-  });
-
-  router.post('/portal/integrations/curaleaf/prescriptions/barcode', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const organisationId = await authorisedOrganisationId(req.context, req.body?.organisationId, organisationRepo);
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection?.secretResourceName) {
-        throw new HttpError(503, 'Curaleaf is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-      }
-
-      const result = await curaleafApiRequest(connection, '/v1/clinic-prescriptions/', {
-        method: 'POST',
-        body: JSON.stringify(req.body),
-      });
-      res.status(200).json(result);
-    } catch (error) { next(error); }
   });
 
   router.post('/portal/integrations/curaleaf/prescriptions/scan', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = curaleafScanSchema.parse(req.body);
-      const organisationId = await authorisedOrganisationId(req.context, input.organisationId, organisationRepo);
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection?.secretResourceName) {
-        throw new HttpError(503, 'Curaleaf is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-      }
-
+      const { organisationId, connection } = await requireCuraleafConnection(req.context, input.organisationId);
       const result = await scanClinicPrescriptionFromStoredFile(connection, organisationId, input.fileId);
       res.setHeader('Cache-Control', 'no-store');
       res.status(result.status === 'processing' ? 202 : 200).json(result);

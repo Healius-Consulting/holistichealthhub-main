@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
-import { getCuraleafCatalogue, getCuraleafConnectionStatus, getCuraleafTrainingCatalogue, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, isApiConfigured } from '../shared/api';
+import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, isApiConfigured } from '../shared/api';
 import type { CuraleafCancellationState, CuraleafCatalogue, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
 import { activeRedoPriceResolution } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
@@ -2054,16 +2054,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_CATALOGUE_LOADING' });
     const request = useLocalSandbox
       ? getDevCuraleafCatalogue()
-      : livePharmacyWorkspace
-        ? getCuraleafCatalogue(state.currentOrganisationId)
-        : getCuraleafTrainingCatalogue(state.currentOrganisationId);
+      : getCuraleafCatalogue(state.currentOrganisationId);
     request.then(catalogue => {
       if (!cancelled) dispatch({ type: 'SET_CATALOGUE', catalogue: mapCuraleafCatalogue(catalogue), updatedAt: catalogue.fetchedAt });
     }).catch(error => {
       if (!cancelled) dispatch({ type: 'SET_CATALOGUE_ERROR', message: error instanceof Error ? error.message : 'Curaleaf catalogue unavailable.' });
     });
     return () => { cancelled = true; };
-  }, [livePharmacyWorkspace, state.currentOrganisationId, state.staffSession]);
+  }, [state.currentOrganisationId, state.staffSession]);
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !livePharmacyWorkspace || state.catalogueSource !== 'curaleaf') return;

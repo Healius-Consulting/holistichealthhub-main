@@ -1074,22 +1074,3 @@ export async function executeCuraleafOrderPlacement(
   };
 }
 
-export async function fetchCuraleafActivity(connection: IntegrationConnectionRecord) {
-  const [prescribers, prescriptions, purchaseOrders, shipments] = await Promise.all([
-    curaleafApiRequest(connection, '/v1/prescribers/').catch(() => ({ prescribers: [] })),
-    curaleafApiRequest(connection, '/v1/prescriptions/').catch(() => ({ prescriptions: [] })),
-    curaleafApiRequest(connection, '/v1/purchase-orders/').catch(() => ({ purchaseOrders: [] })),
-    curaleafApiRequest(connection, '/v1/shipments/').catch(() => ({ shipments: [] })),
-  ]);
-
-  return {
-    environment: config.CURALEAF_BASE_URL.includes('.dev') ? 'test' as const : 'production' as const,
-    checkedAt: new Date().toISOString(),
-    prescribers: (prescribers as any)?.prescribers || [],
-    prescriptions: (prescriptions as any)?.prescriptions || [],
-    purchaseOrders: (purchaseOrders as any)?.purchaseOrders || [],
-    shipments: (shipments as any)?.shipments || [],
-  };
-}
-
-

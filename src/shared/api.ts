@@ -23,17 +23,13 @@ import type {
   CuraleafCatalogue,
   CuraleafQuote,
   CuraleafQuoteRequestItem,
-  CuraleafActivity,
   PortalPatientDirectoryRecord,
   PortalOrderInput,
   PortalOrderRecord,
   ExpiryCheckState,
   PrescriptionUploadRequest,
   PrescriptionUploadTarget,
-  CuraleafClinicPrescriptionInput,
   CuraleafClinicScan,
-  CuraleafManualPrescriptionInput,
-  CuraleafSubmissionResult,
   WorldpayBrandingInput,
   WorldpayConnectionInput,
   WorldpayConnectionStatus,
@@ -312,10 +308,6 @@ export function getCuraleafCatalogue(organisationId: string) {
   return apiRequest<CuraleafCatalogue>(`/v1/portal/integrations/curaleaf/catalog?organisationId=${encodeURIComponent(organisationId)}`);
 }
 
-export function getCuraleafTrainingCatalogue(organisationId: string) {
-  return apiRequest<CuraleafCatalogue>(`/v1/portal/integrations/curaleaf/training/catalog?organisationId=${encodeURIComponent(organisationId)}`);
-}
-
 export function getDevCuraleafQuote(items: CuraleafQuoteRequestItem[]) {
   return apiRequest<CuraleafQuote>('/v1/dev/curaleaf/quote', {
     method: 'POST',
@@ -328,21 +320,6 @@ export function getCuraleafQuote(organisationId: string, items: CuraleafQuoteReq
     method: 'POST',
     body: JSON.stringify({ organisationId, items }),
   });
-}
-
-export function getCuraleafTrainingQuote(organisationId: string, items: CuraleafQuoteRequestItem[]) {
-  return apiRequest<CuraleafQuote>('/v1/portal/integrations/curaleaf/training/quote', {
-    method: 'POST',
-    body: JSON.stringify({ organisationId, items }),
-  });
-}
-
-export function getDevCuraleafActivity() {
-  return apiRequest<CuraleafActivity>('/v1/dev/curaleaf/activity');
-}
-
-export function getCuraleafActivity(organisationId: string) {
-  return apiRequest<CuraleafActivity>(`/v1/portal/integrations/curaleaf/activity?organisationId=${encodeURIComponent(organisationId)}`);
 }
 
 export function getPortalPatientDirectory(organisationId: string) {
@@ -546,20 +523,6 @@ export function placePrescriptionManually(orderId: string, prescriptionId: strin
   return apiRequest(`/v1/portal/orders/${encodeURIComponent(orderId)}/prescriptions/${encodeURIComponent(prescriptionId)}/place`, { method: 'POST', body: JSON.stringify({ organisationId }) });
 }
 
-export function submitCuraleafManualPrescription(input: CuraleafManualPrescriptionInput) {
-  return apiRequest<CuraleafSubmissionResult>('/v1/portal/integrations/curaleaf/prescriptions/manual', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
-export function submitCuraleafClinicPrescription(input: CuraleafClinicPrescriptionInput) {
-  return apiRequest<CuraleafSubmissionResult>('/v1/portal/integrations/curaleaf/prescriptions/barcode', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
 export function scanCuraleafClinicPrescription(organisationId: string, fileId: string) {
   return apiRequest<CuraleafClinicScan>('/v1/portal/integrations/curaleaf/prescriptions/scan', {
     method: 'POST',
@@ -653,31 +616,6 @@ export function getPrescriberDirectory(organisationId: string, query = '') {
 
 export function createPrescriberDirectoryRecord(input: Omit<import('./contracts').PrescriberDirectoryRecord, 'id' | 'active' | 'curaleafIds' | 'createdAt' | 'updatedAt'> & { organisationId: string }) {
   return apiRequest<import('./contracts').PrescriberDirectoryRecord>('/v1/portal/prescribers', { method: 'POST', body: JSON.stringify(input) });
-}
-
-export function getCuraleafSupportCases(organisationId: string, orderId?: string) {
-  const query = new URLSearchParams({ organisationId });
-  if (orderId) query.set('orderId', orderId);
-  return apiRequest<import('./contracts').CuraleafSupportCase[]>(`/v1/portal/curaleaf/support-cases?${query}`);
-}
-
-export function createCuraleafSupportCase(input: {
-  organisationId: string;
-  orderId: string;
-  reason: import('./contracts').CuraleafSupportReason;
-  note: string;
-  prescriptionId?: string;
-  purchaseOrderId?: string;
-}) {
-  return apiRequest<import('./contracts').CuraleafSupportCase>('/v1/portal/curaleaf/support-cases', { method: 'POST', body: JSON.stringify(input) });
-}
-
-export function updateCuraleafSupportCase(caseId: string, input: { organisationId: string; status: import('./contracts').CuraleafSupportStatus; note: string }) {
-  return apiRequest<import('./contracts').CuraleafSupportCase>(`/v1/portal/curaleaf/support-cases/${encodeURIComponent(caseId)}`, { method: 'PATCH', body: JSON.stringify(input) });
-}
-
-export function approveCuraleafQuoteReview(orderId: string, input: { organisationId: string; note: string }) {
-  return apiRequest(`/v1/portal/orders/${encodeURIComponent(orderId)}/curaleaf-quote-review/approve`, { method: 'POST', body: JSON.stringify(input) });
 }
 
 export function resolvePortalQuoteReview(orderId: string, input: {

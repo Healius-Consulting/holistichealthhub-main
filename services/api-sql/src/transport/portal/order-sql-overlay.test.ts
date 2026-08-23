@@ -47,8 +47,8 @@ describe('SQL order overlay', () => {
     assert.equal(listSrc.includes('fetchCuraleafPurchaseOrders'), false);
     assert.equal(listSrc.includes('fetchCuraleafShipments'), false);
     assert.equal(listSrc.includes('mapPortalOrderFromSql'), true);
-    const defaultGetById = getByIdSrc.split("String(req.query.refresh")[0] ?? '';
-    assert.equal(defaultGetById.includes('fetchCuraleafPurchaseOrders'), false);
+    assert.equal(getByIdSrc.includes('fetchCuraleafPurchaseOrders'), false);
+    assert.equal(getByIdSrc.includes('fetchCuraleafShipments'), false);
     assert.equal(getByIdSrc.includes('mapPortalOrderFromSql'), true);
   });
 

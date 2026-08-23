@@ -23,7 +23,7 @@ import {
 } from '../context/AppContext';
 import { TRAINING_PRESCRIBER, TRAINING_PRODUCT } from '../training/workspace';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getCuraleafTrainingQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../shared/api';
+import { createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../shared/api';
 import { formatPatientDob } from '../utils/patientDob';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { MAX_PRESCRIPTION_FILE_BYTES, PRESCRIPTION_FILE_ACCEPT, resolvePrescriptionContentType } from '../utils/prescriptionFile';
@@ -809,9 +809,7 @@ export default function CreateOrder() {
     try {
       const quote = isLocalPortalPreview
         ? await getDevCuraleafQuote(currentQuoteItems)
-        : state.workspaceMode === 'live'
-          ? await getCuraleafQuote(state.currentOrganisationId, currentQuoteItems)
-          : await getCuraleafTrainingQuote(state.currentOrganisationId, currentQuoteItems);
+        : await getCuraleafQuote(state.currentOrganisationId, currentQuoteItems);
       if (requestVersion !== quoteRequestVersion.current) return;
       const quotedPackIds = new Set(quote.items.map(item => item.packId));
       const missingPackIds = [...new Set(currentQuoteItems.map(item => item.packId).filter(packId => !quotedPackIds.has(packId)))];
