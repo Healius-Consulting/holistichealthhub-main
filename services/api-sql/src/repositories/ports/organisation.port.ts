@@ -115,10 +115,22 @@ export interface UpdateOrganisationProfileInput {
   mainContactEmail: string | null;
 }
 
+export interface UpdateOrganisationBrandInput {
+  primaryColour: string;
+  logoText: string;
+  portalName: string;
+}
+
+export interface OrganisationDomainRecord {
+  id: string;
+  hostname: string;
+}
+
 export interface OrganisationRepositoryPort {
   findOrganisationById(id: string): Promise<OrganisationRecord | null>;
   listOrganisations(): Promise<OrganisationRecord[]>;
   updateOrganisationProfile(id: string, input: UpdateOrganisationProfileInput): Promise<void>;
+  updateOrganisationBrand(id: string, input: UpdateOrganisationBrandInput): Promise<void>;
   updateOrganisationClassification(id: string, classification: OrganisationRecord['classification']): Promise<void>;
   updateOrganisationStatus(id: string, status: OrganisationRecord['status']): Promise<void>;
   updateOrganisationPaymentRoute(id: string, defaultPaymentRoute: OrganisationRecord['defaultPaymentRoute'], worldpayEnabled: boolean): Promise<void>;
@@ -133,6 +145,8 @@ export interface OrganisationRepositoryPort {
   }): Promise<void>;
   createOrganisation(input: CreateOrganisationRecordInput): Promise<void>;
   createOrganisationDomain(organisationId: string, hostname: string): Promise<void>;
+  listOrganisationDomains(organisationId: string): Promise<OrganisationDomainRecord[]>;
+  deleteOrganisationDomain(id: string): Promise<void>;
   listSetupTasks(organisationId: string): Promise<SetupTaskRecord[]>;
   upsertSetupTask(params: {
     organisationId: string;

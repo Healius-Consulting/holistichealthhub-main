@@ -6,7 +6,9 @@ import type {
   PublicPharmacyResolution,
   ReferralTokenRecord,
   CreateOrganisationRecordInput,
+  OrganisationDomainRecord,
   SetupTaskRecord,
+  UpdateOrganisationBrandInput,
   UpdateOrganisationProfileInput,
 } from '../ports/organisation.port.js';
 import { organisationAddressSummary } from '../ports/directory.port.js';
@@ -213,6 +215,21 @@ const CREATE_ORGANISATION_DOMAIN_GQL = `
   }
 `;
 
+const LIST_ORGANISATION_DOMAINS_GQL = `
+  query ListOrganisationDomains($organisationId: UUID!) {
+    organisationDomains(where: { organisationId: { eq: $organisationId } }) {
+      id
+      hostname
+    }
+  }
+`;
+
+const DELETE_ORGANISATION_DOMAIN_GQL = `
+  mutation DeleteOrganisationDomain($id: UUID!) {
+    organisationDomain_delete(key: { id: $id })
+  }
+`;
+
 const LIST_SETUP_TASKS_GQL = `
   query ListSetupTasksByOrg($organisationId: UUID!) {
     setupTasks(where: { organisationId: { eq: $organisationId } }) {
@@ -287,6 +304,24 @@ const UPDATE_ORGANISATION_PROFILE_GQL = `
         mainContactName: $mainContactName
         mainContactPhone: $mainContactPhone
         mainContactEmail: $mainContactEmail
+      }
+    )
+  }
+`;
+
+const UPDATE_ORGANISATION_BRAND_GQL = `
+  mutation UpdateOrganisationBrand(
+    $id: UUID!
+    $primaryColour: String!
+    $logoText: String!
+    $portalName: String!
+  ) {
+    organisation_update(
+      key: { id: $id }
+      data: {
+        primaryColour: $primaryColour
+        logoText: $logoText
+        portalName: $portalName
       }
     )
   }
@@ -399,6 +434,17 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
         mainContactName: input.mainContactName,
         mainContactPhone: input.mainContactPhone,
         mainContactEmail: input.mainContactEmail,
+      },
+    });
+  }
+
+  async updateOrganisationBrand(id: string, input: UpdateOrganisationBrandInput): Promise<void> {
+    await dataConnect.executeGraphql<any, any>(UPDATE_ORGANISATION_BRAND_GQL, {
+      variables: {
+        id: asUuid(id),
+        primaryColour: input.primaryColour,
+        logoText: input.logoText,
+        portalName: input.portalName,
       },
     });
   }
@@ -531,7 +577,21 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
 
   async createOrganisationDomain(organisationId: string, hostname: string): Promise<void> {
     await dataConnect.executeGraphql<any, any>(CREATE_ORGANISATION_DOMAIN_GQL, {
-      variables: { organisationId, hostname },
+      variables: { organisationId: asUuid(organisationId), hostname },
+    });
+  }
+
+  async listOrganisationDomains(organisationId: string): Promise<OrganisationDomainRecord[]> {
+    const result = await dataConnect.executeGraphql<{ organisationDomains: OrganisationDomainRecord[] }, any>(
+      LIST_ORGANISATION_DOMAINS_GQL,
+      { variables: { organisationId: asUuid(organisationId) } },
+    );
+    return result.data.organisationDomains ?? [];
+  }
+
+  async deleteOrganisationDomain(id: string): Promise<void> {
+    await dataConnect.executeGraphql<any, any>(DELETE_ORGANISATION_DOMAIN_GQL, {
+      variables: { id: asUuid(id) },
     });
   }
 

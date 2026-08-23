@@ -1,7 +1,7 @@
 import { formatOrganisationAddress } from '../../domain/geography/address.js';
 import { geocodePostcode, normaliseUkPostcode } from '../../domain/geography/postcode.js';
+import type { DirectoryRepositoryPort } from '../../repositories/ports/directory.port.js';
 import type { OrganisationRecord, UpdateOrganisationProfileInput } from '../../repositories/ports/organisation.port.js';
-import type { SqlDirectoryRepository } from '../../repositories/sql/directory.sql.js';
 
 export async function buildOrganisationProfileUpdate(
   current: OrganisationRecord,
@@ -10,6 +10,7 @@ export async function buildOrganisationProfileUpdate(
     name?: string;
     gphcNumber?: string;
     superintendent?: string;
+    address?: string;
     addressLine1?: string;
     addressLine2?: string;
     locality?: string;
@@ -26,14 +27,16 @@ export async function buildOrganisationProfileUpdate(
   const county = input.county?.trim() || current.county || null;
   const postcodeInput = input.postcode?.trim() || current.postcode || '';
   const postcode = postcodeInput ? normaliseUkPostcode(postcodeInput) : null;
-  const geocode = postcode ? await geocodePostcode(postcode) : null;
+  const shouldGeocode = Boolean(postcode) && postcode !== current.postcode;
+  const geocode = shouldGeocode && postcode ? await geocodePostcode(postcode) : null;
+  const formattedAddress = formatOrganisationAddress({ addressLine1, addressLine2, locality, county, postcode });
 
   return {
     tradingName: input.tradingName ?? current.tradingName,
     name: input.name ?? current.name,
     gphcNumber: input.gphcNumber ?? current.gphcNumber,
     superintendentName: input.superintendent ?? current.superintendentName,
-    address: formatOrganisationAddress({ addressLine1, addressLine2, locality, county, postcode }),
+    address: input.address?.trim() || formattedAddress || current.address,
     addressLine1: addressLine1 || null,
     addressLine2,
     locality: locality || null,
@@ -48,7 +51,7 @@ export async function buildOrganisationProfileUpdate(
 }
 
 export async function syncDirectoryProfileFromOrganisation(
-  directoryRepo: SqlDirectoryRepository,
+  directoryRepo: Pick<DirectoryRepositoryPort, 'upsertProfile'>,
   organisationId: string,
   profile: UpdateOrganisationProfileInput,
 ) {

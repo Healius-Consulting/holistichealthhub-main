@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { updateAdminOrganisationDetails } from '../../application/organisation/admin-update.js';
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { canAcceptPublicIntake } from '../../domain/organisation/access.js';
@@ -11,6 +12,7 @@ import {
   type PharmacySetupStatusView,
 } from '../../domain/organisation/operational-readiness.js';
 import type { OrganisationRecord, SetupTaskRecord } from '../../repositories/ports/organisation.port.js';
+import { SqlDirectoryRepository } from '../../repositories/sql/directory.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
@@ -136,6 +138,7 @@ export function createPortalSetupRouter(): Router {
   const organisationRepo = new SqlOrganisationRepository();
   const identityRepo = new SqlIdentityRepository();
   const integrationRepo = new SqlIntegrationRepository();
+  const directoryRepo = new SqlDirectoryRepository();
   const referralLinks = new ReferralLinkService(organisationRepo);
 
   async function setupSnapshot(organisation: OrganisationRecord, records?: SetupTaskRecord[]): Promise<PharmacySetupStatusView> {
@@ -550,6 +553,36 @@ export function createPortalSetupRouter(): Router {
         surface: context.surface,
       });
       res.status(200).json({ url });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/portal/admin/organisations/:id', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const { organisation, changedFields } = await updateAdminOrganisationDetails(organisationId, req.body, {
+        organisationRepo,
+        directoryRepo,
+        normaliseHostname,
+      });
+      if (changedFields.length > 0) {
+        await identityRepo.appendAudit({
+          organisationId,
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          event: 'organisation.updated',
+          recordType: 'Organisation',
+          recordId: organisationId,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: scope.surface,
+          details: { changedFields },
+        });
+      }
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(toPortalOrganisation(organisation));
     } catch (error) {
       next(error);
     }
