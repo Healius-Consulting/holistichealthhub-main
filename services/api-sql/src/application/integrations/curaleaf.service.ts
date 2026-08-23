@@ -37,6 +37,11 @@ import {
   stampQuoteReviewOnSnapshot,
   supplierPurchaseOrderCancelled,
 } from '../orders/quote-review.js';
+import {
+  buildPrescriptionPlacementItems,
+  packSizeFromProductRecord,
+  prescriptionItemsFromSnapshot,
+} from '../orders/prescription-units.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { MAX_PRESCRIPTION_UPLOAD_BYTES } from '../../providers/storage/upload-constraints.js';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
@@ -252,6 +257,19 @@ async function listAll(path: string, collectionKey: string, credential: Curaleaf
     if (items.length === 0) break;
   }
   return { records, totalRecordCount: Number.isFinite(totalRecordCount) ? totalRecordCount : records.length };
+}
+
+async function productPackSizeCatalogue(connection: IntegrationConnectionRecord) {
+  const credential = await credentialFor(connection);
+  const products = await listAll('/v1/products/', 'products', credential);
+  const sizes = new Map<string, number>();
+  for (const raw of products.records) {
+    const record = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+    const id = String(record.id || '').trim();
+    const packSize = packSizeFromProductRecord(record);
+    if (id && packSize) sizes.set(id, packSize);
+  }
+  return sizes;
 }
 
 export async function fetchCuraleafCatalogue(connection: IntegrationConnectionRecord) {
@@ -732,38 +750,60 @@ export async function executeCuraleafOrderPlacement(
     };
   }
 
-  // Step 2: Extract line items & formulas for prescription submission.
+  // Step 2: Extract line items. Units are pack count × product pack size — never a 10g guess.
   const rxDataItems = Array.isArray(rxData.items) ? rxData.items as Array<Record<string, unknown>> : [];
   const rawItems: Array<Record<string, unknown>> = Array.isArray(snapshot.lineItems)
     ? snapshot.lineItems as Array<Record<string, unknown>>
     : Array.isArray(snapshot.items)
       ? snapshot.items as Array<Record<string, unknown>>
       : rxList.flatMap(rx => Array.isArray(rx.items) ? rx.items as Array<Record<string, unknown>> : []);
-  const lineItems: Array<{ productId: string; count: number; formulaId?: string; unitsNeededCount?: number }> = [];
-
-  for (const item of rawItems) {
-    const id = String(item.productId || item.packId || item.id || '');
-    const count = Number(item.quantity || item.qty || item.count || 1);
-    const rawFormulaId = item.formulaId ?? rxDataItems[0]?.formulaId;
-    const formulaId = typeof rawFormulaId === 'string' ? rawFormulaId : undefined;
-    const rawUnitsNeeded = item.unitsNeededCount;
-    const unitsNeededCount = typeof rawUnitsNeeded === 'number'
-      ? rawUnitsNeeded
-      : count * 10;
-    if (id && count > 0) {
-      lineItems.push({
-        productId: id,
-        count,
-        formulaId: formulaId && formulaId !== id ? formulaId : undefined,
-        unitsNeededCount,
+  const prescriptionItems = [...rxDataItems, ...prescriptionItemsFromSnapshot(snapshot)];
+  let catalogPackSizeByPackId = new Map<string, number>();
+  let placedLines = buildPrescriptionPlacementItems({
+    rawLines: rawItems,
+    prescriptionItems,
+    catalogPackSizeByPackId,
+  });
+  if (placedLines.missingPackSize.length) {
+    try {
+      catalogPackSizeByPackId = await productPackSizeCatalogue(connection);
+      placedLines = buildPrescriptionPlacementItems({
+        rawLines: rawItems,
+        prescriptionItems,
+        catalogPackSizeByPackId,
       });
+    } catch (error) {
+      console.warn('[Curaleaf] Pack-size catalogue lookup note:', error);
+      return {
+        skipped: true,
+        reason: 'Curaleaf pack sizes could not be retrieved',
+        prescriberId,
+        prescriptionId: null,
+        purchaseOrder: null,
+      };
     }
   }
 
-  const rxItems = lineItems.filter(item => Boolean(item.formulaId)).map(item => ({
-    formulaId: item.formulaId!,
-    unitsNeededCount: item.unitsNeededCount || item.count * 10,
+  const lineItems = placedLines.items.map(item => ({
+    productId: item.productId,
+    count: item.count,
+    formulaId: item.formulaId,
+    unitsNeededCount: item.unitsNeededCount,
   }));
+  const rxItems = placedLines.items.map(item => ({
+    formulaId: item.formulaId,
+    unitsNeededCount: item.unitsNeededCount,
+  }));
+
+  if (placedLines.missingPackSize.length) {
+    return {
+      skipped: true,
+      reason: 'Prescription lines are missing Curaleaf pack sizes',
+      prescriberId,
+      prescriptionId: null,
+      purchaseOrder: null,
+    };
+  }
 
   if (rxItems.length === 0) {
     return {
@@ -977,6 +1017,20 @@ export async function executeCuraleafOrderPlacement(
       }),
     });
     console.log(`[Curaleaf] Purchase order from prescription placed: ${JSON.stringify(purchaseOrderResult)}`);
+    const createdPurchaseOrderId = String(purchaseOrderResult?.id || purchaseOrderResult?.purchaseOrderId || '').trim();
+    if (createdPurchaseOrderId) {
+      try {
+        const livePurchaseOrder = await curaleafApiRequest<Record<string, unknown>>(
+          connection,
+          `/v1/purchase-orders/${encodeURIComponent(createdPurchaseOrderId)}/`,
+        );
+        if (livePurchaseOrder && typeof livePurchaseOrder === 'object') {
+          purchaseOrderResult = { ...purchaseOrderResult, ...livePurchaseOrder };
+        }
+      } catch (lookupErr) {
+        console.warn('[Curaleaf] Purchase-order detail lookup note:', lookupErr);
+      }
+    }
     await persistCuraleafPrescriptionIdentity({
       organisationId: connection.organisationId,
       orderId: order.id,
@@ -986,6 +1040,7 @@ export async function executeCuraleafOrderPlacement(
       prescriberId,
       prescriptionState: 'ACTIVE',
       purchaseOrder: purchaseOrderResult,
+      customerReferenceFallback: customerReference,
       fulfilmentStatus: 'SUPPLIER_PROCESSING',
     });
     await purgeOrderPrescriptionFiles(connection.organisationId, snapshot).catch(error =>

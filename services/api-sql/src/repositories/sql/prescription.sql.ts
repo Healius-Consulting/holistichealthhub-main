@@ -320,6 +320,23 @@ const UPSERT_ORDER_PRESCRIPTION_GQL = `
   }
 `;
 
+const UPSERT_ORDER_PRESCRIPTION_PLACED_GQL = `
+  mutation UpsertPlacedOrderPrescription(
+    $orderId: UUID!
+    $prescriptionId: UUID!
+    $supplierPurchaseOrderId: String
+  ) {
+    orderPrescription_upsert(data: {
+      orderId: $orderId
+      prescriptionId: $prescriptionId
+      placementState: PLACED
+      supplierPurchaseOrderId: $supplierPurchaseOrderId
+      placedAt_expr: "request.time"
+      updatedAt_expr: "request.time"
+    })
+  }
+`;
+
 const CREATE_PRESCRIPTION_FILE_GQL = `
   mutation CreatePrescriptionFile(
     $id: UUID
@@ -642,13 +659,11 @@ export class SqlPrescriptionRepository implements PrescriptionRepositoryPort {
       ?? await this.findPrescriptionBySerial(input.organisationId, input.serialNumber);
     if (!saved) throw new Error('Prescription could not be saved with the Curaleaf prescription ID.');
 
-    await dataConnect.executeGraphql(UPSERT_ORDER_PRESCRIPTION_GQL, {
-      variables: {
-        orderId: input.orderId,
-        prescriptionId: saved.id,
-        placementState: input.placementState ?? (input.status === 'PLACED' ? 'PLACED' : 'PENDING_PLACEMENT'),
-        supplierPurchaseOrderId: input.supplierPurchaseOrderId ?? null,
-      },
+    await this.upsertOrderPrescriptionLink({
+      orderId: input.orderId,
+      prescriptionId: saved.id,
+      placementState: input.placementState ?? (input.status === 'PLACED' ? 'PLACED' : 'PENDING_PLACEMENT'),
+      supplierPurchaseOrderId: input.supplierPurchaseOrderId ?? null,
     });
 
     return saved;
@@ -694,16 +709,38 @@ export class SqlPrescriptionRepository implements PrescriptionRepositoryPort {
     );
     const links = result.data.orderPrescriptions ?? [];
     for (const link of links) {
-      await dataConnect.executeGraphql(UPSERT_ORDER_PRESCRIPTION_GQL, {
-        variables: {
-          orderId,
-          prescriptionId: link.prescriptionId,
-          placementState: ['PENDING_PLACEMENT', 'HELD_PRICE', 'HELD_STOCK', 'CANCELLATION_PENDING_REFUND', 'PLACED', 'HELD_FOR_RENEWAL', 'CANCELLED_REFUNDED'].includes(link.placementState)
-            ? link.placementState
-            : 'PENDING_PLACEMENT',
-          supplierPurchaseOrderId,
-        },
+      await this.upsertOrderPrescriptionLink({
+        orderId,
+        prescriptionId: link.prescriptionId,
+        placementState: 'PLACED',
+        supplierPurchaseOrderId,
       });
     }
+  }
+
+  private async upsertOrderPrescriptionLink(input: {
+    orderId: string;
+    prescriptionId: string;
+    placementState: string;
+    supplierPurchaseOrderId?: string | null;
+  }) {
+    if (input.placementState === 'PLACED') {
+      await dataConnect.executeGraphql(UPSERT_ORDER_PRESCRIPTION_PLACED_GQL, {
+        variables: {
+          orderId: input.orderId,
+          prescriptionId: input.prescriptionId,
+          supplierPurchaseOrderId: input.supplierPurchaseOrderId ?? null,
+        },
+      });
+      return;
+    }
+    await dataConnect.executeGraphql(UPSERT_ORDER_PRESCRIPTION_GQL, {
+      variables: {
+        orderId: input.orderId,
+        prescriptionId: input.prescriptionId,
+        placementState: input.placementState,
+        supplierPurchaseOrderId: input.supplierPurchaseOrderId ?? null,
+      },
+    });
   }
 }

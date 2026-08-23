@@ -20,6 +20,7 @@ import {
 } from '../integrations/curaleaf-events.js';
 import { listPharmacyRecipients, queueEmailToRecipients } from '../notifications/email-outbox.js';
 import { curaleafApiRequest } from '../integrations/curaleaf.service.js';
+import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import type { CuraleafPurchaseOrderLike, CuraleafShipmentLike } from '../orders/curaleaf-fulfilment.js';
 import type { IdentityRepositoryPort } from '../../repositories/ports/identity.port.js';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
@@ -184,6 +185,48 @@ async function pollKind(
               ? 'Curaleaf cancelled the purchase order. Refund or replace the paid order.'
               : 'Curaleaf rejected the purchase order. Refund or replace the paid order.',
             afterPharmacyCall,
+          });
+        }
+      } else if (kind === 'purchaseOrder') {
+        const purchaseOrder = record as CuraleafPurchaseOrderLike;
+        const sqlIds = await sqlOrderIdsForPurchaseOrder(connection.organisationId, String(purchaseOrder.id || ''), deps);
+        const orders = await resolveOrdersForCuraleafEntity(
+          connection.organisationId,
+          sqlIds,
+          deps,
+          order => orderMatchesCancelledPurchaseOrder(order, purchaseOrder),
+        );
+        const lockedFulfilment = new Set([
+          'PARTIALLY_DISPATCHED_TO_PHARMACY',
+          'DISPATCHED_TO_PHARMACY',
+          'PARTIALLY_RECEIVED',
+          'RECEIVED',
+          'READY_FOR_COLLECTION',
+          'COLLECTED',
+        ]);
+        for (const order of orders) {
+          const snapshot = order.quoteSnapshot && typeof order.quoteSnapshot === 'object'
+            ? order.quoteSnapshot as Record<string, unknown>
+            : {};
+          const prior = snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
+            ? snapshot.curaleaf as Record<string, unknown>
+            : {};
+          const poState = String(purchaseOrder.state || purchaseOrder.purchaseOrderState || 'CREATED').toUpperCase();
+          const fulfilmentStatus = lockedFulfilment.has(String(order.fulfilmentStatus || ''))
+            ? undefined
+            : poState === 'FULLY_ALLOCATED'
+              ? 'SUPPLIER_ALLOCATED'
+              : 'SUPPLIER_PROCESSING';
+          await persistCuraleafPrescriptionIdentity({
+            organisationId: order.organisationId,
+            orderId: order.id,
+            patientId: order.patientId,
+            snapshot: order.quoteSnapshot,
+            prescriptionId: typeof prior.prescriptionId === 'string' ? prior.prescriptionId : null,
+            prescriberId: typeof prior.prescriberId === 'string' ? prior.prescriberId : null,
+            purchaseOrder: record,
+            customerReferenceFallback: order.orderNumber,
+            fulfilmentStatus,
           });
         }
       }

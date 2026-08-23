@@ -591,12 +591,18 @@ export default function CreateOrder() {
         const lineItems = activeOrder.prescriptions.flatMap(rx => rx.items.map(item => {
           const quoted = quoteItems.find(entry => entry.packId === item.productId);
           const wholesalePackPricePence = quoted ? Math.round(Number(quoted.wholesalePackPrice) * 100) : undefined;
+          const catalogueItem = state.catalogue.find(entry => entry.id === item.productId);
+          const packSize = Number.isInteger(catalogueItem?.packSize) && (catalogueItem?.packSize ?? 0) > 0
+            ? catalogueItem!.packSize
+            : undefined;
           return {
             productId: item.productId,
             packId: item.productId,
             formulaId: item.formulaId,
             name: item.name,
             quantity: item.qty,
+            packSize,
+            unitsNeededCount: packSize ? packSize * item.qty : item.unitsNeededCount,
             unitPricePence: Math.round((item.retail || 0) * 100),
             wholesalePackPrice: quoted?.wholesalePackPrice,
             wholesalePackPricePence,

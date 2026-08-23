@@ -27,6 +27,15 @@ const LIST_BY_ORG_GQL = `
   }
 `;
 
+const MARK_LINES_PLACED_GQL = `
+  mutation MarkOrderLinesPlaced($orderId: UUID!) {
+    orderLine_updateMany(
+      where: { orderId: { eq: $orderId } }
+      data: { placementState: PLACED, updatedAt_expr: "request.time" }
+    )
+  }
+`;
+
 const INSERT_LINE_GQL = `
   mutation InsertOrderLine(
     $orderId: UUID!
@@ -72,6 +81,12 @@ export class SqlOrderLineRepository implements OrderLineRepositoryPort {
       { variables: { organisationId, limit } },
     );
     return result.data.orderLines ?? [];
+  }
+
+  async markLinesPlaced(orderId: string): Promise<void> {
+    await dataConnect.executeGraphql(MARK_LINES_PLACED_GQL, {
+      variables: { orderId },
+    });
   }
 
   async replaceOrderLines(orderId: string, lines: CreateOrderLineInput[]): Promise<void> {

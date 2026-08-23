@@ -54,6 +54,7 @@ import {
   mapPortalOrderFromSql,
 } from './order-sql-overlay.js';
 import { parseQuote } from '../../application/orders/quote-review.js';
+import { stampPackFieldsOnSnapshot } from '../../application/orders/prescription-units.js';
 import {
   completedManualRefund,
   orderMoneyWasTaken,
@@ -118,6 +119,8 @@ const createOrderInputSchema = z.object({
     formulaId: z.string().optional(),
     name: z.string().optional(),
     quantity: z.number().int().positive(),
+    packSize: z.number().int().positive().optional(),
+    unitsNeededCount: z.number().int().positive().optional(),
     unitPricePence: z.number().int().nonnegative().optional(),
   })).default([]),
   prescriptions: z.array(z.object({
@@ -463,14 +466,14 @@ export function createPortalOrderRouter(): Router {
       const paymentRoute = input.paymentRoute.toUpperCase() === 'WORLDPAY' ? 'WORLDPAY' as const : 'MANUAL' as const;
       const orderNumber = input.orderNumber || `ORD-${Date.now().toString(36).toUpperCase()}`;
 
-      const quoteSnapshot = input.quoteSnapshot ?? {
+      const quoteSnapshot = stampPackFieldsOnSnapshot(input.quoteSnapshot ?? {
         prescriptions: input.prescriptions,
         lineItems: input.lineItems,
         pricingQuote: input.pricingQuote ?? null,
         medicineTotalPence,
         dispensingFeePence,
         totalPence,
-      };
+      }, input.lineItems);
 
       const result = await orderRepo.createOrder({
         organisationId: scope.organisationId,

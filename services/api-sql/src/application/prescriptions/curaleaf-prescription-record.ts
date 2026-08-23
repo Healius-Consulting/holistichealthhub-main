@@ -1,4 +1,5 @@
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
+import { SqlOrderLineRepository } from '../../repositories/sql/order-line.sql.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 import { prescriptionFileIdsFromSnapshot } from './prescription-file-purge.js';
 
@@ -26,6 +27,30 @@ export function asCuraleafPrescriptionState(value: unknown): CuraleafPrescriptio
   return null;
 }
 
+export function normalizeCuraleafPurchaseOrder(
+  purchaseOrder: Record<string, unknown> | null | undefined,
+  fallback?: { customerReference?: string | null },
+): Record<string, unknown> | null {
+  if (!purchaseOrder || typeof purchaseOrder !== 'object') return null;
+  const id = String(purchaseOrder.id || purchaseOrder.purchaseOrderId || '').trim();
+  if (!id) return purchaseOrder;
+  const state = String(purchaseOrder.state || purchaseOrder.purchaseOrderState || 'CREATED').toUpperCase();
+  const customerReference = typeof purchaseOrder.customerReference === 'string' && purchaseOrder.customerReference.trim()
+    ? purchaseOrder.customerReference.trim()
+    : (fallback?.customerReference ?? null);
+  return {
+    ...purchaseOrder,
+    id,
+    purchaseOrderId: id,
+    state,
+    purchaseOrderState: state,
+    customerReference,
+    courier: typeof purchaseOrder.courier === 'string' && purchaseOrder.courier.trim()
+      ? purchaseOrder.courier.trim()
+      : purchaseOrder.courier ?? null,
+  };
+}
+
 export function stampCuraleafPrescriptionOnSnapshot(
   snapshot: unknown,
   input: {
@@ -33,13 +58,17 @@ export function stampCuraleafPrescriptionOnSnapshot(
     prescriberId?: string | null;
     prescriptionState?: string | null;
     purchaseOrder?: Record<string, unknown> | null;
+    customerReferenceFallback?: string | null;
   },
 ) {
   const root = asRecord(snapshot);
   const prior = asRecord(root.curaleaf);
   const prescriptionId = input.prescriptionId || (typeof prior.prescriptionId === 'string' ? prior.prescriptionId : null);
   const prescriberId = input.prescriberId || (typeof prior.prescriberId === 'string' ? prior.prescriberId : null);
-  const purchaseOrder = input.purchaseOrder && typeof input.purchaseOrder === 'object' ? input.purchaseOrder : null;
+  const purchaseOrder = normalizeCuraleafPurchaseOrder(
+    input.purchaseOrder && typeof input.purchaseOrder === 'object' ? input.purchaseOrder : null,
+    { customerReference: input.customerReferenceFallback },
+  );
   if (String(prior.purchaseOrderState || prior.state || '').toUpperCase() === 'CANCELLED') {
     return {
       ...root,
@@ -84,7 +113,8 @@ export function stampCuraleafPrescriptionOnSnapshot(
       prescriptionState,
       purchaseOrderId: purchaseOrder?.id ?? prior.purchaseOrderId ?? null,
       purchaseOrderState: purchaseOrder?.state ?? prior.purchaseOrderState ?? null,
-      customerReference: purchaseOrder?.customerReference ?? prior.customerReference ?? null,
+      customerReference: purchaseOrder?.customerReference ?? prior.customerReference ?? input.customerReferenceFallback ?? null,
+      courier: purchaseOrder?.courier ?? prior.courier ?? null,
     },
   };
 }
@@ -98,6 +128,7 @@ export async function persistCuraleafPrescriptionIdentity(input: {
   prescriberId?: string | null;
   prescriptionState?: string | null;
   purchaseOrder?: Record<string, unknown> | null;
+  customerReferenceFallback?: string | null;
   fulfilmentStatus?: 'SUPPLIER_PENDING' | 'SUPPLIER_PROCESSING' | 'SUPPLIER_ALLOCATED' | 'PARTIALLY_DISPATCHED_TO_PHARMACY' | 'DISPATCHED_TO_PHARMACY' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'READY_FOR_COLLECTION' | 'COLLECTED' | 'EXCEPTION';
 }) {
   if (!input.prescriptionId && !input.purchaseOrder && !input.prescriberId) return input.snapshot;
@@ -119,6 +150,10 @@ export async function persistCuraleafPrescriptionIdentity(input: {
       ? input.purchaseOrder.purchaseOrderId
       : null;
   const prescriptionRepo = new SqlPrescriptionRepository();
+
+  if (purchaseOrderId) {
+    await new SqlOrderLineRepository().markLinesPlaced(input.orderId);
+  }
 
   if (!input.prescriptionId) {
     if (purchaseOrderId) {

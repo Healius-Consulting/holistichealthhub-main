@@ -31,4 +31,5 @@ export interface OrderLineRepositoryPort {
   listByOrderId(orderId: string): Promise<OrderLineRecord[]>;
   listByOrganisation(organisationId: string, limit?: number): Promise<OrderLineRecord[]>;
   replaceOrderLines(orderId: string, lines: CreateOrderLineInput[]): Promise<void>;
+  markLinesPlaced(orderId: string): Promise<void>;
 }
