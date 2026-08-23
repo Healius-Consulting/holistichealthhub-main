@@ -456,11 +456,11 @@ h1, h2, h3, .hhh-serif {
   animation: hhh-rise 0.85s var(--ease-out) 0.28s both;
 }
 
-#main-content > *:not(:first-child):not(.hhh-sticky-chapter) {
+#main-content > *:not(:first-child) {
   opacity: 0;
 }
 
-body.hhh-page-ready #main-content > *:not(:first-child):not(.hhh-sticky-chapter) {
+body.hhh-page-ready #main-content > *:not(:first-child) {
   animation: hhh-fade-in 0.7s var(--ease-out) both;
   animation-delay: calc(0.55s + clamp(0, var(--enter-i, 1) - 1, 7) * 0.1s);
 }
