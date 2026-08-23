@@ -2,6 +2,8 @@ import { formatOrganisationAddress } from '../../domain/geography/address.js';
 
 export interface DirectoryProfileRecord {
   organisationId: string;
+  /** Pharmacy name from the organisation. Absent on raw Data Connect profile rows. */
+  name?: string;
   tradingName: string;
   gphcNumber: string;
   addressLine1: string;

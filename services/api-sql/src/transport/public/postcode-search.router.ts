@@ -81,6 +81,7 @@ export function createPublicPostcodeSearchRouter(): Router {
         mapRadiusMiles: geocode.status === 'matched' ? directoryMapScaleMiles(geocode, mapProfiles) : null,
         results: matches.map(({ profile, miles }, index) => ({
           id: profile.organisationId,
+          name: profile.name || profile.tradingName,
           tradingName: profile.tradingName,
           gphcNumber: profile.gphcNumber,
           addressSummary: directoryAddressSummary(profile),

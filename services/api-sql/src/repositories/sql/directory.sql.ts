@@ -158,6 +158,7 @@ function toListedProfile(
   const address = structuredAddress(organisation, profile);
   return {
     organisationId: organisation.id,
+    name: organisation.name || profile?.tradingName || organisation.tradingName,
     tradingName: profile?.tradingName || organisation.tradingName,
     gphcNumber: profile?.gphcNumber || organisation.gphcNumber,
     addressLine1: address.addressLine1,

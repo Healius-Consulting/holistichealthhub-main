@@ -72,6 +72,8 @@ export interface EligibilitySubmissionReceipt {
 
 export interface PublicDirectoryResult {
   id: string;
+  /** Pharmacy name. Falls back to tradingName when the search API omits it. */
+  name?: string;
   tradingName: string;
   gphcNumber: string;
   addressSummary: string;
@@ -84,6 +86,10 @@ export interface PublicDirectoryResult {
   intakeAvailability: 'available' | 'limited';
   /** Server-projected position on the approximate map. Never coordinates. */
   mapPosition: { xPercent: number; yPercent: number };
+}
+
+export function publicDirectoryPharmacyName(result: Pick<PublicDirectoryResult, 'name' | 'tradingName'>) {
+  return result.name?.trim() || result.tradingName;
 }
 
 export const PUBLIC_DIRECTORY_MAP_RADIUS_MILES = 100;

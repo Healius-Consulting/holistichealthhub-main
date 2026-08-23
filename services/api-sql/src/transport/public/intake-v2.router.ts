@@ -162,7 +162,7 @@ export function createPublicIntakeV2Router(): Router {
         assignedOrganisationId = resolution.pharmacy.id;
         sourceType = 'PHARMACY_QR';
         assignmentStatus = 'PROVISIONAL';
-        provisionalPharmacyName = resolution.pharmacy.tradingName;
+        provisionalPharmacyName = resolution.pharmacy.name || resolution.pharmacy.tradingName;
       } else {
         const search = await searchRepo.findSessionById(asUuid(input.searchId));
         if (!search || Date.parse(search.expiresAt) <= Date.now()) {
@@ -180,7 +180,7 @@ export function createPublicIntakeV2Router(): Router {
             sourceOrganisationId = organisation.id;
             assignedOrganisationId = organisation.id;
             assignmentStatus = 'PROVISIONAL';
-            provisionalPharmacyName = organisation.tradingName;
+            provisionalPharmacyName = organisation.name || organisation.tradingName;
           } else {
             warning = 'SELECTED_PHARMACY_UNAVAILABLE';
           }

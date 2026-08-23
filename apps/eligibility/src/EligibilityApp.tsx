@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type R
 import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
 import { CONDITIONS, conditionLabel } from '@hhh/domain';
 import { createEligibilitySubmission, createV2Intake, resolvePublicReferralToken, searchPublicPharmacies } from '../../../src/shared/api';
-import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
+import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
 import { tenantThemeVariables } from '../../../src/utils/tenantTheme';
 import { parseEligibilityReferralRoute } from './referralRoute';
 
@@ -139,7 +139,8 @@ export default function EligibilityApp() {
   const choosePharmacy = (result: PublicDirectoryResult) => {
     setSelectedDirectoryProfileId(result.id);
     setManualProceed(false);
-    setPharmacy({ ...HHH_PUBLIC_IDENTITY, id: result.id, name: result.tradingName, tradingName: result.tradingName, gphcNumber: result.gphcNumber, address: result.addressSummary });
+    const pharmacyName = publicDirectoryPharmacyName(result);
+    setPharmacy({ ...HHH_PUBLIC_IDENTITY, id: result.id, name: pharmacyName, tradingName: pharmacyName, gphcNumber: result.gphcNumber, address: result.addressSummary });
   };
 
   const continueManual = () => { setSelectedDirectoryProfileId(null); setPharmacy(HHH_PUBLIC_IDENTITY); setManualProceed(true); };
@@ -253,7 +254,7 @@ export default function EligibilityApp() {
                 className={selectedDirectoryProfileId === result.id ? 'is-selected' : ''}
                 type="button"
                 style={{ left: `${result.mapPosition.xPercent}%`, top: `${result.mapPosition.yPercent}%` }}
-                aria-label={`${index + 1}. Select ${result.tradingName}, ${result.addressSummary}, ${result.approximateMiles.toFixed(1)} miles away`}
+                aria-label={`${index + 1}. Select ${publicDirectoryPharmacyName(result)}, ${result.addressSummary}, ${result.approximateMiles.toFixed(1)} miles away`}
                 aria-pressed={selectedDirectoryProfileId === result.id}
                 onClick={() => choosePharmacy(result)}
               ><MapPin aria-hidden="true" /><span>{index + 1}</span></button>)}
@@ -265,7 +266,7 @@ export default function EligibilityApp() {
                   <button type="button" aria-pressed={selectedDirectoryProfileId === result.id} className={selectedDirectoryProfileId === result.id ? 'is-selected' : ''} key={result.id} onClick={() => choosePharmacy(result)}>
                     <span className="eligibility-directory-number" aria-hidden="true">{index + 1}</span>
                     <span>
-                      <strong>{result.tradingName}</strong>
+                      <strong>{publicDirectoryPharmacyName(result)}</strong>
                       <small>{result.addressSummary}</small>
                       {contact ? <small className="eligibility-directory-contact">{contact}</small> : null}
                       <small>{result.approximateMiles.toFixed(1)} miles away</small>
