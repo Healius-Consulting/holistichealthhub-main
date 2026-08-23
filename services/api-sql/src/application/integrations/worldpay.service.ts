@@ -13,6 +13,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const SECRET_REGION = 'europe-west2';
 const HPP_MEDIA_TYPE = 'application/vnd.worldpay.payment_pages-v1.hal+json';
 const PAYMENT_QUERIES_MEDIA_TYPE = 'application/vnd.worldpay.payment-queries-v1.hal+json';
+export const WORLDPAY_TRY_BASE_URL = 'https://try.access.worldpay.com';
+export const WORLDPAY_LIVE_BASE_URL = 'https://access.worldpay.com';
 
 export type WorldpayCredential = {
   username: string;
@@ -64,11 +66,15 @@ function worldpayAuthorization(credential: WorldpayCredential) {
   return `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}`;
 }
 
-function paymentQueriesBaseUrl() {
-  return process.env.WORLDPAY_PAYMENT_QUERIES_BASE_URL
-    || process.env.WORLDPAY_VERIFY_BASE_URL
-    || process.env.WORLDPAY_HPP_BASE_URL
-    || 'https://try.access.worldpay.com';
+function configuredWorldpayBaseUrl() {
+  return config.WORLDPAY_PAYMENT_QUERIES_BASE_URL || config.WORLDPAY_HPP_BASE_URL || null;
+}
+
+export function worldpayBaseUrl(environment?: 'TEST' | 'PRODUCTION' | 'try' | 'live' | null) {
+  const override = configuredWorldpayBaseUrl();
+  if (override) return override;
+  if (environment === 'PRODUCTION' || environment === 'live') return WORLDPAY_LIVE_BASE_URL;
+  return WORLDPAY_TRY_BASE_URL;
 }
 
 export async function readStoredWorldpayCredential(
@@ -122,27 +128,34 @@ function worldpayEnvironment(url: string): 'try' | 'live' {
 }
 
 export async function validateWorldpayCredentials(credential: WorldpayCredential): Promise<WorldpayConnectionValidation> {
-  const baseUrl = paymentQueriesBaseUrl();
-  const url = new URL('/paymentQueries/payments', baseUrl);
-  url.searchParams.set('transactionReference', `HHH-CONNECTION-CHECK-${randomUUID()}`);
-  const response = await worldpayFetch(url, {}, credential);
-  if (response.status === 401 || response.status === 403) {
-    throw new HttpError(401, 'Worldpay rejected these API credentials.', 'WORLDPAY_CREDENTIALS_REJECTED');
+  const override = configuredWorldpayBaseUrl();
+  const candidates = override ? [override] : [WORLDPAY_TRY_BASE_URL, WORLDPAY_LIVE_BASE_URL];
+  let lastStatus = 0;
+  for (const [index, baseUrl] of candidates.entries()) {
+    const url = new URL('/paymentQueries/payments', baseUrl);
+    url.searchParams.set('transactionReference', `HHH-CONNECTION-CHECK-${randomUUID()}`);
+    const response = await worldpayFetch(url, {}, credential);
+    lastStatus = response.status;
+    if (response.status === 401 || response.status === 403) {
+      if (index < candidates.length - 1) continue;
+      throw new HttpError(401, 'Worldpay rejected these API credentials.', 'WORLDPAY_CREDENTIALS_REJECTED');
+    }
+    if (!response.ok) {
+      throw new HttpError(502, `Worldpay could not validate the connection (${response.status}).`, 'WORLDPAY_VALIDATION_FAILED');
+    }
+    try {
+      await response.json();
+    } catch {
+      throw new HttpError(502, 'Worldpay returned an invalid Payment Queries response.', 'WORLDPAY_VALIDATION_FAILED');
+    }
+    return {
+      passed: true,
+      checkedAt: new Date().toISOString(),
+      environment: worldpayEnvironment(baseUrl),
+      entityId: credential.entityId,
+    };
   }
-  if (!response.ok) {
-    throw new HttpError(502, `Worldpay could not validate the connection (${response.status}).`, 'WORLDPAY_VALIDATION_FAILED');
-  }
-  try {
-    await response.json();
-  } catch {
-    throw new HttpError(502, 'Worldpay returned an invalid Payment Queries response.', 'WORLDPAY_VALIDATION_FAILED');
-  }
-  return {
-    passed: true,
-    checkedAt: new Date().toISOString(),
-    environment: worldpayEnvironment(baseUrl),
-    entityId: credential.entityId,
-  };
+  throw new HttpError(502, `Worldpay could not validate the connection (${lastStatus}).`, 'WORLDPAY_VALIDATION_FAILED');
 }
 
 export async function writeWorldpayCredential(
@@ -265,7 +278,7 @@ export async function queryWorldpayPayment(
 }> {
   const credential = await readStoredWorldpayCredential(connection, organisationId);
   if (!credential) return { queried: false, reason: 'Worldpay credentials are not stored for this pharmacy.' };
-  const baseUrl = paymentQueriesBaseUrl();
+  const baseUrl = worldpayBaseUrl(connection?.environment);
   const url = new URL('/paymentQueries/payments', baseUrl);
   url.searchParams.set('transactionReference', transactionReference);
   const response = await worldpayFetch(url, {}, credential);
@@ -300,7 +313,7 @@ export async function createWorldpayHostedSession(
   const expirySeconds = input.expirySeconds || 86400 * 7;
   const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
   const credential = await requireStoredWorldpayCredential(connection, organisationId);
-  const baseUrl = process.env.WORLDPAY_HPP_BASE_URL || 'https://try.access.worldpay.com';
+  const baseUrl = worldpayBaseUrl(connection?.environment);
   const endpoint = new URL('/payment_pages', baseUrl);
   const authHeader = `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}`;
 

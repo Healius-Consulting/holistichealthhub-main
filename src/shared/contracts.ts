@@ -913,15 +913,10 @@ export interface WorldpayConnectionStatus {
   configured: boolean;
   connected: boolean;
   status?: 'verification_required' | 'connected' | 'attention';
+  environment?: 'try' | 'live';
   maskedIdentifier?: string;
   brandingConfigured?: boolean;
   updatedAt?: string;
-  validation?: {
-    passed: true;
-    checkedAt: string;
-    environment: 'try' | 'live';
-    entityId: string;
-  } | null;
 }
 
 export interface CreateOrganisationInput {

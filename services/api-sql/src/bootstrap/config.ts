@@ -7,6 +7,8 @@ const configSchema = z.object({
   DATA_CONNECT_SERVICE_ID: z.string().default('hhh-platform-service'),
   DATA_CONNECT_LOCATION: z.string().default('europe-west2'),
   CURALEAF_BASE_URL: z.url().default('https://api.curaleaflaboratories.dev'),
+  WORLDPAY_HPP_BASE_URL: z.url().optional(),
+  WORLDPAY_PAYMENT_QUERIES_BASE_URL: z.url().optional(),
   EMAIL_FROM_ADDRESS: z.string().email().optional(),
   RESEND_API_KEY_SECRET_RESOURCE_NAME: z.string().optional(),
   IP_HASH_SECRET: z.string().optional(),

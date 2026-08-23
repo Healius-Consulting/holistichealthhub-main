@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
-import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, isApiConfigured } from '../shared/api';
+import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, getWorldpayConnectionStatus, isApiConfigured } from '../shared/api';
 import type { CuraleafCancellationState, CuraleafCatalogue, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
 import { activeRedoPriceResolution } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
@@ -2077,6 +2077,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }).catch(error => console.warn('Curaleaf status check unavailable:', error));
     return () => { cancelled = true; };
   }, [state.catalogueSource, state.staffSession, livePharmacyWorkspace]);
+
+  useEffect(() => {
+    if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;
+    let cancelled = false;
+    const organisationId = state.currentOrganisationId;
+    getWorldpayConnectionStatus(organisationId).then(status => {
+      if (cancelled) return;
+      dispatch({
+        type: 'UPDATE_WORLDPAY',
+        organisationId,
+        updates: {
+          status: status.connected ? 'connected' : status.configured ? 'onboarding' : 'not-connected',
+          environment: status.environment === 'live' ? 'live' : 'sandbox',
+          merchantId: status.maskedIdentifier ?? null,
+          lastSyncedAt: status.updatedAt ?? new Date(),
+        },
+      });
+    }).catch(error => console.warn('Worldpay status check unavailable:', error));
+    return () => { cancelled = true; };
+  }, [livePharmacyWorkspace, state.currentOrganisationId, state.staffSession]);
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;

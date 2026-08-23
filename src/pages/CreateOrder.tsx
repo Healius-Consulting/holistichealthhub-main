@@ -64,7 +64,7 @@ export default function CreateOrder() {
   const organisationPatients = state.crm.filter(candidate => candidate.organisationId === state.currentOrganisationId);
   const orderablePatients = organisationPatients.filter(canCreateOrderForPatient);
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
-  const canUseWorldpay = Boolean(organisation?.worldpay.enabled && organisation?.worldpay.status === 'connected');
+  const canUseWorldpay = organisation?.worldpay.status === 'connected';
   const draftOrders = state.orders.filter(order => order.organisationId === state.currentOrganisationId && order.payment.status === 'none');
   const activeOrder = state.orders.find(order => order.organisationId === state.currentOrganisationId && order.id === state.activeOrderId && order.payment.status === 'none');
   const selectedPaymentRoute = activeOrder?.paymentRoute ?? (canUseWorldpay ? 'worldpay' : 'manual');

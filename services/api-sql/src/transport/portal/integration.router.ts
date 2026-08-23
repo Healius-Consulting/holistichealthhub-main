@@ -112,15 +112,10 @@ async function worldpayConnectionStatus(
     configured,
     connected,
     status: disconnected || !configured ? 'verification_required' as const : connected ? 'connected' as const : 'attention' as const,
+    environment: connection?.environment === 'PRODUCTION' ? 'live' as const : 'try' as const,
     maskedIdentifier: connection?.maskedCredential ?? undefined,
     brandingConfigured: Boolean(stored?.customisationId),
     updatedAt: connection?.updatedAt,
-    validation: connected && connection?.externalCustomerId ? {
-      passed: true as const,
-      checkedAt: connection.updatedAt,
-      environment: connection.environment === 'PRODUCTION' ? 'live' as const : 'try' as const,
-      entityId: connection.maskedCredential ?? '',
-    } : null,
   };
 }
 

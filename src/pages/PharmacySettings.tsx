@@ -252,9 +252,8 @@ export default function PharmacySettings() {
 
             {organisation.worldpay.status === 'connected' && (
               <div className="connection-summary">
-                <div><span>Environment</span><strong>{organisation.worldpay.environment === 'live' ? 'Live' : 'Sandbox'}</strong></div>
-                <div><span>Merchant</span><strong>{organisation.worldpay.merchantName ?? 'Not assigned'}</strong></div>
-                <div><span>Merchant ID</span><strong>{organisation.worldpay.merchantId ?? 'Pending onboarding'}</strong></div>
+                <div><span>Environment</span><strong>{organisation.worldpay.environment === 'live' ? 'Live' : 'Try'}</strong></div>
+                <div><span>Merchant entity</span><strong>{organisation.worldpay.merchantId ?? 'Stored'}</strong></div>
                 <div><span>Patient payment route</span><strong>{organisation.defaultPaymentRoute === 'worldpay' ? 'Worldpay' : 'Managed by pharmacy'}</strong></div>
               </div>
             )}
@@ -267,8 +266,8 @@ export default function PharmacySettings() {
                   type: 'UPDATE_WORLDPAY',
                   organisationId: organisation.id,
                   updates: {
-                    enabled: connection.connected,
                     status: connection.connected ? 'connected' : connection.configured ? 'onboarding' : 'not-connected',
+                    environment: connection.environment === 'live' ? 'live' : 'sandbox',
                     merchantId: connection.maskedIdentifier ?? null,
                     lastSyncedAt: connection.updatedAt ?? new Date(),
                   },
