@@ -7,6 +7,7 @@ import { requireStaff } from '../../security/require-staff.js';
 import { quotedCostFromSnapshot } from '../../application/orders/finance-costing.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
+import { isTrainingDirectoryOrganisation } from '../../domain/organisation/training-directory.js';
 import { pharmacyFinanceRecognition } from './finance-recognition.js';
 
 const organisationIdSchema = z.string().regex(/^(?:[a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i);
@@ -26,7 +27,7 @@ const LIST_REFERRAL_FEES_GQL = `
   query ListReferralFeeEvents {
     referralFeeEvents(limit: 20001, orderBy: { createdAt: DESC }) {
       id organisationId patientId kind amountPence dueDate status createdAt settledAt
-      organisation { tradingName }
+      organisation { name tradingName classification }
       patient { firstName surname email }
     }
   }
@@ -35,7 +36,7 @@ const LIST_REFERRAL_FEES_GQL = `
 type FeeRow = {
   id: string; organisationId: string; patientId: string; kind: 'NEW_REFERRAL' | 'ANNUAL_PATIENT';
   amountPence: number | string; dueDate: string; status: string; createdAt: string; settledAt: string | null;
-  organisation: { tradingName: string } | null;
+  organisation: { name?: string | null; tradingName: string; classification?: string | null } | null;
   patient: { firstName: string; surname: string; email: string } | null;
 };
 
@@ -211,6 +212,12 @@ export function createPortalFinanceRouter(): Router {
         throw new HttpError(413, 'The fee ledger is too large for one report. Select a narrower date range.', 'REPORT_SCOPE_TOO_LARGE');
       }
       const rows = all
+        .filter(event => !isTrainingDirectoryOrganisation({
+          id: event.organisationId,
+          name: event.organisation?.name,
+          tradingName: event.organisation?.tradingName,
+          classification: event.organisation?.classification,
+        }))
         .filter(event => !filters.organisationId || event.organisationId === filters.organisationId)
         .filter(event => !filters.from || event.dueDate >= filters.from!)
         .filter(event => !filters.to || event.dueDate <= filters.to!)

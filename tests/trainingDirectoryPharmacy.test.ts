@@ -10,6 +10,11 @@ test('Primary and Alternate sit in the training directory, not registered pharma
   assert.equal(isTrainingDirectoryPharmacy({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', workspaceClassification: 'training', tradingName: 'Demo' }), true);
 });
 
+test('Primary and Alternate names stay out of admin finance even without the sandbox flag', () => {
+  assert.equal(isTrainingDirectoryPharmacy({ id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', tradingName: 'Primary Branch' }), true);
+  assert.equal(isTrainingDirectoryPharmacy({ id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', name: 'Alternate Branch' }), true);
+});
+
 test('Eastwood and K-Chem remain registered pharmacies', () => {
   assert.equal(isTrainingDirectoryPharmacy({ id: '6d0176bb-89a0-4e32-9bce-c934c9557c42', tradingName: 'Eastwood Health Ltd' }), false);
   assert.equal(isTrainingDirectoryPharmacy({ id: '3e9f74ff-4fed-497d-904d-4d3ee3e5e126', tradingName: 'K-Chem Ltd' }), false);

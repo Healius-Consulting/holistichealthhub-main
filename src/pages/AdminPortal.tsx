@@ -1141,6 +1141,12 @@ export default function AdminPortal() {
 
     state.submissions
       .filter(submission => submission.status === 'Approved')
+      .filter(submission => {
+        const compactId = submission.organisationId.replaceAll('-', '').toLowerCase();
+        const organisation = organisations.get(submission.organisationId)
+          ?? [...organisations.values()].find(item => item.id.replaceAll('-', '').toLowerCase() === compactId);
+        return !isTrainingDirectoryPharmacy(organisation ?? { id: submission.organisationId, tradingName: submission.pharmacyName });
+      })
       .forEach(submission => {
         const patientKey = `${submission.organisationId}:${submission.email.trim().toLowerCase()}`;
         const patient = patients.get(patientKey);
@@ -1232,6 +1238,10 @@ export default function AdminPortal() {
   const referralFeeEvents = useMemo<AdminFeeEvent[]>(() => {
     if (isLocalPortalPreview) return previewReferralFeeEvents;
     return (adminFinanceReport?.rows ?? []).flatMap(row => {
+      const compactId = row.organisationId.replaceAll('-', '').toLowerCase();
+      const organisation = state.organisations.find(item => item.id.replaceAll('-', '').toLowerCase() === compactId)
+        ?? { id: row.organisationId, tradingName: row.pharmacyName };
+      if (isTrainingDirectoryPharmacy(organisation)) return [];
       const occurredAt = toValidDate(row.occurredAt) ?? toValidDate(row.dueDate);
       if (!occurredAt) return [];
       const patient = state.crm.find(record => record.id === row.patientId);
@@ -1570,7 +1580,7 @@ export default function AdminPortal() {
         <section className="order-crm-summary" aria-label="Pharmacy portfolio summary">
           <article className="order-crm-metric">
             <span className="order-crm-metric__icon"><Building2 size={16} /></span>
-            <span><small>Pharmacies</small><strong>{state.organisations.length}</strong><em>{registeredCount} registered · {trainingCount} training</em></span>
+            <span><small>Pharmacies</small><strong>{state.organisations.length}</strong><em>{registeredCount} registered · {trainingCount} testing</em></span>
           </article>
           <article className="order-crm-metric">
             <span className="order-crm-metric__icon"><Users size={16} /></span>
@@ -1605,7 +1615,7 @@ export default function AdminPortal() {
             {([
               { key: 'all' as const, label: 'All', count: state.organisations.length },
               { key: 'registered' as const, label: 'Registered', count: registeredCount },
-              { key: 'training' as const, label: 'Training', count: trainingCount },
+              { key: 'training' as const, label: 'Testing', count: trainingCount },
             ]).map(filter => (
               <button
                 type="button"
@@ -1659,10 +1669,10 @@ export default function AdminPortal() {
                       </section>
                     ) : null}
                     {trainingPharmacies.length ? (
-                      <section className="order-crm-list-group" aria-label="Training pharmacies">
+                      <section className="order-crm-list-group" aria-label="Testing pharmacies">
                         <header>
                           <span>
-                            <strong>Training pharmacies</strong>
+                            <strong>Testing pharmacies</strong>
                             <small>Primary and Alternate sandbox</small>
                           </span>
                           <b>{trainingPharmacies.length}</b>
@@ -2346,7 +2356,7 @@ export default function AdminPortal() {
               <span className="sr-only">Pharmacy</span>
               <select id="finance-pharmacy" value={financeOrganisationId} onChange={event => setFinanceOrganisationId(event.target.value)} aria-label="Filter by pharmacy">
                 <option value="all">All pharmacies</option>
-                {state.organisations.map(organisation => <option value={organisation.id} key={organisation.id}>{organisation.tradingName}</option>)}
+                {state.organisations.filter(organisation => !isTrainingDirectoryPharmacy(organisation)).map(organisation => <option value={organisation.id} key={organisation.id}>{organisation.tradingName}</option>)}
               </select>
             </label>
             {financePeriod === 'month' ? (
