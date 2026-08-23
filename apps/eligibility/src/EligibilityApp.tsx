@@ -56,11 +56,6 @@ function directoryContactLine(result: PublicDirectoryResult) {
 }
 
 function EligibilityShell({ themeStyle, children }: { themeStyle: CSSProperties; children: ReactNode }) {
-  useEffect(() => {
-    document.body.classList.add('eligibility-active');
-    return () => document.body.classList.remove('eligibility-active');
-  }, []);
-
   return <main className="eligibility-shell tenant-surface" style={themeStyle}>{children}</main>;
 }
 

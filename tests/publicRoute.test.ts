@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canonicalEligibilityRedirect, resolvePublicView } from '../apps/public/src/publicRoute.ts';
+import { canonicalEligibilityRedirect, publicHeaderVariant, resolvePublicView } from '../apps/public/src/publicRoute.ts';
 
 test('legacy pharmacy QR URLs open the eligibility form from the public root', () => {
   assert.equal(
@@ -76,6 +76,12 @@ test('the exact printed Eastwood and K-Chem URLs redirect onto holistichealthhub
       `https://holistichealthhub.cc/eligibility?token=${token}`,
     );
   }
+});
+
+test('the shared public header stays in marketing mode except on pharmacy token links', () => {
+  assert.equal(publicHeaderVariant('/about', ''), 'site');
+  assert.equal(publicHeaderVariant('/eligibility', ''), 'eligibility');
+  assert.equal(publicHeaderVariant('/eligibility', '?token=eastwood-3m8q2v'), 'token');
 });
 
 test('the canonical and unrelated public hosts never redirect themselves', () => {

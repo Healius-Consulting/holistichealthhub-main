@@ -1,4 +1,4 @@
-import { normaliseEligibilitySearch } from '../../eligibility/src/referralRoute.ts';
+import { normaliseEligibilitySearch, parseEligibilityReferralRoute } from '../../eligibility/src/referralRoute.ts';
 
 export type PublicView = 'site' | 'eligibility' | 'payment-complete' | 'payment-cancelled';
 
@@ -38,6 +38,14 @@ export function resolvePublicView(pathname: string, search: string): PublicView 
     path === '/payment/failed'
   ) return 'payment-cancelled';
   return 'site';
+}
+
+export type PublicHeaderVariant = 'site' | 'eligibility' | 'token';
+
+export function publicHeaderVariant(pathname: string, search: string): PublicHeaderVariant {
+  const view = resolvePublicView(pathname, search);
+  if (view !== 'eligibility') return 'site';
+  return parseEligibilityReferralRoute(search).kind === 'token' ? 'token' : 'eligibility';
 }
 
 export function canonicalEligibilityRedirect(hostname: string, pathname: string, search: string) {

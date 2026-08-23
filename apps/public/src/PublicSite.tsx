@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   Activity, ArrowRight, Brain, Check, ChevronDown, ChevronRight, ClipboardCheck, Clock3, Flower2,
-  Globe2, HeartHandshake, HeartPulse, Leaf, Menu, MoonStar, Orbit, PackageCheck,
-  ShieldCheck, ShieldPlus, Sparkles, Stethoscope, UserRoundCheck, Video, X,
+  Globe2, HeartHandshake, HeartPulse, Leaf, MoonStar, Orbit, PackageCheck,
+  ShieldCheck, ShieldPlus, Sparkles, Stethoscope, UserRoundCheck, Video,
 } from 'lucide-react';
 import './public-site.css';
 import { posts } from './journalPosts';
+import { PublicHeader, PublicLink } from './PublicHeader';
+import { usePublicLocation } from './publicLocation';
 
 const MARK = '/holistic-health-hub-mark.png';
 const HERO_IMAGE = '/hhh-consultation-hero.jpg';
@@ -134,49 +136,6 @@ const faqs = [
   ['Am I eligible for CBPM therapy?', 'Eligibility generally requires that you have a diagnosed eligible condition and have previously tried at least two licensed therapies or medications that proved ineffective or caused intolerable side effects. Complete the secure Holistic Health Hub eligibility pre-check to start a review.'],
 ] as const;
 
-function PublicLink({ href, children, className = '', ...props }: { href: string; children: ReactNode; className?: string } & React.AnchorHTMLAttributes<HTMLAnchorElement>) {
-  return <a className={className} href={href} {...props}>{children}</a>;
-}
-
-function SiteHeader() {
-  const [open, setOpen] = useState(false);
-  const path = window.location.pathname.replace(/\/+$/, '') || '/';
-
-  return (
-    <header className="hhh-header">
-      <div className="hhh-header__inner">
-        <PublicLink href="/" className="hhh-mark" aria-label="Holistic Health Hub Home">
-          <img src={MARK} alt="Holistic Health Hub Emblem" width="48" height="48" />
-          <span>
-            <strong>Holistic Health Hub</strong>
-            <small>Personalised healthcare</small>
-          </span>
-        </PublicLink>
-        <button
-          className="hhh-menu-toggle"
-          type="button"
-          aria-expanded={open}
-          aria-controls="public-navigation"
-          onClick={() => setOpen(value => !value)}
-        >
-          {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
-          <span className="sr-only">Toggle Navigation Menu</span>
-        </button>
-        <nav id="public-navigation" className={`hhh-nav ${open ? 'is-open' : ''}`} aria-label="Primary navigation">
-          <PublicLink href="/" className={path === '/' ? 'is-active' : ''}>Home</PublicLink>
-          <PublicLink href="/how-it-works" className={path === '/how-it-works' ? 'is-active' : ''}>How it works</PublicLink>
-          <PublicLink href="/conditions" className={path === '/conditions' ? 'is-active' : ''}>Conditions</PublicLink>
-          <PublicLink href="/about" className={path === '/about' ? 'is-active' : ''}>About</PublicLink>
-          <PublicLink href="/blog" className={path.startsWith('/blog') || path.startsWith('/post/') ? 'is-active' : ''}>Journal</PublicLink>
-          <PublicLink href="/faq" className={path === '/faq' ? 'is-active' : ''}>FAQs</PublicLink>
-          <PublicLink href="/eligibility" className="hhh-button hhh-button--rust hhh-nav__cta">
-            Check eligibility <ArrowRight aria-hidden="true" />
-          </PublicLink>
-        </nav>
-      </div>
-    </header>
-  );
-}
 
 function SiteFooter() {
   return (
@@ -224,44 +183,23 @@ function SiteFooter() {
 }
 
 function PageShell({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    document.documentElement.classList.add('hhh-public-active');
-    document.body.classList.add('hhh-public-active');
-    window.scrollTo(0, 0);
+  const { pathname } = usePublicLocation();
 
+  useEffect(() => {
     const sections = document.querySelectorAll<HTMLElement>('#main-content > *');
     sections.forEach((section, index) => {
       section.style.setProperty('--enter-i', String(index));
     });
     document.body.style.setProperty('--page-beats', String(Math.max(sections.length - 1, 0)));
-
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      document.body.classList.add('hhh-page-ready');
-      return () => {
-        document.documentElement.classList.remove('hhh-public-active');
-        document.body.classList.remove('hhh-public-active');
-        document.body.classList.remove('hhh-page-ready');
-        document.body.style.removeProperty('--page-beats');
-      };
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      document.body.classList.add('hhh-page-ready');
-    });
-
     return () => {
-      window.cancelAnimationFrame(frame);
-      document.documentElement.classList.remove('hhh-public-active');
-      document.body.classList.remove('hhh-public-active');
-      document.body.classList.remove('hhh-page-ready');
       document.body.style.removeProperty('--page-beats');
     };
-  }, []);
+  }, [pathname]);
 
   return (
     <div className="hhh-public">
       <a className="hhh-skip" href="#main-content">Skip to main content</a>
-      <SiteHeader />
+      <PublicHeader />
       {children}
       <SiteFooter />
     </div>
@@ -1498,7 +1436,8 @@ function updateJsonLd(schemaId: string, schema: object | null) {
 }
 
 export default function PublicSite() {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  const { pathname } = usePublicLocation();
+  const path = pathname.replace(/\/+$/, '') || '/';
 
   useEffect(() => {
     const isPost = path.startsWith('/post/');

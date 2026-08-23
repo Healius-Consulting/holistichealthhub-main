@@ -19,23 +19,13 @@
   src: url("/fonts/outfit-latin-wght-normal.woff2") format("woff2");
 }
 
-body.hhh-public-active {
-  height: auto;
-  min-height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
-  background: #f7f5f0;
-  color: #1e2a25;
-  scrollbar-width: thin;
-  scrollbar-color: #94b0a4 transparent;
-}
-
-body.hhh-public-active #root {
-  height: auto;
-  min-height: 100vh;
-}
-
-.hhh-public {
+html.hhh-public-active,
+html.eligibility-active,
+.hhh-public,
+.eligibility-shell {
+  --hhh-chrome-height: 88px;
+  --hhh-chrome-gutter: 24px;
+  --hhh-chrome-inner: min(1180px, calc(100% - (var(--hhh-chrome-gutter) * 2)));
   --cream: #f7f5f0;
   --sand: #eee6da;
   --mint: #d3e2da;
@@ -56,7 +46,27 @@ body.hhh-public-active #root {
   --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  
+}
+
+body.hhh-public-active,
+body.eligibility-active {
+  height: auto;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #f7f5f0;
+  color: #1e2a25;
+  scrollbar-width: thin;
+  scrollbar-color: #94b0a4 transparent;
+}
+
+body.hhh-public-active #root,
+body.eligibility-active #root {
+  height: auto;
+  min-height: 100vh;
+}
+
+.hhh-public {
   font-family: var(--sans);
   font-size: 17px;
   line-height: 1.6;
@@ -190,15 +200,21 @@ h1, h2, h3, .hhh-serif {
   position: sticky;
   top: 0;
   z-index: 100;
+  width: 100%;
   background: rgba(247, 245, 240, 0.92);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid color-mix(in srgb, var(--green) 10%, transparent);
 }
 
+.hhh-header a {
+  color: inherit;
+  text-decoration: none;
+}
+
 .hhh-header__inner {
-  height: 88px;
-  width: min(1180px, calc(100% - 48px));
+  height: var(--hhh-chrome-height);
+  width: var(--hhh-chrome-inner);
   margin: auto;
   display: flex;
   align-items: center;
@@ -275,6 +291,10 @@ h1, h2, h3, .hhh-serif {
 .hhh-nav > a:not(.hhh-button):hover:after,
 .hhh-nav > a:not(.hhh-button).is-active:after {
   right: 0;
+}
+
+.hhh-nav > a:not(.hhh-button).is-active:after {
+  transition: none;
 }
 
 .hhh-nav__cta {
@@ -3068,22 +3088,25 @@ body.hhh-page-ready .hhh-article > *:not(.hhh-page-head__intro):not(.hhh-text-li
 }
 
 @media (max-width: 650px) {
+  html.hhh-public-active,
+  html.eligibility-active,
+  .hhh-public,
+  .eligibility-shell {
+    --hhh-chrome-height: 72px;
+    --hhh-chrome-gutter: 16px;
+  }
+
   .hhh-public {
     font-size: 16px;
   }
 
   .hhh-section-inner,
-  .hhh-header__inner,
   .hhh-footer__inner {
     width: min(100% - 32px, 1180px);
   }
 
-  .hhh-header__inner {
-    height: 72px;
-  }
-
   .hhh-nav {
-    top: 72px;
+    top: var(--hhh-chrome-height);
   }
 
   .hhh-hero {
