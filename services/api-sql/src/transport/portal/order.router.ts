@@ -336,7 +336,6 @@ async function attachCuraleafToOrder(
 
 export function createPortalOrderRouter(): Router {
   const router = Router();
-  router.use(requirePharmacyOperationalWrites);
   const orderRepo = new SqlOrderRepository();
   const orderLineRepo = new SqlOrderLineRepository();
   const paymentRepo = new SqlPaymentRepository();
@@ -361,7 +360,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/order-drafts - Create or save order draft
-  router.post('/portal/order-drafts', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/order-drafts', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const input = draftInputSchema.parse(req.body);
@@ -402,7 +401,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // PATCH /v1/portal/order-drafts/:id - Update existing order draft
-  router.patch('/portal/order-drafts/:id', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.patch('/portal/order-drafts/:id', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const draftId = String(req.params.id || '');
@@ -426,7 +425,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // DELETE /v1/portal/order-drafts/:id - Delete order draft
-  router.delete('/portal/order-drafts/:id', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.delete('/portal/order-drafts/:id', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const draftId = String(req.params.id || '');
@@ -443,7 +442,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders - Promote draft or submit order
-  router.post('/portal/orders', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const input = createOrderInputSchema.parse(req.body);
@@ -589,7 +588,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/prescriptions/:prescriptionId/place - Place prescription manually
-  router.post('/portal/orders/:id/prescriptions/:prescriptionId/place', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/prescriptions/:prescriptionId/place', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -663,7 +662,7 @@ export function createPortalOrderRouter(): Router {
     }
   });
 
-  router.post('/portal/orders/:id/cancellations', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/cancellations', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -710,7 +709,7 @@ export function createPortalOrderRouter(): Router {
     } catch (error) { next(error); }
   });
 
-  router.post('/portal/orders/:id/quote-review/resolve', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/quote-review/resolve', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -831,7 +830,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/curaleaf-cancellation - Record Curaleaf order cancellation
-  router.post('/portal/orders/:id/curaleaf-cancellation', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/curaleaf-cancellation', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -873,7 +872,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/curaleaf-rejections - Record Curaleaf rejection and support case
-  router.post('/portal/orders/:id/curaleaf-rejections', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/curaleaf-rejections', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -912,7 +911,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/refunds/manual - Prepare manual refund task
-  router.post('/portal/orders/:id/refunds/manual', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/refunds/manual', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -986,7 +985,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/refunds/:refundId/confirm - Confirm completed manual refund
-  router.post('/portal/orders/:id/refunds/:refundId/confirm', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/refunds/:refundId/confirm', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -1100,7 +1099,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/handout - Hand out medication to patient
-  router.post('/portal/orders/:id/handout', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/handout', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -1195,7 +1194,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/ready-for-collection - Mark order ready for collection
-  router.post('/portal/orders/:id/ready-for-collection', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/ready-for-collection', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -1237,7 +1236,7 @@ export function createPortalOrderRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/cancel-and-archive - Cancel with Curaleaf & Replace Order
-  router.post('/portal/orders/:id/cancel-and-archive', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/cancel-and-archive', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');

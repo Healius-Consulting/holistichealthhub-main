@@ -39,7 +39,6 @@ function snapshotObject(value: unknown): Record<string, any> {
 
 export function createPortalFulfilmentRouter(): Router {
   const router = Router();
-  router.use(requirePharmacyOperationalWrites);
   const fulfilmentRepo = new SqlFulfilmentRepository();
   const orderRepo = new SqlOrderRepository();
 
@@ -63,7 +62,7 @@ export function createPortalFulfilmentRouter(): Router {
     }
   });
 
-  router.post('/portal/shipments/:shipmentId/goods-receipts', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/shipments/:shipmentId/goods-receipts', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const supplierShipmentId = String(req.params.shipmentId || '');
@@ -163,7 +162,7 @@ export function createPortalFulfilmentRouter(): Router {
     }
   });
 
-  router.patch('/portal/shipments/:shipmentId/status', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.patch('/portal/shipments/:shipmentId/status', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const supplierShipmentId = String(req.params.shipmentId || '');

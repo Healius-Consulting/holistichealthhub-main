@@ -57,7 +57,6 @@ const uploadTargetSchema = z.object({
 
 export function createPortalPrescriptionRouter(): Router {
   const router = Router();
-  router.use(requirePharmacyOperationalWrites);
   const prescriptionRepo = new SqlPrescriptionRepository();
   const storageProvider = new StorageProvider();
 
@@ -96,11 +95,11 @@ export function createPortalPrescriptionRouter(): Router {
     }
   };
 
-  router.post('/portal/prescription-files/upload-target', requireCsrf, requireStaff('pharmacy'), createUploadTarget);
-  router.post('/portal/prescription-files/upload-url', requireCsrf, requireStaff('pharmacy'), createUploadTarget);
+  router.post('/portal/prescription-files/upload-target', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, createUploadTarget);
+  router.post('/portal/prescription-files/upload-url', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, createUploadTarget);
 
   // POST /v1/portal/prescription-files/:id/complete
-  router.post('/portal/prescription-files/:id/complete', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/prescription-files/:id/complete', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const fileId = String(req.params.id || '');
@@ -139,7 +138,7 @@ export function createPortalPrescriptionRouter(): Router {
   });
 
   // DELETE /v1/portal/prescription-files/:id
-  router.delete('/portal/prescription-files/:id', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.delete('/portal/prescription-files/:id', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const fileId = String(req.params.id || '');
@@ -200,7 +199,7 @@ export function createPortalPrescriptionRouter(): Router {
   });
 
   // POST /v1/portal/prescribers - Add or update central prescriber directory entry
-  router.post('/portal/prescribers', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/prescribers', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const input = prescriberDirectoryInputSchema.parse(req.body);

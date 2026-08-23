@@ -79,7 +79,6 @@ const refundSchema = z.object({
 
 export function createPortalPaymentRouter(): Router {
   const router = Router();
-  router.use(requirePharmacyOperationalWrites);
   const paymentRepo = new SqlPaymentRepository();
   const orderRepo = new SqlOrderRepository();
   const integrationRepo = new SqlIntegrationRepository();
@@ -91,7 +90,7 @@ export function createPortalPaymentRouter(): Router {
   const patientFinanceDeps = { patientRepo, patientFinanceRepo };
 
   // POST /v1/portal/orders/:id/payments/manual - Record manual pharmacy payment
-  router.post('/portal/orders/:id/payments/manual', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/payments/manual', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -222,7 +221,7 @@ export function createPortalPaymentRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/payments/worldpay-session - Create Worldpay checkout session
-  router.post('/portal/orders/:id/payments/worldpay-session', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/payments/worldpay-session', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -292,7 +291,7 @@ export function createPortalPaymentRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/payment-links/resend - Resend/refresh payment link
-  router.post('/portal/orders/:id/payment-links/resend', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/payment-links/resend', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -369,7 +368,7 @@ export function createPortalPaymentRouter(): Router {
   });
 
   // POST /v1/portal/orders/:id/payments - Record payment or generate payment link
-  router.post('/portal/orders/:id/payments', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/orders/:id/payments', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
@@ -424,7 +423,7 @@ export function createPortalPaymentRouter(): Router {
   });
 
   // POST /v1/portal/payments/:id/refunds - Issue idempotent refund
-  router.post('/portal/payments/:id/refunds', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/payments/:id/refunds', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const paymentId = String(req.params.id || '');

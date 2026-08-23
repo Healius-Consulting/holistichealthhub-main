@@ -37,12 +37,12 @@ export interface PublicScope {
 
 export type RequestContext = TenantScope | PlatformScope | PublicScope;
 
-export function isTenantScope(context: RequestContext): context is TenantScope {
-  return context.kind === 'tenant';
+export function isTenantScope(context: RequestContext | undefined): context is TenantScope {
+  return context?.kind === 'tenant';
 }
 
-export function isPlatformScope(context: RequestContext): context is PlatformScope {
-  return context.kind === 'platform';
+export function isPlatformScope(context: RequestContext | undefined): context is PlatformScope {
+  return context?.kind === 'platform';
 }
 
 export function assertTenantScope(context: RequestContext): TenantScope {
