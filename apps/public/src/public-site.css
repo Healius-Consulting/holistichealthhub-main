@@ -551,7 +551,9 @@ body.hhh-page-ready .hhh-article > *:not(.hhh-page-head__intro):not(.hhh-text-li
 .hhh-float {
   position: absolute;
   display: block;
-  transform: translate3d(0, calc(var(--hhh-parallax, 0) * var(--float-depth, 24px)), 0);
+  transform:
+    translate3d(0, calc(var(--hhh-parallax, 0) * var(--float-depth, 24px)), 0)
+    rotate(calc(var(--hhh-parallax, 0) * var(--float-spin, 0deg)));
   will-change: transform;
 }
 
@@ -583,17 +585,17 @@ body.hhh-page-ready .hhh-article > *:not(.hhh-page-head__intro):not(.hhh-text-li
   background: color-mix(in srgb, var(--rust) 38%, transparent);
 }
 
-.hhh-float--a { top: 4%; left: -7%; width: 260px; height: 260px; --float-depth: 36px; --float-dur: 22s; --float-x: 12px; --float-y: -16px; }
-.hhh-float--b { top: 46%; left: 44%; width: 86px; height: 86px; --float-depth: 16px; --float-dur: 16s; --float-x: -8px; --float-y: 10px; }
-.hhh-float--c { right: -8%; bottom: 4%; width: 210px; height: 210px; --float-depth: 48px; --float-dur: 24s; --float-x: -14px; --float-y: 12px; opacity: 0.64; }
-.hhh-float--d { top: 8%; right: 16%; width: 128px; height: 128px; --float-depth: 24px; --float-dur: 19s; --float-x: 10px; --float-y: -8px; }
-.hhh-float--e { left: 18%; bottom: 18%; width: 8px; height: 8px; --float-depth: 14px; --float-dur: 14s; --float-x: 6px; --float-y: -12px; }
+.hhh-float--a { top: 4%; left: -7%; width: 260px; height: 260px; --float-depth: 42px; --float-spin: -8deg; --float-dur: 22s; --float-x: 12px; --float-y: -16px; }
+.hhh-float--b { top: 46%; left: 44%; width: 86px; height: 86px; --float-depth: -18px; --float-spin: 8deg; --float-dur: 16s; --float-x: -8px; --float-y: 10px; }
+.hhh-float--c { right: -8%; bottom: 4%; width: 210px; height: 210px; --float-depth: -48px; --float-spin: 10deg; --float-dur: 24s; --float-x: -16px; --float-y: 14px; opacity: 0.64; }
+.hhh-float--d { top: 8%; right: 16%; width: 128px; height: 128px; --float-depth: 22px; --float-spin: -6deg; --float-dur: 19s; --float-x: 12px; --float-y: -10px; }
+.hhh-float--e { left: 18%; bottom: 18%; width: 8px; height: 8px; --float-depth: -12px; --float-spin: 6deg; --float-dur: 14s; --float-x: 8px; --float-y: -14px; }
 
-.hhh-float--local-a { top: -18%; right: -22%; width: 150px; height: 150px; --float-depth: 18px; --float-dur: 20s; --float-x: 10px; --float-y: -12px; opacity: 0.7; }
-.hhh-float--local-b { bottom: 6%; left: -14%; width: 74px; height: 74px; --float-depth: 12px; --float-dur: 16s; --float-x: -8px; --float-y: 10px; }
+.hhh-float--local-a { top: -18%; right: -22%; width: 150px; height: 150px; --float-depth: 16px; --float-spin: -8deg; --float-dur: 20s; --float-x: 10px; --float-y: -12px; opacity: 0.7; }
+.hhh-float--local-b { bottom: 6%; left: -14%; width: 74px; height: 74px; --float-depth: -10px; --float-spin: 8deg; --float-dur: 16s; --float-x: -8px; --float-y: 10px; }
 
 .hhh-float--local-b > span {
-  border-color: color-mix(in srgb, var(--rust) 22%, transparent);
+  border-color: color-mix(in srgb, var(--rust) 18%, transparent);
 }
 
 @keyframes hhh-float-drift {
