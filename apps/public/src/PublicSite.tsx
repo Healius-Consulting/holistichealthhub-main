@@ -182,6 +182,69 @@ function SiteFooter() {
   );
 }
 
+function useAtmosphereParallax(
+  layerRef: { current: HTMLDivElement | null },
+  mode: 'page' | 'local',
+) {
+  useEffect(() => {
+    const layer = layerRef.current;
+    if (!layer || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      if (mode === 'page') {
+        const travel = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+        const progress = Math.min(1, Math.max(0, window.scrollY / travel));
+        layer.style.setProperty('--hhh-parallax', progress.toFixed(3));
+        return;
+      }
+      const host = layer.parentElement;
+      if (!host) return;
+      const rect = host.getBoundingClientRect();
+      const progress = Math.min(1.15, Math.max(-0.15, -rect.top / Math.max(rect.height, 1)));
+      layer.style.setProperty('--hhh-parallax', progress.toFixed(3));
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [mode]);
+}
+
+function PageAtmosphere() {
+  const layerRef = useRef<HTMLDivElement>(null);
+  useAtmosphereParallax(layerRef, 'page');
+
+  return (
+    <div className="hhh-atmosphere hhh-atmosphere--page" ref={layerRef} aria-hidden="true">
+      <span className="hhh-float hhh-float--orb hhh-float--a"><span /></span>
+      <span className="hhh-float hhh-float--ring hhh-float--b"><span /></span>
+      <span className="hhh-float hhh-float--orb hhh-float--c"><span /></span>
+      <span className="hhh-float hhh-float--ring hhh-float--d"><span /></span>
+      <span className="hhh-float hhh-float--dot hhh-float--e"><span /></span>
+    </div>
+  );
+}
+
+function LocalAtmosphere() {
+  const layerRef = useRef<HTMLDivElement>(null);
+  useAtmosphereParallax(layerRef, 'local');
+
+  return (
+    <div className="hhh-atmosphere hhh-atmosphere--local" ref={layerRef} aria-hidden="true">
+      <span className="hhh-float hhh-float--orb hhh-float--local-a"><span /></span>
+      <span className="hhh-float hhh-float--ring hhh-float--local-b"><span /></span>
+    </div>
+  );
+}
+
 function PageShell({ children }: { children: ReactNode }) {
   const { pathname } = usePublicLocation();
 
@@ -198,6 +261,7 @@ function PageShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="hhh-public">
+      <PageAtmosphere />
       <a className="hhh-skip" href="#main-content">Skip to main content</a>
       <PublicHeader />
       {children}
@@ -1121,6 +1185,7 @@ function FaqPage() {
 
         <section className="hhh-faq hhh-section-inner">
           <aside className="hhh-faq__intro">
+            <LocalAtmosphere />
             <span><Sparkles aria-hidden="true" /></span>
             <p className="hhh-kicker">Frequently asked</p>
             <h2>Start with the essentials.</h2>

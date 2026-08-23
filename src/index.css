@@ -10816,16 +10816,15 @@ html.eligibility-active #root{
 
 html.hhh-public-active,
 html.eligibility-active{
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 html.hhh-public-active body,
 html.eligibility-active body,
 body.hhh-public-active,
 body.eligibility-active{
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
   background: #f7f5f0;
   color: #1e2a25;
   font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
