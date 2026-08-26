@@ -77,6 +77,7 @@ export interface IdentityRepositoryPort {
   listPlatformAdmins(): Promise<StaffUserRecord[]>;
   upsertStaffUser(input: UpsertStaffUserInput): Promise<void>;
   updateStaffUserStatus(uid: string, status: 'INVITED' | 'ACTIVE' | 'DISABLED' | 'REMOVED', disabled: boolean): Promise<void>;
+  activateInvitedStaffUser(uid: string): Promise<boolean>;
   findStaffSession(sessionHash: string): Promise<StaffSessionRecord | null>;
   createSession(input: CreateSessionInput): Promise<void>;
   touchSession(sessionHash: string, lastActivityAt: string, idleExpiresAt: string): Promise<void>;

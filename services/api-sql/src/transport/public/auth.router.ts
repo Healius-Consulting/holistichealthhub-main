@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { SessionService } from '../../application/identity/session.service.js';
 import { firstPartyPasswordResetLink, portalAppOrigin } from '../../application/identity/password-reset-link.js';
+import { hasEnrolledTotp } from '../../application/identity/staff-activation.js';
 import { queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
 import { auth } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
@@ -217,9 +218,24 @@ export function createAuthRouter(): Router {
       } catch {
         throw new HttpError(401, 'A valid staff session is required.', 'UNAUTHENTICATED');
       }
-      const profile = await identityRepo.findStaffUser(uid);
-      if (!profile || profile.disabled || profile.status === 'REMOVED') {
+      let profile = await identityRepo.findStaffUser(uid);
+      if (!profile || profile.disabled || (profile.status !== 'INVITED' && profile.status !== 'ACTIVE')) {
         throw new HttpError(401, 'A valid staff session is required.', 'UNAUTHENTICATED');
+      }
+      const firebaseUser = await auth.getUser(uid);
+      if (!hasEnrolledTotp(firebaseUser)) {
+        throw new HttpError(403, 'Complete authenticator enrolment before activating this staff account.', 'MFA_TOTP_REQUIRED');
+      }
+      if (profile.status === 'INVITED') {
+        const activated = await identityRepo.activateInvitedStaffUser(uid);
+        if (!activated) {
+          profile = await identityRepo.findStaffUser(uid);
+          if (!profile || profile.disabled || profile.status !== 'ACTIVE') {
+            throw new HttpError(409, 'The staff account changed while activation was being completed.', 'ACCOUNT_STATE_CONFLICT');
+          }
+        } else {
+          profile = { ...profile, status: 'ACTIVE' };
+        }
       }
       const organisation = profile.organisationId
         ? await organisationRepo.findOrganisationById(profile.organisationId)

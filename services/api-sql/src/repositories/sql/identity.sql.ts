@@ -141,6 +141,24 @@ const UPDATE_STAFF_USER_STATUS_GQL = `
   }
 `;
 
+const ACTIVATE_INVITED_STAFF_USER_GQL = `
+  mutation ActivateInvitedStaffUser($uid: String!) {
+    updated: staffUser_updateMany(
+      where: {
+        uid: { eq: $uid }
+        status: { eq: INVITED }
+        disabled: { eq: false }
+      }
+      data: {
+        status: ACTIVE
+        disabled: false
+        activatedAt_expr: "request.time"
+        updatedAt_expr: "request.time"
+      }
+    )
+  }
+`;
+
 const GET_STAFF_SESSION_GQL = `
   query GetStaffSessionByHash($sessionHash: String!) {
     staffSession(key: { sessionHash: $sessionHash }) {
@@ -295,6 +313,14 @@ export class SqlIdentityRepository implements IdentityRepositoryPort {
     await dataConnect.executeGraphql<any, any>(UPDATE_STAFF_USER_STATUS_GQL, {
       variables: { uid, status, disabled },
     });
+  }
+
+  async activateInvitedStaffUser(uid: string): Promise<boolean> {
+    const result = await dataConnect.executeGraphql<{ updated: number }, { uid: string }>(
+      ACTIVATE_INVITED_STAFF_USER_GQL,
+      { variables: { uid } },
+    );
+    return result.data.updated === 1;
   }
 
   async findStaffSession(sessionHash: string): Promise<StaffSessionRecord | null> {

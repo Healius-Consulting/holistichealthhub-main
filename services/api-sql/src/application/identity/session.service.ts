@@ -67,11 +67,28 @@ export class SessionService {
     }
 
     // 5. Query SQL for active staff user
-    const staff = await this.identityRepo.findStaffUser(decoded.uid);
+    let staff = await this.identityRepo.findStaffUser(decoded.uid);
     if (!staff || staff.disabled || staff.status === 'DISABLED' || staff.status === 'REMOVED') {
       throw new HttpError(403, 'This staff account has been disabled.', 'ACCOUNT_DISABLED');
     }
-    if (staff.status !== 'ACTIVE') {
+    if (staff.status === 'INVITED') {
+      const activated = await this.identityRepo.activateInvitedStaffUser(decoded.uid);
+      if (activated) {
+        staff = { ...staff, status: 'ACTIVE' };
+        await this.identityRepo.appendAudit({
+          organisationId: staff.organisationId,
+          actorUid: decoded.uid,
+          actorRole: staff.role,
+          event: 'staff.activated_after_totp',
+          recordType: 'StaffUser',
+          recordId: decoded.uid,
+          surface,
+        });
+      } else {
+        staff = await this.identityRepo.findStaffUser(decoded.uid);
+      }
+    }
+    if (!staff || staff.status !== 'ACTIVE') {
       throw new HttpError(403, 'This staff account is not active.', 'ACCOUNT_INACTIVE');
     }
 
