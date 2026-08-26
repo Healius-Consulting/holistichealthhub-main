@@ -20,6 +20,7 @@ export default function OrderStepper({ progress, focusedStep, onStepClick }: Ord
           const unlocked = step <= progress.furthestUnlocked;
           const label = WIZARD_STEP_LABELS[step];
           const shortLabel = WIZARD_STEP_SHORT_LABELS[step];
+          const locked = !unlocked && !complete;
           return (
             <li
               key={step}
@@ -30,8 +31,9 @@ export default function OrderStepper({ progress, focusedStep, onStepClick }: Ord
                 type="button"
                 className="rx-order-stepper__button"
                 aria-current={current ? 'step' : undefined}
-                aria-disabled={!unlocked && !complete}
-                disabled={!unlocked && !complete}
+                aria-disabled={locked}
+                aria-label={locked ? `Step ${step} (locked)` : `Go to step ${step}: ${label}`}
+                disabled={locked}
                 onClick={() => onStepClick(step)}
               >
                 <span className="rx-order-stepper__number">

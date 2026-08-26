@@ -3,7 +3,7 @@ import { normalisePrescriptionDateParts, prescriptionDateWindowStatus, prescript
 import { Check, ChevronLeft, ChevronRight, Minus, Package, Plus, Search, Trash2 } from 'lucide-react';
 import MedicineLabel from './MedicineLabel';
 import type { CatalogueItem, LineItem, Prescription } from '../context/AppContext';
-import { money, useApp } from '../context/AppContext';
+import { marginPct, money, useApp } from '../context/AppContext';
 import './ManualPrescriptionEditor.css';
 import { createPrescriberDirectoryRecord, getPrescriberDirectory, isApiConfigured } from '../shared/api';
 import type { PrescriberDirectoryRecord } from '../shared/contracts';
@@ -376,7 +376,9 @@ export default function ManualPrescriptionEditor({
                 <button type="button" key={product.id} disabled={selected} className={selected ? 'is-selected' : ''} onClick={() => addProduct(product)}>
                   <span className="manual-rx-picker__product"><small>{catalogueTypeLabels[product.type]} · active</small><MedicineLabel name={product.name} /></span>
                   <span className="manual-rx-picker__pack"><small>Pack size</small><strong>{product.packSize ?? '—'} {product.unit ?? 'units'}</strong></span>
-                  <span className="manual-rx-picker__price"><small>Patient price</small><strong>{money(product.retail)}</strong></span>
+                  <span className="manual-rx-picker__price"><small>Patient</small><strong>{money(product.retail)}</strong></span>
+                  <span className="manual-rx-picker__wholesale"><small>Wholesale</small><strong>{product.cost !== null ? money(product.cost) : '—'}</strong></span>
+                  <span className="manual-rx-picker__margin"><small>Margin</small><strong>{marginPct(product.cost, product.retail) !== null ? `${marginPct(product.cost, product.retail)}%` : '—'}</strong></span>
                   <span className="manual-rx-picker__add">{selected ? <Check size={14} /> : <Plus size={14} />} {selected ? 'Added' : 'Add'}</span>
                 </button>
               );

@@ -81,6 +81,7 @@ export default function Step2PrescriptionPanel({
 
       <div className="rx-step2-panel__body">
         <div className={`rx-step2-section${rxSubStep === 'route' ? ' is-current' : routeChosen ? ' is-complete' : ''}`}>
+          {rxSubStep === 'route' ? <span className="rx-guided-active-indicator" aria-hidden="true" /> : null}
           <p className="section-label">Route</p>
           <p className="rx-guided__route-lead">Choose one route for this draft. Next you will upload the prescription copy.</p>
           <div className="rx-entry-mode rx-entry-mode--choose" role="group" aria-label="Prescription entry route">
@@ -108,6 +109,7 @@ export default function Step2PrescriptionPanel({
 
         {showUpload ? (
           <div className={`rx-step2-section${rxSubStep === 'upload' ? ' is-current' : uploaded ? ' is-complete' : ''}`}>
+            {rxSubStep === 'upload' ? <span className="rx-guided-active-indicator" aria-hidden="true" /> : null}
             <p className="section-label">Upload</p>
             <div className="rx-clinic-note">
               <Upload size={18} aria-hidden="true" />
@@ -152,6 +154,7 @@ export default function Step2PrescriptionPanel({
 
         {showDetails ? (
           <div className={`rx-step2-section${rxSubStep === 'details' ? ' is-current' : ''}`}>
+            {rxSubStep === 'details' ? <span className="rx-guided-active-indicator" aria-hidden="true" /> : null}
             <p className="section-label">{selectedRx.entryMode === 'manual' ? 'Manual details' : 'Scan result'}</p>
             {selectedRx.entryMode === 'manual' ? (
               <ManualPrescriptionEditor

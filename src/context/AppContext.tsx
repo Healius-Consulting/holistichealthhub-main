@@ -1234,16 +1234,21 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'APPLY_CURALEAF_QUOTE': {
       const quoted = new Map(action.items.map(item => [item.productId, item]));
+      // The quote is the only source of wholesale cost, so bank it on the catalogue
+      // too: the medicine picker needs cost and margin before a line is ever added.
+      const quotedCatalogue = state.catalogue.map(product => {
+        const item = quoted.get(product.id);
+        return item ? {
+          ...product,
+          cost: item.wholesalePrice,
+          retail: item.patientPrice,
+          availability: !item.inStock || item.stockStatus === 'out_of_stock' ? 'out' : item.stockStatus === 'low_stock' ? 'low' : 'in',
+        } as CatalogueItem : product;
+      });
+      saveCachedCatalogue(quotedCatalogue, state.catalogueUpdatedAt, state.currentOrganisationId);
       return {
         ...state,
-        catalogue: state.catalogue.map(product => {
-          const item = quoted.get(product.id);
-          return item ? {
-            ...product,
-            retail: item.patientPrice,
-            availability: !item.inStock || item.stockStatus === 'out_of_stock' ? 'out' : item.stockStatus === 'low_stock' ? 'low' : 'in',
-          } : product;
-        }),
+        catalogue: quotedCatalogue,
         orders: state.orders.map(order => order.payment.status !== 'none' ? order : ({
           ...order,
           prescriptions: order.prescriptions.map(rx => ({

@@ -106,6 +106,10 @@ export default function Step4CheckoutPanel({
 }: Step4CheckoutPanelProps) {
   const productSubtotal = orderRevenue(activeOrder) - activeOrder.dispensingFee;
   const patientTotal = orderRevenue(activeOrder);
+  // Curaleaf's taxRate is a decimal fraction ('0.2' = 20%) on the pharmacy's purchase.
+  const taxOnWholesale = quoteSummary
+    ? Math.round((orderCost(activeOrder) + quoteSummary.shippingPrice) * quoteSummary.taxRate * 100) / 100
+    : 0;
   const quoteStatus = quoteStatusLine({
     workspaceMode,
     quoteAvailable,
@@ -166,16 +170,28 @@ export default function Step4CheckoutPanel({
           ) : null}
         </div>
 
-        <dl className="rx-step4-chips" aria-label="Order commercial summary">
-          <div>
-            <dt>Patient subtotal</dt>
-            <dd>{money(productSubtotal)}</dd>
-          </div>
+        <dl className="rx-step4-ledger" aria-label="Order commercial summary">
           <div>
             <dt>Wholesale</dt>
             <dd>{wholesaleKnown ? money(orderCost(activeOrder)) : workspaceMode === 'training' ? 'Not supplied' : 'Quote required'}</dd>
           </div>
           <div>
+            <dt>Delivery</dt>
+            <dd>{quoteSummary ? money(quoteSummary.shippingPrice) : 'Quote required'}</dd>
+          </div>
+          <div>
+            <dt>Tax <small>on wholesale</small></dt>
+            <dd>{wholesaleKnown && quoteSummary ? money(taxOnWholesale) : 'Quote required'}</dd>
+          </div>
+          <div>
+            <dt>Dispensing</dt>
+            <dd>{money(activeOrder.dispensingFee)}</dd>
+          </div>
+          <div className="is-total">
+            <dt>Patient total</dt>
+            <dd>{money(patientTotal)}</dd>
+          </div>
+          <div className="rx-step4-ledger__margin">
             <dt>Gross margin</dt>
             <dd className={orderMargin === null ? '' : orderMargin >= 25 ? 'is-good' : 'is-warn'}>
               {orderMargin === null ? 'Pending' : `${money(patientTotal - orderCost(activeOrder))} · ${orderMargin}%`}
@@ -348,8 +364,8 @@ export default function Step4CheckoutPanel({
           <div className="rx-step4-commit__row">
             <div className="rx-step4-commit__total">
               <small>Patient total</small>
-              <em>{money(productSubtotal)} products + {money(activeOrder.dispensingFee)} dispensing</em>
               <strong>{money(patientTotal)}</strong>
+              <em>{money(productSubtotal)} products + {money(activeOrder.dispensingFee)} dispensing</em>
             </div>
             <button
               type="button"

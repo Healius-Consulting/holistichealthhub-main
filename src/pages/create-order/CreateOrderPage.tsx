@@ -276,8 +276,18 @@ export default function CreateOrderPage() {
     : [];
   const draftBasketCount = draftBasketItems.length;
   const draftBasketTotal = activeOrder ? orderRevenue(activeOrder) : 0;
-  const draftBasketWholesalePlusDelivery = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
-    ? orderCost(activeOrder) + quoteSummary.shippingPrice
+  // Curaleaf's taxRate is a decimal fraction ('0.2' = 20%) charged on what the
+  // pharmacy buys, so it applies to wholesale plus delivery, not the patient total.
+  const draftBasketCosts = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
+    ? (() => {
+      const wholesale = orderCost(activeOrder);
+      const delivery = quoteSummary.shippingPrice;
+      return {
+        wholesale,
+        delivery,
+        tax: Math.round((wholesale + delivery) * quoteSummary.taxRate * 100) / 100,
+      };
+    })()
     : null;
   const draftBasketIssues = draftBasketItems.map(item => basketItemIssue({
     productId: item.productId,
@@ -1086,7 +1096,7 @@ export default function CreateOrderPage() {
             focusedStep={wizard.focusedStep}
             draftBasketCount={draftBasketCount}
             draftBasketTotal={draftBasketTotal}
-            draftBasketWholesalePlusDelivery={draftBasketWholesalePlusDelivery}
+            draftBasketCosts={draftBasketCosts}
             dispensingFee={activeOrder.dispensingFee}
             draftBasketItems={draftBasketItems}
             draftBasketIssues={draftBasketIssues}

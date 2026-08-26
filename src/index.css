@@ -15709,19 +15709,20 @@ html[data-theme='dark'] .auth-loading-page{
   font-size: 11px;
 }
 
+/* One medicine per row so the price columns line up and stay comparable. */
 .rx-workbench--guided .manual-rx-picker__results{
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 10px;
   max-height: min(62vh, 680px);
   padding: 12px 16px 16px;
 }
 
 .rx-workbench--guided .manual-rx-picker__results button{
-  grid-template-columns: minmax(0, 1.4fr) auto auto 88px;
+  grid-template-columns: minmax(0, 1.6fr) 108px 92px 92px 76px 88px;
   align-items: center;
   gap: 10px 12px;
-  min-height: 76px;
+  min-height: 64px;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -15753,8 +15754,15 @@ html[data-theme='dark'] .auth-loading-page{
 }
 
 .rx-workbench--guided .manual-rx-picker__pack strong,
-.rx-workbench--guided .manual-rx-picker__price strong{
+.rx-workbench--guided .manual-rx-picker__price strong,
+.rx-workbench--guided .manual-rx-picker__wholesale strong,
+.rx-workbench--guided .manual-rx-picker__margin strong{
   font-size: 14px;
+}
+
+.rx-workbench--guided .manual-rx-picker__wholesale strong,
+.rx-workbench--guided .manual-rx-picker__margin strong{
+  color: var(--text-secondary);
 }
 
 .rx-workbench--guided .manual-rx-picker__add{
@@ -15777,16 +15785,20 @@ html[data-theme='dark'] .auth-loading-page{
   padding: 10px 16px;
 }
 
-@media (max-width: 900px){
-  .rx-workbench--guided .manual-rx-picker__results{
-    grid-template-columns: 1fr;
+@media (max-width: 1080px){
+  .rx-workbench--guided .manual-rx-picker__results button{
+    grid-template-columns: minmax(0, 1.4fr) 88px 84px 84px 88px;
   }
+
+  .rx-workbench--guided .manual-rx-picker__pack{ display: none; }
 }
 
 @media (max-width: 680px){
   .rx-workbench--guided .manual-rx-picker__results button{
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
   }
+
+  .rx-workbench--guided .manual-rx-picker__pack{ display: block; }
 
   .rx-workbench--guided .manual-rx-picker__product{
     grid-column: 1 / -1;
@@ -15883,20 +15895,37 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
   font-size: 12px;
 }
 
+/* Reachable steps read as a segmented control: chip surface, hover, focus ring. */
 .rx-order-stepper__button{
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
-  border: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
   border-radius: 999px;
-  color: var(--text-tertiary);
-  background: transparent;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
   cursor: pointer;
   font: inherit;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
+.rx-order-stepper__button:hover:not(:disabled){
+  border-color: color-mix(in srgb, var(--tenant-primary) 40%, var(--border));
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--tenant-primary) 8%, var(--bg-surface));
+}
+
+.rx-order-stepper__button:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+
+/* Locked steps stay flat so only reachable ones look pressable. */
 .rx-order-stepper__button:disabled{
+  border-color: transparent;
+  color: var(--text-tertiary);
+  background: transparent;
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -15938,6 +15967,7 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
 }
 
 .rx-step2-section{
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -15946,8 +15976,37 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
 
 .rx-step2-section.is-current{
   padding-left: 10px;
-  border-left: 3px solid color-mix(in srgb, var(--tenant-primary) 50%, transparent);
 }
+
+/*
+ * Shared "this is where you are" marker. Motion is decorative only: the
+ * indicator's presence, not its pulse, carries the meaning.
+ */
+.rx-guided-active-indicator{
+  position: absolute;
+  top: 4px;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tenant-primary) 50%, transparent);
+  animation: rxGuidedActivePulse 2.4s ease-in-out infinite;
+}
+
+/*
+ * Glow only — never opacity. A dimming pulse on a button reads as "disabled",
+ * which is exactly the wrong signal for a step that has just become available.
+ */
+@keyframes rxGuidedActivePulse{
+  0%, 100%{ box-shadow: 0 0 0 0 color-mix(in srgb, var(--tenant-primary) 0%, transparent); }
+  50%{ box-shadow: 0 0 8px 1px color-mix(in srgb, var(--tenant-primary) 45%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .rx-guided-active-indicator{ animation: none; }
+}
+
+html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
 
 .rx-order-summary-rail{
   position: sticky;
@@ -16152,6 +16211,15 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
   white-space: nowrap;
 }
 
+.rx-order-summary-rail__line small{
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .rx-order-summary-rail__edit{
   grid-column: 1 / -1;
   display: flex;
@@ -16172,6 +16240,12 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
   gap: 12px;
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+/* Qualifier on a ledger label, e.g. which side of the order the tax sits on. */
+.rx-order-summary-rail__totals > div dt small{
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
 .rx-order-summary-rail__totals > div dd{
@@ -16208,6 +16282,17 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
   width: calc(100% - 32px);
   margin: 0 16px 16px;
 }
+
+/* Decorative nudge once the step is satisfied; the enabled state carries the meaning. */
+.rx-order-summary-rail__continue.is-ready{
+  animation: rxGuidedActivePulse 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .rx-order-summary-rail__continue.is-ready{ animation: none; }
+}
+
+html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{ animation: none; }
 
 .rx-step4-panel__body{
   display: flex;
@@ -16269,47 +16354,78 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
   gap: 10px;
 }
 
-.rx-step4-chips{
+/*
+ * Ledger rows in the same order as the summary rail, so the two surfaces
+ * reconcile line for line instead of showing two different shapes of the money.
+ */
+.rx-step4-ledger{
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
+  gap: 6px;
   margin: 0;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 
-.rx-step4-chips > div{
-  display: grid;
-  gap: 4px;
-  padding: 14px 16px;
-  border-right: 1px solid var(--border);
+.rx-step4-ledger > div{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
 }
 
-.rx-step4-chips > div:last-child{
-  border-right: 0;
+.rx-step4-ledger dt{
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.rx-step4-chips dt{
+.rx-step4-ledger dt small{
   color: var(--text-tertiary);
   font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
-.rx-step4-chips dd{
+.rx-step4-ledger dd{
   margin: 0;
   color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  text-align: right;
 }
 
-.rx-step4-chips dd.is-good{
+.rx-step4-ledger > div.is-total{
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.rx-step4-ledger > div.is-total dt{
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.rx-step4-ledger > div.is-total dd{
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.rx-step4-ledger__margin{
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.rx-step4-ledger__margin dt,
+.rx-step4-ledger__margin dd{
+  font-size: 12px;
+}
+
+.rx-step4-ledger dd.is-good{
   color: var(--tenant-primary-strong);
 }
 
-.rx-step4-chips dd.is-warn{
+.rx-step4-ledger dd.is-warn{
   color: #a56208;
 }
 
@@ -16572,37 +16688,43 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
   align-items: stretch;
 }
 
+/*
+ * The total is a figure to read, not a control. It stays a bordered surface so
+ * the primary colour belongs to the one thing on this panel you can act on.
+ */
 .rx-step4-commit__total{
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 2px;
   padding: 14px 16px;
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
-  color: var(--tenant-on-primary);
-  background: var(--tenant-primary);
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .rx-step4-commit__total small{
+  color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  opacity: 0.85;
-}
-
-.rx-step4-commit__total em{
-  font-size: 12px;
-  font-style: normal;
-  opacity: 0.78;
 }
 
 .rx-step4-commit__total strong{
-  margin-top: 4px;
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.rx-step4-commit__total em{
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-style: normal;
 }
 
 .rx-step4-panel .rx-create-payment{
@@ -16613,19 +16735,6 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
 }
 
 @media (max-width: 720px){
-  .rx-step4-chips{
-    grid-template-columns: 1fr;
-  }
-
-  .rx-step4-chips > div{
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .rx-step4-chips > div:last-child{
-    border-bottom: 0;
-  }
-
   .rx-step4-decide{
     grid-template-columns: 1fr;
   }

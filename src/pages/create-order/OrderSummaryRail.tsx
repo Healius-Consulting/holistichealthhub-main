@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle, Minus, Plus, Trash2 } from 'lucide-react';
 import MedicineLabel from '../../components/MedicineLabel';
-import { lineRevenue, money, type CRMPatient } from '../../context/AppContext';
+import { lineCost, lineMargin, lineRevenue, money, type CRMPatient } from '../../context/AppContext';
 import type { WizardProgress, WizardStep } from './types';
 import { WIZARD_STEP_LABELS } from './types';
 
@@ -19,7 +19,8 @@ type OrderSummaryRailProps = {
   focusedStep: number;
   draftBasketCount: number;
   draftBasketTotal: number;
-  draftBasketWholesalePlusDelivery: number | null;
+  /** Null until a current Curaleaf quote supplies wholesale cost, delivery and tax. */
+  draftBasketCosts: { wholesale: number; delivery: number; tax: number } | null;
   dispensingFee: number;
   draftBasketItems: BasketItem[];
   draftBasketIssues: Array<{ tone: 'blocked' | 'warning'; label: string } | null>;
@@ -45,7 +46,7 @@ export default function OrderSummaryRail({
   focusedStep,
   draftBasketCount,
   draftBasketTotal,
-  draftBasketWholesalePlusDelivery,
+  draftBasketCosts,
   dispensingFee,
   draftBasketItems,
   draftBasketIssues,
@@ -125,6 +126,10 @@ export default function OrderSummaryRail({
                     </div>
                     <div className="rx-order-summary-rail__line">
                       <strong>{money(lineRevenue(item))}</strong>
+                      <small>
+                        {item.cost !== null ? `${money(lineCost(item))} wholesale` : 'Wholesale pending'}
+                        {lineMargin(item) !== null ? ` · ${lineMargin(item)}% margin` : ''}
+                      </small>
                     </div>
                     {canEditBasketItems && item.rxId === selectedRxId ? (
                       <div className="rx-order-summary-rail__edit">
@@ -147,8 +152,16 @@ export default function OrderSummaryRail({
 
             <dl className="rx-order-summary-rail__totals">
               <div>
-                <dt>Wholesale + delivery</dt>
-                <dd>{draftBasketWholesalePlusDelivery !== null ? money(draftBasketWholesalePlusDelivery) : 'Quote pending'}</dd>
+                <dt>Wholesale</dt>
+                <dd>{draftBasketCosts ? money(draftBasketCosts.wholesale) : 'Quote pending'}</dd>
+              </div>
+              <div>
+                <dt>Delivery</dt>
+                <dd>{draftBasketCosts ? money(draftBasketCosts.delivery) : 'Quote pending'}</dd>
+              </div>
+              <div>
+                <dt>Tax <small>on wholesale</small></dt>
+                <dd>{draftBasketCosts ? money(draftBasketCosts.tax) : 'Quote pending'}</dd>
               </div>
               <div>
                 <dt>Dispensing</dt>
@@ -166,7 +179,7 @@ export default function OrderSummaryRail({
       {showContinue ? (
         <button
           type="button"
-          className="btn btn-primary rx-order-summary-rail__continue"
+          className={`btn btn-primary rx-order-summary-rail__continue${continueDisabled ? '' : ' is-ready'}`}
           disabled={continueDisabled}
           onClick={onContinue}
         >
