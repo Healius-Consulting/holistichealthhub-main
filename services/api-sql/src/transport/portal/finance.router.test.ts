@@ -24,34 +24,55 @@ describe('portal finance query validation', () => {
 });
 
 describe('pharmacy finance recognition', () => {
-  it('recognises paid orders before collection', () => {
+  it('keeps paid uncollected orders pending, not realised', () => {
     const paid = pharmacyFinanceRecognition({
       paymentStatus: 'PAID',
       status: 'PLACED',
+      fulfilmentStatus: 'READY_FOR_COLLECTION',
       paidAt: '2026-08-01T10:00:00.000Z',
     });
-    assert.equal(paid.recognised, true);
+    assert.equal(paid.recognised, false);
+    assert.equal(paid.realised, false);
+    assert.equal(paid.pendingCollection, true);
     assert.equal(paid.refunded, false);
     assert.equal(paid.refundPending, false);
+  });
+
+  it('realises paid orders after collection', () => {
+    const collected = pharmacyFinanceRecognition({
+      paymentStatus: 'PAID',
+      status: 'COMPLETED',
+      fulfilmentStatus: 'COLLECTED',
+      paidAt: '2026-08-01T10:00:00.000Z',
+    });
+    assert.equal(collected.recognised, true);
+    assert.equal(collected.realised, true);
+    assert.equal(collected.pendingCollection, false);
   });
 
   it('does not recognise unpaid orders', () => {
     const unpaid = pharmacyFinanceRecognition({
       paymentStatus: 'PENDING',
       status: 'PENDING_PLACEMENT',
+      fulfilmentStatus: 'SUPPLIER_PENDING',
       paidAt: null,
     });
     assert.equal(unpaid.recognised, false);
+    assert.equal(unpaid.realised, false);
+    assert.equal(unpaid.pendingCollection, false);
   });
 
   it('removes completed refunds from recognised totals', () => {
     const refunded = pharmacyFinanceRecognition({
       paymentStatus: 'PAID',
       status: 'CANCELLED',
+      fulfilmentStatus: 'COLLECTED',
       paidAt: '2026-08-01T10:00:00.000Z',
       quoteSnapshot: { refund: { status: 'completed', confirmedAt: '2026-08-02T10:00:00.000Z' } },
     });
     assert.equal(refunded.recognised, false);
+    assert.equal(refunded.realised, false);
+    assert.equal(refunded.pendingCollection, false);
     assert.equal(refunded.refunded, true);
     assert.equal(refunded.refundConfirmedAt, '2026-08-02T10:00:00.000Z');
   });
@@ -60,41 +81,48 @@ describe('pharmacy finance recognition', () => {
     const cancelledPayment = pharmacyFinanceRecognition({
       paymentStatus: 'CANCELLED',
       status: 'CANCELLED',
+      fulfilmentStatus: 'READY_FOR_COLLECTION',
       paidAt: '2026-08-01T10:00:00.000Z',
     });
     assert.equal(cancelledPayment.recognised, false);
     assert.equal(cancelledPayment.refunded, true);
+    assert.equal(cancelledPayment.pendingCollection, false);
   });
 
   it('excludes opened refunds before confirmation', () => {
     const pending = pharmacyFinanceRecognition({
       paymentStatus: 'PAID',
       status: 'CANCELLED',
+      fulfilmentStatus: 'COLLECTED',
       paidAt: '2026-08-01T10:00:00.000Z',
       quoteSnapshot: { refund: { status: 'pending_confirmation' } },
     });
     assert.equal(pending.recognised, false);
     assert.equal(pending.refundPending, true);
     assert.equal(pending.refunded, false);
+    assert.equal(pending.pendingCollection, false);
   });
 
-  it('keeps supplied value recognised after a completed partial remainder refund', () => {
+  it('keeps supplied value recognised after a completed partial remainder refund when collected', () => {
     const partial = pharmacyFinanceRecognition({
       paymentStatus: 'PAID',
       status: 'CANCELLED',
+      fulfilmentStatus: 'COLLECTED',
       paidAt: '2026-08-01T10:00:00.000Z',
       totalPence: 35_000,
       quoteSnapshot: { refund: { status: 'completed', amountPence: 17_000 } },
     });
     assert.equal(partial.recognised, true);
+    assert.equal(partial.realised, true);
     assert.equal(partial.refunded, false);
     assert.equal(partial.partialRefund, true);
     assert.equal(partial.refundAmountPence, 17_000);
   });
 
-  it('keeps a supplied source allocation and its dispensing fee recognised after replacement', () => {
+  it('keeps a supplied source allocation and its dispensing fee recognised after replacement when collected', () => {
     const source = pharmacyFinanceRecognition({
-      paymentStatus: 'PAID', status: 'CANCELLED', paidAt: '2026-08-01T10:00:00.000Z',
+      paymentStatus: 'PAID', status: 'CANCELLED', fulfilmentStatus: 'COLLECTED',
+      paidAt: '2026-08-01T10:00:00.000Z',
       resolutionReason: 'REPLACED', activeAllocationPence: 18_000,
     });
     assert.equal(source.recognised, true);

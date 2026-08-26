@@ -49,17 +49,17 @@ function inDateRange(dateStr: string | null | undefined, from?: string, to?: str
   return true;
 }
 
-function financePeriodCounts(rows: Array<{ recognised: boolean; financialEventAt: string }>, now = Date.now()) {
-  const recognised = rows.filter(r => r.recognised && r.financialEventAt);
+function financePeriodCounts(rows: Array<{ realised: boolean; financialEventAt: string }>, now = Date.now()) {
+  const realised = rows.filter(r => r.realised && r.financialEventAt);
   const countSince = (days: number) => {
     const threshold = new Date(now - days * 86_400_000).toISOString().slice(0, 10);
-    return recognised.filter(r => r.financialEventAt.slice(0, 10) >= threshold).length;
+    return realised.filter(r => r.financialEventAt.slice(0, 10) >= threshold).length;
   };
   return {
     '30': countSince(30),
     '90': countSince(90),
     '365': countSince(365),
-    all: recognised.length,
+    all: realised.length,
   };
 }
 
@@ -142,7 +142,15 @@ export function createPortalFinanceRouter(): Router {
         const productMarginPence = quoted.wholesaleComplete ? productRevenuePence - wholesaleProductPence! : null;
         const totalContributionPence = quoted.wholesaleComplete ? patientRevenuePence - wholesalePence! : null;
 
-        const financialEventAt = String(order.paidAt || order.cancelledAt || order.updatedAt || order.createdAt);
+        const paidEventAt = order.paidAt ? String(order.paidAt) : null;
+        const collectedEventAt = order.collectedAt ? String(order.collectedAt) : null;
+        const realisedAt = flags.realised
+          ? String(collectedEventAt || paidEventAt || order.updatedAt || order.createdAt)
+          : null;
+        // Realised rows period on collection; pending on payment; exclusions on payment/cancel.
+        const financialEventAt = flags.realised
+          ? realisedAt!
+          : String(paidEventAt || order.cancelledAt || order.updatedAt || order.createdAt);
 
         return {
           orderId: order.orderNumber || order.id,
@@ -150,12 +158,14 @@ export function createPortalFinanceRouter(): Router {
           patientName: patientMap.get(order.patientId) || 'Patient record',
           createdAt: String(order.createdAt),
           updatedAt: String(order.updatedAt || order.createdAt),
-          recognisedAt: flags.recognised ? String(order.paidAt || order.updatedAt || order.createdAt) : null,
+          recognisedAt: realisedAt,
           refundedAt: flags.refunded ? String(flags.refundConfirmedAt || order.cancelledAt || order.updatedAt) : null,
           financialEventAt,
           paymentStatus: String(order.paymentStatus).toLowerCase(),
           fulfilmentStatus: String(order.fulfilmentStatus).toLowerCase(),
           recognised: flags.recognised,
+          realised: flags.realised,
+          pendingCollection: flags.pendingCollection,
           refunded: flags.refunded,
           partialRefund: flags.partialRefund,
           refundAmountPence: completedRefundPence,
@@ -177,25 +187,28 @@ export function createPortalFinanceRouter(): Router {
         .filter(row => inDateRange(row.financialEventAt, filters.from, filters.to))
         .sort((left, right) => right.financialEventAt.localeCompare(left.financialEventAt));
 
-      const recognisedRows = rangedRows.filter(r => r.recognised);
+      const realisedRows = rangedRows.filter(r => r.realised);
+      const pendingCollectionRows = rangedRows.filter(r => r.pendingCollection);
       const refundedRows = rangedRows.filter(r => r.refunded || r.partialRefund);
       const refundPendingRows = rangedRows.filter(r => r.refundPending);
       const pendingPaymentRows = rangedRows.filter(r => ['pending', 'awaiting_manual_payment', 'awaiting_payment'].includes(r.paymentStatus));
-      const costedRows = recognisedRows.filter(r => r.wholesaleComplete);
+      const costedRows = realisedRows.filter(r => r.wholesaleComplete);
 
       const totals = {
         prescriptionCount: rangedRows.length,
-        paidPrescriptionCount: recognisedRows.length,
+        paidPrescriptionCount: realisedRows.length,
+        pendingCollectionCount: pendingCollectionRows.length,
+        pendingPatientRevenuePence: pendingCollectionRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
         pendingPrescriptionCount: pendingPaymentRows.length,
         refundedPrescriptionCount: refundedRows.length,
         refundedPatientPence: refundedRows.reduce((sum, r) => sum + r.refundAmountPence, 0),
         refundPendingCount: refundPendingRows.length,
         refundPendingPatientPence: refundPendingRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
-        patientRevenuePence: recognisedRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
-        productRevenuePence: recognisedRows.reduce((sum, r) => sum + r.productRevenuePence, 0),
-        dispensingFeesPence: recognisedRows.reduce((sum, r) => sum + r.dispensingFeePence, 0),
+        patientRevenuePence: realisedRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
+        productRevenuePence: realisedRows.reduce((sum, r) => sum + r.productRevenuePence, 0),
+        dispensingFeesPence: realisedRows.reduce((sum, r) => sum + r.dispensingFeePence, 0),
         wholesaleKnownForCount: costedRows.length,
-        wholesalePendingForCount: recognisedRows.length - costedRows.length,
+        wholesalePendingForCount: realisedRows.length - costedRows.length,
         wholesaleProductPence: costedRows.reduce((sum, r) => sum + (r.wholesaleProductPence ?? 0), 0),
         shippingPence: costedRows.reduce((sum, r) => sum + (r.shippingPence ?? 0), 0),
         wholesalePence: costedRows.reduce((sum, r) => sum + (r.wholesalePence ?? 0), 0),

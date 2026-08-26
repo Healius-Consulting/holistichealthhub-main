@@ -2,10 +2,11 @@ function snapshotObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-/** Paid orders count immediately. Completed or opened refunds drop out. Collection is not a gate. */
+/** Paid orders realise only after collection. Open refunds still drop out. */
 export function pharmacyFinanceRecognition(order: {
   paymentStatus?: string | null;
   status?: string | null;
+  fulfilmentStatus?: string | null;
   paidAt?: string | null;
   totalPence?: number | null;
   resolutionReason?: string | null;
@@ -14,6 +15,7 @@ export function pharmacyFinanceRecognition(order: {
 }) {
   const payment = String(order.paymentStatus || '').toUpperCase();
   const status = String(order.status || '').toUpperCase();
+  const fulfilment = String(order.fulfilmentStatus || '').toUpperCase();
   const refund = snapshotObject(snapshotObject(order.quoteSnapshot).refund);
   const refundStatus = String(refund.status || '').toLowerCase();
   const refundAmountPence = Math.max(0, Number(refund.amountPence || 0));
@@ -36,8 +38,14 @@ export function pharmacyFinanceRecognition(order: {
     || payment === 'REFUND_REQUIRED'
     || status === 'CANCELLED'
   );
+  const retained = paidOnce && !refunded && !refundPending;
+  const collected = fulfilment === 'COLLECTED';
+  const realised = retained && collected;
+  const pendingCollection = retained && !collected;
   return {
-    recognised: paidOnce && !refunded && !refundPending,
+    recognised: realised,
+    realised,
+    pendingCollection,
     refunded,
     partialRefund,
     refundAmountPence,

@@ -10139,8 +10139,6 @@ html[data-theme='light'] :is(
   .rx-record-tabs > button small,
   .order-card-header .date,
   .text-muted,
-  .pharmacy-finance__pending,
-  .pharmacy-finance__footnote,
   .app-header__eyebrow,
   .header-context,
   .settings-meta-grid span,
@@ -10159,8 +10157,6 @@ html[data-theme='light'] .pill-green{ color: #065f46 !important; }
 html[data-theme='light'] .pill-amber{ color: #92400e !important; }
 html[data-theme='light'] .pill-red{ color: #9f1239 !important; }
 html[data-theme='light'] .pill-info{ color: #1e40af !important; }
-html[data-theme='light'] .pharmacy-finance__table-wrap td > span{ color: var(--text-tertiary) !important; }
-
 html[data-theme='light'] :is(body, .app-shell, .app-main, .page-container){
   background-color: var(--bg-app) !important;
 }
@@ -10467,8 +10463,7 @@ html[data-theme='dark'] .settings-note{
 
 html[data-theme='dark'] button:not(.btn-primary):not(.button-primary):not(.btn-danger):not(.button-danger){ color: inherit; }
 
-html[data-theme='dark'] :is(.pharmacy-finance__table-wrap strong, .pharmacy-finance__footnote strong){ color: var(--text-primary) !important; }
-html[data-theme='dark'] :is(.sort-control, .pharmacy-finance__footnote){ color: var(--text-tertiary); }
+html[data-theme='dark'] .sort-control{ color: var(--text-tertiary); }
 
 html[data-theme='dark'] :is(.admin-referral-item, .unified-admin-shell .admin-patient-filters, .unified-admin-shell .admin-finance-filters, .unified-admin-shell .admin-search.search-box, .unified-admin-shell .search-box.admin-search){
   color: var(--text-primary);

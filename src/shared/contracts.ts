@@ -1190,6 +1190,8 @@ export interface PharmacyPrescriptionFinanceReport {
   totals: {
     prescriptionCount: number;
     paidPrescriptionCount: number;
+    pendingCollectionCount: number;
+    pendingPatientRevenuePence: number;
     pendingPrescriptionCount: number;
     refundedPrescriptionCount: number;
     refundedPatientPence: number;
@@ -1218,6 +1220,8 @@ export interface PharmacyPrescriptionFinanceReport {
     paymentStatus: string;
     fulfilmentStatus: string;
     recognised: boolean;
+    realised: boolean;
+    pendingCollection: boolean;
     refunded: boolean;
     refundPending: boolean;
     productRevenuePence: number;
