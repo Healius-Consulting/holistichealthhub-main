@@ -22,6 +22,7 @@ export type WizardProgress = {
 
 export type ComputeWizardProgressInput = {
   patientReady: boolean;
+  prescriptionAuthenticated: boolean;
   prescriptionReady: boolean;
   readyForProducts: boolean;
   draftBasketCount: number;

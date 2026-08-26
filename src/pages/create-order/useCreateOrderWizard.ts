@@ -43,7 +43,7 @@ export function useCreateOrderWizard(options: UseCreateOrderWizardOptions) {
       skipFocusRef.current = true;
       previousPatientReady.current = progressInput.patientReady;
     }
-  }, [activeOrderId, progressInput.patientReady, progressInput.prescriptionReady, progressInput.readyForProducts, progressInput.draftBasketCount, progressInput.readyForPayment, progressInput.isReplacement, progressInput.selectedRx]);
+  }, [activeOrderId, progressInput.patientReady, progressInput.prescriptionAuthenticated, progressInput.prescriptionReady, progressInput.readyForProducts, progressInput.draftBasketCount, progressInput.readyForPayment, progressInput.isReplacement, progressInput.selectedRx]);
 
   useEffect(() => {
     if (progressInput.patientReady && !previousPatientReady.current) {

@@ -27,6 +27,7 @@ const blankRx = (overrides: Partial<Prescription> = {}): Prescription => ({
 test('fresh empty draft starts at step 1', () => {
   const progress = computeWizardProgress({
     patientReady: false,
+    prescriptionAuthenticated: false,
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 0,
@@ -44,6 +45,7 @@ test('fresh empty draft starts at step 1', () => {
 test('patient prefilled from overview lands on step 2', () => {
   const progress = computeWizardProgress({
     patientReady: true,
+    prescriptionAuthenticated: false,
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 0,
@@ -59,6 +61,7 @@ test('patient prefilled from overview lands on step 2', () => {
 test('redo with carried medicines stays on step 2 with provisional basket', () => {
   const progress = computeWizardProgress({
     patientReady: true,
+    prescriptionAuthenticated: false,
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 2,
@@ -85,6 +88,7 @@ test('resumed draft with verified file opens on upload sub-step', () => {
   assert.equal(deriveRxSubStep(rx, true), 'details');
   const progress = computeWizardProgress({
     patientReady: true,
+    prescriptionAuthenticated: false,
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 0,
@@ -97,9 +101,36 @@ test('resumed draft with verified file opens on upload sub-step', () => {
   assert.equal(progress.rxSubStep, 'details');
 });
 
+test('manual auth complete unlocks step 3 before medicines are priced', () => {
+  const progress = computeWizardProgress({
+    patientReady: true,
+    prescriptionAuthenticated: true,
+    prescriptionReady: false,
+    readyForProducts: true,
+    draftBasketCount: 0,
+    readyForPayment: false,
+    selectedRx: blankRx({
+      entryMode: 'manual',
+      copyFileName: 'rx.pdf',
+      fileId: 'file-1',
+      serialNumber: 'RX-100',
+      prescriber: 'Dr Smith',
+      prescriberPin: '1234',
+      issueDate: '2026-08-01',
+    }),
+    routeExplicitlyChosen: true,
+    isReplacement: false,
+  });
+  assert.equal(progress.furthestUnlocked, 3);
+  assert.equal(progress.suggestedFocus, 3);
+  assert.equal(progress.steps[2].complete, true);
+  assert.equal(progress.steps[3].complete, false);
+});
+
 test('authenticated prescription with basket unlocks step 4 focus when ready', () => {
   const progress = computeWizardProgress({
     patientReady: true,
+    prescriptionAuthenticated: true,
     prescriptionReady: true,
     readyForProducts: true,
     draftBasketCount: 1,
@@ -116,6 +147,7 @@ test('authenticated prescription with basket unlocks step 4 focus when ready', (
 test('paid redo with price difference can focus step 4 when auth complete', () => {
   const progress = computeWizardProgress({
     patientReady: true,
+    prescriptionAuthenticated: true,
     prescriptionReady: true,
     readyForProducts: true,
     draftBasketCount: 2,

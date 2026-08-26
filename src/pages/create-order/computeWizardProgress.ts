@@ -20,6 +20,7 @@ export function deriveRxSubStep(rx: Prescription | null, routeChosen: boolean): 
 export function computeWizardProgress(input: ComputeWizardProgressInput): WizardProgress {
   const {
     patientReady,
+    prescriptionAuthenticated,
     prescriptionReady,
     readyForProducts,
     draftBasketCount,
@@ -36,34 +37,36 @@ export function computeWizardProgress(input: ComputeWizardProgressInput): Wizard
   const steps: WizardProgress['steps'] = {
     1: { complete: patientReady },
     2: {
-      complete: prescriptionReady,
+      complete: prescriptionAuthenticated,
       blockedReason: !patientReady ? 'Link a patient first' : undefined,
     },
     3: {
       complete: medicinesComplete,
-      blockedReason: !prescriptionReady ? 'Authenticate prescription first' : undefined,
+      blockedReason: !prescriptionAuthenticated ? 'Authenticate prescription first' : undefined,
     },
     4: {
       complete: readyForPayment,
-      blockedReason: !prescriptionReady
+      blockedReason: !prescriptionAuthenticated
         ? 'Prescription incomplete'
         : draftBasketCount < 1
           ? 'Add medicines first'
-          : undefined,
+          : !prescriptionReady
+            ? 'Complete medicine pricing and quantities'
+            : undefined,
     },
   };
 
   let furthestUnlocked: WizardStep = 1;
   if (patientReady) furthestUnlocked = 2;
-  if (prescriptionReady) furthestUnlocked = 3;
+  if (prescriptionAuthenticated) furthestUnlocked = 3;
   if (prescriptionReady && draftBasketCount >= 1) furthestUnlocked = 4;
 
   let suggestedFocus = furthestUnlocked;
-  if (isReplacement && patientReady && !prescriptionReady) {
+  if (isReplacement && patientReady && !prescriptionAuthenticated) {
     suggestedFocus = 2;
-  } else if (patientReady && !prescriptionReady) {
+  } else if (patientReady && !prescriptionAuthenticated) {
     suggestedFocus = 2;
-  } else if (prescriptionReady && draftBasketCount < 1) {
+  } else if (prescriptionAuthenticated && draftBasketCount < 1) {
     suggestedFocus = 3;
   } else if (readyForPayment) {
     suggestedFocus = 4;
@@ -74,8 +77,8 @@ export function computeWizardProgress(input: ComputeWizardProgressInput): Wizard
     suggestedFocus,
     rxSubStep,
     steps,
-    basketUnlocked: prescriptionReady && draftBasketCount > 0,
-    basketIsProvisional: isReplacement && draftBasketCount > 0 && !prescriptionReady,
+    basketUnlocked: prescriptionAuthenticated && draftBasketCount > 0,
+    basketIsProvisional: isReplacement && draftBasketCount > 0 && !prescriptionAuthenticated,
     isReplacement,
     patientLocked: isReplacement,
     routeChosen,

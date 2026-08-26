@@ -212,6 +212,9 @@ export default function CreateOrderPage() {
     { label: 'Prescriber details complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => Boolean(rx.issueDate && rx.prescriber.trim() && (rx.entryMode === 'manual' ? rx.prescriberPin?.trim() : rx.prescriberId))) },
     { label: 'Priced medicines and quantities complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.items.length > 0 && rx.items.every(item => Boolean(item.productId && item.formulaId) && Number.isInteger(item.qty) && item.qty > 0 && Number.isInteger(item.unitsNeededCount) && item.unitsNeededCount! > 0 && Number.isFinite(item.retail) && item.retail > 0)) },
   ] : [];
+  const prescriptionAuthenticated = readiness
+    .filter(item => item.label !== 'Priced medicines and quantities complete')
+    .every(item => item.complete);
   const prescriptionReady = readiness.every(item => item.complete);
   const wholesaleKnown = Boolean(activeOrder?.prescriptions.every(rx => rx.items.every(item => item.cost !== null)));
   const orderMargin = activeOrder && wholesaleKnown
@@ -257,7 +260,14 @@ export default function CreateOrderPage() {
   const prescriptionUploaded = Boolean(selectedRx && (selectedRx.copyFileName || selectedRx.clinicScanId));
   const readyForProducts = selectedRx?.entryMode === 'clinic'
     ? Boolean(selectedRx.clinicScanId)
-    : Boolean(selectedRx?.copyFileName && selectedRx.prescriber.trim() && selectedRx.serialNumber?.trim());
+    : Boolean(
+      selectedRx?.copyFileName
+      && selectedRx.prescriber.trim()
+      && selectedRx.serialNumber?.trim()
+      && selectedRx.issueDate
+      && selectedRx.prescriberPin?.trim()
+      && prescriptionDateIsCurrent(selectedRx.issueDate, selectedRx.expiryDate),
+    );
   const draftBasketItems = activeOrder
     ? activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({ ...item, rxId: rx.id })))
     : [];
@@ -281,6 +291,7 @@ export default function CreateOrderPage() {
     activeOrderId: activeOrder?.id ?? null,
     selectedRxId,
     patientReady,
+    prescriptionAuthenticated,
     prescriptionReady,
     readyForProducts,
     draftBasketCount,
