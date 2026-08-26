@@ -1042,7 +1042,6 @@ export default function CreateOrderPage() {
                 <Step4CheckoutPanel
                   activeOrder={activeOrder}
                   activeOrderRef={activeOrderRef}
-                  patient={patient}
                   redoSourceOrder={redoSourceOrder}
                   paidRedo={paidRedo}
                   paidRedoAmountMatches={paidRedoAmountMatches}
@@ -1057,10 +1056,8 @@ export default function CreateOrderPage() {
                   quoteCheckedAt={quoteCheckedAt}
                   quoteSummary={quoteSummary}
                   currentQuoteItemsCount={currentQuoteItems.length}
-                  draftBasketCount={draftBasketCount}
-                  draftBasketTotal={draftBasketTotal}
-                  draftBasketItems={draftBasketItems}
-                  draftBasketIssues={draftBasketIssues}
+                  draftBasketBlockedCount={draftBasketBlockedCount}
+                  draftBasketWarningCount={draftBasketWarningCount}
                   selectedPaymentRoute={selectedPaymentRoute}
                   canUseWorldpay={canUseWorldpay}
                   readyForPayment={readyForPayment}
