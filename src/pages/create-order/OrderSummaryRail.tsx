@@ -117,20 +117,30 @@ export default function OrderSummaryRail({
                 const issue = draftBasketIssues[index];
                 return (
                   <li key={`${item.rxId}-${item.productId}`} className={issue ? `is-${issue.tone}` : undefined}>
+                    {/* The name gets the full rail width so its marquee frame has room to read. */}
                     <div className="rx-order-summary-rail__product">
                       <MedicineLabel name={item.name} />
-                      <small>
-                        {item.qty} pack{item.qty === 1 ? '' : 's'}
-                        {issue ? ` · ${issue.label}` : ''}
-                      </small>
                     </div>
-                    <div className="rx-order-summary-rail__line">
+                    <div className="rx-order-summary-rail__headline">
+                      <span>{item.qty} pack{item.qty === 1 ? '' : 's'}</span>
                       <strong>{money(lineRevenue(item))}</strong>
-                      <small>
-                        {item.cost !== null ? `${money(lineCost(item))} wholesale` : 'Wholesale pending'}
-                        {lineMargin(item) !== null ? ` · ${lineMargin(item)}% margin` : ''}
-                      </small>
                     </div>
+                    {issue ? (
+                      <p className="rx-order-summary-rail__issue">
+                        <AlertTriangle size={12} aria-hidden="true" />
+                        {issue.label}
+                      </p>
+                    ) : null}
+                    <dl className="rx-order-summary-rail__economics">
+                      <div>
+                        <dt>Wholesale</dt>
+                        <dd>{item.cost !== null ? money(lineCost(item)) : 'Pending'}</dd>
+                      </div>
+                      <div>
+                        <dt>Margin</dt>
+                        <dd>{lineMargin(item) !== null ? `${lineMargin(item)}%` : '—'}</dd>
+                      </div>
+                    </dl>
                     {canEditBasketItems && item.rxId === selectedRxId ? (
                       <div className="rx-order-summary-rail__edit">
                         <button type="button" className="icon-button" aria-label={`Reduce packs of ${item.name}`} disabled={item.qty <= 1} onClick={() => onEditQuantity(item.rxId, item.productId, item.qty - 1)}><Minus size={14} /></button>
