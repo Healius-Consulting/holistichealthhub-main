@@ -39,3 +39,6 @@ dist-ssr
 output/
 tmp/
 docs/*
+
+# Local client-review packs (not used by the app)
+artifacts/email-template-review*
