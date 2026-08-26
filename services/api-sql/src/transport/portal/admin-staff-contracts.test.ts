@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
-import { resolveOwnerUid, toPortalPharmacyStaffAccounts, toPortalPlatformAdminAccounts } from './admin-staff-contracts.js';
+import { resolveOwnerUid, staffInviteEmailKey, toPortalPharmacyStaffAccounts, toPortalPlatformAdminAccounts } from './admin-staff-contracts.js';
 
 const organisationId = '70913a3071c34a41952ed532927af58c';
 
@@ -86,5 +86,27 @@ describe('admin staff contracts', () => {
         createdAt: adminMember.createdAt,
       },
     ]);
+  });
+
+  it('keeps first-time invites idempotent but gives intentional re-invites a fresh key', () => {
+    assert.deepEqual(staffInviteEmailKey({
+      role: 'hhh_admin',
+      uid: 'admin-uid',
+      existingInvite: false,
+      requestId: 'request-one',
+    }), ['platform-admin-invite', 'admin-uid']);
+    assert.deepEqual(staffInviteEmailKey({
+      role: 'hhh_admin',
+      uid: 'admin-uid',
+      existingInvite: true,
+      requestId: 'request-two',
+    }), ['platform-admin-invite', 'admin-uid', 'resend', 'request-two']);
+    assert.deepEqual(staffInviteEmailKey({
+      role: 'pharmacy_staff',
+      uid: 'staff-uid',
+      organisationId,
+      existingInvite: true,
+      requestId: 'request-three',
+    }), ['pharmacy-staff-invite', 'staff-uid', organisationId, 'resend', 'request-three']);
   });
 });

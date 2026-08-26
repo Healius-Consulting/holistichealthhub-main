@@ -21,6 +21,21 @@ export interface PortalPlatformAdminAccount {
   createdAt: string;
 }
 
+export function staffInviteEmailKey(input: {
+  role: 'pharmacy_staff' | 'hhh_admin';
+  uid: string;
+  organisationId?: string | null;
+  existingInvite: boolean;
+  requestId: string;
+}) {
+  const base = input.role === 'pharmacy_staff'
+    ? ['pharmacy-staff-invite', input.uid, input.organisationId]
+    : ['platform-admin-invite', input.uid];
+  return input.existingInvite
+    ? [...base, 'resend', input.requestId]
+    : base;
+}
+
 function lowerStaffStatus(status: StaffUserRecord['status']): PortalPharmacyStaffAccount['status'] {
   if (status === 'ACTIVE') return 'active';
   if (status === 'DISABLED') return 'disabled';

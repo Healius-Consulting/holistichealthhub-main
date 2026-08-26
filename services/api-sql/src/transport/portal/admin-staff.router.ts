@@ -10,7 +10,7 @@ import { SqlOrganisationRepository } from '../../repositories/sql/organisation.s
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
-import { resolveOwnerUid, toPortalPharmacyStaffAccounts, toPortalPlatformAdminAccounts } from './admin-staff-contracts.js';
+import { resolveOwnerUid, staffInviteEmailKey, toPortalPharmacyStaffAccounts, toPortalPlatformAdminAccounts } from './admin-staff-contracts.js';
 
 const organisationIdSchema = z.string().regex(/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
 const staffUidSchema = z.string().min(8).max(128);
@@ -148,7 +148,13 @@ export function createAdminStaffRouter(): Router {
           organisationId: organisation.id,
           actionLink,
         },
-        ['pharmacy-staff-invite', user.uid, input.organisationId],
+        staffInviteEmailKey({
+          role: 'pharmacy_staff',
+          uid: user.uid,
+          organisationId: input.organisationId,
+          existingInvite: Boolean(existingProfile),
+          requestId: scope.requestId,
+        }),
         { organisationId: input.organisationId },
       );
 
@@ -293,7 +299,12 @@ export function createAdminStaffRouter(): Router {
           pharmacyName: 'HHH admin workspace',
           actionLink,
         },
-        ['platform-admin-invite', user.uid],
+        staffInviteEmailKey({
+          role: 'hhh_admin',
+          uid: user.uid,
+          existingInvite: Boolean(existingProfile),
+          requestId: scope.requestId,
+        }),
         {},
       );
 
