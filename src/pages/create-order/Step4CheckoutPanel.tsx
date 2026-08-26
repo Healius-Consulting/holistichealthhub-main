@@ -23,6 +23,7 @@ type Step4CheckoutPanelProps = {
   draftBasketWarningCount: number;
   selectedPaymentRoute: 'worldpay' | 'manual';
   canUseWorldpay: boolean;
+  worldpayStatusReady: boolean;
   readyForPayment: boolean;
   outstandingPaymentGates: Array<{ label: string; complete: boolean }>;
   checkoutBusy: boolean;
@@ -92,6 +93,7 @@ export default function Step4CheckoutPanel({
   draftBasketWarningCount,
   selectedPaymentRoute,
   canUseWorldpay,
+  worldpayStatusReady,
   readyForPayment,
   outstandingPaymentGates,
   checkoutBusy,
@@ -262,7 +264,13 @@ export default function Step4CheckoutPanel({
                   <CreditCard size={17} />
                   <span>
                     <strong>Worldpay</strong>
-                    <small>{canUseWorldpay ? 'Fresh hosted checkout' : 'Not configured'}</small>
+                    <small>
+                      {!worldpayStatusReady
+                        ? 'Checking merchant connection…'
+                        : canUseWorldpay
+                          ? 'Fresh hosted checkout'
+                          : 'Not configured'}
+                    </small>
                   </span>
                   {selectedPaymentRoute === 'worldpay' ? <CheckCircle size={14} /> : null}
                 </button>

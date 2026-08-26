@@ -1373,14 +1373,31 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'SET_CURRENT_ORGANISATION':
       return { ...state, currentOrganisationId: action.organisationId };
-    case 'SET_ORGANISATIONS':
+    case 'SET_ORGANISATIONS': {
+      const organisations = action.organisations.map(organisation => {
+        const previous = state.organisations.find(item => item.id === organisation.id);
+        if (!previous?.worldpay.lastSyncedAt) return organisation;
+        return {
+          ...organisation,
+          worldpay: {
+            ...organisation.worldpay,
+            status: previous.worldpay.status,
+            environment: previous.worldpay.environment,
+            merchantId: previous.worldpay.merchantId,
+            merchantName: previous.worldpay.merchantName,
+            lastSyncedAt: previous.worldpay.lastSyncedAt,
+            enabled: organisation.worldpay.enabled || previous.worldpay.enabled,
+          },
+        };
+      });
       return {
         ...state,
-        organisations: action.organisations,
-        currentOrganisationId: action.organisations.some(organisation => organisation.id === state.currentOrganisationId)
+        organisations,
+        currentOrganisationId: organisations.some(organisation => organisation.id === state.currentOrganisationId)
           ? state.currentOrganisationId
-          : action.organisations[0]?.id ?? '',
+          : organisations[0]?.id ?? '',
       };
+    }
     case 'UPDATE_PLATFORM_INTEGRATION':
       return { ...state, platformIntegrations: state.platformIntegrations.map(integration => integration.id === action.integrationId ? { ...integration, status: action.status, description: action.description ?? integration.description } : integration) };
     case 'ADD_ORGANISATION':
@@ -2104,6 +2121,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;
+    if (currentOrganisation?.worldpay.lastSyncedAt) return;
     let cancelled = false;
     const organisationId = state.currentOrganisationId;
     getWorldpayConnectionStatus(organisationId).then(status => {
@@ -2115,12 +2133,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: status.connected ? 'connected' : status.configured ? 'onboarding' : 'not-connected',
           environment: status.environment === 'live' ? 'live' : 'sandbox',
           merchantId: status.maskedIdentifier ?? null,
-          lastSyncedAt: status.updatedAt ?? new Date(),
+          lastSyncedAt: status.updatedAt ?? new Date().toISOString(),
         },
       });
-    }).catch(error => console.warn('Worldpay status check unavailable:', error));
+    }).catch(error => {
+      console.warn('Worldpay status check unavailable:', error);
+      if (cancelled) return;
+      dispatch({
+        type: 'UPDATE_WORLDPAY',
+        organisationId,
+        updates: {
+          status: 'not-connected',
+          lastSyncedAt: new Date().toISOString(),
+        },
+      });
+    });
     return () => { cancelled = true; };
-  }, [livePharmacyWorkspace, state.currentOrganisationId, state.staffSession]);
+  }, [currentOrganisation?.worldpay.lastSyncedAt, livePharmacyWorkspace, state.currentOrganisationId, state.staffSession]);
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;

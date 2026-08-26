@@ -190,7 +190,7 @@ function AuthSessionBridge() {
       if (!cancelled) dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'Pharmacy profile could not be loaded.', toastType: 'error' });
     });
     return () => { cancelled = true; };
-  }, [authState.phase, authState.staff, dispatch]);
+  }, [authState.phase, authState.staff?.email, authState.staff?.organisationId, authState.staff?.role, dispatch]);
 
   return null;
 }

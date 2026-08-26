@@ -44,6 +44,7 @@ export default function CreateOrderPage() {
   const orderablePatients = organisationPatients.filter(canCreateOrderForPatient);
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const canUseWorldpay = organisation?.worldpay.status === 'connected';
+  const worldpayStatusReady = Boolean(organisation?.worldpay.lastSyncedAt);
   const draftOrders = state.orders.filter(order => order.organisationId === state.currentOrganisationId && order.payment.status === 'none');
   const activeOrder = state.orders.find(order => order.organisationId === state.currentOrganisationId && order.id === state.activeOrderId && order.payment.status === 'none');
   const selectedPaymentRoute = activeOrder?.paymentRoute ?? (canUseWorldpay ? 'worldpay' : 'manual');
@@ -114,10 +115,13 @@ export default function CreateOrderPage() {
   }, [dispatch, state.currentOrganisationId, state.orders]);
 
   useEffect(() => {
+    // Wait until Worldpay status has been synced before demoting a draft off Worldpay.
+    // Org reloads used to reset status to not-connected and this effect would wipe the route.
+    if (!organisation?.worldpay.lastSyncedAt) return;
     if (activeOrder?.payment.status === 'none' && activeOrder.paymentRoute === 'worldpay' && !canUseWorldpay) {
       dispatch({ type: 'SET_ORDER_PAYMENT_ROUTE', orderId: activeOrder.id, paymentRoute: 'manual' });
     }
-  }, [activeOrder?.id, activeOrder?.payment.status, activeOrder?.paymentRoute, canUseWorldpay, dispatch]);
+  }, [activeOrder?.id, activeOrder?.payment.status, activeOrder?.paymentRoute, canUseWorldpay, dispatch, organisation?.worldpay.lastSyncedAt]);
 
   useEffect(() => {
     if (!durableDraftEnabled || !activeOrder || activeOrder.draftId || checkoutBusy) return;
@@ -1060,6 +1064,7 @@ export default function CreateOrderPage() {
                   draftBasketWarningCount={draftBasketWarningCount}
                   selectedPaymentRoute={selectedPaymentRoute}
                   canUseWorldpay={canUseWorldpay}
+                  worldpayStatusReady={worldpayStatusReady}
                   readyForPayment={readyForPayment}
                   outstandingPaymentGates={outstandingPaymentGates}
                   checkoutBusy={checkoutBusy}
