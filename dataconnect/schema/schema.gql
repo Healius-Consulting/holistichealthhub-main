@@ -262,8 +262,33 @@ enum TaskStatus {
 
 enum RefundStatus {
   PENDING_CONFIRMATION
+  VERIFICATION_PENDING
+  RECONCILIATION_REQUIRED
   COMPLETED
   FAILED
+}
+
+enum QuoteCheckPhase {
+  PRE_PAYMENT
+  POST_PAYMENT
+  FINAL_PLACEMENT
+  REPLACEMENT
+}
+
+enum QuoteCheckStatus {
+  MATCHED
+  REVIEW_REQUIRED
+  OUT_OF_STOCK
+  RECONCILIATION_REQUIRED
+  ABSORBED
+  CANCELLED
+}
+
+enum PaymentAllocationStatus {
+  ACTIVE
+  TRANSFERRED
+  REFUNDED
+  RELEASED
 }
 
 enum FeeEventKind {
@@ -680,7 +705,7 @@ type Order @table {
   patientId: UUID! @index
   draft: OrderDraft @unique @ref(fields: "draftId")
   draftId: UUID
-  redoOf: Order @ref(fields: "redoOfId")
+  redoOf: Order @unique @ref(fields: "redoOfId")
   redoOfId: UUID @index
   orderNumber: String @unique
   status: OrderStatus! @default(value: SUBMITTED)
@@ -703,6 +728,10 @@ type Order @table {
   paidAt: Timestamp
   collectedAt: Timestamp
   cancelledAt: Timestamp
+  resolutionStatus: String
+  resolutionReason: String
+  resolvedAt: Timestamp
+  archivedAt: Timestamp
 }
 
 type OrderPrescription @table(key: ["order", "prescription"]) {
@@ -771,6 +800,8 @@ type Payment @table {
   manualTender: String
   manualReference: String
   providerPayload: Any
+  baselineQuoteCheckId: UUID
+  basketFingerprint: String
   version: Int! @default(value: 1)
   createdAt: Timestamp! @default(expr: "request.time")
   updatedAt: Timestamp! @default(expr: "request.time")
@@ -779,7 +810,7 @@ type Payment @table {
   reconciledAt: Timestamp
 }
 
-type Refund @table {
+type Refund @table @unique(fields: ["organisationId", "idempotencyKey"]) {
   id: UUID! @default(expr: "uuidV4()")
   organisation: Organisation! @ref(fields: "organisationId")
   organisationId: UUID! @index
@@ -794,12 +825,60 @@ type Refund @table {
   cause: String!
   route: PaymentRoute!
   status: RefundStatus! @default(value: PENDING_CONFIRMATION)
-  idempotencyKey: String! @unique
+  idempotencyKey: String! @index
   externalReference: String
+  verificationStatus: String
+  verificationPayload: Any
   confirmedBy: StaffUser @ref(fields: "confirmedByUid", references: "uid")
   confirmedByUid: String @index
   createdAt: Timestamp! @default(expr: "request.time")
   confirmedAt: Timestamp
+  verifiedAt: Timestamp
+}
+
+type QuoteCheck @table {
+  id: UUID! @default(expr: "uuidV4()")
+  organisation: Organisation! @ref(fields: "organisationId")
+  organisationId: UUID! @index
+  order: Order! @ref(fields: "orderId")
+  orderId: UUID! @index
+  payment: Payment @ref(fields: "paymentId")
+  paymentId: UUID @index
+  phase: QuoteCheckPhase! @index
+  status: QuoteCheckStatus! @index
+  baselineQuoteCheckId: UUID
+  basketFingerprint: String!
+  quoteFingerprint: String!
+  patientTotalPence: Int64!
+  wholesaleTotalPence: Int64!
+  shippingPence: Int64! @default(value: 0)
+  taxPence: Int64! @default(value: 0)
+  rawQuote: Any!
+  comparison: Any
+  decidedBy: StaffUser @ref(fields: "decidedByUid", references: "uid")
+  decidedByUid: String @index
+  createdAt: Timestamp! @default(expr: "request.time")
+  decidedAt: Timestamp
+}
+
+type PaymentAllocation @table @unique(fields: ["paymentId", "orderId"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  organisation: Organisation! @ref(fields: "organisationId")
+  organisationId: UUID! @index
+  payment: Payment! @ref(fields: "paymentId")
+  paymentId: UUID! @index
+  order: Order! @ref(fields: "orderId")
+  orderId: UUID! @index
+  # A settled source order can fund at most one replacement. Nullable values are
+  # used by the original/source allocation, while transferred allocations carry
+  # the source order id and are protected from concurrent duplicate commits.
+  sourceOrderId: UUID @unique
+  amountPence: Int64!
+  status: PaymentAllocationStatus! @default(value: ACTIVE) @index
+  version: Int! @default(value: 1)
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+  transferredAt: Timestamp
 }
 
 type IntegrationConnection @table @unique(fields: ["organisationId", "integration", "environment"]) {
@@ -1055,4 +1134,3 @@ type CuraleafQuoteBankSync @table(key: ["environment"]) {
   lastError: String
   updatedAt: Timestamp! @default(expr: "request.time")
 }
-

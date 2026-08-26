@@ -255,13 +255,14 @@ export function trainingWorkspace(organisationId: string): {
     curaleafPatientDob: bySlug[slug].dob,
     ...extras,
   });
-  const cancelledRx = (id: number, slug: string) => namedRx(id, slug, 'cancelled', {
+  const cancelledRx = (id: number, slug: string, extras: Partial<Prescription> = {}) => namedRx(id, slug, 'cancelled', {
     placed: true,
     placedAt: daysAgo(6),
     poRef: `PO-TRAINING-${id}`,
     purchaseOrderState: 'CANCELLED',
     curaleafPrescriptionId: undefined,
     curaleafPrescriptionState: 'CANCELLED',
+    ...extras,
   });
   const replacement = (
     id: number,
@@ -553,6 +554,11 @@ export function trainingWorkspace(organisationId: string): {
       fulfilmentLines: [line({ ordered: 2, allocated: 2, shipped: 2, received: 2, collected: 1 })],
     })]),
     orderShell(121, 'harper', 1, paid(121, 1, 'Training example — quote review: patient price increased after payment.'), [namedRx(1211, 'harper', 'awaiting-approval')], {
+      quoteChecks: [
+        { id: 'training-quote-121-pre', phase: 'PRE_PAYMENT', status: 'MATCHED', checkedAt: daysAgo(1).toISOString(), basketFingerprint: 'training-121', patientTotalPence: 8500, wholesaleTotalPence: 4200, shippingPence: 0, stockAvailable: true },
+        { id: 'training-quote-121-post', phase: 'POST_PAYMENT', status: 'CHANGED', checkedAt: daysAgo(1).toISOString(), basketFingerprint: 'training-121', comparedWithQuoteCheckId: 'training-quote-121-pre', patientTotalPence: 9500, wholesaleTotalPence: 4200, shippingPence: 0, patientDeltaPence: 1000, stockAvailable: true },
+      ],
+      activeQuoteCheck: { id: 'training-quote-121-post', phase: 'POST_PAYMENT', status: 'CHANGED', checkedAt: daysAgo(1).toISOString(), basketFingerprint: 'training-121', comparedWithQuoteCheckId: 'training-quote-121-pre', patientTotalPence: 9500, wholesaleTotalPence: 4200, shippingPence: 0, patientDeltaPence: 1000, stockAvailable: true },
       quoteReview: review('required', 'patient_price_changed', [{
         category: 'patient_price',
         field: 'patientPackPrice',
@@ -588,23 +594,24 @@ export function trainingWorkspace(organisationId: string): {
         latest: '4800',
       }], quote('85.00', '48.00')),
     }),
-    orderShell(125, 'shiloh', 2, paid(125, 2, 'Training example — quote review: waiting for the patient top-up before placement.'), [namedRx(1251, 'shiloh', 'awaiting-approval')], {
-      quoteReview: review('awaiting_top_up', 'patient_price_changed', [{
+    orderShell(125, 'shiloh', 2, paid(125, 2, 'Training example — quote review: price increase awaiting absorb or cancel.'), [namedRx(1251, 'shiloh', 'awaiting-approval')], {
+      quoteReview: review('required', 'patient_price_changed', [{
         category: 'patient_price',
         field: 'patientPackPrice',
         packId: TRAINING_PRODUCT.id,
         previous: '8500',
         latest: '9500',
-      }], quote('95.00', '42.00'), { patientDeltaPence: 1000, hostedPaymentUrl: 'https://invalid.example/training-top-up' }),
+      }], quote('95.00', '42.00'), { patientDeltaPence: 1000 }),
     }),
-    orderShell(126, 'jules', 2, paid(126, 2, 'Training example — quote review: waiting to refund the patient price drop.'), [namedRx(1261, 'jules', 'awaiting-approval')], {
-      quoteReview: review('awaiting_refund', 'patient_price_changed', [{
+    orderShell(126, 'jules', 2, paid(126, 2, 'Training example — quote review: price decrease awaiting absorb or cancel.'), [namedRx(1261, 'jules', 'awaiting-approval')], {
+      curaleafPlacement: { route: 'MANUAL_PRESCRIPTION', stage: 'AWAITING_PRESCRIPTION_ACTIVATION', prescriberState: 'VERIFIED', prescriptionState: 'PENDING', attentionReason: 'prescription_activation', nextCheckAt: new Date(Date.now() + 60_000).toISOString(), updatedAt: daysAgo(1).toISOString() },
+      quoteReview: review('required', 'patient_price_changed', [{
         category: 'patient_price',
         field: 'patientPackPrice',
         packId: TRAINING_PRODUCT.id,
         previous: '8500',
         latest: '7500',
-      }], quote('75.00', '42.00'), { patientDeltaPence: -1000, refundAmountPence: 1000 }),
+      }], quote('75.00', '42.00'), { patientDeltaPence: -1000 }),
     }),
     orderShell(131, 'cameron', 8, paid(131, 8, 'Training example — cancelled and refunded, then replaced with a new payment.'), [cancelledRx(1311, 'cameron')], {
       lifecycleStatus: 'cancelled',
@@ -721,7 +728,10 @@ export function trainingWorkspace(organisationId: string): {
         latest: false,
       }], quote('85.00', '42.00', false)),
     }),
-    orderShell(144, 'peyton', 2, paid(144, 2, 'Training example — cancelled with the payment still held. Refund in ePOS, then confirm the reference.'), [cancelledRx(1441, 'peyton')], {
+    orderShell(144, 'peyton', 2, paid(144, 2, 'Training example — cancelled remainder with the payment still held. Refund in ePOS, then confirm the reference.'), [cancelledRx(1441, 'peyton', {
+      items: [twoPacks],
+      fulfilmentLines: [line({ ordered: 2, allocated: 1, shipped: 1, received: 1, collected: 0, remaining: 1, cancelledRemainder: 1, remainingExpected: 0 })],
+    })], {
       lifecycleStatus: 'cancelled',
       unresolvedReason: 'cancelled',
       cancellation: {

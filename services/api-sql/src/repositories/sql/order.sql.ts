@@ -92,6 +92,39 @@ const LIST_TENANT_ORDER_DRAFTS_GQL = `
   }
 `;
 
+const LIST_OPEN_ORDER_DRAFTS_GQL = `
+  query ListOpenOrderDrafts($limit: Int!) {
+    orderDrafts(
+      where: { status: { eq: DRAFT } }
+      orderBy: { updatedAt: ASC }
+      limit: $limit
+    ) {
+      id
+      organisationId
+      patientId
+      status
+      paymentStatus
+      payload
+      version
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+const MARK_ORDER_DRAFT_ABANDONED_GQL = `
+  mutation MarkOrderDraftAbandoned($id: UUID!, $payload: Any!) {
+    orderDraft_update(
+      key: { id: $id }
+      data: {
+        status: ABANDONED
+        payload: $payload
+        updatedAt_expr: "request.time"
+      }
+    )
+  }
+`;
+
 const GET_ORDER_BY_ID_GQL = `
   query GetOrderById($id: UUID!, $organisationId: UUID!) {
     orders(
@@ -105,6 +138,7 @@ const GET_ORDER_BY_ID_GQL = `
       organisationId
       patientId
       draftId
+      redoOfId
       orderNumber
       status
       paymentStatus
@@ -122,6 +156,10 @@ const GET_ORDER_BY_ID_GQL = `
       paidAt
       collectedAt
       cancelledAt
+      resolutionStatus
+      resolutionReason
+      resolvedAt
+      archivedAt
       createdAt
       updatedAt
     }
@@ -223,6 +261,42 @@ const CANCEL_ORDER_GQL = `
   }
 `;
 
+const LINK_REPLACEMENT_RESOLUTION_GQL = `
+  mutation LinkReplacementResolution($sourceOrderId: UUID!, $replacementOrderId: UUID!) {
+    order_update(key: { id: $replacementOrderId }, data: {
+      redoOfId: $sourceOrderId
+      status: PROCESSING
+      paymentStatus: PAID
+      paidAt_expr: "request.time"
+      updatedAt_expr: "request.time"
+    })
+    order_update(key: { id: $sourceOrderId }, data: {
+      status: CANCELLED
+      resolutionStatus: "RESOLVED"
+      resolutionReason: "REPLACED"
+      resolvedAt_expr: "request.time"
+      archivedAt_expr: "request.time"
+      cancelledAt_expr: "request.time"
+      updatedAt_expr: "request.time"
+    })
+  }
+`;
+
+const MARK_REFUND_RESOLUTION_GQL = `
+  mutation MarkRefundResolution($orderId: UUID!, $paymentStatus: PaymentStatus!) {
+    order_update(key: { id: $orderId }, data: {
+      status: CANCELLED
+      paymentStatus: $paymentStatus
+      resolutionStatus: "RESOLVED"
+      resolutionReason: "REFUNDED"
+      resolvedAt_expr: "request.time"
+      archivedAt_expr: "request.time"
+      cancelledAt_expr: "request.time"
+      updatedAt_expr: "request.time"
+    })
+  }
+`;
+
 const UPDATE_ORDER_PAYMENT_STATUS_GQL = `
   mutation UpdateOrderPaymentStatus($id: UUID!, $paymentStatus: PaymentStatus!) {
     order_update(
@@ -245,6 +319,7 @@ const LIST_TENANT_ORDERS_GQL = `
       organisationId
       patientId
       draftId
+      redoOfId
       orderNumber
       status
       paymentStatus
@@ -262,6 +337,10 @@ const LIST_TENANT_ORDERS_GQL = `
       paidAt
       collectedAt
       cancelledAt
+      resolutionStatus
+      resolutionReason
+      resolvedAt
+      archivedAt
       createdAt
       updatedAt
     }
@@ -281,6 +360,7 @@ const LIST_PAID_OPEN_ORDERS_GQL = `
       organisationId
       patientId
       draftId
+      redoOfId
       orderNumber
       status
       paymentStatus
@@ -298,6 +378,10 @@ const LIST_PAID_OPEN_ORDERS_GQL = `
       paidAt
       collectedAt
       cancelledAt
+      resolutionStatus
+      resolutionReason
+      resolvedAt
+      archivedAt
       createdAt
       updatedAt
     }
@@ -370,6 +454,20 @@ export class SqlOrderRepository implements OrderRepositoryPort {
       }
     );
     return { id: result.data.orderDraft_insert?.id };
+  }
+
+  async listOpenDrafts(limit = 2_000): Promise<OrderDraftRecord[]> {
+    const result = await dataConnect.executeGraphql<{ orderDrafts: OrderDraftRecord[] }, any>(
+      LIST_OPEN_ORDER_DRAFTS_GQL,
+      { variables: { limit } },
+    );
+    return result.data.orderDrafts ?? [];
+  }
+
+  async markDraftAbandoned(id: string, scrubbedPayload: unknown): Promise<void> {
+    await dataConnect.executeGraphql(MARK_ORDER_DRAFT_ABANDONED_GQL, {
+      variables: { id, payload: scrubbedPayload },
+    });
   }
 
   async updateDraft(data: {
@@ -482,6 +580,29 @@ export class SqlOrderRepository implements OrderRepositoryPort {
       },
     });
     return true;
+  }
+
+  async linkReplacementResolution(data: {
+    sourceOrderId: string;
+    replacementOrderId: string;
+    organisationId: string;
+  }): Promise<void> {
+    const [source, replacement] = await Promise.all([
+      this.findOrderById(data.sourceOrderId, data.organisationId),
+      this.findOrderById(data.replacementOrderId, data.organisationId),
+    ]);
+    if (!source || !replacement) throw new Error('Replacement orders must belong to the same pharmacy.');
+    await dataConnect.executeGraphql(LINK_REPLACEMENT_RESOLUTION_GQL, {
+      variables: { sourceOrderId: data.sourceOrderId, replacementOrderId: data.replacementOrderId },
+    });
+  }
+
+  async markRefundResolution(data: { orderId: string; organisationId: string; fullyRefunded: boolean }): Promise<void> {
+    const order = await this.findOrderById(data.orderId, data.organisationId);
+    if (!order) throw new Error('Refunded order must belong to the same pharmacy.');
+    await dataConnect.executeGraphql(MARK_REFUND_RESOLUTION_GQL, {
+      variables: { orderId: data.orderId, paymentStatus: data.fullyRefunded ? 'REFUNDED' : 'PAID' },
+    });
   }
 
   async setPaymentStatus(id: string, paymentStatus: 'NONE' | 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUND_REQUIRED' | 'REFUNDED'): Promise<void> {

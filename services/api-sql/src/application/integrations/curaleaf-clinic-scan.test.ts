@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   asClinicScanProducts,
+  clinicPrescriptionPlacementEligibility,
   clinicScanId,
   matchClinicPrescriptionPacks,
   parseClinicPrescription,
@@ -14,6 +15,14 @@ describe('clinic QR scan mapping', () => {
     assert.equal(prescriptionIdFromUpload({ id: 'rx-1' }), 'rx-1');
     assert.equal(prescriptionIdFromUpload({ prescription: { id: 'rx-2' } }), 'rx-2');
     assert.equal(prescriptionIdFromUpload({ fileId: 'not-an-id' }), undefined);
+  });
+
+  it('allows pending/active clinic prescriptions but blocks terminal prescriptions', () => {
+    assert.deepEqual(clinicPrescriptionPlacementEligibility('PENDING'), { eligible: true, waiting: true });
+    assert.deepEqual(clinicPrescriptionPlacementEligibility('ACTIVE'), { eligible: true, waiting: false });
+    assert.equal(clinicPrescriptionPlacementEligibility('FULFILLED').eligible, false);
+    assert.equal(clinicPrescriptionPlacementEligibility('EXPIRED').eligible, false);
+    assert.equal(clinicPrescriptionPlacementEligibility('CANCELLED').eligible, false);
   });
 
   it('does not require a patient name or date of birth on a clinic prescription', () => {

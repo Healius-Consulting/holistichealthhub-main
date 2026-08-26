@@ -463,4 +463,73 @@ describe('Curaleaf fulfilment mapping', () => {
     };
     assert.equal(existingCuraleafPurchaseOrder(compactOrder)?.purchaseOrderId, tenPackPo.id);
   });
+
+  it('joins duplicate products by purchaseOrderItemId across multiple shipments', () => {
+    const purchaseOrder = {
+      id: 'po-duplicate-product',
+      state: 'PROCESSING',
+      items: [
+        { id: 'poi-1', productId: 'pack-same', formulaId: 'formula-a', packsOrderedCount: 2 },
+        { id: 'poi-2', productId: 'pack-same', formulaId: 'formula-b', packsOrderedCount: 3 },
+      ],
+    };
+    const lines = normalisedFulfilmentLines({
+      purchaseOrder,
+      shipments: [
+        { id: 'shipment-1', items: [{ purchaseOrderItemId: 'poi-1', productId: 'pack-same', packCount: 1 }] },
+        { id: 'shipment-2', items: [{ purchaseOrderItemId: 'poi-2', productId: 'pack-same', packCount: 2 }] },
+      ],
+      requestedItems: [{ packId: 'pack-same', quantity: 5 }],
+    });
+    assert.equal(lines.length, 2);
+    assert.equal(lines.find(line => line.purchaseOrderItemId === 'poi-1')?.shipped, 1);
+    assert.equal(lines.find(line => line.purchaseOrderItemId === 'poi-2')?.shipped, 2);
+    assert.equal(lines.some(line => line.reconciliationRequired), false);
+    const received = applyPharmacyGoodsReceipt({
+      lines,
+      shipmentId: 'shipment-1',
+      items: [{ purchaseOrderItemId: 'poi-1', productId: 'pack-same', receivedQuantity: 1 }],
+    });
+    assert.equal(received.lines.find(line => line.purchaseOrderItemId === 'poi-1')?.received, 1);
+    assert.equal(received.lines.find(line => line.purchaseOrderItemId === 'poi-2')?.received, 0);
+  });
+
+  it('fails into reconciliation when a duplicate-product shipment omits purchaseOrderItemId', () => {
+    const purchaseOrder = {
+      id: 'po-ambiguous',
+      state: 'PROCESSING',
+      items: [
+        { id: 'poi-1', productId: 'pack-same', packsOrderedCount: 1 },
+        { id: 'poi-2', productId: 'pack-same', packsOrderedCount: 1 },
+      ],
+    };
+    const shipments = [{ id: 'shipment-ambiguous', items: [{ productId: 'pack-same', packCount: 1 }] }];
+    const lines = normalisedFulfilmentLines({ purchaseOrder, shipments });
+    assert.equal(lines.every(line => line.shipped === 0), true);
+    assert.equal(lines.every(line => line.reconciliationRequired), true);
+    assert.equal(supplierFulfilmentStatus({ purchaseOrder, shipments, lines }), 'EXCEPTION');
+  });
+
+  it('preserves shipped packs and calculates only the cancelled remainder', () => {
+    const purchaseOrder = {
+      id: 'po-partial-cancel',
+      state: 'CANCELLED',
+      items: [{ id: 'poi-1', productId: 'pack-a', packsOrderedCount: 4 }],
+    };
+    const shipments = [{
+      id: 'shipment-partial',
+      purchaseOrderId: 'po-partial-cancel',
+      items: [{ purchaseOrderItemId: 'poi-1', productId: 'pack-a', packCount: 2 }],
+    }];
+    const lines = normalisedFulfilmentLines({
+      purchaseOrder,
+      shipments,
+      requestedItems: [{ packId: 'pack-a', quantity: 4 }],
+    });
+    assert.equal(lines[0]?.shipped, 2);
+    assert.equal(lines[0]?.remaining, 0);
+    assert.equal(lines[0]?.cancelledRemainder, 2);
+    assert.equal(lines[0]?.backordered, false);
+    assert.equal(supplierFulfilmentStatus({ purchaseOrder, shipments, lines }), 'EXCEPTION');
+  });
 });

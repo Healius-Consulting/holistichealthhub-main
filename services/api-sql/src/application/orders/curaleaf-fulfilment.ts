@@ -15,6 +15,8 @@ export type SupplierFulfilmentStatus =
   | 'EXCEPTION';
 
 export interface CuraleafPoItem {
+  id?: string | null;
+  purchaseOrderItemId?: string | null;
   productId?: string | null;
   formulaId?: string | null;
   packsOrderedCount?: number | string | null;
@@ -50,6 +52,8 @@ export interface CuraleafPurchaseOrderLike {
 }
 
 export interface CuraleafShipmentItemLike {
+  id?: string | null;
+  purchaseOrderItemId?: string | null;
   productId?: string | null;
   sku?: string | null;
   packCount?: number | string | null;
@@ -74,7 +78,9 @@ export interface CuraleafShipmentLike {
 
 export interface FulfilmentLine {
   lineId: string;
+  purchaseOrderItemId: string | null;
   productId: string;
+  formulaId: string | null;
   ordered: number;
   requested: number;
   sent: number | null;
@@ -83,10 +89,13 @@ export interface FulfilmentLine {
   shipped: number;
   returned: number;
   remaining: number;
+  cancelledRemainder: number;
   received: number;
   collected: number;
   backordered: boolean;
   quantityMismatch: boolean;
+  reconciliationRequired: boolean;
+  reconciliationReason: string | null;
 }
 
 const FULFILMENT_RANK: Record<string, number> = {
@@ -217,11 +226,12 @@ export function syncSnapshotLineItemsFromPurchaseOrder(
   const ref = String(purchaseOrder.customerReference || '').trim();
   if (!ref || !customerReferenceMatchesOrder(ref, order)) return snapshot;
 
-  const poByProduct = new Map(
-    purchaseOrder.items.flatMap(item => item.productId
-      ? [[String(item.productId), count(item.packsOrderedCount ?? item.count)] as const]
-      : []),
-  );
+  const poByProduct = new Map<string, number>();
+  for (const item of purchaseOrder.items) {
+    const productId = String(item.productId || '');
+    if (!productId) continue;
+    poByProduct.set(productId, (poByProduct.get(productId) ?? 0) + count(item.packsOrderedCount ?? item.count));
+  }
   if (!poByProduct.size) return snapshot;
 
   const patchItems = (items: unknown) => {
@@ -271,18 +281,19 @@ export function matchShipments(
 }
 
 export function mergePriorPharmacyLines(...sources: unknown[]): Array<Record<string, unknown>> {
-  const byProduct = new Map<string, Record<string, unknown>>();
+  const byIdentity = new Map<string, Record<string, unknown>>();
   for (const source of sources) {
     const lines = Array.isArray(source) ? source as Array<Record<string, unknown>> : [];
     for (const line of lines) {
       const productId = String(line.productId ?? '');
       if (!productId) continue;
-      const existing = byProduct.get(productId);
+      const identity = String(line.purchaseOrderItemId || line.lineId || productId);
+      const existing = byIdentity.get(identity);
       if (!existing) {
-        byProduct.set(productId, { ...line, productId });
+        byIdentity.set(identity, { ...line, productId });
         continue;
       }
-      byProduct.set(productId, {
+      byIdentity.set(identity, {
         ...existing,
         ...line,
         productId,
@@ -291,26 +302,33 @@ export function mergePriorPharmacyLines(...sources: unknown[]): Array<Record<str
       });
     }
   }
-  return [...byProduct.values()];
+  return [...byIdentity.values()];
 }
 
-export function pharmacyCountsKey(lines: Array<{ productId?: string; received?: number; collected?: number }>) {
-  return lines.map(line => [String(line.productId || ''), count(line.received), count(line.collected)]);
+export function pharmacyCountsKey(lines: Array<{ purchaseOrderItemId?: string | null; productId?: string; received?: number; collected?: number }>) {
+  return lines.map(line => [String(line.purchaseOrderItemId || line.productId || ''), count(line.received), count(line.collected)]);
 }
 
 export function applyPharmacyGoodsReceipt(input: {
   lines: FulfilmentLine[];
-  items: Array<{ productId: string; receivedQuantity: number }>;
+  items: Array<{ purchaseOrderItemId?: string | null; productId: string; receivedQuantity: number }>;
   shipmentId: string;
   shipmentStates?: Record<string, string>;
 }): { lines: FulfilmentLine[]; shipmentStates: Record<string, string> } {
-  const receivedByProduct = new Map(input.lines.map(line => [line.productId, line.received]));
+  const receivedByIdentity = new Map(input.lines.map(line => [line.purchaseOrderItemId || line.lineId, line.received]));
+  const lineCountByProduct = new Map<string, number>();
+  for (const line of input.lines) lineCountByProduct.set(line.productId, (lineCountByProduct.get(line.productId) ?? 0) + 1);
   for (const item of input.items) {
-    receivedByProduct.set(item.productId, Math.max(receivedByProduct.get(item.productId) ?? 0, count(item.receivedQuantity)));
+    const matchingLine = item.purchaseOrderItemId
+      ? input.lines.find(line => line.purchaseOrderItemId === item.purchaseOrderItemId)
+      : (lineCountByProduct.get(item.productId) === 1 ? input.lines.find(line => line.productId === item.productId) : undefined);
+    if (!matchingLine) continue;
+    const identity = matchingLine.purchaseOrderItemId || matchingLine.lineId;
+    receivedByIdentity.set(identity, Math.max(receivedByIdentity.get(identity) ?? 0, count(item.receivedQuantity)));
   }
   const lines = input.lines.map(line => ({
     ...line,
-    received: Math.min(line.ordered, line.shipped, receivedByProduct.get(line.productId) ?? line.received),
+    received: Math.min(line.ordered, line.shipped, receivedByIdentity.get(line.purchaseOrderItemId || line.lineId) ?? line.received),
   }));
   return {
     lines,
@@ -359,42 +377,75 @@ export function normalisedFulfilmentLines(input: {
   const purchaseOrder = input.purchaseOrder ?? {};
   const shipments = input.shipments ?? [];
   const requestedItems = input.requestedItems ?? [];
-  const priorByProduct = new Map(
-    mergePriorPharmacyLines(input.priorLines).map(line => [String(line.productId ?? ''), line]),
-  );
+  const priorLines = mergePriorPharmacyLines(input.priorLines);
+  const priorByIdentity = new Map(priorLines.map(line => [String(line.purchaseOrderItemId || line.lineId || line.productId || ''), line]));
   const requestedByProduct = new Map<string, number>();
   for (const item of requestedItems) {
     const productId = String(item.packId || item.productId || '');
     const quantity = count(item.quantity ?? item.qty ?? item.count);
-    if (productId && quantity > 0) requestedByProduct.set(productId, quantity);
+    if (productId && quantity > 0) requestedByProduct.set(productId, (requestedByProduct.get(productId) ?? 0) + quantity);
   }
-  const supplierByProduct = new Map(
-    (purchaseOrder.items ?? []).flatMap(raw => typeof raw.productId === 'string' && raw.productId
-      ? [[raw.productId, raw] as const]
-      : []),
-  );
-  const productIds = [...new Set([...requestedByProduct.keys(), ...supplierByProduct.keys()])];
-  return productIds.flatMap((requestedProductId, index) => {
-    const raw = supplierByProduct.get(requestedProductId) ?? {};
+  const supplierItems = (purchaseOrder.items ?? []).filter(raw => typeof raw.productId === 'string' && raw.productId);
+  const supplierCountByProduct = new Map<string, number>();
+  for (const item of supplierItems) {
+    const productId = String(item.productId);
+    supplierCountByProduct.set(productId, (supplierCountByProduct.get(productId) ?? 0) + 1);
+  }
+  const representedProducts = new Set(supplierItems.map(item => String(item.productId)));
+  const lineSources: Array<{ raw: CuraleafPoItem; productId: string; index: number }> = supplierItems.map((raw, index) => ({
+    raw,
+    productId: String(raw.productId),
+    index,
+  }));
+  for (const productId of requestedByProduct.keys()) {
+    if (!representedProducts.has(productId)) lineSources.push({ raw: {}, productId, index: lineSources.length });
+  }
+  const knownPoItemIds = new Set(supplierItems.map(item => String(item.id || item.purchaseOrderItemId || '')).filter(Boolean));
+  const unmatchedShipmentItems = shipments.flatMap(shipment => shipment.items ?? []).filter(item => {
+    const poItemId = String(item.purchaseOrderItemId || '');
+    if (poItemId) return !knownPoItemIds.has(poItemId);
+    const productId = String(item.productId || '');
+    return !productId || (supplierCountByProduct.get(productId) ?? 0) !== 1;
+  });
+  const cancelled = String(purchaseOrder.state || purchaseOrder.purchaseOrderState || '').toUpperCase() === 'CANCELLED';
+  return lineSources.flatMap(({ raw, productId: requestedProductId, index }) => {
     const productId = typeof raw.productId === 'string' ? raw.productId : requestedProductId;
     if (!productId) return [];
+    const purchaseOrderItemId = String(raw.id || raw.purchaseOrderItemId || '').trim() || null;
     const supplierReportedOrdered = count(raw.packsOrderedCount ?? raw.count);
-    const requested = count(requestedByProduct.get(productId));
+    const requested = (supplierCountByProduct.get(productId) ?? 0) > 1
+      ? supplierReportedOrdered
+      : count(requestedByProduct.get(productId));
     const ordered = Math.max(requested, supplierReportedOrdered);
     const allocated = count(raw.packsAllocatedCount);
     const returnedByPo = count(raw.packsReturnedCount);
+    const shipmentItemMatches = (item: CuraleafShipmentItemLike) => {
+      const incomingPoItemId = String(item.purchaseOrderItemId || '');
+      if (incomingPoItemId) return Boolean(purchaseOrderItemId && incomingPoItemId === purchaseOrderItemId);
+      return String(item.productId || '') === productId && (supplierCountByProduct.get(productId) ?? 0) <= 1;
+    };
     const shipped = shipments.reduce((total, shipment) => total + (shipment.items ?? [])
-      .filter(item => String(item.productId || '') === productId)
+      .filter(shipmentItemMatches)
       .reduce((sum, item) => sum + count(item.packCount ?? item.count), 0), 0);
     const returnedByShipments = shipments.reduce((total, shipment) => total + (shipment.items ?? [])
-      .filter(item => String(item.productId || '') === productId)
+      .filter(shipmentItemMatches)
       .reduce((sum, item) => sum + count(item.packsReturnedCount), 0), 0);
-    const existing = priorByProduct.get(productId);
+    const lineId = purchaseOrderItemId
+      ?? createHash('sha256').update(`${purchaseOrder.id ?? 'po'}:${productId}:${index}`).digest('hex').slice(0, 32);
+    const existing = priorByIdentity.get(purchaseOrderItemId || lineId)
+      ?? ((supplierCountByProduct.get(productId) ?? 0) <= 1 ? priorLines.find(line => String(line.productId || '') === productId) : undefined);
     const returned = Math.max(returnedByPo, returnedByShipments);
-    const remaining = Math.max(0, ordered - Math.max(0, shipped - returned));
+    const cancelledRemainder = cancelled ? Math.max(0, ordered - shipped) : 0;
+    const remaining = cancelled ? 0 : Math.max(0, ordered - Math.max(0, shipped - returned));
+    const ambiguousProduct = (supplierCountByProduct.get(productId) ?? 0) > 1
+      && shipments.some(shipment => (shipment.items ?? []).some(item => !item.purchaseOrderItemId && String(item.productId || '') === productId));
+    const unknownPoItem = unmatchedShipmentItems.some(item => String(item.productId || '') === productId || !item.productId);
+    const reconciliationRequired = ambiguousProduct || unknownPoItem;
     return [{
-      lineId: String(existing?.lineId ?? createHash('sha256').update(`${purchaseOrder.id ?? 'po'}:${productId}:${index}`).digest('hex').slice(0, 32)),
+      lineId: String(existing?.lineId ?? lineId),
+      purchaseOrderItemId,
       productId,
+      formulaId: typeof raw.formulaId === 'string' ? raw.formulaId : null,
       ordered,
       requested,
       sent: ordered,
@@ -403,10 +454,17 @@ export function normalisedFulfilmentLines(input: {
       shipped,
       returned,
       remaining,
+      cancelledRemainder,
       received: count(existing?.received),
       collected: count(existing?.collected),
       backordered: shipments.length > 0 && remaining > 0,
       quantityMismatch: requested > 0 && supplierReportedOrdered > 0 && requested !== supplierReportedOrdered,
+      reconciliationRequired,
+      reconciliationReason: ambiguousProduct
+        ? 'Shipment item omitted purchaseOrderItemId for a product used by multiple PO lines.'
+        : unknownPoItem
+          ? 'Shipment item does not match a Curaleaf purchase-order item.'
+          : null,
     }];
   });
 }
@@ -426,7 +484,8 @@ export function supplierFulfilmentStatus(input: {
   const purchaseOrder = input.purchaseOrder;
   const shipments = input.shipments ?? [];
   const lines = input.lines;
-  if (purchaseOrder?.state === 'CANCELLED' || purchaseOrder?.state === 'REJECTED') return 'EXCEPTION';
+  if (lines.some(line => 'reconciliationRequired' in line && line.reconciliationRequired)) return 'EXCEPTION';
+  if (purchaseOrder?.state === 'CANCELLED') return 'EXCEPTION';
   if (lines.length > 0 && lines.every(line => line.ordered > 0 && line.collected >= line.ordered)) return 'COLLECTED';
   if (lines.some(line => line.received > 0) && lines.some(line => line.received < line.ordered || line.remaining > 0)) {
     return 'PARTIALLY_RECEIVED';
@@ -480,7 +539,12 @@ export function buildCuraleafSnapshot(input: {
     shipmentStates: input.shipmentStates ?? {},
     dispatchStatus,
     quantityMismatch: input.lines.some(line => line.quantityMismatch),
+    reconciliationRequired: input.lines.some(line => line.reconciliationRequired),
+    cancelledRemainderTotal: input.lines.reduce((total, line) => total + line.cancelledRemainder, 0),
+    partialCancellation: purchaseOrder?.state === 'CANCELLED' && input.lines.some(line => line.shipped > 0),
     supplierItems: (purchaseOrder?.items ?? []).map(item => ({
+      id: item.id ?? item.purchaseOrderItemId ?? null,
+      purchaseOrderItemId: item.id ?? item.purchaseOrderItemId ?? null,
       productId: item.productId ?? null,
       packsOrderedCount: count(item.packsOrderedCount ?? item.count),
       packsAllocatedCount: count(item.packsAllocatedCount),

@@ -1,5 +1,6 @@
-import { executeCuraleafOrderPlacement } from '../integrations/curaleaf.service.js';
+import { executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../integrations/curaleaf.service.js';
 import { curaleafCancellationBlocksPlacement } from '../orders/quote-review.js';
+import { quoteCheckInput } from '../orders/quote-gate.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import { promotePatientAfterCuraleafPlacement } from '../patient-finance/patient-finance.js';
 import type { PatientFinanceDeps } from '../patient-finance/patient-finance.js';
@@ -12,6 +13,7 @@ import type { IdentityRepositoryPort } from '../../repositories/ports/identity.p
 import type { OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
 import type { PatientRepositoryPort } from '../../repositories/ports/patient.port.js';
 import { sha256 } from '../../security/session-utils.js';
+import { SqlOrderLineRepository } from '../../repositories/sql/order-line.sql.js';
 
 export type WorldpaySettlementDeps = {
   paymentRepo: PaymentRepositoryPort;
@@ -35,9 +37,21 @@ export async function settlePaidWorldpayPayment(
     return { payment, settled: false as const, reason: 'not_pending' as const };
   }
 
+  const order = await deps.orderRepo.findOrderById(payment.orderId, payment.organisationId);
+  if (!order || order.archivedAt || String(order.resolutionStatus || '').toUpperCase() === 'RESOLVED'
+    || ['CANCELLED', 'COMPLETED'].includes(String(order.status || '').toUpperCase())) {
+    return { payment, settled: false as const, reason: 'terminal_order' as const };
+  }
+
   const receiptHash = payment.receiptHash ?? sha256(crypto.randomUUID());
   await deps.paymentRepo.updatePaymentStatus(payment.id, 'PAID', payment.orderId, receiptHash);
   const settled: PaymentRecord = { ...payment, status: 'PAID', receiptHash };
+  await deps.paymentRepo.createPaymentAllocation({
+    organisationId: payment.organisationId,
+    paymentId: payment.id,
+    orderId: payment.orderId,
+    amountPence: Number(payment.amountPence),
+  });
   await queueSettlementEmails(settled, deps).catch(error => {
     console.warn('[Worldpay] settlement notification note:', error);
   });
@@ -101,34 +115,68 @@ export async function placeOrderAfterWorldpaySettlement(
   if (!order) return null;
 
   const snapshot = (order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot : {}) as Record<string, any>;
-  if (curaleafCancellationBlocksPlacement(order.quoteSnapshot) || order.status === 'CANCELLED') {
+  if (curaleafCancellationBlocksPlacement(order.quoteSnapshot)
+    || order.status === 'CANCELLED'
+    || order.status === 'COMPLETED'
+    || order.archivedAt
+    || String(order.resolutionStatus || '').toUpperCase() === 'RESOLVED') {
     return null;
   }
-  const review = snapshot.quoteReview && typeof snapshot.quoteReview === 'object' ? snapshot.quoteReview as Record<string, any> : null;
-  if (review?.status === 'awaiting_top_up' && (review.topUpPaymentId === payment.id || payment.amountPence === review.patientDeltaPence)) {
-    const approved = {
-      ...snapshot,
-      quoteReview: {
-        ...review,
-        status: 'approved',
-        approvedAt: new Date().toISOString(),
-        approvedFingerprint: review.fingerprint,
-      },
-    };
+  const connection = await deps.integrationRepo.findConnection(payment.organisationId, 'CURALEAF').catch(() => null);
+  const baseline = payment.baselineQuoteCheckId
+    ? await deps.paymentRepo.findQuoteCheckById(payment.baselineQuoteCheckId, payment.organisationId)
+    : null;
+  if (!baseline || baseline.phase !== 'PRE_PAYMENT' || payment.basketFingerprint !== baseline.basketFingerprint) {
+    await deps.paymentRepo.updatePaymentOutcome({
+      id: payment.id,
+      orderId: payment.orderId,
+      status: 'RECONCILIATION_REQUIRED',
+      providerPayload: { reconciliationReason: 'missing_or_mismatched_pre_payment_quote' },
+    });
+    return null;
+  }
+  if (!connection?.secretResourceName) return null;
+  const lines = await new SqlOrderLineRepository().listByOrderId(order.id);
+  const basket = lines.map(line => ({ packId: line.packId, quantity: Number(line.quantity) }));
+  const rawQuote = await fetchCuraleafQuote(connection, basket);
+  const postCheck = await deps.paymentRepo.createQuoteCheck(quoteCheckInput({
+    organisationId: payment.organisationId,
+    orderId: order.id,
+    paymentId: payment.id,
+    phase: 'POST_PAYMENT',
+    basket,
+    rawQuote,
+    baseline,
+    dispensingFeePence: Number(order.dispensingFeePence || 0),
+  }));
+  if (postCheck.status !== 'MATCHED') {
+    const comparison = postCheck.comparison && typeof postCheck.comparison === 'object'
+      ? postCheck.comparison as Record<string, unknown>
+      : {};
     await deps.orderRepo.updateQuoteSnapshot({
       id: order.id,
       organisationId: order.organisationId,
-      quoteSnapshot: approved,
+      quoteSnapshot: {
+        ...snapshot,
+        quoteReview: {
+          status: postCheck.status === 'RECONCILIATION_REQUIRED' ? 'recreate_required' : 'required',
+          type: postCheck.status === 'OUT_OF_STOCK' ? 'out_of_stock' : 'patient_price_changed',
+          fingerprint: postCheck.quoteFingerprint,
+          latestQuote: postCheck.rawQuote,
+          differences: comparison.differences ?? [],
+          patientDeltaPence: Number(comparison.patientDeltaPence ?? 0),
+          checkedAt: postCheck.createdAt,
+          baselineQuoteCheckId: baseline.id,
+          quoteCheckId: postCheck.id,
+        },
+      },
       fulfilmentStatus: 'SUPPLIER_PENDING',
     });
-    order.quoteSnapshot = approved;
+    return null;
   }
 
-  const connection = await deps.integrationRepo.findConnection(payment.organisationId, 'CURALEAF').catch(() => null);
   let curaleafResult: Awaited<ReturnType<typeof executeCuraleafOrderPlacement>> | null = null;
-  if (connection?.secretResourceName) {
-    curaleafResult = await executeCuraleafOrderPlacement(connection, order);
-  }
+  curaleafResult = await executeCuraleafOrderPlacement(connection, order);
 
   if (curaleafResult && ('prescriptionId' in curaleafResult || 'purchaseOrder' in curaleafResult)) {
     const placed = curaleafResult as { prescriptionId?: string; prescriberId?: string; purchaseOrder?: Record<string, unknown> | null };

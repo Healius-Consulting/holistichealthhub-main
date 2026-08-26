@@ -45,7 +45,7 @@ import {
   type Prescription,
 } from '../context/AppContext';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordCuraleafRejection, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink, updatePortalShipmentStatus } from '../shared/api';
+import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink, updatePortalShipmentStatus } from '../shared/api';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
 import {
@@ -136,7 +136,8 @@ const FILTER_LABELS: Record<StageFilter, string> = Object.fromEntries(
 ) as Record<StageFilter, string>;
 
 function quoteReviewIsOpen(order: PatientOrder) {
-  return ['required', 'awaiting_top_up', 'awaiting_refund'].includes(order.quoteReview?.status ?? '');
+  return ['required', 'awaiting_top_up', 'awaiting_refund'].includes(order.quoteReview?.status ?? '')
+    || ['CHANGED', 'OUT_OF_STOCK', 'RECONCILIATION_REQUIRED'].includes(order.activeQuoteCheck?.status ?? '');
 }
 
 function supplierCancelledAfterCall(order: PatientOrder) {
@@ -212,15 +213,17 @@ function recordStageMeta(record: OrderRecord) {
   if (resolution === 'needs-action') return { label: 'Needs Action', description: 'Cancellation requires supplier or refund follow-up', tone: 'danger', icon: AlertTriangle };
   if (quoteReviewIsOpen(record.order)) {
     const review = record.order.quoteReview;
-    const delta = review?.patientDeltaPence ?? 0;
+    const quoteCheck = record.order.activeQuoteCheck;
+    const delta = review?.patientDeltaPence ?? quoteCheck?.patientDeltaPence ?? 0;
+    const outOfStock = review?.type === 'out_of_stock' || quoteCheck?.status === 'OUT_OF_STOCK';
     return {
-      label: review?.type === 'out_of_stock' ? 'Stock Hold' : 'Quote Review',
-      description: review?.type === 'out_of_stock'
-        ? 'Curaleaf reports a line out of stock. Refresh the quote or cancel this order.'
+      label: outOfStock ? 'Stock Hold' : quoteCheck?.status === 'RECONCILIATION_REQUIRED' ? 'Reconciliation' : 'Quote Review',
+      description: outOfStock
+        ? 'Curaleaf reports a line out of stock. Recheck the quote or cancel this order.'
         : delta > 0
           ? 'Patient price increased after payment. Absorb the difference or cancel this order.'
           : delta < 0
-            ? 'Patient price dropped after payment. Take the difference into the dispensing fee or cancel this order.'
+            ? 'Patient price dropped after payment. Absorb the difference and keep the patient payment unchanged, or cancel this order.'
             : 'The paid quote could not be compared. Refresh to continue placement, or cancel this order.',
       tone: 'warning',
       icon: AlertTriangle,
@@ -637,12 +640,11 @@ export default function Orders() {
     setCallCuraleafModalOrder(null);
   };
 
-  const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'continue_as_fee' | 'refresh') => {
+  const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'refresh') => {
     if (quoteReviewBusyOrderId) return;
     const trainingLocal = isLocalPortalPreview || state.workspaceMode !== 'live' || !order.backendId;
     if (trainingLocal) {
       const review = order.quoteReview;
-      const delta = Math.abs(review?.patientDeltaPence ?? 0) / 100;
       if (action === 'refresh') {
         dispatch({ type: 'ADD_TOAST', message: `Quote still needs review for ${orderReference(order)}.`, toastType: 'warning' });
         return;
@@ -651,15 +653,13 @@ export default function Orders() {
         type: 'SET_QUOTE_REVIEW',
         orderId: order.id,
         quoteReview: review
-          ? { ...review, status: 'approved', approvedAt: new Date().toISOString(), approvalNote: action === 'absorb' ? 'Pharmacy absorbed the difference.' : 'Price drop taken into the dispensing charge.' }
+          ? { ...review, status: 'approved', approvedAt: new Date().toISOString(), approvalNote: 'Pharmacy absorbed the difference; patient payment unchanged.' }
           : undefined,
-        dispensingFee: action === 'continue_as_fee' ? order.dispensingFee + delta : order.dispensingFee,
+        dispensingFee: order.dispensingFee,
       });
       dispatch({
         type: 'ADD_TOAST',
-        message: action === 'absorb'
-          ? `Price change absorbed for ${orderReference(order)}. Placement will continue.`
-          : `Price drop recorded as dispensing fee for ${orderReference(order)}. Placement will continue.`,
+        message: `Price change absorbed for ${orderReference(order)}. The patient payment is unchanged and placement will continue.`,
         toastType: 'success',
       });
       return;
@@ -679,7 +679,6 @@ export default function Orders() {
       });
       const messages: Record<typeof action, string> = {
         absorb: `Price change absorbed for ${orderReference(order)}. Placement will continue.`,
-        continue_as_fee: `Price drop recorded as dispensing fee for ${orderReference(order)}. Placement will continue.`,
         refresh: result.order.quoteReview && ['required', 'awaiting_top_up', 'awaiting_refund'].includes(result.order.quoteReview.status)
           ? `Quote still needs review for ${orderReference(order)}.`
           : `Quote rechecked for ${orderReference(order)}. Placement can continue.`,
@@ -713,8 +712,10 @@ export default function Orders() {
     if (!order.refund || !externalReference || refundBusyOrderId) return;
     setRefundBusyOrderId(order.id);
     try {
+      let recordedStatus: NonNullable<PatientOrder['refund']>['status'] = 'completed';
       if (!isLocalPortalPreview && state.workspaceMode === 'live' && order.backendId) {
         const refund = await confirmPortalOrderRefund(order.backendId, order.refund.id, { organisationId: state.currentOrganisationId, externalReference });
+        recordedStatus = refund.status;
         dispatch({ type: 'SET_ORDER_REFUND', orderId: order.id, refund });
         if (order.quoteReview) {
           dispatch({
@@ -727,7 +728,15 @@ export default function Orders() {
       } else {
         dispatch({ type: 'CONFIRM_ORDER_REFUND', orderId: order.id, externalReference });
       }
-      dispatch({ type: 'ADD_TOAST', message: `Refund confirmed for ${orderReference(order)}.`, toastType: 'success' });
+      dispatch({
+        type: 'ADD_TOAST',
+        message: recordedStatus === 'completed'
+          ? `Refund verified for ${orderReference(order)}.`
+          : recordedStatus === 'reconciliation_required'
+            ? `Refund reference recorded for ${orderReference(order)}, but finance reconciliation is required.`
+            : `Refund reference recorded for ${orderReference(order)} and is being verified.`,
+        toastType: recordedStatus === 'completed' ? 'success' : 'warning',
+      });
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The refund could not be confirmed.', toastType: 'error' });
     } finally { setRefundBusyOrderId(null); }
@@ -908,19 +917,6 @@ export default function Orders() {
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The payment link could not be reissued.', toastType: 'error' });
     } finally { setPaymentLinkBusyOrderId(null); }
-  };
-
-  const handleRecordRejection = async (order: PatientOrder, prescription: Prescription) => {
-    if (isLocalPortalPreview || state.workspaceMode !== 'live' || !order.backendId || !prescription.backendId) return;
-    const reason = window.prompt('Record Curaleaf’s rejection reason exactly as supplied:')?.trim();
-    if (!reason) return;
-    setFulfilmentBusyRxId(prescription.id);
-    try {
-      await recordCuraleafRejection(order.backendId, { organisationId: state.currentOrganisationId, prescriptionId: prescription.backendId, reason });
-      dispatch({ type: 'ADD_TOAST', message: 'Curaleaf rejection recorded and linked to a support case.', toastType: 'warning' });
-    } catch (error) {
-      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The rejection could not be recorded.', toastType: 'error' });
-    } finally { setFulfilmentBusyRxId(null); }
   };
 
   const handleManualPlace = async (order: PatientOrder, prescription: Prescription) => {
@@ -1401,7 +1397,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   onConfirmRefund: () => void;
   refundBusy: boolean;
   quoteReviewBusy: boolean;
-  onQuoteReviewResolve: (action: 'absorb' | 'continue_as_fee' | 'refresh') => void;
+  onQuoteReviewResolve: (action: 'absorb' | 'refresh') => void;
   cancellationEditorOpen: boolean;
   cancellationNote: string;
   cancellationReference: string;
@@ -1426,7 +1422,8 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const meta = recordStageMeta(record);
   const Icon = meta.icon;
   const cancellationResolution = orderCancellationResolution(order);
-  const cancellationClosed = ['resolved', 'refunded'].includes(cancellationResolution);
+  const typedResolutionClosed = ['REPLACED', 'REFUNDED', 'SPLIT_RESOLVED'].includes(order.resolution?.status ?? '');
+  const cancellationClosed = ['resolved', 'refunded'].includes(cancellationResolution) || typedResolutionClosed;
   const hideJourneyRail = stage === 'cancelled' || stage === 'collected' || cancellationResolution !== 'none';
   const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => prescription.placed);
   const canRedo = Boolean(record.unresolvedReason) && (stage === 'rejected' || stage === 'archived' || stage === 'cancelled');
@@ -1497,10 +1494,12 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
         </div>
       </header>
 
-      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={cancellationResolution as 'resolved' | 'refunded'} /> : hideJourneyRail ? null : <JourneyRail stage={stage} paymentPaid={order.payment.status === 'paid'} order={order} />}
+      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : hideJourneyRail ? null : <JourneyRail stage={stage} paymentPaid={order.payment.status === 'paid'} order={order} />}
 
       <ExpiryCountdown order={order} now={now} />
       <ReplacementLineage order={order} allOrders={state.orders} />
+      <QuoteCheckpointSummary order={order} />
+      <PlacementStatusPanel order={order} />
 
       {!cancellationClosed && cancellationEditorOpen && !order.cancellation ? (
         <OrderCancellationPanel
@@ -1537,7 +1536,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
         />
       ) : null}
 
-      {((order.payment.status === 'paid' || order.refund?.status === 'pending_confirmation' || order.refund?.status === 'completed') && !reviewOpen && (stage === 'rejected' || stage === 'archived' || stage === 'cancelled' || Boolean(order.cancellation) || order.prescriptions.some(rx => rx.purchaseOrderState === 'CANCELLED' || rx.status === 'cancelled'))) ? (
+      {((order.payment.status === 'paid' || Boolean(order.refund)) && !reviewOpen && !cancellationClosed && (stage === 'rejected' || stage === 'archived' || stage === 'cancelled' || Boolean(order.cancellation) || order.prescriptions.some(rx => rx.purchaseOrderState === 'CANCELLED' || rx.status === 'cancelled'))) ? (
         <PaidExceptionResolution
           order={order}
           canReplace={!hasCuraleafOrder}
@@ -1987,35 +1986,93 @@ function quoteReviewFieldLabel(field: string) {
   return field;
 }
 
+function QuoteCheckpointSummary({ order }: { order: PatientOrder }) {
+  const checks = order.quoteChecks?.length
+    ? [...order.quoteChecks].sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
+    : order.activeQuoteCheck ? [order.activeQuoteCheck] : [];
+  if (!checks.length) return null;
+  const phaseLabels: Record<(typeof checks)[number]['phase'], string> = {
+    PRE_PAYMENT: 'Before payment',
+    POST_PAYMENT: 'After payment',
+    FINAL_PLACEMENT: 'Before purchase order',
+    REPLACEMENT: 'Replacement',
+  };
+  return (
+    <section className="order-gate-summary" aria-labelledby="order-quote-checks-title">
+      <header>
+        <span><small>Payment gate</small><strong id="order-quote-checks-title">Curaleaf quote checks</strong></span>
+        <CheckCircle2 size={17} aria-hidden="true" />
+      </header>
+      <ol>
+        {checks.map(check => (
+          <li key={check.id} className={`is-${check.status.toLowerCase().replaceAll('_', '-')}`}>
+            <span><strong>{phaseLabels[check.phase]}</strong><small>{formatDate(check.checkedAt, true)}</small></span>
+            <span><b>{check.status === 'MATCHED' ? 'Matched' : check.status === 'CHANGED' ? 'Changed' : check.status === 'OUT_OF_STOCK' ? 'Out of stock' : check.status === 'ABSORBED' ? 'Difference absorbed' : check.status === 'CANCELLED' ? 'Cancelled' : 'Reconciliation required'}</b><small>{money(check.patientTotalPence / 100)} patient total</small></span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function PlacementStatusPanel({ order }: { order: PatientOrder }) {
+  const placement = order.curaleafPlacement;
+  if (!placement || placement.stage === 'PLACED') return null;
+  const content = placement.attentionReason === 'image_reupload' || placement.stage === 'UPLOAD_CORRECTION_REQUIRED'
+    ? {
+        title: 'Curaleaf requested a clearer prescription copy',
+        detail: 'The prescription remains on the same supplier record. Upload a legible copy after the pharmacy call; do not create a replacement prescription or refund while Curaleaf is waiting for the image.',
+      }
+    : placement.stage === 'AWAITING_PRESCRIBER_VERIFICATION'
+      ? { title: 'Awaiting Curaleaf prescriber verification', detail: 'No prescription or purchase order will be sent until Curaleaf marks the prescriber as verified.' }
+      : placement.stage === 'AWAITING_PRESCRIPTION_ACTIVATION'
+        ? { title: 'Awaiting Curaleaf prescription approval', detail: 'This is a normal waiting state. The paid order remains open and will continue when the prescription becomes active.' }
+        : placement.stage === 'CORRECTION_REQUIRED'
+          ? { title: 'Supplier details need correction', detail: 'Placement is paused. Review the recorded pharmacy task before retrying; no automatic refund has been started.' }
+          : placement.stage === 'TERMINAL'
+            ? { title: 'Supplier resolution required', detail: 'Placement cannot continue automatically. Review replacement and refund gates before resolving the order.' }
+            : null;
+  if (!content) return null;
+  return (
+    <section className="order-placement-wait" role="status" aria-live="polite">
+      <Clock3 size={18} aria-hidden="true" />
+      <span>
+        <strong>{content.title}</strong>
+        <small>{content.detail}</small>
+        {placement.slaDueAt ? <em className={placement.slaAlert ? 'is-overdue' : undefined}>{placement.slaAlert ? 'Pharmacy follow-up is due' : 'Follow-up due'} {formatDate(placement.slaDueAt, true)}</em> : placement.nextCheckAt ? <em>Next automatic check {formatDate(placement.nextCheckAt, true)}</em> : null}
+      </span>
+    </section>
+  );
+}
+
 function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
   order: PatientOrder;
   busy: boolean;
-  onResolve: (action: 'absorb' | 'continue_as_fee' | 'refresh') => void;
+  onResolve: (action: 'absorb' | 'refresh') => void;
   onCancel: () => void;
 }) {
   const review = order.quoteReview;
-  if (!review || !['required', 'awaiting_top_up', 'awaiting_refund'].includes(review.status)) return null;
-  const delta = review.patientDeltaPence ?? 0;
-  const missingBaseline = review.differences?.some(difference => difference.field === 'missingOriginalQuote');
-  const priceUp = review.type === 'patient_price_changed' && delta > 0;
-  const priceDown = review.type === 'patient_price_changed' && delta < 0;
-  const continuePlacement = review.type === 'supplier_cost_changed' || (review.type === 'patient_price_changed' && delta === 0);
-  const title = review.type === 'out_of_stock'
+  const quoteCheck = order.activeQuoteCheck;
+  const legacyOpen = Boolean(review && ['required', 'awaiting_top_up', 'awaiting_refund'].includes(review.status));
+  const checkOpen = Boolean(quoteCheck && ['CHANGED', 'OUT_OF_STOCK', 'RECONCILIATION_REQUIRED'].includes(quoteCheck.status));
+  if (!legacyOpen && !checkOpen) return null;
+  const delta = review?.patientDeltaPence ?? quoteCheck?.patientDeltaPence ?? 0;
+  const missingBaseline = quoteCheck?.status === 'RECONCILIATION_REQUIRED' || review?.differences?.some(difference => difference.field === 'missingOriginalQuote');
+  const outOfStock = quoteCheck?.status === 'OUT_OF_STOCK' || review?.type === 'out_of_stock';
+  const title = outOfStock
     ? 'Curaleaf reports a line out of stock'
-    : missingBaseline || (review.type === 'patient_price_changed' && delta === 0)
+    : missingBaseline
       ? 'Paid quote could not be compared'
-      : review.type === 'patient_price_changed'
+      : review?.type === 'patient_price_changed' || delta !== 0
         ? delta > 0 ? 'Patient price increased after payment' : 'Patient price dropped after payment'
         : 'Supplier cost changed after payment';
-  const detail = review.type === 'out_of_stock'
-    ? 'Placement is held. Refresh the quote after Curaleaf restocks, or cancel this order to refund or replace it.'
-    : missingBaseline || (review.type === 'patient_price_changed' && delta === 0)
-      ? 'The paid Curaleaf quote was not stored, so this is not a patient-price change. Refresh to adopt the current quote and continue placement, or cancel this order to refund or replace it.'
-      : priceUp
-        ? `Absorb ${money(delta / 100)} so placement can continue, or cancel this order to refund or replace it.`
-        : priceDown
-          ? `Take ${money(Math.abs(delta) / 100)} into the dispensing fee so placement can continue, or cancel this order to refund or replace it.`
-          : 'Wholesale-only change. Absorb to continue placement, or cancel this order to refund or replace it.';
+  const detail = outOfStock
+    ? 'Placement is held. Recheck after Curaleaf restocks, or cancel this order to replace it or complete a refund.'
+    : missingBaseline
+      ? 'The quote attached to payment cannot be proved. Recheck keeps placement held for reconciliation; cancellation can move to replacement or refund.'
+      : delta !== 0
+        ? `Absorb the ${money(Math.abs(delta) / 100)} ${delta > 0 ? 'increase' : 'decrease'} and keep the patient payment unchanged, or cancel this order.`
+        : 'The supplier cost changed. Absorb the difference and keep the patient payment unchanged, or cancel this order.';
   return (
     <section className="quote-review-panel" aria-labelledby="quote-review-title">
       <header className="quote-review-panel__header">
@@ -2026,7 +2083,7 @@ function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
           <em>{detail}</em>
         </span>
       </header>
-      {review.differences?.length ? (
+      {review?.differences?.length ? (
         <ul className="quote-review-panel__diffs">
           {review.differences.map((difference, index) => (
             <li key={`${difference.field}-${difference.packId ?? index}`}>
@@ -2037,18 +2094,15 @@ function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
         </ul>
       ) : null}
       <div className="quote-review-panel__actions">
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('refresh')}>
-          <RefreshCw size={13} /> {busy ? 'Checking…' : 'Refresh quote'}
-        </button>
-        {priceUp ? (
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('absorb')}>Absorb {money(delta / 100)}</button>
-        ) : null}
-        {priceDown ? (
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('continue_as_fee')}>Take {money(Math.abs(delta) / 100)} into dispensing fee</button>
-        ) : null}
-        {continuePlacement ? (
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('absorb')}>Continue placement</button>
-        ) : null}
+        {outOfStock || missingBaseline ? (
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('refresh')}>
+            <RefreshCw size={13} /> {busy ? 'Checking…' : 'Recheck quote'}
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('absorb')}>
+            Absorb{delta !== 0 ? ` ${money(Math.abs(delta) / 100)}` : ' difference'}
+          </button>
+        )}
         <button type="button" className="btn btn-secondary" disabled={busy} onClick={onCancel}>
           <XCircle size={13} /> Cancel order
         </button>
@@ -2059,7 +2113,9 @@ function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
 
 function CancellationClosureSummary({ order, resolution }: { order: PatientOrder; resolution: 'resolved' | 'refunded' }) {
   const refunded = resolution === 'refunded';
-  const closedAt = refunded ? order.refund?.confirmedAt : order.curaleafCancellation?.confirmedAt ?? order.cancellation?.requestedAt;
+  const replaced = order.resolution?.status === 'REPLACED';
+  const splitResolved = order.resolution?.status === 'SPLIT_RESOLVED';
+  const closedAt = order.resolution?.archivedAt ?? order.resolution?.resolvedAt ?? (refunded ? order.refund?.confirmedAt : order.curaleafCancellation?.confirmedAt ?? order.cancellation?.requestedAt);
   const supplierCopy = order.curaleafCancellation?.status === 'confirmed'
     ? 'Curaleaf cancellation confirmed.'
     : orderRequiresCuraleafCancel(order)
@@ -2070,8 +2126,8 @@ function CancellationClosureSummary({ order, resolution }: { order: PatientOrder
       <span className="order-cancellation-closure__icon">{refunded ? <Banknote size={18} /> : <CheckCircle2 size={18} />}</span>
       <span className="order-cancellation-closure__copy">
         <small>Closed order</small>
-        <strong>{refunded ? `${money((order.refund?.amountPence ?? Math.round(order.payment.amount * 100)) / 100)} refunded` : 'Cancellation resolved'}</strong>
-        <em>{supplierCopy} This closes this order only; the patient can place another order in future.</em>
+        <strong>{refunded ? `${money((order.refund?.amountPence ?? Math.round(order.payment.amount * 100)) / 100)} refunded` : replaced ? 'Replaced using paid balance' : splitResolved ? 'Split fulfilment resolved' : 'Cancellation resolved'}</strong>
+        <em>{supplierCopy} {replaced ? 'The paid allocation moved to the replacement order.' : splitResolved ? 'Supplied packs and the cancelled remainder are fully accounted for.' : 'This order is retained in the archive for audit.'}</em>
       </span>
       <span className="order-cancellation-closure__status"><b>No action needed</b><small>{formatDate(closedAt, true)}</small></span>
     </section>
@@ -2143,6 +2199,8 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
         <span><small>Paid-order resolution</small><strong>{
           lockedByCuraleaf ? 'Call Curaleaf before refund or replacement'
             : order.refund?.status === 'completed' ? 'Refund completed'
+            : order.refund?.status === 'verifying' ? 'Refund reference is being verified'
+            : order.refund?.status === 'reconciliation_required' ? 'Refund needs reconciliation'
             : order.refund ? 'Refund due'
             : canReplace ? 'Choose replacement or refund'
             : 'Refund due'
@@ -2160,16 +2218,20 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
         </div>
       ) : !order.refund ? (
         <div className="order-resolution__choices">
-          {canReplace ? <button type="button" className="btn btn-primary btn-sm" onClick={onReplace}><RefreshCw size={13} /> Create replacement</button> : null}
-          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onRequestRefund}><XCircle size={13} /> Cancel & prepare full refund</button>
-          <small>Refunds are completed in {method}. HHH records the task and confirmation but does not move the money automatically.</small>
+          {canReplace ? <button type="button" className="btn btn-primary btn-sm" onClick={onReplace}><RefreshCw size={13} /> Replace using paid balance</button> : null}
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onRequestRefund}><Banknote size={13} /> Refund payment</button>
+          <small>A replacement keeps the verified payment allocated to the new order. A refund is completed in {method} and requires its external reference before this order can be archived.</small>
         </div>
       ) : order.refund.status === 'pending_confirmation' ? (
         <div className="order-resolution__confirm">
           <ol><li>Sign in to {method}.</li><li>Find payment <code>{reference}</code> and refund {money(order.refund.amountPence / 100)}.</li><li>Enter the refund reference below and confirm. HHH records the confirmation but does not move the money.</li></ol>
           <label><span>Refund confirmation reference</span><input className="input" value={refundReference} onChange={event => onRefundReferenceChange(event.target.value)} placeholder="Worldpay refund / command ID" /></label>
-          <button type="button" className="btn btn-primary btn-sm" disabled={busy || refundReference.trim().length < 3} onClick={onConfirmRefund}><CheckCircle2 size={13} /> {busy ? 'Recording…' : 'Confirm refund completed'}</button>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy || refundReference.trim().length < 3} onClick={onConfirmRefund}><CheckCircle2 size={13} /> {busy ? 'Recording…' : 'Submit reference for verification'}</button>
         </div>
+      ) : order.refund.status === 'verifying' ? (
+        <div className="order-resolution__locked" role="status"><RefreshCw size={16} className="spin" /><span><strong>Verifying with {order.payment.route === 'worldpay' ? 'Worldpay' : 'the payment record'}</strong><small>Reference {order.refund.externalReference ?? 'recorded'}. Keep this order open until the amount and original transaction are confirmed.</small></span></div>
+      ) : order.refund.status === 'reconciliation_required' ? (
+        <div className="order-resolution__locked" role="alert"><AlertTriangle size={16} /><span><strong>Do not archive this order yet</strong><small>{order.refund.verificationMessage ?? 'The refund reference or amount could not be verified against the original payment. Finance reconciliation is required.'}</small></span></div>
       ) : (
         <div className="order-resolution__completed"><CheckCircle2 size={16} /><span><strong>{money(order.refund.amountPence / 100)} refunded via {method}</strong><small>Confirmation {order.refund.externalReference ?? 'recorded'} · {formatDate(order.refund.confirmedAt, true)}</small></span></div>
       )}
@@ -2179,12 +2241,34 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
 
 function JourneyRail({ stage, paymentPaid, order }: { stage: OrderStage; paymentPaid: boolean; order: PatientOrder }) {
   if (stage === 'cancelled' || stage === 'collected') return null;
+  const purchaseOrderExists = order.prescriptions.some(prescription => Boolean(prescription.poRef || prescription.placed));
+  if (paymentPaid && !purchaseOrderExists) {
+    const placement = order.curaleafPlacement;
+    const clinicRoute = placement?.route === 'CLINIC_BARCODE' || order.prescriptions.every(prescription => prescription.entryMode === 'clinic');
+    const prescriberComplete = clinicRoute || placement?.prescriberState === 'VERIFIED'
+      || ['CREATING_PRESCRIPTION', 'UPLOADING_PRESCRIPTION_IMAGE', 'AWAITING_PRESCRIPTION_ACTIVATION', 'CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
+    const prescriptionComplete = placement?.prescriptionState === 'ACTIVE'
+      || ['CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
+    const phases = [
+      { label: 'Prescriber check', detail: clinicRoute ? 'Clinic scan' : prescriberComplete ? 'Verified' : placement?.prescriberState === 'UNVERIFIED' ? 'Awaiting Curaleaf' : 'Checking', complete: prescriberComplete, active: !prescriberComplete },
+      { label: 'Prescription check', detail: prescriptionComplete ? 'Active' : placement?.prescriptionState === 'PENDING' ? 'Awaiting Curaleaf' : 'Pending', complete: prescriptionComplete, active: prescriberComplete && !prescriptionComplete },
+      { label: 'Purchase order sent', detail: 'Pending', complete: false, active: prescriptionComplete },
+    ];
+    return (
+      <ol className="order-journey-rail order-journey-rail--premium" aria-label="Curaleaf placement progress">
+        {phases.map((phase, index) => (
+          <li key={phase.label} className={phase.complete ? 'is-complete' : phase.active ? 'is-active' : 'is-pending'} aria-current={phase.active ? 'step' : undefined}>
+            <span className="order-journey-rail__marker" aria-hidden="true">{phase.complete ? <Check size={12} /> : index + 1}</span>
+            <div className="order-journey-rail__copy"><strong>{phase.label}</strong><small>{phase.detail}</small></div>
+          </li>
+        ))}
+      </ol>
+    );
+  }
   const packTotals = orderPackTotals(order);
   const curaleafComplete = ['curaleaf-approved', 'dispatched', 'delivered', 'ready', 'collected'].includes(stage);
   const deliveryFullyComplete = packTotals.ordered > 0 && packTotals.received >= packTotals.ordered;
   const deliveryPartial = packTotals.received > 0 && !deliveryFullyComplete;
-  const collectionFullyComplete = packTotals.ordered > 0 && packTotals.collected >= packTotals.ordered;
-  const partialCollection = orderHasPartialCollection(order);
   const hasUncollected = orderHasUncollectedReceivedPacks(order);
   const deliveryDetail = deliveryFullyComplete
     ? 'Checked In'
@@ -2193,29 +2277,22 @@ function JourneyRail({ stage, paymentPaid, order }: { stage: OrderStage; payment
       : stage === 'dispatched'
         ? 'In Transit'
         : 'Pending';
-  const collectionDetail = collectionFullyComplete
-    ? 'Collected'
-    : partialCollection
-      ? 'Part Collected'
-      : hasUncollected || stage === 'ready'
-        ? 'Ready'
-        : 'Pending';
   const phases = [
-    { label: 'Payment', detail: paymentPaid ? 'Cleared' : 'Awaiting', complete: paymentPaid, partial: false, active: stage === 'awaiting-payment' },
-    { label: 'Curaleaf', detail: curaleafComplete ? 'Approved' : stage === 'curaleaf-pending' ? 'In Review' : 'Pending', complete: curaleafComplete, partial: false, active: stage === 'paid' || stage === 'curaleaf-pending' },
+    { label: 'Ordered', detail: purchaseOrderExists ? 'PO sent' : 'Pending', complete: purchaseOrderExists, partial: false, active: !purchaseOrderExists },
+    { label: 'Curaleaf Dispensed', detail: curaleafComplete ? 'Allocated' : stage === 'curaleaf-pending' ? 'In progress' : 'Pending', complete: curaleafComplete, partial: orderHasPartialCuraleafDispense(order), active: purchaseOrderExists && !curaleafComplete },
     {
-      label: 'Delivery',
+      label: 'In Transit',
+      detail: stage === 'dispatched' ? 'Dispatched' : deliveryPartial ? 'Part arrived' : 'Pending',
+      complete: deliveryFullyComplete || deliveryPartial,
+      partial: orderHasInTransitPacks(order),
+      active: curaleafComplete && !deliveryFullyComplete && !deliveryPartial,
+    },
+    {
+      label: 'Checked In',
       detail: deliveryDetail,
       complete: deliveryFullyComplete,
       partial: deliveryPartial,
-      active: !deliveryFullyComplete && !deliveryPartial && (stage === 'curaleaf-approved' || stage === 'dispatched'),
-    },
-    {
-      label: 'Ready to Collect',
-      detail: collectionDetail,
-      complete: collectionFullyComplete,
-      partial: partialCollection,
-      active: !collectionFullyComplete && !partialCollection && (stage === 'delivered' || stage === 'ready' || hasUncollected),
+      active: !deliveryFullyComplete && (stage === 'dispatched' || hasUncollected),
     },
   ];
   return (
@@ -2255,6 +2332,8 @@ type FulfilmentDisplayLine = {
   receivedPacks: number;
   inTransitPacks: number;
   awaitingDispatchPacks: number;
+  cancelledRemainderPacks: number;
+  remainingExpectedPacks: number;
   isDeliveredOrCheckedIn: boolean;
   isSplit: boolean;
   percentReceived: number;
@@ -2440,6 +2519,14 @@ function FulfilmentItemCard({
               PO reports {line.supplierReportedOrdered} pk (mismatch)
             </span>
           ) : null}
+          {line.cancelledRemainderPacks > 0 ? (
+            <div className="order-fulfilment-remainder" role="status">
+              <XCircle size={14} aria-hidden="true" />
+              <span><strong>{line.cancelledRemainderPacks} pack{line.cancelledRemainderPacks === 1 ? '' : 's'} cancelled by Curaleaf</strong><small>{line.receivedPacks + line.inTransitPacks} supplied or in transit · choose replacement or refund for the cancelled remainder.</small></span>
+            </div>
+          ) : line.remainingExpectedPacks > 0 ? (
+            <p className="order-fulfilment-remainder order-fulfilment-remainder--waiting"><Clock3 size={14} aria-hidden="true" /><span><strong>{line.remainingExpectedPacks} pack{line.remainingExpectedPacks === 1 ? '' : 's'} still expected</strong><small>Curaleaf has not cancelled this remainder.</small></span></p>
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -2547,7 +2634,9 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
     const inTransitPacks = consignmentCheckedIn
       ? 0
       : Math.max(0, consignmentPacks > 0 ? consignmentPacks : Math.max(0, dispatchedPacks - receivedPacks));
-    const awaitingDispatchPacks = Math.max(0, orderedPacks - dispatchedPacks);
+    const cancelledRemainderPacks = Math.max(0, matchingLine?.cancelledRemainder ?? 0);
+    const remainingExpectedPacks = Math.max(0, matchingLine?.remainingExpected ?? orderedPacks - dispatchedPacks - cancelledRemainderPacks);
+    const awaitingDispatchPacks = remainingExpectedPacks;
     const isDeliveredOrCheckedIn = receivedPacks > 0 && (consignmentCheckedIn || (!remainingOpen && receivedPacks >= orderedPacks));
     const isSplit = awaitingDispatchPacks > 0 && dispatchedPacks > 0;
 
@@ -2566,6 +2655,8 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
       receivedPacks,
       inTransitPacks,
       awaitingDispatchPacks,
+      cancelledRemainderPacks,
+      remainingExpectedPacks,
       isDeliveredOrCheckedIn,
       isSplit,
       percentReceived,
@@ -2705,7 +2796,9 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
                         {combinedProgress.allocatedPacks} dispensed
                         {' · '}
                         {combinedProgress.inTransitPacks + combinedProgress.receivedPacks} dispatched
-                        . Nothing further will ship. Use paid-order resolution above to refund or replace.
+                        {' · '}
+                        {displayLines.reduce((sum, line) => sum + line.cancelledRemainderPacks, 0)} cancelled remainder.
+                        {' '}Nothing further will ship for the cancelled quantity. Use paid-order resolution above to replace or refund only what remains unresolved.
                       </small>
                     </span>
                   </div>

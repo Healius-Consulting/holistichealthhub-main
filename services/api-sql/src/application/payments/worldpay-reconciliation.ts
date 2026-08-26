@@ -2,8 +2,9 @@ import { queryWorldpayPayment } from '../integrations/worldpay.service.js';
 import type { IntegrationRepositoryPort } from '../../repositories/ports/integration.port.js';
 import type { OrderRepositoryPort } from '../../repositories/ports/order.port.js';
 import type { PaymentRecord, PaymentRepositoryPort } from '../../repositories/ports/payment.port.js';
-import { worldpayIdentityMatches, worldpayStatusToSql } from './worldpay-query.js';
+import { worldpayIdentityMatches, worldpayStatusToSql, type WorldpayPaymentStatus } from './worldpay-query.js';
 import { settlePaidWorldpayPayment, type WorldpaySettlementDeps } from './worldpay-settlement.js';
+import { sha256 } from '../../security/session-utils.js';
 
 const PAYMENT_QUERY_LAG_GRACE_MS = 2 * 60 * 1_000;
 
@@ -20,6 +21,29 @@ export type WorldpayReconciliationOutcome =
 
 function payloadObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+export function worldpayPaymentDisposition(input: {
+  localPaymentStatus: string;
+  providerPaymentStatus: WorldpayPaymentStatus;
+  order?: { status?: string | null; cancelledAt?: string | null; archivedAt?: string | null; resolutionStatus?: string | null } | null;
+}) {
+  const terminalOrder = input.order?.status === 'CANCELLED'
+    || input.order?.status === 'COMPLETED'
+    || Boolean(input.order?.cancelledAt)
+    || Boolean(input.order?.archivedAt)
+    || String(input.order?.resolutionStatus || '').toUpperCase() === 'RESOLVED';
+  const latePaymentAfterCancellation = Boolean(terminalOrder && input.providerPaymentStatus === 'paid');
+  const retiredLinkPaid = input.localPaymentStatus === 'CANCELLED' && input.providerPaymentStatus === 'paid';
+  const providerReportsRefund = input.providerPaymentStatus === 'refund_required' || input.providerPaymentStatus === 'refunded';
+  return {
+    latePaymentAfterCancellation,
+    retiredLinkPaid,
+    providerReportsRefund,
+    nextStatus: latePaymentAfterCancellation || retiredLinkPaid || providerReportsRefund
+      ? 'refund_required'
+      : input.providerPaymentStatus,
+  };
 }
 
 export async function reconcileWorldpayPaymentRecord(
@@ -79,9 +103,45 @@ export async function reconcileWorldpayPaymentRecord(
   }
 
   const order = await deps.orderRepo.findOrderById(payment.orderId, payment.organisationId);
-  const cancelledOrder = order?.status === 'CANCELLED' || Boolean(order?.cancelledAt);
-  const latePaymentAfterCancellation = cancelledOrder && provider.paymentStatus === 'paid';
-  const nextStatus = latePaymentAfterCancellation ? 'refund_required' : provider.paymentStatus;
+  // Provider refund events open/advance the staff refund gate; they never close it
+  // without the pharmacy's recorded reference and exact verification route.
+  const { latePaymentAfterCancellation, retiredLinkPaid, providerReportsRefund, nextStatus } = worldpayPaymentDisposition({
+    localPaymentStatus: payment.status,
+    providerPaymentStatus: provider.paymentStatus,
+    order,
+  });
+
+  if (nextStatus === 'refund_required' && (latePaymentAfterCancellation || retiredLinkPaid)) {
+    const siblings = await deps.paymentRepo.listPaymentsByOrderId(payment.orderId, payment.organisationId);
+    const anotherSettledPayment = siblings.some(row => row.id !== payment.id && ['PAID', 'REFUND_REQUIRED', 'REFUNDED'].includes(row.status));
+    await deps.paymentRepo.cancelPendingPaymentsForOrder(payment.orderId, payment.organisationId);
+    await deps.paymentRepo.createRefund({
+      organisationId: payment.organisationId,
+      orderId: payment.orderId,
+      paymentId: payment.id,
+      amountPence: Number(payment.amountPence),
+      currency: payment.currency,
+      cause: retiredLinkPaid ? 'late_payment_on_retired_link' : 'late_payment_after_order_resolution',
+      route: 'WORLDPAY',
+      status: 'PENDING_CONFIRMATION',
+      idempotencyKey: sha256(`${payment.organisationId}:late-worldpay:${payment.id}`),
+    });
+    await deps.paymentRepo.updatePaymentOutcome({
+      id: payment.id,
+      orderId: payment.orderId,
+      status: 'REFUND_REQUIRED',
+      updateOrderPaymentStatus: !anotherSettledPayment,
+      providerPayload: {
+        ...payloadObject(payment.providerPayload),
+        providerPaymentId: provider.paymentId,
+        providerStatus: provider.providerStatus,
+        latePaymentAfterCancellation,
+        retiredLinkPaid,
+        providerResponse: provider.payment,
+      },
+    });
+    return { state: 'reconciled', paymentStatus: 'REFUND_REQUIRED', providerStatus: provider.providerStatus };
+  }
 
   if (nextStatus === 'paid' && payment.status === 'PENDING') {
     await settlePaidWorldpayPayment(payment, deps);
@@ -101,6 +161,8 @@ export async function reconcileWorldpayPaymentRecord(
       providerPaymentId: provider.paymentId,
       providerStatus: provider.providerStatus,
       latePaymentAfterCancellation,
+      retiredLinkPaid,
+      providerRefundState: providerReportsRefund ? provider.paymentStatus : null,
       providerResponse: provider.payment,
     },
   });

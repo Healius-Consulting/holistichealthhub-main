@@ -1,4 +1,5 @@
 import { paidQuoteFromSnapshot } from '../../application/orders/finance-costing.js';
+import { curaleafWaitingSla } from '../../application/orders/curaleaf-waiting-sla.js';
 import { orderMoneyWasTaken, snapshotRefundCompleted } from '../../application/orders/paid-refund.js';
 import {
   advanceFulfilmentStatus,
@@ -14,6 +15,7 @@ import { organisationAddressSummary } from '../../repositories/ports/directory.p
 import type { OrderDraftRecord, OrderRecord } from '../../repositories/ports/order.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
 import type { PatientRecord } from '../../repositories/ports/patient.port.js';
+import type { PaymentAllocationRecord, QuoteCheckRecord } from '../../repositories/ports/payment.port.js';
 import type { TenantPendingEnquiryRecord } from '../../repositories/ports/intake.port.js';
 import { formConditionRecords, primaryConditionCode } from '../../domain/eligibility/form-conditions.js';
 import { sqlIntakeCaseReference } from './intake-contracts.js';
@@ -100,7 +102,6 @@ function realPurchaseOrderId(po: { id?: unknown; purchaseOrderId?: unknown } | n
 
 function asPrescriptionState(value: unknown): 'ACTIVE' | 'FULFILLED' | 'EXPIRED' | 'CANCELLED' | 'PENDING' | undefined {
   const state = String(value || '').trim().toUpperCase();
-  if (state === 'REJECTED') return 'CANCELLED';
   if (state === 'ACTIVE' || state === 'FULFILLED' || state === 'EXPIRED' || state === 'CANCELLED' || state === 'PENDING') {
     return state;
   }
@@ -271,16 +272,73 @@ export type PortalOrderSource = OrderRecord & {
   curaleaf?: any;
   sqlRefund?: Record<string, unknown> | null;
   sqlLines?: PortalSqlLine[] | null;
+  sqlQuoteChecks?: QuoteCheckRecord[] | null;
+  sqlPaymentAllocation?: PaymentAllocationRecord | null;
 };
 
 export function toPortalOrder(order: PortalOrderSource) {
   const snapshot = (order.quoteSnapshot ?? {}) as any;
+  const storedQuoteChecks = Array.isArray(order.sqlQuoteChecks) && order.sqlQuoteChecks.length > 0
+    ? order.sqlQuoteChecks
+    : Array.isArray(snapshot.quoteChecks) ? snapshot.quoteChecks : [];
+  const paymentQuote = snapshot.paymentQuote && typeof snapshot.paymentQuote === 'object' ? snapshot.paymentQuote : null;
+  const reviewQuoteCheck = snapshot.quoteReview?.quoteCheckId ? {
+    id: snapshot.quoteReview.quoteCheckId,
+    phase: 'POST_PAYMENT',
+    status: snapshot.quoteReview.type === 'out_of_stock' ? 'OUT_OF_STOCK' : snapshot.quoteReview.status === 'recreate_required' ? 'RECONCILIATION_REQUIRED' : 'CHANGED',
+    checkedAt: snapshot.quoteReview.checkedAt,
+    basketFingerprint: snapshot.paymentQuote?.basketFingerprint || '',
+    comparedWithQuoteCheckId: snapshot.quoteReview.baselineQuoteCheckId ?? null,
+    patientTotalPence: Number(snapshot.paymentQuote?.patientTotalPence || order.totalPence || 0),
+    wholesaleTotalPence: Number(snapshot.paymentQuote?.wholesaleTotalPence || 0),
+    shippingPence: 0,
+    patientDeltaPence: Number(snapshot.quoteReview.patientDeltaPence || 0),
+    stockAvailable: snapshot.quoteReview.type !== 'out_of_stock',
+  } : null;
+  const quoteChecks = [
+    ...(paymentQuote?.id ? [{
+      id: paymentQuote.id,
+      phase: 'PRE_PAYMENT',
+      status: paymentQuote.status === 'MATCHED' ? 'MATCHED' : paymentQuote.status === 'OUT_OF_STOCK' ? 'OUT_OF_STOCK' : 'RECONCILIATION_REQUIRED',
+      checkedAt: paymentQuote.checkedAt,
+      basketFingerprint: paymentQuote.basketFingerprint || '',
+      comparedWithQuoteCheckId: null,
+      patientTotalPence: Number(paymentQuote.patientTotalPence || order.totalPence || 0),
+      wholesaleTotalPence: Number(paymentQuote.wholesaleTotalPence || 0),
+      shippingPence: Number(paymentQuote.shippingPence || 0),
+      stockAvailable: paymentQuote.status !== 'OUT_OF_STOCK',
+    }] : []),
+    ...storedQuoteChecks.map((check: any) => ({
+      id: String(check.id || ''),
+      phase: String(check.phase || 'REPLACEMENT'),
+      status: check.status === 'MATCHED' ? 'MATCHED'
+        : check.status === 'OUT_OF_STOCK' ? 'OUT_OF_STOCK'
+          : check.status === 'RECONCILIATION_REQUIRED' ? 'RECONCILIATION_REQUIRED'
+            : check.status === 'ABSORBED' ? 'ABSORBED'
+              : check.status === 'CANCELLED' ? 'CANCELLED'
+            : 'CHANGED',
+      checkedAt: String(check.checkedAt || check.createdAt || order.updatedAt),
+      basketFingerprint: String(check.basketFingerprint || ''),
+      comparedWithQuoteCheckId: check.baselineQuoteCheckId ?? null,
+      patientTotalPence: Number(check.patientTotalPence || order.totalPence || 0),
+      wholesaleTotalPence: Number(check.wholesaleTotalPence || 0),
+      shippingPence: Number(check.shippingPence || 0),
+      patientDeltaPence: Number(check.comparison?.patientDeltaPence ?? check.comparison?.signedAdjustmentPence ?? 0),
+      wholesaleDeltaPence: Number(check.comparison?.wholesaleDeltaPence || 0),
+      stockAvailable: check.status !== 'OUT_OF_STOCK',
+    })),
+    ...(reviewQuoteCheck ? [reviewQuoteCheck] : []),
+  ].filter((check, index, rows) => check.id && rows.findIndex(candidate => candidate.id === check.id) === index);
+  const storedAllocation = order.sqlPaymentAllocation
+    ?? (snapshot.paymentAllocation && typeof snapshot.paymentAllocation === 'object'
+      ? snapshot.paymentAllocation
+      : null);
   const persistedCuraleaf = snapshot?.curaleaf && typeof snapshot.curaleaf === 'object' ? snapshot.curaleaf : null;
   const po = order.curaleaf || persistedCuraleaf;
   const isHhhCancelled = order.status === 'CANCELLED';
-  const isSupplierCancelled = po?.state === 'CANCELLED' || po?.state === 'REJECTED'
-    || po?.purchaseOrderState === 'CANCELLED' || po?.purchaseOrderState === 'REJECTED'
-    || po?.prescriptionState === 'CANCELLED' || po?.prescriptionState === 'REJECTED'
+  const isSupplierCancelled = po?.state === 'CANCELLED'
+    || po?.purchaseOrderState === 'CANCELLED'
+    || po?.prescriptionState === 'CANCELLED'
     || snapshot?.curaleafCancellation?.status === 'confirmed';
   const supplierStillLive = !isSupplierCancelled
     && !supplierCancellationAlreadyConfirmed(snapshot)
@@ -314,6 +372,48 @@ export function toPortalOrder(order: PortalOrderSource) {
   const isSupplierFlowActive = isPaid && !reviewBlocking && (hasPurchaseOrderRecord || POST_PURCHASE_ORDER_FULFILMENT.has(order.fulfilmentStatus));
   const prescriptionState = asPrescriptionState(po?.prescriptionState)
     ?? (hasPurchaseOrderRecord ? 'ACTIVE' : prescriptionId ? 'PENDING' : undefined);
+  const prescriberState = String(po?.prescriberState || '').toUpperCase();
+  const supplierApprovalWaiting = !hasPurchaseOrderRecord && (
+    prescriberState === 'UNVERIFIED'
+    || prescriptionState === 'PENDING'
+  );
+  const supplierWaitingSince = supplierApprovalWaiting
+    ? String(po?.waitingSince || snapshot?.curaleafAttention?.recordedAt || order.updatedAt || order.paidAt || order.createdAt)
+    : '';
+  const waitingSla = supplierWaitingSince ? curaleafWaitingSla(supplierWaitingSince) : null;
+  const attention = snapshot?.curaleafAttention && typeof snapshot.curaleafAttention === 'object'
+    ? snapshot.curaleafAttention
+    : null;
+  const waitingFor = String(po?.waitingFor || '');
+  const attentionCode = String(attention?.code || '');
+  const placementStage = hasPurchaseOrderRecord ? 'PLACED'
+    : attention?.status === 'terminal' ? 'TERMINAL'
+      : attentionCode.includes('UPLOAD') ? 'UPLOAD_CORRECTION_REQUIRED'
+        : attention?.status === 'correction_required' ? 'CORRECTION_REQUIRED'
+          : waitingFor === 'prescriber_verification' || prescriberState === 'UNVERIFIED' ? 'AWAITING_PRESCRIBER_VERIFICATION'
+            : waitingFor === 'prescription_activation' || prescriptionState === 'PENDING' ? 'AWAITING_PRESCRIPTION_ACTIVATION'
+              : isPaid ? 'CHECKING_PRESCRIBER'
+                : 'AWAITING_PAYMENT';
+  const firstPrescription = Array.isArray(snapshot?.prescriptions) ? snapshot.prescriptions[0] : null;
+  const curaleafPlacement = (isPaid || hasClinicPlacement || attention) ? {
+    route: firstPrescription?.clinicScanId ? 'CLINIC_BARCODE' : 'MANUAL_PRESCRIPTION',
+    stage: placementStage,
+    prescriberState: prescriberState || null,
+    prescriptionState: prescriptionState ?? null,
+    nextCheckAt: po?.nextCheckAt ?? null,
+    attentionReason: attentionCode.includes('UPLOAD') ? 'image_reupload'
+      : attention?.status === 'terminal' ? 'reconciliation'
+        : attention?.status === 'correction_required' ? 'provider_correction'
+          : waitingFor === 'prescriber_verification' ? 'prescriber_verification'
+            : waitingFor === 'prescription_activation' ? 'prescription_activation'
+              : null,
+    supportReference: attention?.supportReference ?? null,
+    waitingSince: supplierWaitingSince || null,
+    slaDueAt: waitingSla?.dueAt ?? null,
+    slaAlert: waitingSla?.alert ?? false,
+    slaPolicy: waitingSla?.policy ?? null,
+    updatedAt: String(attention?.recordedAt || po?.updatedAt || order.updatedAt),
+  } : null;
 
   const poItems = (po?.items && Array.isArray(po.items)) ? po.items : [];
   const poItemMap = new Map<string, any>(poItems.map((it: any) => [String(it.productId || it.formulaId || ''), it]));
@@ -519,6 +619,7 @@ export function toPortalOrder(order: PortalOrderSource) {
     customerReference: order.orderNumber || order.id,
     purchaseOrderId: null,
     purchaseOrderState: null,
+    ...(waitingSla ? { waitingSla } : {}),
   } : undefined;
 
   return {
@@ -549,7 +650,27 @@ export function toPortalOrder(order: PortalOrderSource) {
     curaleafApprovedAt: po?.createdAt || po?.issuedDate || undefined,
     autoPlacementEnabled: true,
     curaleaf,
+    curaleafPlacement,
     quoteReview,
+    quoteChecks,
+    activeQuoteCheck: quoteChecks.at(-1) ?? null,
+    paymentAllocation: storedAllocation ? {
+      id: String(storedAllocation.id || ''),
+      paymentId: String(storedAllocation.paymentId || ''),
+      amountPence: Number(storedAllocation.amountPence || 0),
+      status: String(storedAllocation.status || 'ACTIVE').toUpperCase(),
+      sourceOrderId: storedAllocation.sourceOrderId ?? null,
+      replacementOrderId: storedAllocation.replacementOrderId ?? order.id,
+      updatedAt: String(storedAllocation.updatedAt || order.updatedAt),
+    } : null,
+    resolution: order.resolutionStatus === 'RESOLVED' ? {
+      status: order.resolutionReason === 'REPLACED' ? 'REPLACED' : order.paymentStatus === 'REFUNDED' ? 'REFUNDED' : 'SPLIT_RESOLVED',
+      reason: order.resolutionReason === 'REPLACED' ? 'REPLACED' : order.paymentStatus === 'REFUNDED' ? 'REFUNDED' : 'SPLIT_RESOLVED',
+      resolvedAt: order.resolvedAt ?? null,
+      archivedAt: order.archivedAt ?? null,
+    } : snapshot.resolution ?? null,
+    redoOfOrderId: order.redoOfId ?? null,
+    redoContext: snapshot.redoContext ?? undefined,
     pharmacyContributionPence: Number(snapshot?.pharmacyContributionPence || quoteReview?.pharmacyContributionPence || 0) || undefined,
     cancellation: supplierStillLive ? undefined : snapshot?.cancellation ?? undefined,
     curaleafCancellation: supplierStillLive ? undefined : snapshot?.curaleafCancellation ?? undefined,

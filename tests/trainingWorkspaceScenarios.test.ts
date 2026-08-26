@@ -53,8 +53,8 @@ test('training workspace shows quote review, cancelled replacements, and excepti
   assert.ok((byId(122).quoteReview?.patientDeltaPence ?? 0) < 0);
   assert.equal(byId(123).quoteReview?.type, 'out_of_stock');
   assert.equal(byId(124).quoteReview?.type, 'supplier_cost_changed');
-  assert.equal(byId(125).quoteReview?.status, 'awaiting_top_up');
-  assert.equal(byId(126).quoteReview?.status, 'awaiting_refund');
+  assert.equal(byId(125).quoteReview?.status, 'required');
+  assert.equal(byId(126).quoteReview?.status, 'required');
 
   assert.equal(byId(131).refund?.status, 'completed');
   assert.equal(byId(132).redoContext?.isPaidRedo, false);

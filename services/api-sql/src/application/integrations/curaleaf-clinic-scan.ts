@@ -10,6 +10,19 @@ export const SCAN_STATUS_META = 'curaleaf_scan_status';
 
 export type ClinicScanStatus = 'processing' | 'ready' | 'failed' | 'reconciliation_required';
 
+export function clinicPrescriptionPlacementEligibility(state: CuraleafPrescriptionState) {
+  if (state === 'ACTIVE' || state === 'PENDING') return { eligible: true as const, waiting: state === 'PENDING' };
+  return {
+    eligible: false as const,
+    waiting: false as const,
+    reason: state === 'FULFILLED'
+      ? 'This Curaleaf prescription has already been fulfilled.'
+      : state === 'EXPIRED'
+        ? 'This Curaleaf prescription has expired.'
+        : 'This Curaleaf prescription has been cancelled.',
+  };
+}
+
 export type ClinicScanLine = {
   formulaId: string;
   formulaName: string;

@@ -81,6 +81,7 @@ export interface GoodsReceiptLine {
 }
 
 export interface PrescriptionFulfilmentLine {
+  purchaseOrderItemId?: string | null;
   productId: string;
   ordered: number;
   requested: number;
@@ -92,6 +93,8 @@ export interface PrescriptionFulfilmentLine {
   received: number;
   collected: number;
   returned: number;
+  cancelledRemainder?: number;
+  remainingExpected?: number;
   backordered: boolean;
   quantityMismatch: boolean;
 }
@@ -211,6 +214,11 @@ export interface PatientOrder {
   curaleafCancellation?: CuraleafCancellationState;
   pharmacyContribution?: number;
   quoteReview?: PortalOrderRecord['quoteReview'];
+  quoteChecks?: PortalOrderRecord['quoteChecks'];
+  activeQuoteCheck?: PortalOrderRecord['activeQuoteCheck'];
+  paymentAllocation?: PortalOrderRecord['paymentAllocation'];
+  resolution?: PortalOrderRecord['resolution'];
+  curaleafPlacement?: PortalOrderRecord['curaleafPlacement'];
   redoContext?: OrderRedoContext;
   lifecycleStatus?: string;
   isExpired?: boolean;
@@ -910,6 +918,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
             ? (flow?.goodsInAt ?? latestShipmentAt)
             : null,
           fulfilmentLines: flowLines.length ? flowLines.map(line => ({
+            purchaseOrderItemId: line.purchaseOrderItemId,
             productId: line.productId,
             ordered: line.ordered,
             requested: line.requested,
@@ -921,6 +930,8 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
             received: line.received,
             collected: line.collected,
             returned: line.returned,
+            cancelledRemainder: line.cancelledRemainder ?? 0,
+            remainingExpected: line.remainingExpected ?? Math.max(0, line.remaining - (line.cancelledRemainder ?? 0)),
             backordered: line.backordered,
             quantityMismatch: line.quantityMismatch,
           })) : undefined,
@@ -988,6 +999,11 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
     curaleafCancellation: record.curaleafCancellation,
     pharmacyContribution: record.pharmacyContributionPence ? record.pharmacyContributionPence / 100 : 0,
     quoteReview: record.quoteReview,
+    quoteChecks: record.quoteChecks,
+    activeQuoteCheck: record.activeQuoteCheck,
+    paymentAllocation: record.paymentAllocation,
+    resolution: record.resolution,
+    curaleafPlacement: record.curaleafPlacement,
     lifecycleStatus: record.status,
     isExpired: Boolean(record.isExpired || record.unresolvedReason === 'expired'),
     unresolvedReason: record.unresolvedReason ?? null,
@@ -1095,7 +1111,15 @@ function findOrder(state: AppState, orderId: number) {
 }
 
 function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: UnresolvedOrderReason): PatientOrder {
-  const items = source.prescriptions.flatMap(rx => rx.items).map(item => ({ ...item }));
+  const cancelledRemainders = source.prescriptions.flatMap(rx => rx.items.flatMap(item => {
+    const cancelledPacks = rx.fulfilmentLines?.find(line => line.productId === item.productId)?.cancelledRemainder ?? 0;
+    if (cancelledPacks <= 0) return [];
+    const unitsPerPack = item.unitsNeededCount && item.qty > 0 ? item.unitsNeededCount / item.qty : undefined;
+    return [{ ...item, qty: cancelledPacks, unitsNeededCount: unitsPerPack ? Math.max(1, Math.round(unitsPerPack * cancelledPacks)) : item.unitsNeededCount }];
+  }));
+  const items = cancelledRemainders.length
+    ? cancelledRemainders
+    : source.prescriptions.flatMap(rx => rx.items).map(item => ({ ...item }));
   const targetRxId = draft.prescriptions[0]?.id;
   return {
     ...draft,
@@ -1719,8 +1743,8 @@ function reducer(state: AppState, action: Action): AppState {
       if (!order?.redoContext?.isPaidRedo || order.redoContext.originalOrderId !== source?.id || source.payment.status !== 'paid') return state;
       const amount = orderRevenue(order);
       const absorbedDifference = order.redoContext.priceResolution === 'absorb' ? Math.max(0, amount - source.payment.amount) : 0;
-      const feeAligned = order.redoContext.priceResolution === 'continue_as_fee' && Math.abs(amount - source.payment.amount) < 0.005;
-      if (Math.abs(amount - source.payment.amount) >= 0.005 && absorbedDifference <= 0 && !feeAligned) return state;
+      const absorbedReduction = order.redoContext.priceResolution === 'absorb' ? Math.max(0, source.payment.amount - amount) : 0;
+      if (Math.abs(amount - source.payment.amount) >= 0.005 && absorbedDifference <= 0 && absorbedReduction <= 0) return state;
       const nextState = {
         ...state,
         orders: state.orders.map(candidate => {
@@ -1729,10 +1753,10 @@ function reducer(state: AppState, action: Action): AppState {
             payment: {
               ...source.payment,
               status: 'paid' as const,
-              amount: absorbedDifference > 0 ? source.payment.amount : amount,
+              amount: order.redoContext?.priceResolution === 'absorb' ? source.payment.amount : amount,
               paidAt: source.payment.paidAt ?? new Date(),
             },
-            pharmacyContribution: absorbedDifference,
+            pharmacyContribution: order.redoContext?.priceResolution === 'absorb' ? amount - source.payment.amount : 0,
           };
           if (candidate.id === source.id) return {
             ...candidate,

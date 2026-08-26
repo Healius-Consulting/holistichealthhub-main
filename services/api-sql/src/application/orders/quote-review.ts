@@ -50,6 +50,8 @@ export type QuoteReviewRecord = {
   refundId?: string;
   refundAmountPence?: number;
   hostedPaymentUrl?: string;
+  baselineQuoteCheckId?: string;
+  quoteCheckId?: string;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -214,13 +216,14 @@ export function isQuoteReviewBlocking(snapshot: unknown) {
   const review = readQuoteReview(snapshot);
   return review?.status === 'required'
     || review?.status === 'awaiting_top_up'
-    || review?.status === 'awaiting_refund';
+    || review?.status === 'awaiting_refund'
+    || review?.status === 'recreate_required';
 }
 
 export function quoteReviewAllowsPlacement(snapshot: unknown, latestFingerprint: string) {
   const review = readQuoteReview(snapshot);
   if (!review) return true;
-  if (review.status === 'awaiting_top_up' || review.status === 'awaiting_refund' || review.status === 'required') {
+  if (review.status === 'awaiting_top_up' || review.status === 'awaiting_refund' || review.status === 'required' || review.status === 'recreate_required') {
     return false;
   }
   return review.status === 'approved' && review.approvedFingerprint === latestFingerprint;
@@ -247,7 +250,25 @@ export function evaluateQuoteReview(input: {
   }
   const baseline = parseQuote(snapshotQuote(input.snapshot));
   if (!baseline) {
-    return { hold: false, fingerprint, latest, adoptedBaseline: true };
+    return {
+      hold: true,
+      fingerprint,
+      latest,
+      review: {
+        status: 'recreate_required',
+        type: 'patient_price_changed',
+        fingerprint,
+        latestQuote: input.latestRaw,
+        differences: [{
+          category: 'patient_price',
+          field: 'missingPaidBaseline',
+          previous: 'missing',
+          latest: 'present',
+        }],
+        patientDeltaPence: 0,
+        checkedAt: input.now ?? new Date().toISOString(),
+      },
+    };
   }
   const differences = compareQuotes(baseline, latest);
   const type = quoteReviewType(latest, differences);
@@ -280,7 +301,7 @@ export function applyPassedQuoteReview(snapshot: unknown, input: {
   const adoptedQuote = storedQuote
     ?? firstParseableQuote(asRecord(root.quoteReview).latestQuote, input.latestRaw)
     ?? input.latestRaw;
-  const needsBaseline = !storedQuote;
+  const needsBaseline = false;
   const needsRelease = existing?.status === 'required';
   if (!needsBaseline && !needsRelease) {
     return { changed: false, snapshot: root };
@@ -310,7 +331,7 @@ export function stampQuoteReviewOnSnapshot(snapshot: unknown, review: QuoteRevie
   const flow = asRecord(root.prescriptionFlow);
   const heldState = review?.type === 'out_of_stock' ? 'HELD_STOCK' : 'HELD_PRICE';
   const nextFlow: Record<string, unknown> = {};
-  const blocking = Boolean(review && (review.status === 'required' || review.status === 'awaiting_top_up' || review.status === 'awaiting_refund'));
+  const blocking = Boolean(review && (review.status === 'required' || review.status === 'awaiting_top_up' || review.status === 'awaiting_refund' || review.status === 'recreate_required'));
   for (const [key, value] of Object.entries(flow)) {
     const prescription = asRecord(value);
     const state = String(prescription.state || '');
@@ -342,13 +363,13 @@ export function stampQuoteReviewOnSnapshot(snapshot: unknown, review: QuoteRevie
 export function supplierPurchaseOrderCancelled(snapshot: unknown) {
   const curaleaf = asRecord(asRecord(snapshot).curaleaf);
   const state = String(curaleaf.purchaseOrderState || curaleaf.state || '').toUpperCase();
-  return state === 'CANCELLED' || state === 'REJECTED';
+  return state === 'CANCELLED';
 }
 
 export function supplierPrescriptionCancelled(snapshot: unknown) {
   const curaleaf = asRecord(asRecord(snapshot).curaleaf);
   const state = String(curaleaf.prescriptionState || '').toUpperCase();
-  return state === 'CANCELLED' || state === 'REJECTED';
+  return state === 'CANCELLED';
 }
 
 export function supplierOrderCancelled(snapshot: unknown) {

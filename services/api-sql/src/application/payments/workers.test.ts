@@ -10,6 +10,7 @@ import {
   worldpayIdentityMatches,
   worldpayPaymentStatus,
   worldpayStatusToSql,
+  verifyWorldpayRefund,
 } from './worldpay-query.js';
 import { evaluatePendingPaymentLifecycle } from './payment-lifecycle.js';
 import { evaluatePrescriptionMaintenance } from '../orders/order-maintenance.js';
@@ -68,6 +69,39 @@ describe('Worldpay Payment Queries', () => {
     assert.equal(worldpayPaymentStatus('refused'), 'failed');
     assert.equal(worldpayPaymentStatus('expired'), 'expired');
     assert.equal(worldpayPaymentStatus('refundRequestSubmitted'), 'refund_required');
+    assert.equal(worldpayPaymentStatus('sentForPartialRefund'), 'refund_required');
+    assert.equal(worldpayPaymentStatus('partialRefundSucceeded'), 'refunded');
+  });
+
+  it('verifies a full refund from the terminal provider state and original identity', () => {
+    const query = normaliseWorldpayPaymentQuery({ _embedded: { payments: [{
+      transactionReference: 'HHH-1', paymentId: 'pay-1', lastEvent: 'refunded', entity: 'PO1',
+      value: { amount: 1000, currency: 'GBP' },
+    }] } }, 'HHH-1');
+    assert.equal(verifyWorldpayRefund({
+      query, transactionReference: 'HHH-1', paymentId: 'pay-1', paymentAmountPence: 1000,
+      refundAmountPence: 1000, currency: 'GBP', expectedEntityId: 'PO1', externalReference: 'manual-command',
+    }).verified, true);
+  });
+
+  it('requires exact reference, amount and currency evidence for a partial refund', () => {
+    const query = normaliseWorldpayPaymentQuery({ _embedded: { payments: [{
+      transactionReference: 'HHH-1', paymentId: 'pay-1', lastEvent: 'partiallyRefunded', entity: 'PO1',
+      value: { amount: 1000, currency: 'GBP' },
+      _embedded: { refunds: [{
+        commandId: 'refund-command-1', originalPaymentId: 'pay-1', lastEvent: 'partialRefundSucceeded',
+        value: { amount: 400, currency: 'GBP' },
+      }] },
+    }] } }, 'HHH-1');
+    const verified = verifyWorldpayRefund({
+      query, transactionReference: 'HHH-1', paymentId: 'pay-1', paymentAmountPence: 1000,
+      refundAmountPence: 400, currency: 'GBP', expectedEntityId: 'PO1', externalReference: 'refund-command-1',
+    });
+    assert.equal(verified.verified, true);
+    assert.equal(verifyWorldpayRefund({
+      query, transactionReference: 'HHH-1', paymentId: 'pay-1', paymentAmountPence: 1000,
+      refundAmountPence: 401, currency: 'GBP', expectedEntityId: 'PO1', externalReference: 'refund-command-1',
+    }).verified, false);
   });
 
   it('rejects identity mismatches', () => {

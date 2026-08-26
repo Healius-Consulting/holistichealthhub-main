@@ -12810,6 +12810,45 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .quote-review-panel__actions .btn,
   .quote-review-panel__waiting .btn{ width: 100%; }
 }
+
+.order-gate-summary,
+.order-placement-wait{
+  margin: 14px 16px 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-surface);
+}
+.order-gate-summary > header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--border);
+  color: var(--color-success);
+}
+.order-gate-summary > header span,
+.order-gate-summary > header small,
+.order-gate-summary > header strong{ display: block; }
+.order-gate-summary > header small{ color: var(--text-tertiary); font-size: 8px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; }
+.order-gate-summary > header strong{ margin-top: 2px; color: var(--text-primary); font-size: 11px; }
+.order-gate-summary ol{ display: grid; margin: 0; padding: 0; list-style: none; }
+.order-gate-summary li{ display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; border-top: 1px solid var(--border); }
+.order-gate-summary li:first-child{ border-top: 0; }
+.order-gate-summary li > span{ display: grid; gap: 2px; }
+.order-gate-summary li > span:last-child{ text-align: right; }
+.order-gate-summary li strong,
+.order-gate-summary li b{ color: var(--text-primary); font-size: 10px; }
+.order-gate-summary li small{ color: var(--text-secondary); font-size: 9px; }
+.order-gate-summary li.is-changed b,
+.order-gate-summary li.is-out-of-stock b,
+.order-gate-summary li.is-reconciliation-required b{ color: var(--color-danger); }
+.order-placement-wait{ display: flex; align-items: flex-start; gap: 10px; padding: 12px 13px; color: var(--tenant-primary-strong); border-color: color-mix(in srgb, var(--tenant-primary) 24%, var(--border)); background: color-mix(in srgb, var(--tenant-primary) 5%, var(--bg-surface)); }
+.order-placement-wait > span{ display: grid; gap: 3px; }
+.order-placement-wait strong{ color: var(--text-primary); font-size: 11px; }
+.order-placement-wait small,
+.order-placement-wait em{ color: var(--text-secondary); font-size: 9px; font-style: normal; line-height: 1.45; }
+.order-placement-wait em.is-overdue{ color: var(--color-danger); font-weight: 700; }
 .order-crm-alert strong, .order-crm-alert small, .order-crm-next-action strong, .order-crm-next-action small{ display: block; }
 .order-crm-alert strong, .order-crm-next-action strong{ font-size: 11px; }
 .order-crm-alert small, .order-crm-next-action small{ margin-top: 3px; color: var(--text-secondary); font-size: 10px; line-height: 1.45; }
@@ -14036,6 +14075,16 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 .order-fulfilment-item-card .mismatch-tag{
   justify-self: start;
+}
+.order-fulfilment-remainder{ display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; padding: 9px 10px; border: 1px solid color-mix(in srgb, var(--color-danger) 25%, var(--border)); border-radius: 7px; color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 5%, var(--bg-surface)); }
+.order-fulfilment-remainder > span{ display: grid; gap: 2px; }
+.order-fulfilment-remainder strong{ color: var(--text-primary); font-size: 10px; }
+.order-fulfilment-remainder small{ color: var(--text-secondary); font-size: 9px; line-height: 1.4; }
+.order-fulfilment-remainder--waiting{ color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 28%, var(--border)); background: color-mix(in srgb, var(--color-warning) 5%, var(--bg-surface)); }
+
+@media (max-width: 640px){
+  .order-gate-summary li{ align-items: flex-start; }
+  .order-gate-summary li > span:last-child{ text-align: left; }
 }
 .order-fulfilment-row {
   padding: 12px 16px;

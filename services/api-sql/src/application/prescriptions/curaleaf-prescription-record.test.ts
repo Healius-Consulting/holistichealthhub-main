@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  asCuraleafPrescriptionState,
   normalizeCuraleafPurchaseOrder,
   stampCuraleafPrescriptionOnSnapshot,
 } from './curaleaf-prescription-record.js';
+
+describe('asCuraleafPrescriptionState', () => {
+  it('does not invent a REJECTED prescription state', () => {
+    assert.equal(asCuraleafPrescriptionState('REJECTED'), null);
+    assert.equal(asCuraleafPrescriptionState('CANCELLED'), 'CANCELLED');
+  });
+});
 
 describe('normalizeCuraleafPurchaseOrder', () => {
   it('fills CREATED, customer reference, and courier when the create response is only an id', () => {

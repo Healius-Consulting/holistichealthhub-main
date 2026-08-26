@@ -20,7 +20,6 @@ export type CuraleafPrescriptionState = 'ACTIVE' | 'FULFILLED' | 'EXPIRED' | 'CA
 
 export function asCuraleafPrescriptionState(value: unknown): CuraleafPrescriptionState | null {
   const state = String(value || '').trim().toUpperCase();
-  if (state === 'REJECTED') return 'CANCELLED';
   if (state === 'ACTIVE' || state === 'FULFILLED' || state === 'EXPIRED' || state === 'CANCELLED' || state === 'PENDING') {
     return state;
   }
@@ -56,9 +55,11 @@ export function stampCuraleafPrescriptionOnSnapshot(
   input: {
     prescriptionId?: string | null;
     prescriberId?: string | null;
+    prescriberState?: 'UNVERIFIED' | 'VERIFIED' | 'ARCHIVED' | null;
     prescriptionState?: string | null;
     purchaseOrder?: Record<string, unknown> | null;
     customerReferenceFallback?: string | null;
+    now?: string;
   },
 ) {
   const root = asRecord(snapshot);
@@ -94,6 +95,16 @@ export function stampCuraleafPrescriptionOnSnapshot(
       : prescriptionId || prescriberId
         ? 'prescription_pending'
         : prior.status ?? null;
+  const waitingFor = input.prescriberState === 'UNVERIFIED'
+    ? 'prescriber_verification'
+    : prescriptionState === 'PENDING'
+      ? 'prescription_activation'
+      : null;
+  const waitingSince = waitingFor
+    ? (prior.waitingFor === waitingFor && typeof prior.waitingSince === 'string'
+      ? prior.waitingSince
+      : input.now ?? new Date().toISOString())
+    : null;
   const prescriptions = Array.isArray(root.prescriptions)
     ? root.prescriptions.map((entry) => {
       const rx = asRecord(entry);
@@ -110,7 +121,10 @@ export function stampCuraleafPrescriptionOnSnapshot(
       status,
       prescriptionId,
       prescriberId,
+      prescriberState: input.prescriberState ?? prior.prescriberState ?? null,
       prescriptionState,
+      waitingFor,
+      waitingSince,
       purchaseOrderId: purchaseOrder?.id ?? prior.purchaseOrderId ?? null,
       purchaseOrderState: purchaseOrder?.state ?? prior.purchaseOrderState ?? null,
       customerReference: purchaseOrder?.customerReference ?? prior.customerReference ?? input.customerReferenceFallback ?? null,
@@ -126,9 +140,11 @@ export async function persistCuraleafPrescriptionIdentity(input: {
   snapshot: unknown;
   prescriptionId?: string | null;
   prescriberId?: string | null;
+  prescriberState?: 'UNVERIFIED' | 'VERIFIED' | 'ARCHIVED' | null;
   prescriptionState?: string | null;
   purchaseOrder?: Record<string, unknown> | null;
   customerReferenceFallback?: string | null;
+  now?: string;
   fulfilmentStatus?: 'SUPPLIER_PENDING' | 'SUPPLIER_PROCESSING' | 'SUPPLIER_ALLOCATED' | 'PARTIALLY_DISPATCHED_TO_PHARMACY' | 'DISPATCHED_TO_PHARMACY' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'READY_FOR_COLLECTION' | 'COLLECTED' | 'EXCEPTION';
 }) {
   if (!input.prescriptionId && !input.purchaseOrder && !input.prescriberId) return input.snapshot;

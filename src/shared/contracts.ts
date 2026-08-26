@@ -388,10 +388,72 @@ export interface CuraleafActivity {
   shipmentTotal: number;
 }
 
-export type RedoPriceResolution = 'absorb' | 'continue_as_fee';
+export type RedoPriceResolution = 'absorb';
 
 export function activeRedoPriceResolution(value: unknown): RedoPriceResolution | undefined {
-  return value === 'absorb' || value === 'continue_as_fee' ? value : undefined;
+  return value === 'absorb' ? value : undefined;
+}
+
+export type CuraleafQuoteCheckPhase = 'PRE_PAYMENT' | 'POST_PAYMENT' | 'FINAL_PLACEMENT' | 'REPLACEMENT';
+
+export interface CuraleafQuoteCheckSummary {
+  id: string;
+  phase: CuraleafQuoteCheckPhase;
+  status: 'MATCHED' | 'CHANGED' | 'OUT_OF_STOCK' | 'RECONCILIATION_REQUIRED' | 'ABSORBED' | 'CANCELLED';
+  checkedAt: string;
+  basketFingerprint: string;
+  comparedWithQuoteCheckId?: string | null;
+  patientTotalPence: number;
+  wholesaleTotalPence: number;
+  shippingPence: number;
+  patientDeltaPence?: number;
+  wholesaleDeltaPence?: number;
+  stockAvailable: boolean;
+}
+
+export interface CuraleafPlacementSummary {
+  route: 'CLINIC_BARCODE' | 'MANUAL_PRESCRIPTION';
+  stage:
+    | 'DRAFT'
+    | 'SCANNING_CLINIC_PRESCRIPTION'
+    | 'AWAITING_PAYMENT'
+    | 'CHECKING_PRESCRIBER'
+    | 'AWAITING_PRESCRIBER_VERIFICATION'
+    | 'CREATING_PRESCRIPTION'
+    | 'UPLOADING_PRESCRIPTION_IMAGE'
+    | 'AWAITING_PRESCRIPTION_ACTIVATION'
+    | 'UPLOAD_CORRECTION_REQUIRED'
+    | 'CREATING_PURCHASE_ORDER'
+    | 'PLACED'
+    | 'CORRECTION_REQUIRED'
+    | 'TERMINAL';
+  prescriberState?: 'UNVERIFIED' | 'VERIFIED' | 'ARCHIVED' | null;
+  prescriptionState?: 'ACTIVE' | 'FULFILLED' | 'EXPIRED' | 'CANCELLED' | 'PENDING' | null;
+  nextCheckAt?: string | null;
+  attentionReason?: 'prescriber_verification' | 'prescription_activation' | 'image_reupload' | 'provider_correction' | 'reconciliation' | null;
+  supportReference?: string | null;
+  waitingSince?: string | null;
+  slaDueAt?: string | null;
+  slaAlert?: boolean;
+  slaPolicy?: 'three_hours' | 'next_working_day_noon' | null;
+  updatedAt: string;
+}
+
+export interface PaymentAllocationSummary {
+  id: string;
+  paymentId: string;
+  amountPence: number;
+  status: 'ACTIVE' | 'TRANSFER_PENDING' | 'TRANSFERRED' | 'REFUNDED' | 'RELEASED' | 'RECONCILIATION_REQUIRED';
+  sourceOrderId?: string | null;
+  replacementOrderId?: string | null;
+  updatedAt: string;
+}
+
+export interface OrderResolutionSummary {
+  status: 'OPEN' | 'REPLACEMENT_PENDING' | 'REFUND_REQUIRED' | 'REFUND_VERIFYING' | 'RECONCILIATION_REQUIRED' | 'REPLACED' | 'REFUNDED' | 'SPLIT_RESOLVED';
+  reason?: 'CANCELLED' | 'REPLACED' | 'REFUNDED' | 'SPLIT_RESOLVED' | null;
+  resolvedAt?: string | null;
+  archivedAt?: string | null;
 }
 
 export interface PortalOrderInput {
@@ -404,6 +466,12 @@ export interface PortalOrderInput {
   totalPence?: number;
   quoteSnapshot?: Record<string, unknown>;
   pricingQuote?: CuraleafQuote;
+  /** Client-captured display metadata; the backend remains authoritative for the payment-gate quote check. */
+  prePaymentQuote?: {
+    checkedAt: string;
+    basketFingerprint: string;
+    quote: CuraleafQuote;
+  };
   lineItems: Array<{
     productId?: string;
     packId: string;
@@ -623,6 +691,11 @@ export interface PortalOrderRecord {
     hostedPaymentUrl?: string;
     refundAmountPence?: number;
   };
+  quoteChecks?: CuraleafQuoteCheckSummary[];
+  activeQuoteCheck?: CuraleafQuoteCheckSummary | null;
+  paymentAllocation?: PaymentAllocationSummary | null;
+  resolution?: OrderResolutionSummary | null;
+  curaleafPlacement?: CuraleafPlacementSummary | null;
   curaleaf?: PortalCuraleafOrderState;
   curaleafSubOrders?: Record<string, PortalCuraleafOrderState>;
   createdAt: string;
@@ -633,6 +706,7 @@ export type PrescriptionFlowState = 'DRAFT' | 'AWAITING_PAYMENT' | 'PAID' | 'PEN
 
 export interface FulfilmentLineRecord {
   lineId: string;
+  purchaseOrderItemId?: string | null;
   productId: string;
   ordered: number;
   requested: number;
@@ -641,6 +715,8 @@ export interface FulfilmentLineRecord {
   allocated: number;
   shipped: number;
   returned: number;
+  cancelledRemainder?: number;
+  remainingExpected?: number;
   remaining: number;
   received: number;
   collected: number;
@@ -732,7 +808,7 @@ export interface PharmacyOperationalStatus {
 
 export interface OrderRefundState {
   id: string;
-  status: 'pending_confirmation' | 'completed';
+  status: 'pending_confirmation' | 'verifying' | 'reconciliation_required' | 'completed';
   amountPence: number;
   method: 'worldpay_portal' | 'pharmacy_manual';
   paymentReference: string;
@@ -744,6 +820,9 @@ export interface OrderRefundState {
   confirmedAt?: string | null;
   confirmedBy?: string | null;
   externalReference?: string | null;
+  verificationReference?: string | null;
+  verificationMessage?: string | null;
+  verifiedAt?: string | null;
 }
 
 export interface CuraleafCancellationState {

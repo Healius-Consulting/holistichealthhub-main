@@ -90,20 +90,61 @@ export function orderMatchesRejectedPrescriber(
 
 export function isCuraleafTerminalRejection(state: unknown) {
   const value = String(state || '').trim().toUpperCase();
-  return value === 'CANCELLED' || value === 'REJECTED';
+  return value === 'CANCELLED';
 }
 
 export function isCuraleafPrescriberRejected(state: unknown) {
   const value = String(state || '').trim().toUpperCase();
-  return value === 'ARCHIVED' || value === 'REJECTED';
+  return value === 'ARCHIVED';
 }
 
-export function isCuraleafRejectedRequest(error: unknown) {
+export function isCuraleafCorrectionRequired(error: unknown) {
   if (!(error instanceof HttpError)) return false;
   const details = error.details && typeof error.details === 'object' ? error.details as Record<string, unknown> : {};
   const curaleafStatus = Number(details.curaleafStatus);
   const status = Number.isFinite(curaleafStatus) ? curaleafStatus : error.statusCode;
-  return status === 400 || status === 403 || status === 422;
+  return status === 400 || status === 422;
+}
+
+export function stampCuraleafAttentionOnSnapshot(
+  snapshot: unknown,
+  input: {
+    source: 'prescriber' | 'prescription' | 'prescription_upload' | 'purchase_order';
+    reason: string;
+    code: string;
+    prescriberId?: string | null;
+    prescriptionId?: string | null;
+    prescriberState?: string | null;
+    prescriptionState?: string | null;
+    terminal?: boolean;
+    now?: string;
+  },
+) {
+  const root = asRecord(snapshot);
+  const curaleaf = asRecord(root.curaleaf);
+  const now = input.now ?? new Date().toISOString();
+  return {
+    ...root,
+    curaleaf: {
+      ...curaleaf,
+      ...(input.prescriberId ? { prescriberId: input.prescriberId } : {}),
+      ...(input.prescriptionId ? { prescriptionId: input.prescriptionId } : {}),
+      ...(input.prescriberState ? { prescriberState: input.prescriberState } : {}),
+      ...(input.prescriptionState ? { prescriptionState: input.prescriptionState } : {}),
+      status: input.terminal
+        ? 'prescription_closed'
+        : input.source === 'prescription_upload'
+          ? 'upload_correction_required'
+          : 'correction_required',
+    },
+    curaleafAttention: {
+      status: input.terminal ? 'terminal' : 'correction_required',
+      source: input.source,
+      code: input.code,
+      reason: input.reason,
+      recordedAt: now,
+    },
+  };
 }
 
 export function curaleafRequiresSupplierCancel(snapshot: unknown) {
@@ -118,11 +159,10 @@ export function curaleafRequiresSupplierCancel(snapshot: unknown) {
   const prescriptionState = String(curaleaf.prescriptionState || '').toUpperCase();
   if (prescriptionState === 'PENDING' || prescriptionState === 'ACTIVE' || prescriptionState === 'FULFILLED') return true;
   if (String(curaleaf.prescriptionId || '').trim()) return true;
-  if (String(curaleaf.prescriberId || '').trim()) return true;
   return Boolean(String(curaleaf.purchaseOrderId || '').trim());
 }
 
-/** Pharmacy may cancel in HHH only before/during the second quote check. After Prescriber → Prescription → Purchase starts, Curaleaf owns cancel. */
+/** Once a prescription or PO exists Curaleaf owns supplier cancellation; a prescriber record alone has nothing to cancel. */
 export function curaleafOwnsCancellation(snapshot: unknown) {
   const review = String(asRecord(asRecord(snapshot).quoteReview).status || '');
   if (review === 'required' || review === 'awaiting_top_up' || review === 'awaiting_refund') return false;
@@ -144,48 +184,6 @@ export function supplierCancellationAlreadyConfirmed(snapshot: unknown) {
   return cancellation.status === 'confirmed';
 }
 
-export function stampCuraleafRejectionOnSnapshot(
-  snapshot: unknown,
-  input: {
-    source: 'prescriber' | 'prescription' | 'purchase_order';
-    purchaseOrderId?: string | null;
-    prescriptionId?: string | null;
-    prescriberId?: string | null;
-    note?: string | null;
-    now?: string;
-  },
-) {
-  const note = input.note ?? (
-    input.source === 'prescriber'
-      ? 'Curaleaf rejected the prescriber.'
-      : input.source === 'prescription'
-        ? 'Curaleaf rejected the prescription.'
-        : 'Curaleaf rejected the purchase order.'
-  );
-  const stamped = stampCuraleafCancellationOnSnapshot(snapshot, {
-    action: 'confirmed',
-    purchaseOrderId: input.purchaseOrderId,
-    prescriptionId: input.prescriptionId,
-    prescriptionState: input.source === 'prescriber' ? null : 'CANCELLED',
-    reference: `curaleaf_${input.source}_rejected`,
-    note,
-    now: input.now,
-  });
-  const root = asRecord(stamped);
-  const curaleaf = asRecord(root.curaleaf);
-  return {
-    ...root,
-    curaleaf: {
-      ...curaleaf,
-      status: 'prescription_closed',
-      ...(input.prescriberId ? { prescriberId: input.prescriberId } : {}),
-      ...(input.source === 'prescriber' ? { prescriberState: 'ARCHIVED' } : {}),
-      ...(input.source === 'prescription' ? { prescriptionState: 'CANCELLED' } : {}),
-      ...(input.source === 'purchase_order' ? { purchaseOrderState: 'CANCELLED', state: 'CANCELLED' } : {}),
-    },
-  };
-}
-
 export function applyCancelledPurchaseOrderSnapshot(
   snapshot: unknown,
   purchaseOrder: CuraleafPurchaseOrderLike,
@@ -193,6 +191,24 @@ export function applyCancelledPurchaseOrderSnapshot(
   const root = asRecord(snapshot);
   const curaleaf = asRecord(root.curaleaf);
   const flow = asRecord(root.prescriptionFlow);
+  const shipments = Array.isArray(curaleaf.shipments) ? curaleaf.shipments as CuraleafShipmentLike[] : [];
+  const requestedItems = Array.isArray(root.lineItems)
+    ? root.lineItems.map(entry => {
+      const line = asRecord(entry);
+      return {
+        packId: String(line.packId || line.productId || ''),
+        productId: String(line.productId || line.packId || ''),
+        quantity: Number(line.quantity || line.qty || 0),
+      };
+    })
+    : [];
+  const cancelledLines = normalisedFulfilmentLines({
+    purchaseOrder: { ...purchaseOrder, state: 'CANCELLED', purchaseOrderState: 'CANCELLED' },
+    shipments,
+    requestedItems,
+    priorLines: curaleaf.lines,
+  });
+  const partiallyFulfilled = cancelledLines.some(line => Number(line.shipped || 0) > 0);
   const nextFlow: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(flow)) {
     const prescription = asRecord(value);
@@ -210,6 +226,10 @@ export function applyCancelledPurchaseOrderSnapshot(
       purchaseOrderId: purchaseOrder.id ?? curaleaf.purchaseOrderId,
       purchaseOrderState: 'CANCELLED',
       state: 'CANCELLED',
+      lines: cancelledLines.length ? cancelledLines : curaleaf.lines,
+      cancelledRemainderTotal: cancelledLines.reduce((total, line) => total + Number(line.cancelledRemainder || 0), 0),
+      partialCancellation: partiallyFulfilled,
+      resolutionStatus: partiallyFulfilled ? 'partially_fulfilled_cancelled' : 'cancelled_before_fulfilment',
     },
   };
 }

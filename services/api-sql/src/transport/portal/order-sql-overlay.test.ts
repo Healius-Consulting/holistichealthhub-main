@@ -5,8 +5,8 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { OrderRecord } from '../../repositories/ports/order.port.js';
 import type { OrderLineRecord } from '../../repositories/ports/order-line.port.js';
-import type { RefundRecord } from '../../repositories/ports/payment.port.js';
-import { latestRefund, mapPortalOrderFromSql, sqlLinesToPortal } from './order-sql-overlay.js';
+import type { PaymentAllocationRecord, QuoteCheckRecord, RefundRecord } from '../../repositories/ports/payment.port.js';
+import { latestPaymentAllocation, latestRefund, mapPortalOrderFromSql, sqlLinesToPortal } from './order-sql-overlay.js';
 
 const order: OrderRecord = {
   id: '00000000-0000-4000-a000-000000000002',
@@ -125,5 +125,90 @@ describe('SQL order overlay', () => {
     assert.equal(mapped.refund, undefined);
     assert.equal(mapped.status, 'processing');
     assert.equal(mapped.curaleaf?.purchaseOrderState, 'CREATED');
+  });
+
+  it('projects durable refund verification gates without collapsing them to pending confirmation', () => {
+    const verifying = mapPortalOrderFromSql(order, {
+      refunds: [{
+        id: 'refund-verifying',
+        organisationId: order.organisationId,
+        orderId: order.id,
+        paymentId: 'pay-1',
+        status: 'VERIFICATION_PENDING',
+        amountPence: 10500,
+        verificationStatus: 'worldpay_query_pending',
+        createdAt: '2026-08-01T13:00:00.000Z',
+      }],
+      lines: [],
+    });
+    assert.equal(verifying.refund?.status, 'verifying');
+    assert.equal(verifying.refund?.verificationReference, 'worldpay_query_pending');
+
+    const reconciliation = mapPortalOrderFromSql(order, {
+      refunds: [{
+        id: 'refund-reconciliation',
+        organisationId: order.organisationId,
+        orderId: order.id,
+        paymentId: 'pay-1',
+        status: 'RECONCILIATION_REQUIRED',
+        amountPence: 10500,
+        verificationStatus: 'worldpay_refund_not_proven',
+        createdAt: '2026-08-01T13:00:00.000Z',
+      }],
+      lines: [],
+    });
+    assert.equal(reconciliation.refund?.status, 'reconciliation_required');
+  });
+
+  it('uses authoritative SQL quote checks and the newest order payment allocation', () => {
+    const quoteChecks: QuoteCheckRecord[] = [{
+      id: 'quote-post',
+      organisationId: order.organisationId,
+      orderId: order.id,
+      paymentId: 'pay-1',
+      phase: 'POST_PAYMENT',
+      status: 'REVIEW_REQUIRED',
+      baselineQuoteCheckId: 'quote-pre',
+      basketFingerprint: 'basket-a',
+      quoteFingerprint: 'quote-a',
+      patientTotalPence: 11000,
+      wholesaleTotalPence: 7000,
+      shippingPence: 500,
+      taxPence: 0,
+      rawQuote: {},
+      comparison: { patientDeltaPence: 500 },
+      createdAt: '2026-08-01T13:00:00.000Z',
+    }];
+    const paymentAllocations: PaymentAllocationRecord[] = [{
+      id: 'allocation-old',
+      organisationId: order.organisationId,
+      paymentId: 'pay-1',
+      orderId: order.id,
+      amountPence: 5000,
+      status: 'TRANSFERRED',
+      version: 2,
+      createdAt: '2026-08-01T11:00:00.000Z',
+      updatedAt: '2026-08-01T12:00:00.000Z',
+    }, {
+      id: 'allocation-new',
+      organisationId: order.organisationId,
+      paymentId: 'pay-2',
+      orderId: order.id,
+      sourceOrderId: 'source-order',
+      amountPence: 5500,
+      status: 'ACTIVE',
+      version: 1,
+      createdAt: '2026-08-01T12:30:00.000Z',
+      updatedAt: '2026-08-01T13:30:00.000Z',
+    }];
+
+    const mapped = mapPortalOrderFromSql(order, { refunds: [], lines: [], quoteChecks, paymentAllocations });
+    assert.equal(mapped.quoteChecks.length, 1);
+    assert.equal(mapped.activeQuoteCheck?.id, 'quote-post');
+    assert.equal(mapped.activeQuoteCheck?.status, 'CHANGED');
+    assert.equal(mapped.activeQuoteCheck?.checkedAt, '2026-08-01T13:00:00.000Z');
+    assert.equal(latestPaymentAllocation(paymentAllocations)?.id, 'allocation-new');
+    assert.equal(mapped.paymentAllocation?.id, 'allocation-new');
+    assert.equal(mapped.paymentAllocation?.sourceOrderId, 'source-order');
   });
 });

@@ -203,6 +203,7 @@ describe('SQL pharmacy compatibility contracts', () => {
           prescriptionId: '2bd0fa9f-50ee-4344-a5fa-d0da95ac83aa',
           prescriberId: '1c2ccf78-1307-4233-b420-2348fd04065c',
           prescriptionState: 'PENDING',
+          waitingSince: '2026-08-18T09:00:00.000Z',
         },
       },
     });
@@ -211,7 +212,119 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.curaleaf?.status, 'prescription_pending');
     assert.equal(mapped.curaleaf?.prescriptionState, 'PENDING');
     assert.equal(mapped.curaleaf?.purchaseOrderId, null);
+    assert.equal(mapped.curaleaf?.waitingSla?.dueAt, '2026-08-18T12:00:00.000Z');
+    assert.equal(mapped.curaleaf?.waitingSla?.policy, 'three_hours');
+    assert.equal(mapped.curaleafPlacement?.route, 'MANUAL_PRESCRIPTION');
+    assert.equal(mapped.curaleafPlacement?.stage, 'AWAITING_PRESCRIPTION_ACTIVATION');
+    assert.equal(mapped.curaleafPlacement?.slaDueAt, '2026-08-18T12:00:00.000Z');
+    assert.equal(mapped.curaleafPlacement?.slaPolicy, 'three_hours');
     assert.equal(mapped.prescriptionFlow['rx-pending']?.state, 'PENDING_PLACEMENT');
+  });
+
+  it('projects quote-gate history, payment allocation, redo resolution, and Curaleaf placement SLA', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      redoOfId: '00000000-0000-4000-a000-000000000099',
+      paymentStatus: 'PAID',
+      paidAt: '2026-08-18T10:00:00.000Z',
+      resolutionStatus: 'RESOLVED',
+      resolutionReason: 'REPLACED',
+      resolvedAt: '2026-08-18T11:00:00.000Z',
+      archivedAt: '2026-08-18T11:00:00.000Z',
+      quoteSnapshot: {
+        prescriptions: [{
+          id: 'rx-manual',
+          fileId: 'rx-manual',
+          serialNumber: 'RX-MANUAL',
+          issueDate: '2026-08-18',
+          prescriber: { name: 'Dr Prescriber', pin: '123', gmcNumber: null, gphcNumber: '000123', initials: 'DP' },
+          items: [],
+        }],
+        paymentQuote: {
+          id: 'quote-pre',
+          status: 'MATCHED',
+          checkedAt: '2026-08-18T09:00:00.000Z',
+          basketFingerprint: 'basket-a',
+          patientTotalPence: 10500,
+          wholesaleTotalPence: 7000,
+          shippingPence: 500,
+        },
+        quoteChecks: [{
+          id: 'quote-post',
+          phase: 'POST_PAYMENT',
+          status: 'REVIEW_REQUIRED',
+          createdAt: '2026-08-18T10:05:00.000Z',
+          basketFingerprint: 'basket-a',
+          baselineQuoteCheckId: 'quote-pre',
+          patientTotalPence: 11000,
+          wholesaleTotalPence: 7100,
+          shippingPence: 500,
+          comparison: { patientDeltaPence: 500, wholesaleDeltaPence: 100 },
+        }],
+        paymentAllocation: {
+          id: 'allocation-1',
+          paymentId: 'payment-1',
+          amountPence: 10500,
+          status: 'ACTIVE',
+          sourceOrderId: '00000000-0000-4000-a000-000000000099',
+          replacementOrderId: order.id,
+          updatedAt: '2026-08-18T10:01:00.000Z',
+        },
+        redoContext: {
+          originalOrderId: '00000000-0000-4000-a000-000000000099',
+          replacementReason: 'Curaleaf cancellation',
+        },
+        curaleaf: {
+          prescriptionId: 'prescription-1',
+          prescriberId: 'prescriber-1',
+          prescriberState: 'UNVERIFIED',
+          prescriptionState: 'PENDING',
+          waitingFor: 'prescriber_verification',
+          waitingSince: '2026-08-18T09:00:00.000Z',
+        },
+      },
+    });
+
+    assert.deepEqual(mapped.quoteChecks.map(check => check.id), ['quote-pre', 'quote-post']);
+    assert.equal(mapped.activeQuoteCheck?.status, 'CHANGED');
+    assert.equal(mapped.activeQuoteCheck?.checkedAt, '2026-08-18T10:05:00.000Z');
+    assert.equal(mapped.activeQuoteCheck?.patientDeltaPence, 500);
+    assert.equal(mapped.paymentAllocation?.id, 'allocation-1');
+    assert.equal(mapped.paymentAllocation?.sourceOrderId, '00000000-0000-4000-a000-000000000099');
+    assert.equal(mapped.resolution?.status, 'REPLACED');
+    assert.equal(mapped.resolution?.archivedAt, '2026-08-18T11:00:00.000Z');
+    assert.equal(mapped.redoOfOrderId, '00000000-0000-4000-a000-000000000099');
+    assert.equal(mapped.redoContext?.originalOrderId, '00000000-0000-4000-a000-000000000099');
+    assert.equal(mapped.curaleafPlacement?.stage, 'AWAITING_PRESCRIBER_VERIFICATION');
+    assert.equal(mapped.curaleafPlacement?.slaDueAt, '2026-08-18T12:00:00.000Z');
+  });
+
+  it('preserves closed quote-check decisions instead of reopening them as changed', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-08-18T10:00:00.000Z',
+      sqlQuoteChecks: [{
+        id: 'quote-absorbed',
+        organisationId: order.organisationId,
+        orderId: order.id,
+        paymentId: 'payment-1',
+        phase: 'POST_PAYMENT',
+        status: 'ABSORBED',
+        baselineQuoteCheckId: 'quote-pre',
+        basketFingerprint: 'basket-a',
+        quoteFingerprint: 'quote-b',
+        patientTotalPence: 11000,
+        wholesaleTotalPence: 7100,
+        shippingPence: 500,
+        taxPence: 0,
+        rawQuote: {},
+        comparison: { patientDeltaPence: 500 },
+        createdAt: '2026-08-18T10:05:00.000Z',
+      }],
+    });
+
+    assert.equal(mapped.activeQuoteCheck?.status, 'ABSORBED');
   });
 
   it('copies stored quote wholesale onto portal line items', () => {

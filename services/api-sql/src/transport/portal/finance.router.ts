@@ -7,8 +7,9 @@ import { requireStaff } from '../../security/require-staff.js';
 import { quotedCostFromSnapshot } from '../../application/orders/finance-costing.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
+import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
 import { isTrainingDirectoryOrganisation } from '../../domain/organisation/training-directory.js';
-import { pharmacyFinanceRecognition } from './finance-recognition.js';
+import { financeRevenueBasis, pharmacyFinanceRecognition } from './finance-recognition.js';
 
 const organisationIdSchema = z.string().regex(/^(?:[a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i);
 
@@ -68,6 +69,7 @@ export function createPortalFinanceRouter(): Router {
   const router = Router();
   const orderRepo = new SqlOrderRepository();
   const patientRepo = new SqlPatientRepository();
+  const paymentRepo = new SqlPaymentRepository();
 
   router.get('/portal/finance/prescriptions', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -79,15 +81,24 @@ export function createPortalFinanceRouter(): Router {
         to: req.query.to,
       });
 
-      const [rawOrders, rawPatients] = await Promise.all([
+      const [rawOrders, rawPatients, rawAllocations] = await Promise.all([
         orderRepo.listTenantOrders(organisationId, 2000),
         patientRepo.listTenantPatients(organisationId, 2000),
+        paymentRepo.listTenantPaymentAllocations(organisationId, 4000),
       ]);
 
       const patientMap = new Map(rawPatients.map(p => [p.id, `${p.firstName} ${p.surname}`.trim() || p.email]));
+      const activeAllocationByOrder = new Map<string, number>();
+      for (const allocation of rawAllocations) {
+        if (allocation.status !== 'ACTIVE') continue;
+        activeAllocationByOrder.set(allocation.orderId, (activeAllocationByOrder.get(allocation.orderId) ?? 0) + Number(allocation.amountPence));
+      }
 
       const datedRows = rawOrders.map(order => {
-        const flags = pharmacyFinanceRecognition(order);
+        const activeAllocationPence = activeAllocationByOrder.get(order.id) ?? 0;
+        const replacementLinked = Boolean(order.redoOfId || String(order.resolutionReason || '').toUpperCase() === 'REPLACED');
+        const sourceRetainsAllocation = Boolean(order.redoOfId && (activeAllocationByOrder.get(order.redoOfId) ?? 0) > 0);
+        const flags = pharmacyFinanceRecognition({ ...order, activeAllocationPence });
         const snapshot = (order.quoteSnapshot ?? {}) as any;
         const quoted = quotedCostFromSnapshot(snapshot);
         const rawLines = snapshot?.lineItems || snapshot?.items || snapshot?.prescriptions?.flatMap((rx: any) => rx.items) || [];
@@ -112,9 +123,19 @@ export function createPortalFinanceRouter(): Router {
           };
         }) : [];
 
-        const productRevenuePence = Number(order.medicineTotalPence || (Number(order.totalPence) - Number(order.dispensingFeePence || 0)));
-        const dispensingFeePence = Number(order.dispensingFeePence || 0);
-        const patientRevenuePence = Number(order.totalPence || (productRevenuePence + dispensingFeePence));
+        const revenueBasis = financeRevenueBasis({
+          ...order,
+          activeAllocationPence,
+          replacementLinked,
+          sourceRetainsAllocation,
+        });
+        const grossProductRevenuePence = revenueBasis.productRevenuePence;
+        const grossDispensingFeePence = revenueBasis.dispensingFeePence;
+        const grossPatientRevenuePence = revenueBasis.patientRevenuePence;
+        const completedRefundPence = flags.refunded || flags.partialRefund ? flags.refundAmountPence : 0;
+        const dispensingFeePence = flags.refunded ? 0 : grossDispensingFeePence;
+        const productRevenuePence = flags.refunded ? 0 : Math.max(0, grossProductRevenuePence - completedRefundPence);
+        const patientRevenuePence = Math.max(0, grossPatientRevenuePence - completedRefundPence);
         const wholesaleProductPence = quoted.wholesaleProductPence;
         const shippingPence = quoted.shippingPence;
         const wholesalePence = quoted.wholesalePence;
@@ -136,6 +157,8 @@ export function createPortalFinanceRouter(): Router {
           fulfilmentStatus: String(order.fulfilmentStatus).toLowerCase(),
           recognised: flags.recognised,
           refunded: flags.refunded,
+          partialRefund: flags.partialRefund,
+          refundAmountPence: completedRefundPence,
           refundPending: flags.refundPending,
           productRevenuePence,
           dispensingFeePence,
@@ -155,7 +178,7 @@ export function createPortalFinanceRouter(): Router {
         .sort((left, right) => right.financialEventAt.localeCompare(left.financialEventAt));
 
       const recognisedRows = rangedRows.filter(r => r.recognised);
-      const refundedRows = rangedRows.filter(r => r.refunded);
+      const refundedRows = rangedRows.filter(r => r.refunded || r.partialRefund);
       const refundPendingRows = rangedRows.filter(r => r.refundPending);
       const pendingPaymentRows = rangedRows.filter(r => ['pending', 'awaiting_manual_payment', 'awaiting_payment'].includes(r.paymentStatus));
       const costedRows = recognisedRows.filter(r => r.wholesaleComplete);
@@ -165,7 +188,7 @@ export function createPortalFinanceRouter(): Router {
         paidPrescriptionCount: recognisedRows.length,
         pendingPrescriptionCount: pendingPaymentRows.length,
         refundedPrescriptionCount: refundedRows.length,
-        refundedPatientPence: refundedRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
+        refundedPatientPence: refundedRows.reduce((sum, r) => sum + r.refundAmountPence, 0),
         refundPendingCount: refundPendingRows.length,
         refundPendingPatientPence: refundPendingRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
         patientRevenuePence: recognisedRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),

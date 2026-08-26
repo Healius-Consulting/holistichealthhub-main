@@ -68,6 +68,8 @@ export type SqlRefundRow = {
   createdAt?: string | null;
   confirmedAt?: string | null;
   confirmedByUid?: string | null;
+  verificationStatus?: string | null;
+  verifiedAt?: string | null;
 };
 
 export function portalRefundFromSql(row: SqlRefundRow) {
@@ -75,8 +77,9 @@ export function portalRefundFromSql(row: SqlRefundRow) {
   return {
     id: row.id,
     status: status === 'COMPLETED' ? 'completed' as const
-      : status === 'FAILED' ? 'failed' as const
-        : 'pending_confirmation' as const,
+      : status === 'VERIFICATION_PENDING' ? 'verifying' as const
+        : ['RECONCILIATION_REQUIRED', 'FAILED'].includes(status) ? 'reconciliation_required' as const
+          : 'pending_confirmation' as const,
     amountPence: Math.max(0, Number(row.amountPence || 0)),
     method: String(row.route || '').toUpperCase() === 'WORLDPAY' ? 'worldpay_portal' as const : 'pharmacy_manual' as const,
     paymentReference: row.externalReference || row.id,
@@ -88,6 +91,8 @@ export function portalRefundFromSql(row: SqlRefundRow) {
     externalReference: row.externalReference || undefined,
     confirmedAt: row.confirmedAt || undefined,
     confirmedBy: row.confirmedByUid || undefined,
+    verificationReference: row.verificationStatus || undefined,
+    verifiedAt: row.verifiedAt || undefined,
   };
 }
 

@@ -297,7 +297,6 @@ export function orderRequiresCuraleafCancel(order: PatientOrder): boolean {
   const livePurchaseOrder = order.prescriptions.some(prescription =>
     Boolean(prescription.purchaseOrderState)
     && prescription.purchaseOrderState !== 'CANCELLED'
-    && prescription.purchaseOrderState !== 'REJECTED'
   );
   const livePrescription = order.prescriptions.some(prescription =>
     prescription.curaleafPrescriptionState === 'PENDING'
@@ -339,6 +338,9 @@ function supplierCancelled(order: PatientOrder) {
 }
 
 export function orderCancellationResolution(order: PatientOrder): CancellationResolution {
+  if (order.resolution?.status === 'REFUNDED') return 'refunded';
+  if (order.resolution && ['REPLACED', 'SPLIT_RESOLVED'].includes(order.resolution.status)) return 'resolved';
+  if (order.resolution && ['REPLACEMENT_PENDING', 'REFUND_REQUIRED', 'REFUND_VERIFYING', 'RECONCILIATION_REQUIRED'].includes(order.resolution.status)) return 'needs-action';
   if (!order.cancellation && order.lifecycleStatus !== 'cancelled' && !supplierCancelled(order)) return 'none';
   if (orderRequiresCuraleafCancel(order)) return 'needs-action';
   if (order.redoneByOrderId) return order.refund?.status === 'completed' ? 'refunded' : 'resolved';
@@ -347,7 +349,7 @@ export function orderCancellationResolution(order: PatientOrder): CancellationRe
   const supplierActionOutstanding = ['contact_required', 'awaiting_confirmation'].includes(order.curaleafCancellation?.status ?? '')
     || ['curaleaf_contact_required', 'awaiting_curaleaf_confirmation'].includes(order.cancellation?.status ?? '');
   const refundActionOutstanding = order.cancellation?.status === 'refund_required'
-    || order.refund?.status === 'pending_confirmation'
+    || Boolean(order.refund && order.refund.status !== 'completed')
     || order.payment.status === 'paid';
 
   if (supplierActionOutstanding || refundActionOutstanding) return 'needs-action';

@@ -15,6 +15,7 @@ export interface OrderRecord {
   organisationId: string;
   patientId: string;
   draftId: string | null;
+  redoOfId?: string | null;
   orderNumber: string | null;
   status: string;
   paymentStatus: string;
@@ -32,6 +33,10 @@ export interface OrderRecord {
   paidAt: string | null;
   collectedAt: string | null;
   cancelledAt: string | null;
+  resolutionStatus?: string | null;
+  resolutionReason?: string | null;
+  resolvedAt?: string | null;
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,9 +63,11 @@ export interface CreateOrderInput {
 export interface OrderRepositoryPort {
   findDraftById(id: string, organisationId: string): Promise<OrderDraftRecord | null>;
   listTenantDrafts(organisationId: string, limit?: number): Promise<OrderDraftRecord[]>;
+  listOpenDrafts(limit?: number): Promise<OrderDraftRecord[]>;
   createDraft(data: { organisationId: string; patientId?: string | null; payload: unknown; createdByUid: string }): Promise<{ id?: string }>;
   updateDraft(data: { id: string; organisationId: string; patientId?: string | null; payload: unknown }): Promise<{ id: string } | null>;
   deleteDraft(id: string, organisationId: string): Promise<boolean>;
+  markDraftAbandoned(id: string, scrubbedPayload: unknown): Promise<void>;
   findOrderById(id: string, organisationId: string): Promise<OrderRecord | null>;
   createOrder(data: CreateOrderInput): Promise<{ id?: string }>;
   updateOrderStatus(data: {
@@ -83,6 +90,12 @@ export interface OrderRepositoryPort {
     dispensingFeePence?: number;
     medicineTotalPence?: number;
   }): Promise<boolean>;
+  linkReplacementResolution(data: {
+    sourceOrderId: string;
+    replacementOrderId: string;
+    organisationId: string;
+  }): Promise<void>;
+  markRefundResolution(data: { orderId: string; organisationId: string; fullyRefunded: boolean }): Promise<void>;
   appendPlacementEvent(data: {
     organisationId: string;
     orderId: string;

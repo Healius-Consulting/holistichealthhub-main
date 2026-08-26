@@ -1,5 +1,5 @@
-import { orderMoneyWasTaken } from '../orders/paid-refund.js';
 import {
+  applyCancelledPurchaseOrderSnapshot,
   applyShipmentSnapshot,
   curaleafEntityRecord,
   curaleafEventKey,
@@ -14,7 +14,7 @@ import {
   orderMatchesRejectedPrescriber,
   shipmentBelongsToOrder,
   stampCuraleafCancellationOnSnapshot,
-  stampCuraleafRejectionOnSnapshot,
+  stampCuraleafAttentionOnSnapshot,
   supplierCancellationAlreadyConfirmed,
   type CuraleafEventKind,
 } from '../integrations/curaleaf-events.js';
@@ -79,37 +79,47 @@ async function persistSupplierCancellation(
     entityId: string;
     summary: string;
     afterPharmacyCall?: boolean;
+    purchaseOrder?: CuraleafPurchaseOrderLike | null;
   },
 ) {
   if (supplierCancellationAlreadyConfirmed(order.quoteSnapshot)) return;
-  const nextSnapshot = input.afterPharmacyCall
-    ? stampCuraleafCancellationOnSnapshot(order.quoteSnapshot, {
+  const cancellationStamped = stampCuraleafCancellationOnSnapshot(order.quoteSnapshot, {
       action: 'confirmed',
       purchaseOrderId: input.purchaseOrderId,
       prescriptionId: input.prescriptionId,
       prescriptionState: input.source === 'prescription' ? 'CANCELLED' : null,
       reference: input.source === 'purchase_order' ? 'curaleaf_po_cancelled' : `curaleaf_${input.source}_cancelled`,
-      note: 'Curaleaf cancelled the order after pharmacy contact.',
-    })
-    : stampCuraleafRejectionOnSnapshot(order.quoteSnapshot, {
-      source: input.source,
-      purchaseOrderId: input.purchaseOrderId,
-      prescriptionId: input.prescriptionId,
-      prescriberId: input.prescriberId,
-      note: input.summary,
+      note: input.afterPharmacyCall
+        ? 'Curaleaf cancelled the order after pharmacy contact.'
+        : 'Curaleaf reported the supplier record as cancelled.',
     });
+  const baseSnapshot = input.source === 'purchase_order' && input.purchaseOrder
+    ? applyCancelledPurchaseOrderSnapshot(cancellationStamped, input.purchaseOrder)
+    : stampCuraleafAttentionOnSnapshot(cancellationStamped, {
+      source: input.source,
+      code: input.source === 'prescriber' ? 'PRESCRIBER_ARCHIVED' : 'PRESCRIPTION_CANCELLED',
+      reason: input.summary,
+      prescriberId: input.prescriberId,
+      prescriptionId: input.prescriptionId,
+      prescriberState: input.source === 'prescriber' ? 'ARCHIVED' : null,
+      prescriptionState: input.source === 'prescription' ? 'CANCELLED' : null,
+      terminal: true,
+    });
+  const typedSnapshot = baseSnapshot as Record<string, unknown>;
+  const nextSnapshot = {
+    ...typedSnapshot,
+    cancellation: {
+      ...(typedSnapshot.cancellation && typeof typedSnapshot.cancellation === 'object'
+        ? typedSnapshot.cancellation as Record<string, unknown>
+        : {}),
+      status: 'resolution_required',
+    },
+  };
   await deps.orderRepo.updateQuoteSnapshot({
     id: order.id,
     organisationId: order.organisationId,
     quoteSnapshot: nextSnapshot,
     fulfilmentStatus: 'EXCEPTION',
-  });
-  await deps.orderRepo.updateOrderStatus({
-    id: order.id,
-    organisationId: order.organisationId,
-    status: 'CANCELLED',
-    paymentStatus: orderMoneyWasTaken(order) ? 'REFUND_REQUIRED' : 'CANCELLED',
-    cancelledAt: new Date().toISOString(),
   });
   const recipients = await listPharmacyRecipients(order.organisationId, deps);
   await queueEmailToRecipients(
@@ -181,10 +191,9 @@ async function pollKind(
             source: 'purchase_order',
             purchaseOrderId: String(record.id || ''),
             entityId: String(record.id || ''),
-            summary: afterPharmacyCall
-              ? 'Curaleaf cancelled the purchase order. Refund or replace the paid order.'
-              : 'Curaleaf rejected the purchase order. Refund or replace the paid order.',
+            summary: 'Curaleaf cancelled the purchase order. Resolve the unfulfilled packs by replacement or refund.',
             afterPharmacyCall,
+            purchaseOrder,
           });
         }
       } else if (kind === 'purchaseOrder') {
@@ -244,24 +253,89 @@ async function pollKind(
             source: 'prescription',
             prescriptionId: String(record.id || ''),
             entityId: String(record.id || ''),
-            summary: afterPharmacyCall
-              ? 'Curaleaf cancelled the prescription after pharmacy contact. Refund or replace the paid order.'
-              : 'Curaleaf rejected the prescription. Refund or replace the paid order.',
+            summary: 'Curaleaf cancelled the prescription. Review replacement or refund options.',
             afterPharmacyCall,
           });
         }
+      } else if (kind === 'prescription') {
+        const prescriptionState = String(record.state || '').toUpperCase();
+        if (['PENDING', 'ACTIVE', 'FULFILLED', 'EXPIRED'].includes(prescriptionState)) {
+          const sqlIds = await sqlOrderIdsForPrescription(connection.organisationId, String(record.id || ''), deps);
+          const orders = await resolveOrdersForCuraleafEntity(
+            connection.organisationId,
+            sqlIds,
+            deps,
+            order => orderMatchesCancelledPrescription(order, record),
+          );
+          for (const order of orders) {
+            const snapshot = order.quoteSnapshot && typeof order.quoteSnapshot === 'object'
+              ? order.quoteSnapshot as Record<string, unknown>
+              : {};
+            const prior = snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
+              ? snapshot.curaleaf as Record<string, unknown>
+              : {};
+            await persistCuraleafPrescriptionIdentity({
+              organisationId: order.organisationId,
+              orderId: order.id,
+              patientId: order.patientId,
+              snapshot,
+              prescriptionId: String(record.id || ''),
+              prescriberId: typeof prior.prescriberId === 'string' ? prior.prescriberId : null,
+              prescriptionState,
+              purchaseOrder: null,
+              fulfilmentStatus: prescriptionState === 'EXPIRED' || prescriptionState === 'FULFILLED' ? 'EXCEPTION' : 'SUPPLIER_PENDING',
+            });
+            if (prescriptionState === 'ACTIVE') {
+              const { executeCuraleafOrderPlacement } = await import('../integrations/curaleaf.service.js');
+              await executeCuraleafOrderPlacement(connection, order).catch(error => {
+                console.warn('[Curaleaf poll] Active prescription placement retry failed.', {
+                  code: error instanceof Error ? error.name : 'UNKNOWN',
+                });
+              });
+            }
+          }
+        }
       }
-      if (kind === 'prescriber' && isCuraleafPrescriberRejected(record.state)) {
+      if (kind === 'prescriber') {
+        const prescriberState = String(record.state || '').toUpperCase();
+        if (!['UNVERIFIED', 'VERIFIED', 'ARCHIVED'].includes(prescriberState)) continue;
         const orders = await deps.orderRepo.listTenantOrders(connection.organisationId, 500);
         for (const order of orders) {
           if (!orderMatchesRejectedPrescriber(order, record)) continue;
-          if (curaleafRequiresSupplierCancel(order.quoteSnapshot)) continue;
-          await persistSupplierCancellation(order, deps, {
-            source: 'prescriber',
+          if (isCuraleafPrescriberRejected(prescriberState)) {
+            await persistSupplierCancellation(order, deps, {
+              source: 'prescriber',
+              prescriberId: String(record.id || ''),
+              entityId: String(record.id || ''),
+              summary: 'Curaleaf archived the prescriber. Correct or replace the prescriber before continuing.',
+            });
+            continue;
+          }
+          const snapshot = order.quoteSnapshot && typeof order.quoteSnapshot === 'object'
+            ? order.quoteSnapshot as Record<string, unknown>
+            : {};
+          const prior = snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
+            ? snapshot.curaleaf as Record<string, unknown>
+            : {};
+          await persistCuraleafPrescriptionIdentity({
+            organisationId: order.organisationId,
+            orderId: order.id,
+            patientId: order.patientId,
+            snapshot,
+            prescriptionId: typeof prior.prescriptionId === 'string' ? prior.prescriptionId : null,
             prescriberId: String(record.id || ''),
-            entityId: String(record.id || ''),
-            summary: 'Curaleaf rejected the prescriber. Refund or replace the paid order.',
+            prescriberState: prescriberState as 'UNVERIFIED' | 'VERIFIED',
+            purchaseOrder: null,
+            fulfilmentStatus: 'SUPPLIER_PENDING',
           });
+          if (prescriberState === 'VERIFIED') {
+            const { executeCuraleafOrderPlacement } = await import('../integrations/curaleaf.service.js');
+            await executeCuraleafOrderPlacement(connection, order).catch(error => {
+              console.warn('[Curaleaf poll] Verified prescriber placement retry failed.', {
+                code: error instanceof Error ? error.name : 'UNKNOWN',
+              });
+            });
+          }
         }
       }
       if (kind === 'shipment') {

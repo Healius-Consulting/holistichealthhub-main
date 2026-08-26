@@ -511,10 +511,6 @@ export function getPublicPaymentReceipt(token: string) {
   return apiRequest<{ status: 'pending' | 'paid' | 'failed' | 'expired'; message: string }>(`/v1/public/receipts/${encodeURIComponent(token)}`);
 }
 
-export function recordCuraleafRejection(orderId: string, input: { organisationId: string; prescriptionId: string; reason: string; rejectedAt?: string; supportCaseId?: string }) {
-  return apiRequest<{ id: string; supportCaseId: string }>(`/v1/portal/orders/${encodeURIComponent(orderId)}/curaleaf-rejections`, { method: 'POST', body: JSON.stringify(input) });
-}
-
 export function attachPrescriptionRenewal(orderId: string, prescriptionId: string, input: { organisationId: string; renewedPrescription: Record<string, unknown> }) {
   return apiRequest(`/v1/portal/orders/${encodeURIComponent(orderId)}/prescriptions/${encodeURIComponent(prescriptionId)}/renewal`, { method: 'POST', body: JSON.stringify(input) });
 }
@@ -620,7 +616,7 @@ export function createPrescriberDirectoryRecord(input: Omit<import('./contracts'
 
 export function resolvePortalQuoteReview(orderId: string, input: {
   organisationId: string;
-  action: 'absorb' | 'continue_as_fee' | 'refresh';
+  action: 'absorb' | 'refresh';
 }) {
   return apiRequest<{ action: string; order: import('./contracts').PortalOrderRecord }>(
     `/v1/portal/orders/${encodeURIComponent(orderId)}/quote-review/resolve`,
