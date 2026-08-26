@@ -680,7 +680,6 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
             <div className="order-crm-record__titles">
               <strong>{patient.name}</strong>
               <span className="order-crm-record__ref">{contactLine || 'Contact details not recorded'}</span>
-              <em>{meta.description}</em>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
@@ -938,7 +937,6 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
             <div className="order-crm-record__titles">
               <strong>{record.name}</strong>
               <span className="order-crm-record__ref">{enquiry.caseReference}{record.sourceLabel ? ` · ${record.sourceLabel}` : ''}</span>
-              <em>{meta.description}</em>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>

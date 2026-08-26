@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { brandSwatchStyle } from '../utils/tenantTheme';
-import { getCuraleafConnectionStatus, getReferralLink, isApiConfigured, updatePaymentSettings, updatePharmacyProfile } from '../shared/api';
+import { getCuraleafConnectionStatus, getReferralLink, isApiConfigured, refreshCuraleafConnection, updatePaymentSettings, updatePharmacyProfile } from '../shared/api';
 import type { CuraleafConnectionStatus } from '../shared/contracts';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
@@ -35,6 +35,7 @@ export default function PharmacySettings() {
   const [linkError, setLinkError] = useState('');
   const [linkRefresh, setLinkRefresh] = useState(0);
   const [curaleafStatus, setCuraleafStatus] = useState<CuraleafConnectionStatus | null>(null);
+  const [curaleafRefreshing, setCuraleafRefreshing] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileForm, setProfileForm] = useState({
     tradingName: '',
@@ -111,6 +112,21 @@ export default function PharmacySettings() {
   }, [formUrl]);
 
   const notify = (message: string) => dispatch({ type: 'ADD_TOAST', message, toastType: 'success' });
+
+  const refreshCuraleaf = async () => {
+    setCuraleafRefreshing(true);
+    try {
+      // Preview has no write endpoint, so re-read the status instead of forcing a refresh.
+      const status = isLocalPortalPreview
+        ? await getCuraleafConnectionStatus(organisation.id)
+        : await refreshCuraleafConnection(organisation.id);
+      setCuraleafStatus(status);
+    } catch (error) {
+      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The Curaleaf connection could not be refreshed.', toastType: 'error' });
+    } finally {
+      setCuraleafRefreshing(false);
+    }
+  };
   const copyLink = async () => {
     if (!formUrl) return;
     await navigator.clipboard.writeText(formUrl);
@@ -199,6 +215,26 @@ export default function PharmacySettings() {
 
       {activeTab === 'settings' ? (
         <div className="settings-stack">
+          <section className="card settings-panel settings-panel--curaleaf">
+            <div className="section-heading">
+              <div>
+                <p className="section-label">Supplier</p>
+                <h3><Tags size={17} /> Curaleaf</h3>
+              </div>
+            </div>
+            <div className="settings-curaleaf">
+              <div className="settings-curaleaf__id">
+                <span>Customer ID</span>
+                <strong>{curaleafStatus?.customerId ?? 'Not assigned'}</strong>
+              </div>
+              <button type="button" className="btn btn-secondary" disabled={curaleafRefreshing} onClick={() => void refreshCuraleaf()}>
+                <RefreshCw size={14} aria-hidden="true" /> {curaleafRefreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+            </div>
+            <p className="settings-copy">Curaleaf supplies patient price and wholesale cost. Your team can only add an optional dispensing charge while building an order.</p>
+            <button type="button" className="settings-curaleaf__catalogue" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
+          </section>
+
           <section className="card settings-panel settings-panel--profile">
             <div className="section-heading">
               <div>
@@ -283,39 +319,6 @@ export default function PharmacySettings() {
               }}
             />
           </section>
-
-          <div className="settings-split">
-            <section className="card settings-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="section-label">Pricing</p>
-                  <h3><Tags size={17} /> Curaleaf prices & dispensing</h3>
-                </div>
-              </div>
-              <div className="settings-meta-grid">
-                <div><span>Curaleaf connection</span><strong>{curaleafStatus?.connected ? 'Connected' : curaleafStatus?.status?.replaceAll('_', ' ') ?? 'Managed by HHH'}</strong></div>
-                <div><span>Curaleaf customer ID</span><strong>{curaleafStatus?.customerId ?? 'Not assigned'}</strong></div>
-                <div><span>Dispensing charge</span><strong>£5, £10, £15 or custom</strong></div>
-              </div>
-              <p className="settings-copy">Curaleaf supplies patient price and wholesale cost. Your team can only add an optional dispensing charge while building an order.</p>
-              <button type="button" className="btn btn-secondary" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
-            </section>
-
-            <section className="card settings-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="section-label">Readiness</p>
-                  <h3><ShieldCheck size={17} /> Operational status</h3>
-                </div>
-                <CheckCircle2 size={20} className="text-green" />
-              </div>
-              <div className="settings-meta-grid">
-                <div><span>Workspace</span><strong>{state.workspaceMode === 'live' ? 'Live' : 'Training'}</strong></div>
-                <div><span>Intake link</span><strong>{organisation.status === 'paused' ? 'Off' : 'Live'}</strong></div>
-              </div>
-              <p className="settings-copy">{state.workspaceMode === 'live' ? 'This pharmacy can see patients HHH has referred here and can dispense.' : 'Enquiries already go to HHH. This workspace shows training examples until HHH flips you to live.'}</p>
-            </section>
-          </div>
 
         </div>
       ) : (

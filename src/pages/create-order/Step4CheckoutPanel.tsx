@@ -219,19 +219,21 @@ export default function Step4CheckoutPanel({
                 <span>£</span>
                 <input
                   type="number"
-                  min="5"
+                  min="0"
                   max="15"
                   step="0.01"
                   value={activeOrder.dispensingFee || ''}
                   onFocus={event => event.currentTarget.select()}
                   onChange={event => {
                     const amount = Number(event.target.value);
-                    onSetDispensingFee(event.target.value === '' ? 0 : Math.max(5, Math.min(15, amount)));
+                    onSetDispensingFee(event.target.value === '' ? 0 : Math.max(0, Math.min(15, amount)));
                   }}
                   aria-label="Custom dispensing charge"
+                  aria-describedby="rx-dispensing-custom-hint"
                 />
               </span>
             </label>
+            <p className="rx-dispensing-hint" id="rx-dispensing-custom-hint">Any amount from £0 to £15. Presets above are shortcuts.</p>
           </div>
 
           <div className="rx-step4-decide__route">
@@ -321,7 +323,7 @@ export default function Step4CheckoutPanel({
                   className={`btn btn-sm ${activeOrder.redoContext.priceResolution === 'absorb' ? 'btn-primary' : 'btn-secondary'}`}
                   onClick={onChooseAbsorbDifference}
                 >
-                  <Banknote size={12} /> Absorb {money(Math.abs(paidRedoAmountDifference))}
+                  <Banknote size={12} /> Accept
                 </button>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={onCancelReplacement}>
                   <X size={12} /> Cancel replacement

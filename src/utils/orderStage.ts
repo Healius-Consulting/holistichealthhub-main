@@ -42,6 +42,31 @@ export function prescriptionPackTotals(prescription: OrderPrescription) {
   }), { ordered: 0, shipped: 0, received: 0, collected: 0, remaining: 0 });
 }
 
+/**
+ * Supply is incomplete while the supplier still owes packs or goods-in has not
+ * verified everything dispatched. Collection is deliberately excluded: packs
+ * sitting on the dispensary shelf are ready to hand out, not outstanding stock.
+ */
+export function prescriptionSupplyIncomplete(prescription: OrderPrescription) {
+  return (prescription.fulfilmentLines ?? []).some(line => line.remaining > 0 || line.received < line.ordered);
+}
+
+export function orderSupplyIncomplete(order: PatientOrder) {
+  return order.prescriptions.some(prescription =>
+    !prescriptionIsCancelled(prescription) && prescriptionSupplyIncomplete(prescription),
+  );
+}
+
+/** Packs verified into the dispensary that the patient has not collected yet. */
+export function prescriptionUncollectedReadyPacks(prescription: OrderPrescription) {
+  return (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + Math.max(0, line.received - line.collected), 0);
+}
+
+export function orderUncollectedReadyPacks(order: PatientOrder) {
+  return order.prescriptions.reduce((sum, prescription) =>
+    prescriptionIsCancelled(prescription) ? sum : sum + prescriptionUncollectedReadyPacks(prescription), 0);
+}
+
 export function orderPackTotals(order: PatientOrder) {
   return order.prescriptions.reduce((totals, prescription) => {
     const packs = prescriptionPackTotals(prescription);

@@ -24,6 +24,7 @@ import {
   Search,
   ShieldAlert,
   Truck,
+  User,
   X,
   XCircle,
   PhoneCall,
@@ -63,7 +64,11 @@ import {
   orderAwaitingCuraleafCancel,
   orderSplitPackSnapshot,
   orderStage,
+  orderSupplyIncomplete,
+  orderUncollectedReadyPacks,
   prescriptionIsCancelled,
+  prescriptionSupplyIncomplete,
+  prescriptionUncollectedReadyPacks,
   prescriptionStatusLabel,
   prescriptionStatusChipTone,
   stageMatchesFilter,
@@ -221,9 +226,9 @@ function recordStageMeta(record: OrderRecord) {
       description: outOfStock
         ? 'Curaleaf reports a line out of stock. Recheck the quote or cancel this order.'
         : delta > 0
-          ? 'Patient price increased after payment. Absorb the difference or cancel this order.'
+          ? 'Patient price increased after payment. Accept the difference or cancel this order.'
           : delta < 0
-            ? 'Patient price dropped after payment. Absorb the difference and keep the patient payment unchanged, or cancel this order.'
+            ? 'Patient price dropped after payment. Accept the difference and keep the patient payment unchanged, or cancel this order.'
             : 'The paid quote could not be compared. Refresh to continue placement, or cancel this order.',
       tone: 'warning',
       icon: AlertTriangle,
@@ -873,11 +878,11 @@ export default function Orders() {
 
   const handleOrderHandout = async (order: PatientOrder, partial = false, shipmentId?: string) => {
     if (handoutBusy) return;
-    const remainingOpen = order.prescriptions.some(prescription =>
-      (prescription.fulfilmentLines ?? []).some(line => line.remaining > 0 || line.received < line.ordered || line.collected < line.ordered),
-    );
-    if (!partial && remainingOpen) {
-      dispatch({ type: 'ADD_TOAST', message: 'Remaining packs are still awaiting dispatch. Use partial handover for arrived packs only.', toastType: 'warning' });
+    // Supply completeness and collection are separate questions: packs already on the
+    // dispensary shelf must never look like stock the supplier still owes.
+    const supplyIncomplete = orderSupplyIncomplete(order);
+    if (!partial && supplyIncomplete) {
+      dispatch({ type: 'ADD_TOAST', message: 'Remaining packs are still awaiting dispatch. Use partial handout for arrived packs only.', toastType: 'warning' });
       return;
     }
     setHandoutBusy(true);
@@ -893,11 +898,11 @@ export default function Orders() {
       dispatch({ type: 'HANDOUT_ORDER', orderId: order.id, partial, shipmentId });
       dispatch({
         type: 'ADD_TOAST',
-        message: partial ? 'Partial handover recorded. Remaining packs are still awaiting dispatch.' : 'Handover recorded. The order is now completed.',
+        message: partial ? 'Partial handout recorded. Remaining packs are still awaiting dispatch.' : 'Handout recorded. The order is now completed.',
         toastType: 'success',
       });
       setHandoutOrderId(null);
-      if (!partial && !remainingOpen) setActiveFilter('completed');
+      if (!partial && !supplyIncomplete) setActiveFilter('completed');
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The handout could not be recorded.', toastType: 'error' });
     } finally {
@@ -1244,17 +1249,17 @@ export default function Orders() {
             <span className="order-handout-dialog__icon"><PackageCheck size={22} /></span>
             <div>
               <small>Patient handout</small>
-              <h2 id="order-handout-title">{handoutPartial ? 'Confirm partial handover to patient' : 'Confirm medication has been handed to the patient'}</h2>
+              <h2 id="order-handout-title">{handoutPartial ? 'Confirm partial handout to patient' : 'Confirm medication has been handed to the patient'}</h2>
               <p id="order-handout-description">
                 {handoutPartial
-                  ? `This records handover of arrived packs only for ${orderReference(selected.order)}. Remaining packs are still awaiting dispatch.`
+                  ? `This records handout of arrived packs only for ${orderReference(selected.order)}. Remaining packs are still awaiting dispatch.`
                   : `This completes ${orderReference(selected.order)} and records the handout in the audit trail.`}
               </p>
             </div>
             <footer>
               <button type="button" className="btn btn-secondary" disabled={handoutBusy} onClick={() => { setHandoutOrderId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); }}>Cancel</button>
               <button type="button" className="btn btn-primary" disabled={handoutBusy} onClick={() => void handleOrderHandout(selected.order, handoutPartial, handoutShipmentId)}>
-                <Check size={14} /> {handoutBusy ? 'Recording handout…' : handoutPartial ? 'Confirm partial handover' : 'Confirm handout'}
+                <Check size={14} /> {handoutBusy ? 'Recording handout…' : handoutPartial ? 'Confirm partial handout' : 'Confirm handout'}
               </button>
             </footer>
           </section>
@@ -1416,7 +1421,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
 }) {
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [copiedDetailKey, setCopiedDetailKey] = useState<string | null>(null);
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const { order, patient, stage } = record;
   const pharmacy = state.organisations.find(organisation => organisation.id === state.currentOrganisationId);
   const meta = recordStageMeta(record);
@@ -1431,12 +1436,16 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const curaleafCancellationLocked = Boolean(order.curaleafCancellation && order.curaleafCancellation.status !== 'confirmed');
   const mayCancel = !order.cancellation && !['collected', 'cancelled'].includes(stage) && (quoteReviewIsOpen(order) || !orderRequiresCuraleafCancel(order));
   const hasCuraleafOrder = orderRequiresCuraleafCancel(order);
-  const remainingOpen = order.prescriptions.some(prescription =>
-    (prescription.fulfilmentLines ?? []).some(line => line.remaining > 0 || line.received < line.ordered || line.collected < line.ordered),
-  );
-  const canFullHandout = stage === 'ready' && !remainingOpen;
+  const supplyIncomplete = orderSupplyIncomplete(order);
+  const canFullHandout = stage === 'ready' && !supplyIncomplete && orderUncollectedReadyPacks(order) > 0;
   const reviewOpen = quoteReviewIsOpen(order) && !supplierCancelledAfterCall(order);
   const showSupplierCancel = order.payment.status === 'paid' && supplierCancelledAfterCall(order) && !cancellationClosed;
+
+  const openPatientRecord = () => {
+    if (!order.patientId) return;
+    dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient', id: order.patientId } });
+    dispatch({ type: 'SET_SCREEN', screen: 'patients' });
+  };
 
   const handleCopy = (key: string, text: string) => {
     void navigator.clipboard.writeText(text);
@@ -1476,7 +1485,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
                 {order.redoContext ? 'Replacement' : 'Order'} {orderReference(order)}
                 {order.redoContext ? ` · replaces #${order.redoContext.originalOrderId}` : ''}
               </span>
-              <em>{meta.description}</em>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
@@ -1488,7 +1496,10 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
             <span className="order-crm-record__opened">Opened {formatDate(order.date)}</span>
           </div>
           <div className="order-crm-record__actions" role="group" aria-label="Order actions">
-            {canFullHandout ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(false)}><Check size={13} /> Hand over</button> : null}
+            {canFullHandout ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(false)}><Check size={13} /> Handout</button> : null}
+            {order.patientId ? (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={openPatientRecord}><User size={13} aria-hidden="true" /> Open patient</button>
+            ) : null}
             {mayCancel ? <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenCancellation}><XCircle size={13} /> Cancel order</button> : null}
           </div>
         </div>
@@ -2071,8 +2082,8 @@ function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
     : missingBaseline
       ? 'The quote attached to payment cannot be proved. Recheck keeps placement held for reconciliation; cancellation can move to replacement or refund.'
       : delta !== 0
-        ? `Absorb the ${money(Math.abs(delta) / 100)} ${delta > 0 ? 'increase' : 'decrease'} and keep the patient payment unchanged, or cancel this order.`
-        : 'The supplier cost changed. Absorb the difference and keep the patient payment unchanged, or cancel this order.';
+        ? `Accept the ${money(Math.abs(delta) / 100)} ${delta > 0 ? 'increase' : 'decrease'} and keep the patient payment unchanged, or cancel this order.`
+        : 'The supplier cost changed. Accept the difference and keep the patient payment unchanged, or cancel this order.';
   return (
     <section className="quote-review-panel" aria-labelledby="quote-review-title">
       <header className="quote-review-panel__header">
@@ -2100,7 +2111,7 @@ function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
           </button>
         ) : (
           <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('absorb')}>
-            Absorb{delta !== 0 ? ` ${money(Math.abs(delta) / 100)}` : ' difference'}
+            Accept
           </button>
         )}
         <button type="button" className="btn btn-secondary" disabled={busy} onClick={onCancel}>
@@ -2558,18 +2569,20 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
   const statusChipTone = prescriptionStatusChipTone(prescription);
   const totalReceivedPacks = (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + (line.received ?? 0), 0);
   const totalShippedPacks = (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + (line.shipped ?? 0), 0);
-  const arrivedNotCollectedPacks = (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + Math.max(0, (line.received ?? 0) - (line.collected ?? 0)), 0);
   const hasCheckedInPacks = totalReceivedPacks > 0;
   const hasShippedNotCheckedIn = totalShippedPacks > totalReceivedPacks;
 
-  const remainingOpen = (prescription.fulfilmentLines ?? []).some(line => line.remaining > 0 || line.received < line.ordered || line.collected < line.ordered);
-  const isCollected = !remainingOpen && prescription.status === 'collected';
+  // Supply outstanding (supplier still owes packs, or goods-in has not verified a dispatch)
+  // is a different question from packs waiting on the shelf for the patient.
+  const supplyIncomplete = prescriptionSupplyIncomplete(prescription);
+  const uncollectedReadyPacks = prescriptionUncollectedReadyPacks(prescription);
+  const isCollected = !supplyIncomplete && uncollectedReadyPacks === 0 && prescription.status === 'collected';
   const selectedConsignmentCollected = selectedShipmentState === 'collected';
   const selectedConsignmentReady = selectedShipmentState === 'ready_for_collection';
   const selectedConsignmentReceived = (selectedShipmentState === 'received' || selectedConsignmentReady || selectedConsignmentCollected) && hasCheckedInPacks;
   const isReady = !isCollected && (prescription.status === 'ready' || selectedConsignmentReady);
   const isDelivered = !isCollected && !isReady && (prescription.status === 'received' || selectedConsignmentReceived || (hasCheckedInPacks && prescription.status === 'partially-received'));
-  const isPartiallyDelivered = !isCollected && hasCheckedInPacks && (prescription.status === 'partially-received' || selectedShipmentState === 'partially_received' || (remainingOpen && (prescription.receivedItems?.some(item => item.quantityReceived > 0) || (prescription.fulfilmentLines ?? []).some(line => line.received > 0))));
+  const isPartiallyDelivered = !isCollected && hasCheckedInPacks && (prescription.status === 'partially-received' || selectedShipmentState === 'partially_received' || (supplyIncomplete && (prescription.receivedItems?.some(item => item.quantityReceived > 0) || (prescription.fulfilmentLines ?? []).some(line => line.received > 0))));
 
   const selectedConsignment = selectedShipmentId
     ? prescription.shipments?.find(shipment => shipment.id === selectedShipmentId)
@@ -2597,13 +2610,24 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
     && hasShippedNotCheckedIn
     && isDispatchedPhase;
 
-  const readyControl = isDelivered && !remainingOpen;
-  const partialReadyControl = (isPartiallyDelivered || (isDelivered && remainingOpen)) && !selectedConsignmentReady && !selectedConsignmentCollected;
-  const partialHandoutControl = remainingOpen
-    && arrivedNotCollectedPacks > 0
+  // Packs sitting in the selected consignment that goods-in verified but nobody has handed out.
+  const consignmentUncollectedPacks = prescription.items.reduce((sum, item) => {
+    const line = prescription.fulfilmentLines?.find(candidate => candidate.productId === item.productId);
+    const uncollected = Math.max(0, (line?.received ?? 0) - (line?.collected ?? 0));
+    const inConsignment = consignmentPacksFor(item.productId);
+    return sum + (inConsignment > 0 ? Math.min(inConsignment, uncollected) : uncollected);
+  }, 0);
+  const handoutPacks = consignmentUncollectedPacks || uncollectedReadyPacks;
+
+  const readyControl = isDelivered && !supplyIncomplete;
+  const partialReadyControl = (isPartiallyDelivered || (isDelivered && supplyIncomplete)) && !selectedConsignmentReady && !selectedConsignmentCollected;
+  const partialHandoutControl = supplyIncomplete
+    && handoutPacks > 0
     && (selectedConsignmentReady || prescription.status === 'ready');
-  const fullHandoutControl = (prescription.status === 'ready' || selectedConsignmentReady) && !remainingOpen;
-  const collectionControl = isReady && !remainingOpen;
+  const fullHandoutControl = (prescription.status === 'ready' || selectedConsignmentReady)
+    && !supplyIncomplete
+    && uncollectedReadyPacks > 0;
+  const collectionControl = isReady && !supplyIncomplete;
   const deliveryGuidance = (prescription.latestShipmentAt || prescription.placedAt)
     ? curaleafDeliveryGuidance(prescription.latestShipmentAt || prescription.placedAt)
     : null;
@@ -2637,7 +2661,7 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
     const cancelledRemainderPacks = Math.max(0, matchingLine?.cancelledRemainder ?? 0);
     const remainingExpectedPacks = Math.max(0, matchingLine?.remainingExpected ?? orderedPacks - dispatchedPacks - cancelledRemainderPacks);
     const awaitingDispatchPacks = remainingExpectedPacks;
-    const isDeliveredOrCheckedIn = receivedPacks > 0 && (consignmentCheckedIn || (!remainingOpen && receivedPacks >= orderedPacks));
+    const isDeliveredOrCheckedIn = receivedPacks > 0 && (consignmentCheckedIn || (!supplyIncomplete && receivedPacks >= orderedPacks));
     const isSplit = awaitingDispatchPacks > 0 && dispatchedPacks > 0;
 
     const percentReceived = orderedPacks > 0 ? Math.min(100, Math.round((receivedPacks / orderedPacks) * 100)) : 0;
@@ -2868,8 +2892,8 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
                 <span>
                   <PackageCheck size={16} style={{ color: 'var(--tenant-primary)' }} />
                   <span>
-                    <strong>Check in arriving packs before partial handover</strong>
-                    <small>{totalShippedPacks - totalReceivedPacks} pack(s) dispatched from Curaleaf are not checked in yet. Accept delivery when the consignment arrives, then mark ready and hand over partial quantity.</small>
+                    <strong>Check in arriving packs before partial handout</strong>
+                    <small>{totalShippedPacks - totalReceivedPacks} pack(s) dispatched from Curaleaf are not checked in yet. Accept delivery when the consignment arrives, then mark ready and hand out the arrived quantity.</small>
                   </span>
                 </span>
               </div>
@@ -2880,7 +2904,7 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
                   <Clock3 size={16} style={{ color: '#d97706' }} />
                   <span>
                     <strong>Arrived consignment checked in ({arrivingPacks} pk)</strong>
-                    <small>Mark these packs ready for collection. {remainingOpen ? `${Math.max(0, totalOrderedPacks - totalDispatchedPacks)} pack(s) still to dispatch in a later shipment.` : 'Perform pharmacy dispensing checks before patient collection.'}</small>
+                    <small>Mark these packs ready for collection. {supplyIncomplete ? `${Math.max(0, totalOrderedPacks - totalDispatchedPacks)} pack(s) still to dispatch in a later shipment.` : 'Perform pharmacy dispensing checks before patient collection.'}</small>
                   </span>
                 </span>
                 <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onReadyForCollection(selectedShipmentId || undefined)}>
@@ -2907,12 +2931,12 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
                 <span>
                   <PackageCheck size={16} style={{ color: 'var(--tenant-primary)' }} />
                   <span>
-                    <strong>Arrived packs ready — partial handover available</strong>
-                    <small>Hand over only the checked-in packs now. Remaining packs will ship separately.</small>
+                    <strong>Arrived packs ready — partial handout available</strong>
+                    <small>Hand out only the checked-in packs now. Remaining packs will ship separately.</small>
                   </span>
                 </span>
                 <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onOpenHandout(true, selectedShipmentId || undefined)}>
-                  <Check size={13} /> Hand over partial ({arrivedNotCollectedPacks} pk)
+                  <Check size={13} /> Partial handout ({handoutPacks} pk)
                 </button>
               </div>
             ) : null}
@@ -2921,12 +2945,12 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
                 <span>
                   <PackageCheck size={16} />
                   <span>
-                    <strong>All packs ready for handover</strong>
+                    <strong>All packs ready for handout</strong>
                     <small>Every ordered pack has been checked in and is ready for patient collection.</small>
                   </span>
                 </span>
                 <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onOpenHandout(false, selectedShipmentId || undefined)}>
-                  <Check size={13} /> Hand over
+                  <Check size={13} /> Handout
                 </button>
               </div>
             ) : null}

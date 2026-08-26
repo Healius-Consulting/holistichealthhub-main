@@ -10,7 +10,7 @@ import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
 import { formatShippingAddress } from '../utils/shippingAddress';
 import { nextDraftIdAfterDeletion, preferredDraftIndex, preferredDraftPaymentRoute } from '../utils/createOrderDraft';
-import { orderRequiresCuraleafCancel } from '../utils/orderStage';
+import { orderRequiresCuraleafCancel, orderSupplyIncomplete } from '../utils/orderStage';
 import { LEGACY_PHARMACY_DECISION_REASON, PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
 
 export { ORGANISATIONS };
@@ -404,7 +404,12 @@ export interface Toast {
   id: string;
   message: string;
   type: 'success' | 'info' | 'warning' | 'error';
+  /** Identical keys collapse so a single gesture never stacks duplicate toasts. */
+  dedupeKey?: string;
 }
+
+/** Ceiling on the toast stack so the workspace never disappears behind notices. */
+const MAX_VISIBLE_TOASTS = 3;
 
 export interface AppState {
   screen: Screen;
@@ -682,7 +687,7 @@ export type Action =
   | { type: 'HANDOVER_TO_PATIENT'; orderId: number; rxId: number }
   | { type: 'HANDOUT_ORDER'; orderId: number; partial?: boolean; shipmentId?: string }
   // Toasts
-  | { type: 'ADD_TOAST'; message: string; toastType?: 'success' | 'info' | 'warning' | 'error' }
+  | { type: 'ADD_TOAST'; message: string; toastType?: 'success' | 'info' | 'warning' | 'error'; dedupeKey?: string }
   | { type: 'REMOVE_TOAST'; id: string }
   ;
 
@@ -1964,12 +1969,7 @@ function reducer(state: AppState, action: Action): AppState {
           goodsInNote: action.note?.trim() || null,
         };
       }));
-      const receipt = action.lines.map(line => `${line.productId}: ${line.quantityReceived}`).join(', ');
-      nextState.toasts = [...nextState.toasts, {
-        id: Date.now().toString() + Math.random(),
-        message: `Goods-in saved for Rx #${action.rxId} (${receipt}). Collection messaging remains blocked until pharmacy checks are complete.`,
-        type: 'success' as const,
-      }];
+      // Toast is raised once by the Orders handler that dispatches this action.
       return nextState;
     }
     case 'MARK_READY_FOR_COLLECTION': {
@@ -1984,13 +1984,7 @@ function reducer(state: AppState, action: Action): AppState {
           ? { ...(r.shipmentStates ?? {}), [(r.shipmentId || r.shipmentIds?.[0]) as string]: 'ready_for_collection' }
           : r.shipmentStates,
       })));
-      const order = state.orders.find(o => o.id === action.orderId);
-      const patientObj = order?.patientId ? state.crm.find(p => p.id === order.patientId) : null;
-      const patientNameStr = patientObj?.name ?? 'Patient';
-
-      const msg = `Ready-to-collect confirmed for Rx #${action.rxId}. Customer email queued for ${patientNameStr} at ${PHARMACY.collectionPlace}.`;
-      const newToast = { id: Date.now().toString() + Math.random(), message: msg, type: 'success' as const };
-      nextState.toasts = [...nextState.toasts, newToast];
+      // Toast is raised once by the Orders handler that dispatches this action.
       return nextState;
     }
     case 'HANDOVER_TO_PATIENT': {
@@ -1998,27 +1992,21 @@ function reducer(state: AppState, action: Action): AppState {
         ...r,
         status: 'collected',
       })));
-      const order = state.orders.find(o => o.id === action.orderId);
-      const patientObj = order?.patientId ? state.crm.find(p => p.id === order.patientId) : null;
-      const patientNameStr = patientObj?.name ?? 'Patient';
-      
-      const msg = `Handover Completed: Meds collected by ${patientNameStr}. Prescription cleared from active queue.`;
-      const newToast = { id: Date.now().toString() + Math.random(), message: msg, type: 'success' as const };
-      nextState.toasts = [...nextState.toasts, newToast];
+      // Toast is raised once by the Orders handler that dispatches this action.
       return nextState;
     }
     case 'HANDOUT_ORDER': {
       const order = state.orders.find(candidate => candidate.id === action.orderId);
       if (!order || !order.prescriptions.length) return state;
-      const remainingOpen = order.prescriptions.some(prescription =>
-        (prescription.fulfilmentLines ?? []).some(line => line.remaining > 0 || line.received < line.ordered || line.collected < line.ordered),
-      );
+      // Packs on the dispensary shelf are collectable stock, not outstanding supply, so a
+      // full handout is only blocked while the supplier or goods-in still owes packs.
+      const supplyIncomplete = orderSupplyIncomplete(order);
       const readyForHandout = order.prescriptions.some(prescription =>
         ['ready', 'partially-received', 'received'].includes(prescription.status)
         && (prescription.fulfilmentLines ?? []).some(line => line.received > line.collected),
       );
       if (!readyForHandout) return state;
-      if (!action.partial && remainingOpen) return state;
+      if (!action.partial && supplyIncomplete) return state;
       return mapOrder(state, action.orderId, currentOrder => ({
         ...currentOrder,
         handoutAt: new Date(),
@@ -2049,8 +2037,13 @@ function reducer(state: AppState, action: Action): AppState {
 
     case 'ADD_TOAST': {
       const id = Date.now().toString() + Math.random();
-      const newToast = { id, message: action.message, type: action.toastType || 'info' };
-      return { ...state, toasts: [...state.toasts, newToast] };
+      const type = action.toastType || 'info';
+      const dedupeKey = action.dedupeKey ?? `${type}:${action.message}`;
+      // One gesture must never stack duplicate toasts; errors still replace their predecessor.
+      const withoutDuplicate = state.toasts.filter(toast => toast.dedupeKey !== dedupeKey);
+      const newToast = { id, message: action.message, type, dedupeKey };
+      // Keep the visible stack readable.
+      return { ...state, toasts: [...withoutDuplicate, newToast].slice(-MAX_VISIBLE_TOASTS) };
     }
 
     case 'REMOVE_TOAST': {

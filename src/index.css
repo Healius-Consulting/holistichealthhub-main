@@ -8296,6 +8296,58 @@ td{
   margin-top: 14px;
 }
 
+/* Curaleaf supplier panel — identifier plus a single refresh, no status tiles. */
+.settings-curaleaf{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.settings-curaleaf__id{
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-curaleaf__id span{
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.settings-curaleaf__id strong{
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+}
+
+.settings-curaleaf__catalogue{
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.settings-curaleaf__catalogue:hover{ color: var(--text-primary); }
+
+@media (max-width: 480px){
+  .settings-curaleaf{ align-items: stretch; }
+  .settings-curaleaf .btn{ width: 100%; justify-content: center; }
+}
+
 .settings-assets-banner{
   display: flex;
   align-items: flex-start;
@@ -16348,6 +16400,14 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
 
 .rx-step4-panel .rx-dispensing-custom .money-input{
   width: 108px;
+}
+
+.rx-step4-panel .rx-dispensing-hint{
+  margin: 6px 0 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .rx-step4-panel .rx-payment-route-toggle{

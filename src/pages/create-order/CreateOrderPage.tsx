@@ -239,8 +239,7 @@ export default function CreateOrderPage() {
   const currentUnavailableProductIds = quotedSignature === currentQuoteSignature ? quotedUnavailableProductIds : [];
   const quoteAvailable = quoteCurrent && currentUnavailableProductIds.length === 0;
   const dispensingFeeValid = !activeOrder
-    || activeOrder.dispensingFee === 0
-    || activeOrder.dispensingFee >= 5 && activeOrder.dispensingFee <= 15;
+    || (activeOrder.dispensingFee >= 0 && activeOrder.dispensingFee <= 15);
   const quoteGateComplete = !requiresLiveCuraleafEvidence || quoteAvailable;
   const paidRedo = Boolean(activeOrder?.redoContext?.isPaidRedo);
   const paymentRouteReady = paidRedo || selectedPaymentRoute === 'manual' || canUseWorldpay;
@@ -254,7 +253,7 @@ export default function CreateOrderPage() {
   const paymentGate = activeOrder ? [
     ...readiness,
     { label: requiresLiveCuraleafEvidence ? 'Live Curaleaf price and stock quote verified' : 'Curaleaf quote optional in training', complete: quoteGateComplete },
-    { label: 'Dispensing charge is £0 or £5–£15', complete: dispensingFeeValid },
+    { label: 'Dispensing charge is £0–£15', complete: dispensingFeeValid },
     { label: paidRedo ? 'Original verified payment route retained' : selectedPaymentRoute === 'worldpay' ? 'Worldpay merchant connection verified' : 'Pharmacy-managed payment route selected', complete: paymentRouteReady },
     ...(activeOrder.redoContext?.isPaidRedo ? [{ label: 'Replacement price decision recorded', complete: redoPriceResolutionReady }] : []),
   ] : [];
@@ -789,7 +788,10 @@ export default function CreateOrderPage() {
     if (!linkedPatient) return;
     const replacingPatient = Boolean(activeOrder.patientId);
     dispatch({ type: 'SET_ORDER_PATIENT', orderId: activeOrder.id, patientId });
-    dispatch({ type: 'ADD_TOAST', message: replacingPatient ? 'Draft reassigned. The prescription already entered was kept.' : 'Patient linked to this draft.', toastType: 'success' });
+    // Linking is obvious from the panel itself; only the non-obvious reassignment needs a notice.
+    if (replacingPatient) {
+      dispatch({ type: 'ADD_TOAST', message: 'Draft reassigned. The prescription already entered was kept.', toastType: 'success' });
+    }
     setChangingPatient(false);
     setPatientQuery('');
     setPatientSearchOpen(false);
@@ -1034,10 +1036,7 @@ export default function CreateOrderPage() {
                   catalogueError={state.catalogueError}
                   editingClinicFormulary={editingClinicFormularyRxId === selectedRx?.id}
                   onToggleEditFormulary={() => setEditingClinicFormularyRxId(selectedRx?.id ?? null)}
-                  onSaveFormulary={() => {
-                    setEditingClinicFormularyRxId(null);
-                    dispatch({ type: 'ADD_TOAST', message: 'Formulary corrections saved to this prescription draft.', toastType: 'success' });
-                  }}
+                  onSaveFormulary={() => setEditingClinicFormularyRxId(null)}
                   {...rxDispatch}
                 />
               ) : null}
