@@ -154,6 +154,41 @@ function formatDate(value: Date) {
   return value.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+/** Prefer API flags; if Firebase deploy lags, derive from fulfilment + recognised. */
+function financeRowFlags(row: FinanceRow) {
+  if (typeof row.realised === 'boolean') {
+    return {
+      realised: row.realised,
+      pendingCollection: Boolean(row.pendingCollection),
+    };
+  }
+  const retained = Boolean(row.recognised) && !row.refunded && !row.refundPending;
+  const collected = String(row.fulfilmentStatus || '').toUpperCase() === 'COLLECTED';
+  return {
+    realised: retained && collected,
+    pendingCollection: retained && !collected,
+  };
+}
+
+function summariseRealisedRows(rows: FinanceRow[]) {
+  const costed = rows.filter(row => row.wholesaleComplete);
+  return {
+    paidPrescriptionCount: rows.length,
+    patientRevenuePence: rows.reduce((sum, row) => sum + row.patientRevenuePence, 0),
+    productRevenuePence: rows.reduce((sum, row) => sum + row.productRevenuePence, 0),
+    dispensingFeesPence: rows.reduce((sum, row) => sum + row.dispensingFeePence, 0),
+    wholesaleKnownForCount: costed.length,
+    wholesalePendingForCount: rows.length - costed.length,
+    wholesaleProductPence: costed.reduce((sum, row) => sum + (row.wholesaleProductPence ?? 0), 0),
+    shippingPence: costed.reduce((sum, row) => sum + (row.shippingPence ?? 0), 0),
+    wholesalePence: costed.reduce((sum, row) => sum + (row.wholesalePence ?? 0), 0),
+    productMarginPence: costed.reduce((sum, row) => sum + (row.productMarginPence ?? 0), 0),
+    totalContributionPence: costed.reduce((sum, row) => sum + (row.totalContributionPence ?? 0), 0),
+  };
+}
+
+type LedgerRow = FinanceRow & { realised: boolean; pendingCollection: boolean };
+
 export default function PharmacyFinance() {
   const { state } = useApp();
   const liveWorkspace = state.workspaceMode === 'live';
@@ -186,18 +221,44 @@ export default function PharmacyFinance() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const ledgerRows = useMemo(() => (report?.rows ?? [])
+  const classifiedRows = useMemo<LedgerRow[]>(() => (report?.rows ?? []).map(row => ({
+    ...row,
+    ...financeRowFlags(row),
+  })), [report]);
+
+  const ledgerRows = useMemo(() => classifiedRows
     .filter(row => row.realised || row.pendingCollection)
     .sort((left, right) => {
       if (left.pendingCollection !== right.pendingCollection) {
         return left.pendingCollection ? 1 : -1;
       }
       return eventDate(right).getTime() - eventDate(left).getTime();
-    }), [report]);
+    }), [classifiedRows]);
 
-  const totals = report?.totals;
+  const serverHasCollectionGate = Boolean(
+    report
+    && (
+      typeof report.totals.pendingCollectionCount === 'number'
+      || report.rows.some(row => typeof row.realised === 'boolean')
+    ),
+  );
+
+  const totals = useMemo(() => {
+    if (!report) return null;
+    if (serverHasCollectionGate) return report.totals;
+
+    const realisedRows = classifiedRows.filter(row => row.realised);
+    const pendingRows = classifiedRows.filter(row => row.pendingCollection);
+    return {
+      ...report.totals,
+      ...summariseRealisedRows(realisedRows),
+      pendingCollectionCount: pendingRows.length,
+      pendingPatientRevenuePence: pendingRows.reduce((sum, row) => sum + row.patientRevenuePence, 0),
+    };
+  }, [report, classifiedRows, serverHasCollectionGate]);
+
   const periodLabel = PERIOD_OPTIONS.find(option => option.value === period)?.label ?? 'Selected period';
-  const realisedCount = totals?.paidPrescriptionCount ?? report?.periodCounts[period] ?? 0;
+  const realisedCount = totals?.paidPrescriptionCount ?? 0;
 
   return (
     <div className="page-body pharmacy-finance" aria-busy={loading}>
