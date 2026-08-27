@@ -8,7 +8,11 @@ import {
 } from '../../application/orders/curaleaf-fulfilment.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { SqlFulfilmentRepository } from '../../repositories/sql/fulfilment.sql.js';
+import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
+import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
+import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
+import { queueCollectionReadyEmail } from '../../application/notifications/collection-ready-email.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
@@ -41,6 +45,9 @@ export function createPortalFulfilmentRouter(): Router {
   const router = Router();
   const fulfilmentRepo = new SqlFulfilmentRepository();
   const orderRepo = new SqlOrderRepository();
+  const notificationRepo = new SqlNotificationRepository();
+  const patientRepo = new SqlPatientRepository();
+  const organisationRepo = new SqlOrganisationRepository();
 
   router.get('/portal/shipments', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -187,6 +194,21 @@ export function createPortalFulfilmentRouter(): Router {
             quoteSnapshot: { ...snapshot, curaleaf: { ...curaleaf, shipmentStates } },
             fulfilmentStatus: nextFulfilmentStatus,
           }).catch(err => console.warn('Shipment status order sync warning:', err));
+
+          // A consignment marked ready must notify the patient too. This route
+          // used to record the state and queue nothing.
+          if (status === 'ready_for_collection') {
+            await queueCollectionReadyEmail(
+              { notificationRepo, patientRepo, organisationRepo },
+              {
+                organisationId: scope.organisationId,
+                orderId: order.id,
+                patientId: order.patientId,
+                orderNumber: (order as { orderNumber?: string | number | null }).orderNumber ?? null,
+                scopeKey: `shipment:${supplierShipmentId}`,
+              },
+            ).catch(err => console.warn('Ready-for-collection email warning:', err));
+          }
         }
       }
 

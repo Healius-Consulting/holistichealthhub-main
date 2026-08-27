@@ -22,6 +22,7 @@ import {
   normalisedFulfilmentLines,
 } from '../../application/orders/curaleaf-fulfilment.js';
 import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { queueCollectionReadyEmail } from '../../application/notifications/collection-ready-email.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
@@ -1402,22 +1403,16 @@ export function createPortalOrderRouter(): Router {
         fulfilmentStatus: remainingOpen ? 'PARTIALLY_RECEIVED' : 'READY_FOR_COLLECTION',
       });
 
-      const patient = await patientRepo.findPatientById(scope.organisationId, order.patientId).catch(() => null);
-      if (patient?.email) {
-        const organisation = await organisationRepo.findOrganisationById(scope.organisationId).catch(() => null);
-        await queueEmailToRecipients(
-          notificationRepo,
-          [{ email: patient.email, displayName: patient.firstName || null }],
-          'patient_ready_for_collection',
-          {
-            firstName: patient.firstName || 'Patient',
-            orderNumber: order.orderNumber,
-            ...pharmacyEmailContext(organisation),
-          },
-          ['patient-ready-for-collection', orderId, remainingOpen ? 'partial' : 'full'],
-          { organisationId: scope.organisationId, patientId: order.patientId, orderId },
-        );
-      }
+      await queueCollectionReadyEmail(
+        { notificationRepo, patientRepo, organisationRepo },
+        {
+          organisationId: scope.organisationId,
+          orderId,
+          patientId: order.patientId,
+          orderNumber: order.orderNumber,
+          scopeKey: remainingOpen ? 'partial' : 'full',
+        },
+      );
 
       res.status(200).json({ id: orderId, status: 'ready', readyAt: new Date().toISOString() });
     } catch (error) {

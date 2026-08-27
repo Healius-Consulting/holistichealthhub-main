@@ -26,8 +26,17 @@ const FIND_BY_IDEMPOTENCY_GQL = `
 `;
 
 const LIST_PENDING_GQL = `
-  query ListPendingNotifications($limit: Int!) {
-    notificationOutboxes(where: { status: { eq: PENDING } }, limit: $limit) {
+  query ListPendingNotifications($limit: Int!, $now: Timestamp!) {
+    notificationOutboxes(
+      where: {
+        status: { eq: PENDING }
+        _or: [
+          { nextAttemptAt: { isNull: true } }
+          { nextAttemptAt: { le: $now } }
+        ]
+      }
+      limit: $limit
+    ) {
       ${OUTBOX_FIELDS}
     }
   }
@@ -44,6 +53,7 @@ const INSERT_GQL = `
     $encryptedRecipient: String
     $payload: Any!
     $idempotencyKey: String!
+    $nextAttemptAt: Timestamp
   ) {
     notificationOutbox_insert(data: {
       organisationId: $organisationId
@@ -55,6 +65,7 @@ const INSERT_GQL = `
       encryptedRecipient: $encryptedRecipient
       payload: $payload
       idempotencyKey: $idempotencyKey
+      nextAttemptAt: $nextAttemptAt
       status: PENDING
       attemptCount: 0
       version: 1
@@ -119,6 +130,7 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
     encryptedRecipient?: string | null;
     payload: unknown;
     idempotencyKey: string;
+    nextAttemptAt?: string | null;
   }): Promise<{ id?: string; created: boolean }> {
     const existing = await this.findByIdempotencyKey(data.idempotencyKey);
     if (existing) return { id: existing.id, created: false };
@@ -132,6 +144,7 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
             orderId: data.orderId ?? null,
             channel: data.channel,
             templateCode: data.templateCode,
+            nextAttemptAt: data.nextAttemptAt ?? null,
             recipientHash: data.recipientHash,
             encryptedRecipient: data.encryptedRecipient ?? null,
             payload: data.payload,
@@ -150,7 +163,7 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
   async listPending(limit = 100): Promise<NotificationOutboxRecord[]> {
     const result = await dataConnect.executeGraphql<{ notificationOutboxes: NotificationOutboxRecord[] }, any>(
       LIST_PENDING_GQL,
-      { variables: { limit } },
+      { variables: { limit, now: new Date().toISOString() } },
     );
     return result.data.notificationOutboxes ?? [];
   }

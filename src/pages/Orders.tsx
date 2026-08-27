@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { curaleafDeliveryGuidance } from '@hhh/domain/delivery';
 import {
   AlertTriangle,
@@ -59,7 +59,6 @@ import {
   orderHasPartialPharmacyReceipt,
   orderHasUncollectedReceivedPacks,
   orderIsSplitFulfilment,
-  orderPackTotals,
   orderRequiresCuraleafCancel,
   orderAwaitingCuraleafCancel,
   orderSplitPackSnapshot,
@@ -75,7 +74,8 @@ import {
   type OrderStage,
   type StageFilter,
 } from '../utils/orderStage';
-import { buildOrderTimelineEvents } from '../utils/orderTimeline';
+import { buildOrderStageRail, buildOrderTimelineEvents, type OrderStageStep } from '../utils/orderTimeline';
+import RecordDialog from '../components/RecordDialog';
 import {
   collectOrderConsignments,
   consignmentStatusLabel,
@@ -85,6 +85,19 @@ import {
 } from '../utils/orderDetailsLedger';
 type ManualPaymentForm = { tender: ManualTender; reference: string; notes: string; confirmed: boolean };
 type GoodsReceiptDraft = { quantities: Record<string, number>; batches: Record<string, string>; expiries: Record<string, string>; note: string };
+
+/**
+ * Field-scoped search. One fuzzy match across every field makes a PO reference
+ * search hit patient names too; scoping says which field is being searched.
+ */
+const ORDER_SEARCH_SCOPES = [
+  { key: 'all', label: 'All' },
+  { key: 'patient', label: 'Patient' },
+  { key: 'order', label: 'Order' },
+  { key: 'prescription', label: 'Rx / PO' },
+] as const;
+
+type OrderSearchScope = (typeof ORDER_SEARCH_SCOPES)[number]['key'];
 
 interface OrderRecord {
   order: PatientOrder;
@@ -362,10 +375,22 @@ function OrderFilterControl({
   );
 }
 
+function searchFieldsFor(record: OrderRecord, scope: OrderSearchScope): Array<string | number | null | undefined> {
+  const { order, patient } = record;
+  const patientFields = [patient?.name, patient?.dob, patient?.email, patient?.mobile];
+  const orderFields = [order.id, order.backendId, orderReference(order)];
+  const prescriptionFields = order.prescriptions.flatMap(prescription => [prescription.poRef, prescription.serialNumber]);
+  if (scope === 'patient') return patientFields;
+  if (scope === 'order') return orderFields;
+  if (scope === 'prescription') return prescriptionFields;
+  return [...patientFields, ...orderFields, ...prescriptionFields];
+}
+
 export default function Orders() {
   const { state, dispatch } = useApp();
   const [activeFilter, setActiveFilter] = useState<StageFilter>('current');
   const [query, setQuery] = useState('');
+  const [searchScope, setSearchScope] = useState<OrderSearchScope>('all');
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [manualForms, setManualForms] = useState<Record<number, ManualPaymentForm>>({});
   const [submittingOrderId, setSubmittingOrderId] = useState<number | null>(null);
@@ -390,8 +415,6 @@ export default function Orders() {
   const [now, setNow] = useState(() => new Date());
   const [placementConfirmation, setPlacementConfirmation] = useState<{ orderId: number; message: string } | null>(null);
   const observedPlacements = useRef<Map<number, Set<number>> | null>(null);
-  const listRowsRef = useRef<HTMLDivElement>(null);
-  const [listOverflow, setListOverflow] = useState({ top: false, bottom: false });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
@@ -443,46 +466,19 @@ export default function Orders() {
     return records.filter(record => {
       if (!recordMatchesFilter(record, activeFilter)) return false;
       if (!needle) return true;
-      const order = record.order;
-      return [
-        record.patient?.name,
-        record.patient?.dob,
-        record.patient?.email,
-        record.patient?.mobile,
-        order.id,
-        order.backendId,
-        ...order.prescriptions.flatMap(prescription => [prescription.poRef, prescription.serialNumber]),
-      ].filter(Boolean).join(' ').toLowerCase().includes(needle);
+      return searchFieldsFor(record, searchScope).filter(Boolean).join(' ').toLowerCase().includes(needle);
     });
-  }, [activeFilter, query, records]);
+  }, [activeFilter, query, records, searchScope]);
 
+  // The board is the view and the dialog is opt-in, so nothing is auto-selected;
+  // a selection only clears when that order leaves the current filter.
   useEffect(() => {
-    if (!filtered.some(record => record.order.id === selectedOrderId)) setSelectedOrderId(filtered[0]?.order.id ?? null);
+    if (selectedOrderId !== null && !filtered.some(record => record.order.id === selectedOrderId)) {
+      setSelectedOrderId(null);
+    }
   }, [filtered, selectedOrderId]);
 
-  const syncListOverflow = useCallback(() => {
-    const el = listRowsRef.current;
-    if (!el) {
-      setListOverflow({ top: false, bottom: false });
-      return;
-    }
-    const top = el.scrollTop > 6;
-    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 6;
-    setListOverflow(current => current.top === top && current.bottom === bottom ? current : { top, bottom });
-  }, []);
 
-  useEffect(() => {
-    const el = listRowsRef.current;
-    syncListOverflow();
-    if (!el) return;
-    el.addEventListener('scroll', syncListOverflow, { passive: true });
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncListOverflow);
-    observer?.observe(el);
-    return () => {
-      el.removeEventListener('scroll', syncListOverflow);
-      observer?.disconnect();
-    };
-  }, [syncListOverflow, filtered.length, activeFilter]);
 
   useEffect(() => {
     const target = state.navigationTarget;
@@ -497,7 +493,7 @@ export default function Orders() {
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, records, state.navigationTarget]);
 
-  const selected = filtered.find(record => record.order.id === selectedOrderId) ?? filtered[0] ?? null;
+  const selected = selectedOrderId === null ? null : filtered.find(record => record.order.id === selectedOrderId) ?? null;
   const outstandingValue = records.filter(record => orderCancellationResolution(record.order) === 'none' && record.stage === 'awaiting-payment').reduce((sum, record) => sum + record.order.payment.amount, 0);
   const needsAction = records.filter(record => {
     const cancellationResolution = orderCancellationResolution(record.order);
@@ -563,6 +559,9 @@ export default function Orders() {
     if (isPicking) return false;
     return ['paid', 'curaleaf-pending'].includes(record.stage);
   }) : [];
+
+  // One Curaleaf lane covers everything sitting with the supplier or in transit.
+  const curaleafLane = [...currentProcessing, ...currentPicking, ...currentDelivery];
 
   const applyCancellationResponse = (order: PatientOrder, record: Awaited<ReturnType<typeof requestPortalOrderCancellation>>) => {
     const moneyStillHeld = Boolean(order.payment.paidAt) && record.refund?.status !== 'completed' && record.paymentStatus !== 'refunded';
@@ -935,6 +934,14 @@ export default function Orders() {
     } finally { setFulfilmentBusyRxId(null); }
   };
 
+  const lanes: Array<{ key: string; label: string; detail: string; records: OrderRecord[] }> = [
+    { key: 'needs-action', label: 'Needs action', detail: 'Payment, exceptions and cancellations', records: currentNeedsAction },
+    { key: 'curaleaf', label: 'Curaleaf', detail: 'Placement, dispensing and delivery', records: curaleafLane },
+    { key: 'collections', label: 'Collections', detail: 'Ready for patient pickup', records: currentReady },
+    // Split only earns a lane when an order is genuinely split across consignments.
+    ...(currentSplitDelivery.length ? [{ key: 'split', label: 'Split', detail: 'Part dispensed, remainder outstanding', records: currentSplitDelivery }] : []),
+  ];
+
   return (
     <div className="page-body order-crm">
       <section className="order-crm-summary" aria-label="Order pipeline summary">
@@ -947,44 +954,79 @@ export default function Orders() {
       <section className="order-crm-controls">
         <div className="order-crm-search">
           <Search size={15} />
-          <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search patient, order, prescription or PO reference" aria-label="Search orders" />
+          <input
+            type="search"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder={searchScope === 'all' ? 'Search patient, order, prescription or PO reference' : `Search ${ORDER_SEARCH_SCOPES.find(scope => scope.key === searchScope)?.label.toLowerCase()}`}
+            aria-label="Search orders"
+          />
+        </div>
+        <div className="order-search-scope" role="group" aria-label="Search field">
+          {ORDER_SEARCH_SCOPES.map(scope => (
+            <button
+              type="button"
+              key={scope.key}
+              aria-pressed={searchScope === scope.key}
+              className={searchScope === scope.key ? 'is-on' : ''}
+              onClick={() => setSearchScope(scope.key)}
+            >
+              {scope.label}
+            </button>
+          ))}
         </div>
         <OrderFilterControl activeFilter={activeFilter} filterCount={filterCount} onChange={setActiveFilter} />
       </section>
 
-      <div className="order-crm-workspace">
-        <aside className={`order-crm-list${listOverflow.top ? ' is-overflow-top' : ''}${listOverflow.bottom ? ' is-overflow-bottom' : ''}`} aria-label="Orders">
-          <header><span><small>{activeFilter === 'current' ? 'Orders' : FILTER_LABELS[activeFilter]}</small><strong>{filtered.length} result{filtered.length === 1 ? '' : 's'}</strong></span></header>
-          <div className="order-crm-list__scroller">
-          <div className="order-crm-list__rows" ref={listRowsRef}>
-            {filtered.length ? (
-              activeFilter === 'cancelled' ? (
-                <>
-                  <OrderListGroup label="Needs Action" detail="Supplier or refund follow-up" records={cancellationNeedsAction} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} />
-                  <OrderListGroup label="Resolved & Refunded" detail="Closed order history" records={cancellationClosed} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} />
-                </>
-              ) : activeFilter === 'current' ? (
-                <>
-                  {currentNeedsAction.length ? <OrderListGroup label="Needs Action" detail="Awaiting payment, exceptions and cancellations" records={currentNeedsAction} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} /> : null}
-                  {currentReady.length ? <OrderListGroup label="Ready to Collect" detail="Medication ready for patient pickup" records={currentReady} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} /> : null}
-                  {currentSplitDelivery.length ? <OrderListGroup label="Split Dispensed" detail="Some packs dispensed at Curaleaf, with the rest still to allocate, ship, or check in" records={currentSplitDelivery} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} /> : null}
-                  {currentDelivery.length ? <OrderListGroup label="In Transit & Arrived" detail="Full consignments in transit or arrived for check-in" records={currentDelivery} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} /> : null}
-                  {currentPicking.length ? <OrderListGroup label="Curaleaf Dispensing" detail="Curaleaf allocating and packing medication" records={currentPicking} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} /> : null}
-                  {currentProcessing.length ? <OrderListGroup label="Awaiting Placement" detail="Order confirmed; awaiting lab picking queue" records={currentProcessing} selectedOrderId={selected?.order.id ?? null} now={now} onSelect={setSelectedOrderId} /> : null}
-                </>
-              ) : (
-                filtered.map(record => (
-                  <OrderListRow key={record.order.id} record={record} selected={selected?.order.id === record.order.id} now={now} onSelect={() => setSelectedOrderId(record.order.id)} />
-                ))
-              )
-            ) : <div className="order-crm-empty"><Package size={26} /><strong>No orders in this stage</strong><span>Try another filter or search term.</span></div>}
+      {filtered.length ? (
+        activeFilter === 'current' ? (
+          <div className="crm-lane-board">
+            {lanes.map(lane => (
+              <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${lane.records.length} order${lane.records.length === 1 ? '' : 's'}`}>
+                <header className="crm-lane__header">
+                  <span><strong>{lane.label}</strong><small>{lane.detail}</small></span>
+                  <b>{lane.records.length}</b>
+                </header>
+                {lane.records.length ? (
+                  <div className="crm-lane__rows">
+                    {lane.records.map(record => (
+                      <OrderListRow key={record.order.id} record={record} selected={false} now={now} onSelect={() => setSelectedOrderId(record.order.id)} />
+                    ))}
+                  </div>
+                ) : <p className="crm-lane__empty">Nothing here.</p>}
+              </section>
+            ))}
           </div>
+        ) : (
+          <div className={`crm-lane-board${activeFilter === 'cancelled' ? '' : ' crm-lane-board--single'}`}>
+            {(activeFilter === 'cancelled'
+              ? [
+                { key: 'needs-action', label: 'Needs action', detail: 'Supplier or refund follow-up', records: cancellationNeedsAction },
+                { key: 'resolved', label: 'Resolved & refunded', detail: 'Closed order history', records: cancellationClosed },
+              ]
+              : [{ key: 'all', label: FILTER_LABELS[activeFilter], detail: `${filtered.length} result${filtered.length === 1 ? '' : 's'}`, records: filtered }]
+            ).map(lane => (
+              <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${lane.records.length} order${lane.records.length === 1 ? '' : 's'}`}>
+                <header className="crm-lane__header">
+                  <span><strong>{lane.label}</strong><small>{lane.detail}</small></span>
+                  <b>{lane.records.length}</b>
+                </header>
+                {lane.records.length ? (
+                  <div className="crm-lane__rows">
+                    {lane.records.map(record => (
+                      <OrderListRow key={record.order.id} record={record} selected={false} now={now} onSelect={() => setSelectedOrderId(record.order.id)} />
+                    ))}
+                  </div>
+                ) : <p className="crm-lane__empty">Nothing here.</p>}
+              </section>
+            ))}
           </div>
-        </aside>
+        )
+      ) : <div className="order-crm-empty"><Package size={26} /><strong>No orders in this stage</strong><span>Try another filter or search term.</span></div>}
 
-        <main className="order-crm-detail">
-          {selected ? (
-            <OrderDetail
+      {selected ? (
+        <RecordDialog label={`Order ${orderReference(selected.order)}`} onClose={() => setSelectedOrderId(null)}>
+          <OrderDetail
               key={selected.order.id}
               record={selected}
               now={now}
@@ -1036,9 +1078,8 @@ export default function Orders() {
               onConfirmCuraleafCancellation={() => void recordCuraleafCancellationStep(selected.order, 'confirmed')}
               onChaseDelivery={(prescription, shipmentId) => setChaseDeliveryModal({ order: selected.order, prescription, shipmentId })}
             />
-          ) : <div className="order-crm-empty order-crm-empty--detail"><Package size={38} /><strong>Select an order</strong><span>Customer journey, payment and fulfilment information will appear here.</span></div>}
-        </main>
-      </div>
+        </RecordDialog>
+      ) : null}
       {chaseDeliveryModal ? (
         <div className="order-handout-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setChaseDeliveryModal(null); }}>
           <section className="curaleaf-call-modal" role="dialog" aria-modal="true" aria-labelledby="chase-curaleaf-title">
@@ -1273,23 +1314,6 @@ function SummaryMetric({ label, value, detail, icon: Icon, tone }: { label: stri
   return <article className={`order-crm-metric order-crm-metric--${tone}`}><span className="order-crm-metric__icon"><Icon size={16} /></span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></article>;
 }
 
-function OrderListGroup({ label, detail, records, selectedOrderId, now, onSelect }: {
-  label: string;
-  detail: string;
-  records: OrderRecord[];
-  selectedOrderId: number | null;
-  now: Date;
-  onSelect: (orderId: number) => void;
-}) {
-  if (!records.length) return null;
-  return (
-    <section className="order-crm-list-group" aria-label={label}>
-      <header><span><strong>{label}</strong><small>{detail}</small></span><b>{records.length}</b></header>
-      {records.map(record => <OrderListRow key={record.order.id} record={record} selected={selectedOrderId === record.order.id} now={now} onSelect={() => onSelect(record.order.id)} />)}
-    </section>
-  );
-}
-
 function OrderListRow({ record, selected, now, onSelect }: { record: OrderRecord; selected: boolean; now: Date; onSelect: () => void }) {
   const meta = recordStageMeta(record);
   const Icon = meta.icon;
@@ -1505,7 +1529,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
         </div>
       </header>
 
-      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : hideJourneyRail ? null : <JourneyRail stage={stage} paymentPaid={order.payment.status === 'paid'} order={order} />}
+      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : hideJourneyRail ? null : <OrderStageRail order={order} />}
 
       <ExpiryCountdown order={order} now={now} />
       <ReplacementLineage order={order} allOrders={state.orders} />
@@ -2250,77 +2274,37 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
   );
 }
 
-function JourneyRail({ stage, paymentPaid, order }: { stage: OrderStage; paymentPaid: boolean; order: PatientOrder }) {
-  if (stage === 'cancelled' || stage === 'collected') return null;
-  const purchaseOrderExists = order.prescriptions.some(prescription => Boolean(prescription.poRef || prescription.placed));
-  if (paymentPaid && !purchaseOrderExists) {
-    const placement = order.curaleafPlacement;
-    const clinicRoute = placement?.route === 'CLINIC_BARCODE' || order.prescriptions.every(prescription => prescription.entryMode === 'clinic');
-    const prescriberComplete = clinicRoute || placement?.prescriberState === 'VERIFIED'
-      || ['CREATING_PRESCRIPTION', 'UPLOADING_PRESCRIPTION_IMAGE', 'AWAITING_PRESCRIPTION_ACTIVATION', 'CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
-    const prescriptionComplete = placement?.prescriptionState === 'ACTIVE'
-      || ['CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
-    const phases = [
-      { label: 'Prescriber check', detail: clinicRoute ? 'Clinic scan' : prescriberComplete ? 'Verified' : placement?.prescriberState === 'UNVERIFIED' ? 'Awaiting Curaleaf' : 'Checking', complete: prescriberComplete, active: !prescriberComplete },
-      { label: 'Prescription check', detail: prescriptionComplete ? 'Active' : placement?.prescriptionState === 'PENDING' ? 'Awaiting Curaleaf' : 'Pending', complete: prescriptionComplete, active: prescriberComplete && !prescriptionComplete },
-      { label: 'Purchase order sent', detail: 'Pending', complete: false, active: prescriptionComplete },
-    ];
-    return (
-      <ol className="order-journey-rail order-journey-rail--premium" aria-label="Curaleaf placement progress">
-        {phases.map((phase, index) => (
-          <li key={phase.label} className={phase.complete ? 'is-complete' : phase.active ? 'is-active' : 'is-pending'} aria-current={phase.active ? 'step' : undefined}>
-            <span className="order-journey-rail__marker" aria-hidden="true">{phase.complete ? <Check size={12} /> : index + 1}</span>
-            <div className="order-journey-rail__copy"><strong>{phase.label}</strong><small>{phase.detail}</small></div>
-          </li>
-        ))}
-      </ol>
-    );
-  }
-  const packTotals = orderPackTotals(order);
-  const curaleafComplete = ['curaleaf-approved', 'dispatched', 'delivered', 'ready', 'collected'].includes(stage);
-  const deliveryFullyComplete = packTotals.ordered > 0 && packTotals.received >= packTotals.ordered;
-  const deliveryPartial = packTotals.received > 0 && !deliveryFullyComplete;
-  const hasUncollected = orderHasUncollectedReceivedPacks(order);
-  const deliveryDetail = deliveryFullyComplete
-    ? 'Checked In'
-    : deliveryPartial
-      ? 'Part Checked In'
-      : stage === 'dispatched'
-        ? 'In Transit'
-        : 'Pending';
-  const phases = [
-    { label: 'Ordered', detail: purchaseOrderExists ? 'PO sent' : 'Pending', complete: purchaseOrderExists, partial: false, active: !purchaseOrderExists },
-    { label: 'Curaleaf Dispensed', detail: curaleafComplete ? 'Allocated' : stage === 'curaleaf-pending' ? 'In progress' : 'Pending', complete: curaleafComplete, partial: orderHasPartialCuraleafDispense(order), active: purchaseOrderExists && !curaleafComplete },
-    {
-      label: 'In Transit',
-      detail: stage === 'dispatched' ? 'Dispatched' : deliveryPartial ? 'Part arrived' : 'Pending',
-      complete: deliveryFullyComplete || deliveryPartial,
-      partial: orderHasInTransitPacks(order),
-      active: curaleafComplete && !deliveryFullyComplete && !deliveryPartial,
-    },
-    {
-      label: 'Checked In',
-      detail: deliveryDetail,
-      complete: deliveryFullyComplete,
-      partial: deliveryPartial,
-      active: !deliveryFullyComplete && (stage === 'dispatched' || hasUncollected),
-    },
+/**
+ * Fixed two-lane rail. Every stage is always listed, so an outstanding step is
+ * visible as outstanding rather than simply missing from a list of events.
+ */
+function OrderStageRail({ order }: { order: PatientOrder }) {
+  const rail = buildOrderStageRail(order);
+  const lanes: Array<{ key: string; label: string; steps: OrderStageStep[] }> = [
+    { key: 'clinic', label: 'Clinic', steps: rail.clinic },
+    ...(rail.dispensing ? [{ key: 'dispensing', label: 'Dispensing', steps: rail.dispensing }] : []),
   ];
   return (
-    <ol className="order-journey-rail order-journey-rail--premium" aria-label="Order journey">
-      {phases.map((phase, index) => {
-        let stateClass = 'is-pending';
-        if (phase.complete) stateClass = 'is-complete';
-        else if (phase.partial) stateClass = 'is-partial';
-        else if (phase.active) stateClass = 'is-active';
-        return (
-          <li key={phase.label} className={stateClass} aria-current={phase.active ? 'step' : undefined}>
-            <span className="order-journey-rail__marker" aria-hidden="true">{phase.complete ? <Check size={12} /> : index + 1}</span>
-            <div className="order-journey-rail__copy"><strong>{phase.label}</strong><small>{phase.detail}</small></div>
-          </li>
-        );
-      })}
-    </ol>
+    <div className="order-stage-rail">
+      {lanes.map(lane => (
+        <section className="order-stage-rail__lane" key={lane.key} aria-label={`${lane.label} progress`}>
+          <p className="order-stage-rail__lane-label">{lane.label}</p>
+          <ol className="order-stage-rail__steps">
+            {lane.steps.map((entry, index) => (
+              <li key={entry.key} className={`is-${entry.state}`} aria-current={entry.state === 'active' ? 'step' : undefined}>
+                <span className="order-stage-rail__marker" aria-hidden="true">
+                  {entry.state === 'complete' ? <Check size={11} /> : index + 1}
+                </span>
+                <span className="order-stage-rail__copy">
+                  <strong>{entry.label}</strong>
+                  <small>{entry.detail}</small>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -3178,8 +3162,13 @@ function OrderDetailsDrawer({ order, patient, cleanStreetAddress, patientPostcod
           </section>
 
           <section className="order-details-block order-details-block--timeline">
-            <h3>Timeline</h3>
-            <OrderTimeline order={order} />
+            <details className="order-activity-log">
+              <summary>
+                <ChevronDown size={14} aria-hidden="true" />
+                Activity log
+              </summary>
+              <OrderTimeline order={order} />
+            </details>
           </section>
         </div>
       ) : null}

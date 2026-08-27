@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle, ChevronRight, Clock3, Inbox, Lock, Package, Plus, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CheckCircle, ChevronRight, Clock3, Inbox, Lock, Package, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { getUnresolvedReason, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
 import { conditionLabel } from '@hhh/domain';
+import RecordDialog from '../components/RecordDialog';
 import ConditionList from '../components/ConditionList';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { isNegativeEligibilityStatus, pharmacyDecisionReason } from '../utils/eligibilityPresentation';
@@ -425,7 +426,7 @@ export default function Patients() {
         </div>
         <button
           type="button"
-          className={`patient-lane-toggle${showClosed ? ' is-on' : ''}`}
+          className={`crm-lane-toggle${showClosed ? ' is-on' : ''}`}
           aria-pressed={showClosed}
           onClick={() => setShowClosed(value => !value)}
         >
@@ -434,12 +435,12 @@ export default function Patients() {
       </section>
 
       {filtered.length ? (
-        <div className="patient-lane-board">
+        <div className="crm-lane-board">
           {visibleLanes.map(lane => {
             const laneRecords = lanes.get(lane.key) ?? [];
             return (
-              <section className={`patient-lane patient-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
-                <header className="patient-lane__header">
+              <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
+                <header className="crm-lane__header">
                   <span>
                     <strong>{lane.label}</strong>
                     <small>{lane.detail}</small>
@@ -447,13 +448,13 @@ export default function Patients() {
                   <b>{laneRecords.length}</b>
                 </header>
                 {laneRecords.length ? (
-                  <div className="patient-lane__rows">
+                  <div className="crm-lane__rows">
                     {laneRecords.map(record => (
                       <CrmListRow key={record.key} record={record} selected={false} onSelect={() => setSelectedKey(record.key)} />
                     ))}
                   </div>
                 ) : (
-                  <p className="patient-lane__empty">Nothing here.</p>
+                  <p className="crm-lane__empty">Nothing here.</p>
                 )}
               </section>
             );
@@ -464,7 +465,7 @@ export default function Patients() {
       )}
 
       {selected ? (
-        <PatientCrmDialog record={selected} onClose={() => setSelectedKey(null)}>
+        <RecordDialog label={`${selected.name} record`} onClose={() => setSelectedKey(null)}>
           {selected.patient ? (
             <PatientCrmDetail
               record={selected}
@@ -478,47 +479,8 @@ export default function Patients() {
           ) : (
             <EnquiryCrmDetail record={selected} />
           )}
-        </PatientCrmDialog>
+        </RecordDialog>
       ) : null}
-    </div>
-  );
-}
-
-/** Focus-trapped dialog so the record reads full width instead of in a cramped pane. */
-function PatientCrmDialog({ record, onClose, children }: { record: CrmRecord; onClose: () => void; children: ReactNode }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    const previous = document.activeElement as HTMLElement | null;
-    const bodyOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    dialogRef.current?.focus({ preventScroll: true });
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = bodyOverflow;
-      previous?.focus?.();
-    };
-  }, [onClose]);
-
-  return (
-    <div className="patient-crm-dialog__scrim" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <div
-        className="patient-crm-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${record.name} record`}
-        ref={dialogRef}
-        tabIndex={-1}
-      >
-        <button type="button" className="patient-crm-dialog__close icon-button" aria-label="Close record" onClick={onClose}>
-          <X size={16} aria-hidden="true" />
-        </button>
-        <div className="patient-crm-dialog__body">{children}</div>
-      </div>
     </div>
   );
 }

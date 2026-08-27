@@ -26,6 +26,8 @@ export interface NotificationRepositoryPort {
     encryptedRecipient?: string | null;
     payload: unknown;
     idempotencyKey: string;
+    /** Hold the message until this instant; null or absent sends on the next sweep. */
+    nextAttemptAt?: string | null;
   }): Promise<{ id?: string; created: boolean }>;
   listPending(limit?: number): Promise<NotificationOutboxRecord[]>;
   markProcessing(id: string, attemptCount: number): Promise<void>;

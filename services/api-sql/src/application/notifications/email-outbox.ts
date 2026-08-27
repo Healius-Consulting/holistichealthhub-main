@@ -46,6 +46,8 @@ export async function queueEmailToRecipients(
     organisationId?: string | null;
     patientId?: string | null;
     orderId?: string | null;
+    /** Hold delivery until this instant, e.g. outside pharmacy hours. */
+    nextAttemptAt?: Date | string | null;
   },
 ) {
   const unique = dedupeRecipients(recipients);
@@ -63,6 +65,9 @@ export async function queueEmailToRecipients(
         ...((payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload as Record<string, unknown> : { value: payload }),
       },
       idempotencyKey: messageIdempotencyKey([...keyParts, recipient.email]),
+      nextAttemptAt: meta?.nextAttemptAt
+        ? (meta.nextAttemptAt instanceof Date ? meta.nextAttemptAt.toISOString() : meta.nextAttemptAt)
+        : null,
     });
   }
 }

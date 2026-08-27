@@ -196,3 +196,111 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
     (left, right) => new Date(right.date ?? 0).getTime() - new Date(left.date ?? 0).getTime(),
   );
 }
+
+/* ---- Fixed stage rail ----
+ *
+ * The activity log answers "what happened and when"; the rail answers "where is
+ * this order now". Because the rail is fixed, a stage that has not happened is
+ * still shown as an outstanding step rather than being absent from the list.
+ *
+ * Placement boundary per .agents/rules/curaleaf-rocky.md: the clinic lane runs
+ * until a purchase order exists, and only then does the dispensing lane apply.
+ * Goods-in stages are always derived from the dispensary's own records, never
+ * from Curaleaf, which cannot report delivery.
+ */
+
+export type OrderStageState = 'complete' | 'active' | 'partial' | 'pending';
+
+export interface OrderStageStep {
+  key: string;
+  label: string;
+  detail: string;
+  state: OrderStageState;
+}
+
+export interface OrderStageRail {
+  clinic: OrderStageStep[];
+  /** Null until a purchase order exists — dispensing has not begun. */
+  dispensing: OrderStageStep[] | null;
+}
+
+function step(key: string, label: string, detail: string, state: OrderStageState): OrderStageStep {
+  return { key, label, detail, state };
+}
+
+function clinicSteps(order: PatientOrder, purchaseOrderExists: boolean): OrderStageStep[] {
+  const placement = order.curaleafPlacement;
+  const clinicRoute = placement?.route === 'CLINIC_BARCODE'
+    || order.prescriptions.every(prescription => prescription.entryMode === 'clinic');
+  const prescriberComplete = purchaseOrderExists || clinicRoute || placement?.prescriberState === 'VERIFIED'
+    || ['CREATING_PRESCRIPTION', 'UPLOADING_PRESCRIPTION_IMAGE', 'AWAITING_PRESCRIPTION_ACTIVATION', 'CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
+  const prescriptionComplete = purchaseOrderExists || placement?.prescriptionState === 'ACTIVE'
+    || ['CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
+  const paid = order.payment.status === 'paid';
+  const paymentRequested = paid || order.payment.status === 'sent';
+
+  return [
+    step('prescriber', 'Prescriber', clinicRoute ? 'Clinic scan' : prescriberComplete ? 'Verified' : placement?.prescriberState === 'UNVERIFIED' ? 'Awaiting Curaleaf' : 'Checking',
+      prescriberComplete ? 'complete' : 'active'),
+    step('prescription', 'Prescription', prescriptionComplete ? 'Active' : placement?.prescriptionState === 'PENDING' ? 'Awaiting Curaleaf' : 'Pending',
+      prescriptionComplete ? 'complete' : prescriberComplete ? 'active' : 'pending'),
+    // Status only. The amount belongs to the order summary, not the rail.
+    step('payment', 'Payment', paid ? 'Paid' : order.payment.status === 'sent' ? 'Awaiting patient' : 'Not requested',
+      paid ? 'complete' : paymentRequested ? 'active' : 'pending'),
+    step('purchase-order', 'PO sent', purchaseOrderExists ? 'Sent to Curaleaf' : 'Pending',
+      purchaseOrderExists ? 'complete' : prescriptionComplete && paid ? 'active' : 'pending'),
+  ];
+}
+
+function dispensingSteps(order: PatientOrder): OrderStageStep[] {
+  const totals = order.prescriptions.reduce((sum, prescription) => {
+    const packs = prescriptionPackTotals(prescription);
+    return {
+      ordered: sum.ordered + packs.ordered,
+      shipped: sum.shipped + packs.shipped,
+      received: sum.received + packs.received,
+      collected: sum.collected + packs.collected,
+    };
+  }, { ordered: 0, shipped: 0, received: 0, collected: 0 });
+  const allocated = order.prescriptions.reduce((sum, prescription) => (
+    sum + (prescription.fulfilmentLines ?? []).reduce((lineSum, line) => lineSum + (line.allocated ?? 0), 0)
+  ), 0);
+
+  const packLabel = (count: number) => `${count} pack${count === 1 ? '' : 's'}`;
+  const partOf = (done: number) => `${done} of ${totals.ordered} ${totals.ordered === 1 ? 'pack' : 'packs'}`;
+
+  const dispensedComplete = totals.ordered > 0 && allocated >= totals.ordered;
+  const inTransit = Math.max(0, totals.shipped - totals.received);
+  const shippedComplete = totals.ordered > 0 && totals.shipped >= totals.ordered;
+  const receivedComplete = totals.ordered > 0 && totals.received >= totals.ordered;
+  const collectedComplete = totals.ordered > 0 && totals.collected >= totals.ordered;
+  const readyComplete = order.prescriptions.some(prescription => prescription.status === 'ready' || prescription.status === 'collected')
+    || Object.values(Object.assign({}, ...order.prescriptions.map(prescription => prescription.shipmentStates ?? {})))
+      .some(state => state === 'ready_for_collection' || state === 'collected');
+
+  const state = (complete: boolean, some: boolean, active: boolean): OrderStageState =>
+    complete ? 'complete' : some ? 'partial' : active ? 'active' : 'pending';
+
+  return [
+    step('ordered', 'Ordered', 'PO sent', 'complete'),
+    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf',
+      state(dispensedComplete, allocated > 0, true)),
+    step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
+      state(shippedComplete, totals.shipped > 0, dispensedComplete)),
+    // Goods-in is the dispensary's record; Curaleaf cannot report arrival.
+    step('checked-in', 'Checked in', receivedComplete ? 'Verified at dispensary' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
+      state(receivedComplete, totals.received > 0, totals.shipped > 0)),
+    step('ready', 'Ready', readyComplete ? 'Patient notified' : 'Pending pharmacy checks',
+      readyComplete ? 'complete' : receivedComplete ? 'active' : 'pending'),
+    step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
+      state(collectedComplete, totals.collected > 0, readyComplete)),
+  ];
+}
+
+export function buildOrderStageRail(order: PatientOrder): OrderStageRail {
+  const purchaseOrderExists = order.prescriptions.some(prescription => Boolean(prescription.poRef || prescription.placed));
+  return {
+    clinic: clinicSteps(order, purchaseOrderExists),
+    dispensing: purchaseOrderExists ? dispensingSteps(order) : null,
+  };
+}
