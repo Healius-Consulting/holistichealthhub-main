@@ -61,6 +61,9 @@ const curaleafCredentialSchema = z.object({
   customerId: z.string().trim().min(1).max(128),
   apiKey: z.string().trim().min(16).max(500).optional(),
   writeApiKey: z.string().trim().min(16).max(500).optional(),
+  // Optional. Left out, the estate is discovered from whichever host accepts
+  // the key, so a sandbox pharmacy and a live one can be connected side by side.
+  environment: z.enum(['TEST', 'PRODUCTION']).optional(),
 }).refine(value => Boolean(value.apiKey || value.writeApiKey), { message: 'API key is required.', path: ['apiKey'] });
 const curaleafOrganisationSchema = z.object({
   organisationId: z.string().optional(),
@@ -154,13 +157,13 @@ export function createPortalIntegrationRouter(): Router {
         customerId: input.customerId,
         writeApiKey: apiKey,
       };
-      const validation = await validateCuraleafCredentials(credential);
       const existing = await integrationRepo.findConnection(organisationId, 'CURALEAF');
+      const validation = await validateCuraleafCredentials(credential, input.environment ?? null);
       const secretResourceName = await writeCuraleafCredential(organisationId, credential, existing?.secretResourceName);
       const restored = await integrationRepo.restoreConnection({
         organisationId,
         integration: 'CURALEAF',
-        environment: validation.environment === 'production' ? 'PRODUCTION' : 'TEST',
+        environment: validation.connectionEnvironment,
         status: 'ACTIVE',
         secretResourceName,
         externalCustomerId: credential.customerId,

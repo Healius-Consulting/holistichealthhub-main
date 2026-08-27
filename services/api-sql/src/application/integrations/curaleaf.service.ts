@@ -45,7 +45,7 @@ import {
 } from '../orders/prescription-units.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { MAX_PRESCRIPTION_UPLOAD_BYTES } from '../../providers/storage/upload-constraints.js';
-import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
+import type { IntegrationConnectionRecord, IntegrationEnvironment } from '../../repositories/ports/integration.port.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 
@@ -91,8 +91,27 @@ function secretIdFromResource(resourceName: string) {
   return resourceName.split('/secrets/')[1] ?? '';
 }
 
-export function curaleafEnvironment(): 'test' | 'production' {
-  return config.CURALEAF_BASE_URL.includes('.dev') ? 'test' : 'production';
+export const CURALEAF_TEST_BASE_URL = 'https://api.curaleaflaboratories.dev';
+export const CURALEAF_LIVE_BASE_URL = 'https://api.curaleaflaboratories.co.uk';
+
+/**
+ * Curaleaf runs two separate estates with separate keys and customer ids, and
+ * HHH connects pharmacies to both at once: a pharmacy still onboarding stays on
+ * sandbox while a live one talks to production. The host therefore follows the
+ * pharmacy's own connection environment, not a process-wide setting — the same
+ * shape `worldpayBaseUrl` already uses.
+ *
+ * `CURALEAF_BASE_URL` remains a break-glass override for local work. Setting it
+ * in a deployed environment pins every pharmacy to one host and defeats this.
+ */
+export function curaleafBaseUrl(environment?: IntegrationEnvironment | null) {
+  const override = config.CURALEAF_BASE_URL?.trim();
+  if (override) return override;
+  return environment === 'PRODUCTION' ? CURALEAF_LIVE_BASE_URL : CURALEAF_TEST_BASE_URL;
+}
+
+export function curaleafEnvironmentLabel(environment?: IntegrationEnvironment | null): 'test' | 'production' {
+  return curaleafBaseUrl(environment).includes('.dev') ? 'test' : 'production';
 }
 
 async function credentialFor(connection: IntegrationConnectionRecord): Promise<CuraleafCredential> {
@@ -126,12 +145,12 @@ function customerIds(value: unknown): string[] {
   ].filter((item): item is string => Boolean(item));
 }
 
-async function requestPage(path: string, apiKey: string) {
+async function requestPage(path: string, apiKey: string, environment: IntegrationEnvironment) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     await paceCuraleafRequest(apiKey);
-    const response = await fetch(new URL(path.replace(/^\//, ''), `${config.CURALEAF_BASE_URL}/`), {
+    const response = await fetch(new URL(path.replace(/^\//, ''), `${curaleafBaseUrl(environment)}/`), {
       method: 'GET', signal: controller.signal,
       headers: { Accept: 'application/json', 'X-API-Key': apiKey },
     });
@@ -154,11 +173,11 @@ async function requestPage(path: string, apiKey: string) {
   }
 }
 
-async function probeCuraleafApiKey(apiKey: string, expectedCustomerId: string) {
+async function probeCuraleafApiKey(apiKey: string, expectedCustomerId: string, baseUrl: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(new URL('v1/formulas/?pageNumber=0&pageSize=1', `${config.CURALEAF_BASE_URL}/`), {
+    const response = await fetch(new URL('v1/formulas/?pageNumber=0&pageSize=1', `${baseUrl}/`), {
       method: 'GET',
       signal: controller.signal,
       headers: { Accept: 'application/json', 'X-API-Key': apiKey },
@@ -190,19 +209,52 @@ async function probeCuraleafApiKey(apiKey: string, expectedCustomerId: string) {
   }
 }
 
-export async function validateCuraleafCredentials(credential: CuraleafCredential) {
-  await probeCuraleafApiKey(credential.writeApiKey, credential.customerId);
-  if (credential.readApiKey && credential.readApiKey !== credential.writeApiKey) {
-    await new Promise(resolve => setTimeout(resolve, KEY_PROBE_GAP_MS));
-    await probeCuraleafApiKey(credential.readApiKey, credential.customerId);
+/**
+ * A Curaleaf key belongs to exactly one estate, so the estate is discovered by
+ * asking rather than configured by hand: try each candidate host and keep the
+ * one that accepts the key. `validateWorldpayCredentials` resolves its estate
+ * the same way. A caller may pin the estate with `preferredEnvironment`.
+ */
+export async function validateCuraleafCredentials(
+  credential: CuraleafCredential,
+  preferredEnvironment?: IntegrationEnvironment | null,
+) {
+  const override = config.CURALEAF_BASE_URL?.trim();
+  const candidates: IntegrationEnvironment[] = override
+    ? [preferredEnvironment ?? 'TEST']
+    : preferredEnvironment
+      ? [preferredEnvironment]
+      : ['PRODUCTION', 'TEST'];
+
+  let lastError: unknown = null;
+  for (const [index, environment] of candidates.entries()) {
+    const baseUrl = curaleafBaseUrl(environment);
+    try {
+      await probeCuraleafApiKey(credential.writeApiKey, credential.customerId, baseUrl);
+      if (credential.readApiKey && credential.readApiKey !== credential.writeApiKey) {
+        await new Promise(resolve => setTimeout(resolve, KEY_PROBE_GAP_MS));
+        await probeCuraleafApiKey(credential.readApiKey, credential.customerId, baseUrl);
+      }
+      return {
+        passed: true as const,
+        checkedAt: new Date().toISOString(),
+        observedCustomerId: credential.customerId,
+        environment: curaleafEnvironmentLabel(environment),
+        connectionEnvironment: environment,
+        message: `Curaleaf API keys were verified against the ${curaleafEnvironmentLabel(environment)} estate.`,
+      };
+    } catch (error) {
+      lastError = error;
+      // Only a rejected key is worth retrying on the other estate. A timeout or
+      // a tenant mismatch means the same thing on both, so surface it now.
+      const rejected = error instanceof HttpError && error.code === 'CURALEAF_CREDENTIALS_REJECTED';
+      if (!rejected || index === candidates.length - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, KEY_PROBE_GAP_MS));
+    }
   }
-  return {
-    passed: true as const,
-    checkedAt: new Date().toISOString(),
-    observedCustomerId: credential.customerId,
-    environment: curaleafEnvironment(),
-    message: 'Curaleaf API keys were verified against the supplier.',
-  };
+  throw lastError instanceof Error
+    ? lastError
+    : new HttpError(502, 'Curaleaf could not be reached.', 'CURALEAF_UNAVAILABLE');
 }
 
 export async function writeCuraleafCredential(
@@ -253,13 +305,13 @@ export async function writeCuraleafCredential(
   }
 }
 
-async function listAll(path: string, collectionKey: string, credential: CuraleafCredential) {
+async function listAll(path: string, collectionKey: string, credential: CuraleafCredential, environment: IntegrationEnvironment) {
   const records: unknown[] = [];
   let totalRecordCount = Number.POSITIVE_INFINITY;
   for (let pageNumber = 0; pageNumber < MAX_PAGES && records.length < totalRecordCount; pageNumber += 1) {
     if (pageNumber > 0) await new Promise(resolve => setTimeout(resolve, 1_050));
     const query = new URLSearchParams({ pageNumber: String(pageNumber), pageSize: String(PAGE_SIZE) });
-    const page = await requestPage(`${path}?${query}`, credential.readApiKey || credential.writeApiKey);
+    const page = await requestPage(`${path}?${query}`, credential.readApiKey || credential.writeApiKey, environment);
     const items = page[collectionKey];
     if (!Array.isArray(items)) {
       throw new HttpError(502, 'Curaleaf returned an invalid catalogue page.', 'CURALEAF_REQUEST_FAILED');
@@ -277,7 +329,7 @@ async function listAll(path: string, collectionKey: string, credential: Curaleaf
 
 async function productPackSizeCatalogue(connection: IntegrationConnectionRecord) {
   const credential = await credentialFor(connection);
-  const products = await listAll('/v1/products/', 'products', credential);
+  const products = await listAll('/v1/products/', 'products', credential, connection.environment);
   const sizes = new Map<string, number>();
   for (const raw of products.records) {
     const record = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
@@ -290,11 +342,11 @@ async function productPackSizeCatalogue(connection: IntegrationConnectionRecord)
 
 export async function fetchCuraleafCatalogue(connection: IntegrationConnectionRecord) {
   const credential = await credentialFor(connection);
-  const formulas = await listAll('/v1/formulas/', 'formulas', credential);
+  const formulas = await listAll('/v1/formulas/', 'formulas', credential, connection.environment);
   await new Promise(resolve => setTimeout(resolve, 1_050));
-  const products = await listAll('/v1/products/', 'products', credential);
+  const products = await listAll('/v1/products/', 'products', credential, connection.environment);
   return {
-    environment: config.CURALEAF_BASE_URL.includes('.dev') ? 'test' as const : 'production' as const,
+    environment: curaleafEnvironmentLabel(connection.environment),
     fetchedAt: new Date().toISOString(),
     formulas: formulas.records,
     products: products.records,
@@ -334,7 +386,7 @@ export async function curaleafApiRequest<T = any>(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     await paceCuraleafRequest(apiKey);
-    const response = await fetch(new URL(path.replace(/^\//, ''), `${config.CURALEAF_BASE_URL}/`), {
+    const response = await fetch(new URL(path.replace(/^\//, ''), `${curaleafBaseUrl(connection.environment)}/`), {
       ...rest,
       method,
       signal: controller.signal,
@@ -392,7 +444,7 @@ export async function probeCuraleafConnection(connection: IntegrationConnectionR
   return {
     passed: true as const,
     checkedAt: new Date().toISOString(),
-    environment: curaleafEnvironment(),
+    environment: curaleafEnvironmentLabel(connection.environment),
     message: 'The stored Curaleaf credential responded successfully.',
   };
 }
@@ -507,7 +559,7 @@ export async function scanClinicPrescriptionFromStoredFile(
   const prescriberBody = await curaleafApiRequest(connection, `/v1/prescribers/${encodeURIComponent(prescription.prescriberId)}/`);
   const prescriber = parseClinicPrescriber(prescriberBody);
   const credential = await credentialFor(connection);
-  const products = asClinicScanProducts((await listAll('/v1/products/', 'products', credential)).records);
+  const products = asClinicScanProducts((await listAll('/v1/products/', 'products', credential, connection.environment)).records);
   const matchedItems = matchClinicPrescriptionPacks(prescription.items, products);
   await rememberScanState(storage, record.storagePath, {
     [SCAN_PRESCRIPTION_ID_META]: prescription.id,
@@ -730,7 +782,7 @@ export async function executeCuraleafOrderPlacement(
   }
   if (!clinicRoute && !prescriberId) {
     try {
-      const prescriberPage = await listAll('/v1/prescribers/', 'prescribers', await credentialFor(connection));
+      const prescriberPage = await listAll('/v1/prescribers/', 'prescribers', await credentialFor(connection), connection.environment);
       const allPrescribers = prescriberPage.records.flatMap(raw => raw && typeof raw === 'object'
         ? [raw as {
           id: string;

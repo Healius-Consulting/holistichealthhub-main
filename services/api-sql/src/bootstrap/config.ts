@@ -6,7 +6,10 @@ const configSchema = z.object({
   FIREBASE_PROJECT_ID: z.string().default('hhh26-4ebd2'),
   DATA_CONNECT_SERVICE_ID: z.string().default('hhh-platform-service'),
   DATA_CONNECT_LOCATION: z.string().default('europe-west2'),
-  CURALEAF_BASE_URL: z.url().default('https://api.curaleaflaboratories.dev'),
+  // Break-glass override only. Leave unset in deployed environments so each
+  // pharmacy is routed by its own connection environment (TEST vs PRODUCTION),
+  // the way Worldpay already works. Setting this pins every pharmacy to one host.
+  CURALEAF_BASE_URL: z.url().optional(),
   WORLDPAY_HPP_BASE_URL: z.url().optional(),
   WORLDPAY_PAYMENT_QUERIES_BASE_URL: z.url().optional(),
   EMAIL_FROM_ADDRESS: z.string().email().optional(),
