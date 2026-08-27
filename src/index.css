@@ -6739,13 +6739,24 @@ html.modal-open .page-container{ overflow: hidden; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Full-width lanes stacked down the page, not a cramped list beside a pane. */
+/*
+ * Vertical lanes side by side in one row, so the whole pipeline is visible at a
+ * glance. Lanes scroll internally rather than stretching the page: the tallest
+ * lane must not decide how far you scroll to reach the next one.
+ */
 .patient-lane-board{
   display: grid;
-  gap: 14px;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
 }
 
 .patient-lane{
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  max-height: min(68vh, 720px);
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--bg-surface);
@@ -6806,8 +6817,21 @@ html.modal-open .page-container{ overflow: hidden; }
   background: color-mix(in srgb, var(--color-success) 7%, var(--bg-surface));
 }
 
+.patient-lane__header{
+  flex: 0 0 auto;
+}
+
+/* Flex column, not grid: inside a height-capped scroller a grid squashes its
+ * rows instead of letting them keep their natural height. */
 .patient-lane__rows{
-  display: grid;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.patient-lane__rows > .order-crm-row{
+  flex: 0 0 auto;
 }
 
 .patient-lane__empty{
@@ -6815,6 +6839,83 @@ html.modal-open .page-container{ overflow: hidden; }
   padding: 14px;
   color: var(--text-tertiary);
   font-size: 12.5px;
+}
+
+/*
+ * Lane columns are far narrower than the old full-width list, so the row folds:
+ * icon and name on the first line, then pill and date stacked beneath.
+ */
+.patient-lane .order-crm-row{
+  grid-template-columns: 31px minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  gap: 4px 9px;
+  padding: 9px 11px 10px;
+}
+
+.patient-lane .order-crm-row__position{
+  grid-column: 2 / -1;
+  padding-top: 0;
+  text-align: left;
+}
+
+.patient-lane .order-crm-row__position strong,
+.patient-lane .order-crm-row__position small{
+  display: inline;
+  font-size: 10px;
+}
+
+.patient-lane .order-crm-row__position strong{
+  color: var(--text-tertiary);
+  font-weight: 600;
+}
+
+.patient-lane .order-crm-row__position small::before{
+  content: ' · ';
+}
+
+/* Below the board's comfortable width, fall back to full-width stacked lanes. */
+@media (max-width: 1180px){
+  .patient-lane-board{
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    gap: 14px;
+  }
+
+  .patient-lane{
+    max-height: none;
+  }
+
+  .patient-lane .order-crm-row{
+    grid-template-columns: 31px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    padding: 10px 12px 11px;
+  }
+
+  .patient-lane .order-crm-row__position{
+    grid-column: 3;
+    grid-row: 1 / -1;
+    padding-top: 1px;
+    text-align: right;
+  }
+
+  .patient-lane .order-crm-row__position strong,
+  .patient-lane .order-crm-row__position small{
+    display: block;
+  }
+
+  .patient-lane .order-crm-row__position strong{
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .patient-lane .order-crm-row__position small{
+    font-size: 9px;
+  }
+
+  .patient-lane .order-crm-row__position small::before{
+    content: none;
+  }
 }
 
 /* ---- Patient CRM dialog ---- */
