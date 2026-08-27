@@ -144,18 +144,43 @@ export function createPortalFulfilmentRouter(): Router {
         shipmentStates: curaleaf.shipmentStates || {},
       });
       const remainingOpen = lines.some(line => line.remaining > 0 || line.received < line.ordered);
+      const anyReceived = lines.some(line => line.received > 0);
       const nextStatus = advanceFulfilmentStatus(
         order.fulfilmentStatus,
         supplierFulfilmentStatus({ purchaseOrder: curaleaf, shipments: curaleaf.shipments || [], lines }),
       );
+      /*
+       * Goods-in IS the ready-to-collect decision. Pharmacy staff used to check a
+       * consignment in and then press a second "mark ready to collect" button, which
+       * meant a checked-in order could sit on the shelf with the patient never told.
+       * Recording arrival now advances the order and queues the patient's email
+       * itself; `queueCollectionReadyEmail` applies the 15:00 London cut-off, and its
+       * idempotency key is shared with the shipment-status route so a consignment can
+       * only ever notify once.
+       */
       await orderRepo.updateQuoteSnapshot({
         id: order.id,
         organisationId: scope.organisationId,
         quoteSnapshot: { ...snapshot, curaleaf: { ...curaleaf, lines, shipmentStates } },
-        fulfilmentStatus: remainingOpen && lines.some(line => line.received > 0)
+        fulfilmentStatus: remainingOpen && anyReceived
           ? 'PARTIALLY_RECEIVED'
-          : nextStatus,
+          : anyReceived
+            ? advanceFulfilmentStatus(order.fulfilmentStatus, 'READY_FOR_COLLECTION')
+            : nextStatus,
       }).catch(err => console.warn('Order status sync on shipment check-in warning:', err));
+
+      if (anyReceived) {
+        await queueCollectionReadyEmail(
+          { notificationRepo, patientRepo, organisationRepo },
+          {
+            organisationId: scope.organisationId,
+            orderId: order.id,
+            patientId: order.patientId,
+            orderNumber: (order as { orderNumber?: string | number | null }).orderNumber ?? null,
+            scopeKey: `shipment:${supplierShipmentId}`,
+          },
+        ).catch(err => console.warn('Ready-for-collection email warning:', err));
+      }
 
       res.status(201).json({
         id: recordId,

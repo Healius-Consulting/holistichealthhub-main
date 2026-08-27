@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { curaleafDeliveryGuidance } from '@hhh/domain/delivery';
+import { collectionEmailNotice } from '@hhh/domain/collection-window';
 import {
   AlertTriangle,
   Archive,
@@ -47,7 +48,7 @@ import {
   type RecordReturnTarget,
 } from '../context/AppContext';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink, updatePortalShipmentStatus } from '../shared/api';
+import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
 import {
@@ -57,7 +58,6 @@ import {
   fulfilmentPipelineSteps,
   orderHasPartialCollection,
   orderHasPartialCuraleafDispense,
-  orderHasPartialPharmacyReceipt,
   orderHasUncollectedReceivedPacks,
   orderIsSplitFulfilment,
   orderRequiresCuraleafCancel,
@@ -75,6 +75,19 @@ import {
   type OrderStage,
   type StageFilter,
 } from '../utils/orderStage';
+import {
+  ORDER_BOARD_LANES,
+  orderBoardLane,
+  orderCardStageLabel,
+  orderBoardSection,
+  orderBoardSlug,
+  orderCardTagLabel,
+  orderLaneRank,
+  orderSplitCardDescription,
+  orderSplitCardLabel,
+  quoteReviewIsOpen,
+  type OrderBoardLane,
+} from '../utils/orderBoardLanes';
 import { buildOrderStageRail, buildOrderTimelineEvents, type OrderStageStep } from '../utils/orderTimeline';
 import RecordDialog from '../components/RecordDialog';
 import {
@@ -154,11 +167,6 @@ const FILTER_LABELS: Record<StageFilter, string> = Object.fromEntries(
   FILTER_GROUPS.flatMap(group => group.filters.map(filter => [filter.key, filter.label])),
 ) as Record<StageFilter, string>;
 
-function quoteReviewIsOpen(order: PatientOrder) {
-  return ['required', 'awaiting_top_up', 'awaiting_refund'].includes(order.quoteReview?.status ?? '')
-    || ['CHANGED', 'OUT_OF_STOCK', 'RECONCILIATION_REQUIRED'].includes(order.activeQuoteCheck?.status ?? '');
-}
-
 function supplierCancelledAfterCall(order: PatientOrder) {
   return order.prescriptions.some(prescription => prescription.purchaseOrderState === 'CANCELLED' || prescription.status === 'cancelled')
     || order.curaleafCancellation?.status === 'confirmed'
@@ -188,36 +196,6 @@ function orderRecordPriority(record: OrderRecord) {
   if (record.stage === 'collected') return 90;
   if (cancellationResolution !== 'none' || record.stage === 'archived' || record.stage === 'cancelled') return 99;
   return 70;
-}
-
-/**
- * The board has exactly three stable lanes, and these predicates define them. The
- * summary tiles count with the same functions, so a tile can never disagree with the
- * column it is describing. Split fulfilment is a property of an order, not a stage,
- * so it is a badge on the card and never a lane of its own.
- */
-function recordNeedsAction(record: OrderRecord) {
-  const resolution = orderCancellationResolution(record.order);
-  return resolution === 'needs-action'
-    || quoteReviewIsOpen(record.order)
-    || record.stage === 'rejected'
-    || record.stage === 'awaiting-payment';
-}
-
-function recordReadyToCollect(record: OrderRecord) {
-  return !recordNeedsAction(record) && record.stage === 'ready';
-}
-
-function recordWithCuraleaf(record: OrderRecord) {
-  return !recordNeedsAction(record) && !recordReadyToCollect(record);
-}
-
-/** Left-to-right reading order inside the Curaleaf lane: placement → transit → goods-in. */
-const CURALEAF_LANE_ORDER: OrderStage[] = ['paid', 'curaleaf-pending', 'curaleaf-approved', 'dispatched', 'delivered'];
-
-function curaleafLaneRank(record: OrderRecord) {
-  const rank = CURALEAF_LANE_ORDER.indexOf(record.stage);
-  return rank === -1 ? CURALEAF_LANE_ORDER.length : rank;
 }
 
 function recordMatchesFilter(record: OrderRecord, filter: StageFilter) {
@@ -280,32 +258,29 @@ function recordStageMeta(record: OrderRecord) {
   }
   if (resolution === 'refunded') return { label: 'Refunded', description: 'Cancellation closed and patient refund completed', tone: 'refunded', icon: Banknote };
   if (resolution === 'resolved') return { label: 'Resolved', description: 'Cancellation closed with no action outstanding', tone: 'resolved', icon: CheckCircle2 };
-  const split = orderSplitPackSnapshot(record.order);
-  const isSplit = orderIsSplitFulfilment(record.order);
-  const splitFulfilment = isSplit && orderHasUncollectedReceivedPacks(record.order)
-    ? `${split.atPharmacy} pack(s) checked in · ${split.withCuraleaf + split.inTransit} still in transit or awaiting dispatch`
-    : orderHasPartialCollection(record.order) && !orderHasInTransitPacks(record.order) && !orderHasUncollectedReceivedPacks(record.order)
-      ? 'Arrived packs collected; remainder awaiting dispatch'
-      : orderHasPartialPharmacyReceipt(record.order) && !orderHasInTransitPacks(record.order)
-        ? 'First consignment checked in; remainder awaiting dispatch'
-        : isSplit && orderHasInTransitPacks(record.order)
-          ? (split.withCuraleaf > 0
-            ? `${split.inTransit} of ${split.total} packs in transit · ${split.withCuraleaf} awaiting dispatch`
-            : `${split.inTransit} of ${split.total} packs with courier`)
-          : isSplit && orderHasPartialCuraleafDispense(record.order)
-            ? `${split.dispensedAtCuraleaf} of ${split.total} packs dispensed at Curaleaf · ${split.awaitingDispense} awaiting dispense`
-            : isSplit && split.withCuraleaf > 0 && !orderHasInTransitPacks(record.order)
-              ? `${split.withCuraleaf} pack(s) awaiting dispatch after the first consignment`
-              : null;
-  if (splitFulfilment) {
+  // One stage-aware string instead of a "Split 0/10" badge plus a stage-blind
+  // "Split Dispensed" pill: the card has to answer "where is this order?" without
+  // being opened.
+  const splitLabel = orderSplitCardLabel(record);
+  const splitDescription = orderSplitCardDescription(record.order);
+  if (splitLabel && splitDescription) {
     return {
-      label: 'Split Dispensed',
-      description: splitFulfilment,
+      label: splitLabel,
+      description: splitDescription,
       tone: 'partial',
       icon: Layers2,
     };
   }
   return STAGE_META[record.stage];
+}
+
+/**
+ * The status string a lane card shows. Also the sectioning key for the exceptions lane,
+ * so a section heading and the cards under it can never disagree.
+ */
+function recordCardTag(record: OrderRecord) {
+  const meta = recordStageMeta(record);
+  return orderCardTagLabel(meta === STAGE_META[record.stage] ? orderCardStageLabel(record.stage, meta.label) : meta.label);
 }
 
 function formatDate(value: Date | string | null | undefined, includeTime = false) {
@@ -537,29 +512,42 @@ export default function Orders() {
 
   const selected = selectedOrderId === null ? null : filtered.find(record => record.order.id === selectedOrderId) ?? null;
   const outstandingValue = records.filter(record => orderCancellationResolution(record.order) === 'none' && record.stage === 'awaiting-payment').reduce((sum, record) => sum + record.order.payment.amount, 0);
-  // Counted over the same live set the board shows, with the same predicates the lanes
-  // use, so "Needs action 4" always means the four cards in the Needs action column.
+  // Counted over the same live set the board shows, with the same lane function the
+  // columns use, so a tile can never disagree with the column it describes.
   const liveRecords = records.filter(record => recordMatchesFilter(record, 'current'));
-  const needsAction = liveRecords.filter(recordNeedsAction).length;
-  const readyCount = liveRecords.filter(recordReadyToCollect).length;
-  const withCuraleafCount = liveRecords.filter(recordWithCuraleaf).length;
+  const liveLaneCount = (lane: OrderBoardLane) => liveRecords.filter(record => orderBoardLane(record) === lane).length;
   const activeCount = liveRecords.length;
 
   const filterCount = (filter: StageFilter) => records.filter(record => recordMatchesFilter(record, filter)).length;
   const cancellationNeedsAction = activeFilter === 'cancelled' ? filtered.filter(record => orderCancellationResolution(record.order) === 'needs-action') : [];
   const cancellationClosed = activeFilter === 'cancelled' ? filtered.filter(record => ['resolved', 'refunded'].includes(orderCancellationResolution(record.order))) : [];
 
-  // The three lanes partition the current view exactly, so no order can fall between
-  // buckets and vanish from the board — which is what a fourth conditional Split
-  // column used to risk every time its own predicate changed.
-  const currentNeedsAction = activeFilter === 'current'
-    ? filtered.filter(recordNeedsAction).sort((left, right) => orderRecordPriority(left) - orderRecordPriority(right))
-    : [];
-
-  const currentReady = activeFilter === 'current' ? filtered.filter(recordReadyToCollect) : [];
-
-  const curaleafLane = activeFilter === 'current'
-    ? filtered.filter(recordWithCuraleaf).sort((left, right) => curaleafLaneRank(left) - curaleafLaneRank(right))
+  // `orderBoardLane` assigns exactly one lane per record, so the board partitions the
+  // current view: no order can fall between buckets and vanish. Empty lanes are dropped
+  // rather than rendered as "Nothing here" placeholders eating a whole column.
+  const boardLanes = activeFilter === 'current'
+    ? ORDER_BOARD_LANES
+      .map(lane => {
+        const records = filtered
+          .filter(record => orderBoardLane(record) === lane.key)
+          .sort((left, right) => (lane.key === 'needs-action'
+            ? orderRecordPriority(left) - orderRecordPriority(right)
+            : orderLaneRank(left) - orderLaneRank(right)));
+        // Sub-sections in the lane's own sort order. A lane with one section renders
+        // flat — a heading that names the column it already sits in is noise.
+        const sections: Array<{ key: string; label: string; rank: number; records: OrderRecord[] }> = [];
+        for (const record of records) {
+          const section = orderBoardSection(record, lane.key, recordCardTag(record));
+          const existing = sections.find(entry => entry.key === section.key);
+          if (existing) existing.records.push(record);
+          else sections.push({ ...section, records: [record] });
+        }
+        // Stable by first appearance, then by the section's own rank so the actionable
+        // group ("Part here to hand out") sits above the purely inbound one.
+        sections.sort((left, right) => left.rank - right.rank);
+        return { ...lane, records, sections };
+      })
+      .filter(lane => lane.records.length > 0)
     : [];
 
   const applyCancellationResponse = (order: PatientOrder, record: Awaited<ReturnType<typeof requestPortalOrderCancellation>>) => {
@@ -843,32 +831,19 @@ export default function Orders() {
         });
       }
       dispatch({ type: 'RECORD_GOODS_RECEIPT', orderId: order.id, rxId: prescription.id, lines, note: draft.note });
+      // Check-in is the ready-to-collect decision — there is no second button. The
+      // server queues the patient email from the same goods-receipt call; this keeps
+      // the training workspace, which has no server, on the identical flow.
+      if (anyReceived) dispatch({ type: 'MARK_READY_FOR_COLLECTION', orderId: order.id, rxId: prescription.id });
       setReceiptDrafts(current => ({ ...current, [prescription.id]: { ...draft, quantities: Object.fromEntries(lines.map(line => [line.productId, line.quantityReceived])), note: draft.note } }));
-      dispatch({ type: 'ADD_TOAST', message: complete ? 'Arriving consignment checked in.' : 'Partial check-in saved for this consignment.', toastType: 'success' });
+      const notice = collectionEmailNotice(new Date());
+      dispatch({
+        type: 'ADD_TOAST',
+        message: `${complete ? 'Consignment checked in' : 'Partial check-in saved'}. ${notice.summary}.`,
+        toastType: 'success',
+      });
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The delivery receipt could not be saved.', toastType: 'error' });
-    } finally {
-      setFulfilmentBusyRxId(null);
-    }
-  };
-
-  const handleReadyForCollection = async (order: PatientOrder, prescription: Prescription, shipmentId?: string) => {
-    setFulfilmentBusyRxId(prescription.id);
-    try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live') {
-        if (!order.backendId) throw new Error('This order has not finished saving. Refresh and try again.');
-        const targetShipmentId = shipmentId ?? prescription.shipmentId ?? prescription.shipmentIds?.[0];
-        if (!targetShipmentId) throw new Error('This consignment is not linked to the order yet. Refresh and try again.');
-        await updatePortalShipmentStatus(targetShipmentId, {
-          organisationId: state.currentOrganisationId,
-          orderId: order.backendId,
-          status: 'ready_for_collection',
-        });
-      }
-      dispatch({ type: 'MARK_READY_FOR_COLLECTION', orderId: order.id, rxId: prescription.id });
-      dispatch({ type: 'ADD_TOAST', message: 'This shipment is ready and customer message has been queued.', toastType: 'success' });
-    } catch (error) {
-      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'Ready-to-collect could not be confirmed.', toastType: 'error' });
     } finally {
       setFulfilmentBusyRxId(null);
     }
@@ -933,26 +908,31 @@ export default function Orders() {
     } finally { setFulfilmentBusyRxId(null); }
   };
 
-  const lanes: Array<{ key: string; label: string; detail: string; records: OrderRecord[] }> = [
-    { key: 'needs-action', label: 'Needs action', detail: 'Payment, exceptions and cancellations', records: currentNeedsAction },
-    { key: 'curaleaf', label: 'With Curaleaf', detail: 'Placement, dispensing, transit and goods-in', records: curaleafLane },
-    { key: 'collections', label: 'Ready to collect', detail: 'Verified and waiting for the patient', records: currentReady },
-  ];
+  // Tiles speak the lane language and only appear when they have something to report,
+  // so an empty queue costs no screen space instead of showing a decorative zero.
+  const tiles = [
+    { key: 'needs-action', label: 'Needs action', value: String(liveLaneCount('needs-action')), icon: AlertTriangle, tone: 'warning', show: liveLaneCount('needs-action') > 0 },
+    { key: 'outstanding', label: 'Awaiting payment', value: money(outstandingValue), icon: CreditCard, tone: 'warning', show: liveLaneCount('awaiting-payment') > 0 },
+    { key: 'in-fulfilment', label: 'In fulfilment', value: String(liveLaneCount('curaleaf') + liveLaneCount('goods-in')), icon: Package, tone: 'primary', show: liveLaneCount('curaleaf') + liveLaneCount('goods-in') > 0 },
+    { key: 'split', label: 'Split delivery', value: String(liveLaneCount('split')), icon: Layers2, tone: 'primary', show: liveLaneCount('split') > 0 },
+    { key: 'ready', label: 'Ready to collect', value: String(liveLaneCount('ready')), icon: PackageCheck, tone: 'success', show: liveLaneCount('ready') > 0 },
+  ].filter(tile => tile.show);
 
   return (
     <div className="page-body order-crm">
-      {/* One tile per column of the board, plus the money that is still outstanding.
-          The overall total is a header fact, not a fourth competing metric. */}
-      <section className="order-crm-summary" aria-label="Order pipeline summary">
+      {/* One tile per lane that currently holds work, plus the money still outstanding.
+          Label and number only — the lane headings below carry the explanation. */}
+      <section className="order-crm-summary order-crm-summary--compact" aria-label="Order pipeline summary">
         <p className="order-crm-summary__total">
           <strong>{activeCount}</strong> live order{activeCount === 1 ? '' : 's'}
         </p>
-        <div className="order-crm-summary__tiles">
-          <SummaryMetric label="Needs Action" value={String(needsAction)} detail="Payment, exception or cancellation" icon={AlertTriangle} tone="warning" />
-          <SummaryMetric label="Outstanding" value={money(outstandingValue)} detail="Awaiting patient payment" icon={CreditCard} tone="warning" />
-          <SummaryMetric label="With Curaleaf" value={String(withCuraleafCount)} detail="Placement through goods-in" icon={Package} tone="primary" />
-          <SummaryMetric label="Ready to Collect" value={String(readyCount)} detail="Patient collection queue" icon={PackageCheck} tone="success" />
-        </div>
+        {tiles.length ? (
+          <div className="order-crm-summary__tiles">
+            {tiles.map(tile => (
+              <SummaryMetric key={tile.key} label={tile.label} value={tile.value} icon={tile.icon} tone={tile.tone} />
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="order-crm-controls">
@@ -989,20 +969,27 @@ export default function Orders() {
 
       {filtered.length ? (
         activeFilter === 'current' ? (
-          <div className="crm-lane-board">
-            {lanes.map(lane => (
+          <div className={`crm-lane-board crm-lane-board--count-${boardLanes.length}`}>
+            {boardLanes.map(lane => (
               <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${lane.records.length} order${lane.records.length === 1 ? '' : 's'}`}>
-                <header className="crm-lane__header">
-                  <span><strong>{lane.label}</strong><small>{lane.detail}</small></span>
+                <header className="crm-lane__header" title={lane.detail}>
+                  <span><strong>{lane.label}</strong></span>
                   <b>{lane.records.length}</b>
                 </header>
-                {lane.records.length ? (
-                  <div className="crm-lane__rows">
-                    {lane.records.map(record => (
-                      <OrderListRow key={record.order.id} record={record} selected={false} now={now} onSelect={() => setSelectedOrderId(record.order.id)} />
+                <div className="crm-lane__rows">
+                  {lane.sections.length > 1
+                    ? lane.sections.map(section => (
+                      <div className="crm-lane__section" key={section.key} role="group" aria-label={`${section.label}, ${section.records.length} order${section.records.length === 1 ? '' : 's'}`}>
+                        <h3><span>{section.label}</span><b>{section.records.length}</b></h3>
+                        {section.records.map(record => (
+                          <OrderListRow key={record.order.id} record={record} selected={false} now={now} laneLabel={lane.label} sectionKey={section.key} onSelect={() => setSelectedOrderId(record.order.id)} />
+                        ))}
+                      </div>
+                    ))
+                    : lane.records.map(record => (
+                      <OrderListRow key={record.order.id} record={record} selected={false} now={now} laneLabel={lane.label} onSelect={() => setSelectedOrderId(record.order.id)} />
                     ))}
-                  </div>
-                ) : <p className="crm-lane__empty">Nothing here.</p>}
+                </div>
               </section>
             ))}
           </div>
@@ -1012,21 +999,19 @@ export default function Orders() {
               ? [
                 { key: 'needs-action', label: 'Needs action', detail: 'Supplier or refund follow-up', records: cancellationNeedsAction },
                 { key: 'resolved', label: 'Resolved & refunded', detail: 'Closed order history', records: cancellationClosed },
-              ]
+              ].filter(lane => lane.records.length > 0)
               : [{ key: 'all', label: FILTER_LABELS[activeFilter], detail: `${filtered.length} result${filtered.length === 1 ? '' : 's'}`, records: filtered }]
             ).map(lane => (
               <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${lane.records.length} order${lane.records.length === 1 ? '' : 's'}`}>
-                <header className="crm-lane__header">
-                  <span><strong>{lane.label}</strong><small>{lane.detail}</small></span>
+                <header className="crm-lane__header" title={lane.detail}>
+                  <span><strong>{lane.label}</strong></span>
                   <b>{lane.records.length}</b>
                 </header>
-                {lane.records.length ? (
-                  <div className="crm-lane__rows">
-                    {lane.records.map(record => (
-                      <OrderListRow key={record.order.id} record={record} selected={false} now={now} onSelect={() => setSelectedOrderId(record.order.id)} />
-                    ))}
-                  </div>
-                ) : <p className="crm-lane__empty">Nothing here.</p>}
+                <div className="crm-lane__rows">
+                  {lane.records.map(record => (
+                    <OrderListRow key={record.order.id} record={record} selected={false} now={now} laneLabel={lane.label} onSelect={() => setSelectedOrderId(record.order.id)} />
+                  ))}
+                </div>
               </section>
             ))}
           </div>
@@ -1060,7 +1045,6 @@ export default function Orders() {
               onReceiptDraftChange={updateReceiptDraft}
               onSavePartial={(prescription, shipmentId) => void handleGoodsReceipt(selected.order, prescription, false, shipmentId)}
               onConfirmDelivery={(prescription, shipmentId) => void handleGoodsReceipt(selected.order, prescription, true, shipmentId)}
-              onReadyForCollection={(prescription, shipmentId) => void handleReadyForCollection(selected.order, prescription, shipmentId)}
               onCallCuraleaf={() => setCallCuraleafModalOrder(selected.order)}
               onManualPlace={prescription => void handleManualPlace(selected.order, prescription)}
               onPaymentLinkResend={() => void handlePaymentLinkResend(selected.order)}
@@ -1319,40 +1303,44 @@ export default function Orders() {
   );
 }
 
-function SummaryMetric({ label, value, detail, icon: Icon, tone }: { label: string; value: string; detail: string; icon: LucideIcon; tone: string }) {
-  return <article className={`order-crm-metric order-crm-metric--${tone}`}><span className="order-crm-metric__icon"><Icon size={16} /></span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></article>;
+/* Label and number only. The board underneath already explains each lane, so a third
+   line of description per tile was the same sentence twice on one screen. */
+function SummaryMetric({ label, value, icon: Icon, tone }: { label: string; value: string; icon: LucideIcon; tone: string }) {
+  return <article className={`order-crm-metric order-crm-metric--${tone}`}><span className="order-crm-metric__icon"><Icon size={15} aria-hidden="true" /></span><span><small>{label}</small><strong>{value}</strong></span></article>;
 }
 
-function OrderListRow({ record, selected, now, onSelect }: { record: OrderRecord; selected: boolean; now: Date; onSelect: () => void }) {
+function OrderListRow({ record, selected, now, laneLabel, sectionKey, onSelect }: { record: OrderRecord; selected: boolean; now: Date; laneLabel?: string; sectionKey?: string; onSelect: () => void }) {
   const meta = recordStageMeta(record);
   const Icon = meta.icon;
   const patientName = record.patient?.name ?? 'Unknown patient';
   const cancellationResolution = orderCancellationResolution(record.order);
   const isCancellation = cancellationResolution !== 'none';
-  // Split fulfilment describes how one order is arriving, not where it sits in the
-  // pipeline, so it rides on the card next to the stage rather than pulling the order
-  // out into a column of its own.
-  const split = orderIsSplitFulfilment(record.order) ? orderSplitPackSnapshot(record.order) : null;
+  // Cards speak pharmacy, not supplier: the lane header may say "with Curaleaf", the
+  // card says what the pharmacy is waiting for. A split order already carries its own
+  // stage-aware label from `recordStageMeta`, so it is left alone here.
+  const cardLabel = recordCardTag(record);
+  // A tag that repeats the heading directly above it is pure noise — five cards under a
+  // "Quote review" section do not each need to say "Quote review". The status stays in
+  // the accessible name, so nothing is lost for a screen reader.
+  const headingKey = sectionKey ?? orderBoardSlug(laneLabel ?? '');
+  const showTag = orderBoardSlug(cardLabel) !== headingKey;
   return (
     <button
       type="button"
       className={`order-crm-row order-crm-row--${meta.tone}${isCancellation ? ' order-crm-row--cancelled' : ''}${selected ? ' selected' : ''}`}
       aria-pressed={selected}
+      aria-label={`${compactPatientName(patientName)}, ${cardLabel}. ${meta.description}`}
       title={meta.description}
       onClick={onSelect}
     >
-      <span className={`order-crm-row__stage order-tone--${meta.tone}`}><Icon size={15} /></span>
+      <span className={`order-crm-row__stage order-tone--${meta.tone}`}><Icon size={15} aria-hidden="true" /></span>
       <span className="order-crm-row__identity"><strong title={patientName}>{compactPatientName(patientName)}</strong><small>{record.order.redoContext ? 'Replacement' : 'Order'} {orderReference(record.order)} · {record.order.prescriptions.length} Rx</small></span>
+      {showTag ? (
+        <span className="order-crm-row__marks">
+          <span className={`order-stage-pill order-tone--${meta.tone}`}>{cardLabel}</span>
+        </span>
+      ) : null}
       <span className="order-crm-row__position"><strong>{money(record.order.payment.amount)}</strong><small>{formatDate(record.order.date)}</small></span>
-      <span className="order-crm-row__marks">
-        <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
-        {split ? (
-          <span className="order-split-badge">
-            <Layers2 size={11} aria-hidden="true" />
-            Split {split.atPharmacy}/{split.total}
-          </span>
-        ) : null}
-      </span>
     </button>
   );
 }
@@ -1420,7 +1408,7 @@ function ReplacementLineage({ order, allOrders }: { order: PatientOrder; allOrde
   );
 }
 
-function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onReadyForCollection, onCallCuraleaf, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, cancellationEditorOpen, cancellationNote, cancellationReference, cancellationContactNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onCancellationReferenceChange, onCancellationContactNoteChange, onRequestCancellation, onRecordCuraleafContact, onConfirmCuraleafCancellation, onChaseDelivery }: {
+function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onCallCuraleaf, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, cancellationEditorOpen, cancellationNote, cancellationReference, cancellationContactNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onCancellationReferenceChange, onCancellationContactNoteChange, onRequestCancellation, onRecordCuraleafContact, onConfirmCuraleafCancellation, onChaseDelivery }: {
   record: OrderRecord;
   now: Date;
   placementConfirmation: string | null;
@@ -1436,7 +1424,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   onReceiptDraftChange: (prescription: Prescription, patch: Partial<GoodsReceiptDraft>) => void;
   onSavePartial: (prescription: Prescription, shipmentId?: string) => void;
   onConfirmDelivery: (prescription: Prescription, shipmentId?: string) => void;
-  onReadyForCollection: (prescription: Prescription, shipmentId?: string) => void;
   onCallCuraleaf: () => void;
   onManualPlace: (prescription: Prescription) => void;
   onPaymentLinkResend: () => void;
@@ -1628,7 +1615,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
               onReceiptDraftChange={patch => onReceiptDraftChange(prescription, patch)}
               onSavePartial={shipmentId => onSavePartial(prescription, shipmentId)}
               onConfirmDelivery={shipmentId => onConfirmDelivery(prescription, shipmentId)}
-              onReadyForCollection={shipmentId => onReadyForCollection(prescription, shipmentId)}
               onManualPlace={() => onManualPlace(prescription)}
               onChaseCuraleaf={onChaseDelivery}
               onOpenHandout={onOpenHandout}
@@ -2553,7 +2539,7 @@ function FulfilmentItemCard({
   );
 }
 
-function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onReadyForCollection, onManualPlace, onChaseCuraleaf, onOpenHandout }: {
+function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onManualPlace, onChaseCuraleaf, onOpenHandout }: {
   prescription: Prescription;
   index: number;
   receiptDraft: GoodsReceiptDraft;
@@ -2561,7 +2547,6 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
   onReceiptDraftChange: (patch: Partial<GoodsReceiptDraft>) => void;
   onSavePartial: (shipmentId?: string) => void;
   onConfirmDelivery: (shipmentId?: string) => void;
-  onReadyForCollection: (shipmentId?: string) => void;
   onManualPlace: () => void;
   onChaseCuraleaf?: (prescription: Prescription, shipmentId?: string) => void;
   onOpenHandout?: (partial: boolean, shipmentId?: string) => void;
@@ -2588,6 +2573,11 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
   const isCollected = !supplyIncomplete && uncollectedReadyPacks === 0 && prescription.status === 'collected';
   const selectedConsignmentCollected = selectedShipmentState === 'collected';
   const selectedConsignmentReady = selectedShipmentState === 'ready_for_collection';
+  // Staff no longer press anything to tell the patient: goods-in queues that email and
+  // the 15:00 London cut-off decides whether it leaves now or at 09:00 next working
+  // day. Stating the answer here is the difference between an automation people trust
+  // and one they work around by phoning the patient themselves.
+  const collectionNotice = collectionEmailNotice(prescription.goodsInAt ? new Date(prescription.goodsInAt) : new Date());
   const selectedConsignmentReceived = (selectedShipmentState === 'received' || selectedConsignmentReady || selectedConsignmentCollected) && hasCheckedInPacks;
   const isReady = !isCollected && (prescription.status === 'ready' || selectedConsignmentReady);
   const isDelivered = !isCollected && !isReady && (prescription.status === 'received' || selectedConsignmentReceived || (hasCheckedInPacks && prescription.status === 'partially-received'));
@@ -2902,37 +2892,31 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
                   <PackageCheck size={16} style={{ color: 'var(--tenant-primary)' }} />
                   <span>
                     <strong>Check in arriving packs before partial handout</strong>
-                    <small>{totalShippedPacks - totalReceivedPacks} pack(s) dispatched from Curaleaf are not checked in yet. Accept delivery when the consignment arrives, then mark ready and hand out the arrived quantity.</small>
+                    <small>{totalShippedPacks - totalReceivedPacks} pack(s) dispatched from Curaleaf are not checked in yet. Accept delivery when the consignment arrives — that books the packs in and tells the patient — then hand out the arrived quantity.</small>
                   </span>
                 </span>
               </div>
             ) : null}
             {!isCancelled && partialReadyControl ? (
-              <div className="order-ready-control" style={{ background: 'color-mix(in srgb, #f59e0b 8%, var(--bg-surface))', borderColor: 'color-mix(in srgb, #f59e0b 30%, var(--border))' }}>
+              <div className="order-ready-control order-ready-control--notified" style={{ background: 'color-mix(in srgb, #f59e0b 8%, var(--bg-surface))', borderColor: 'color-mix(in srgb, #f59e0b 30%, var(--border))' }}>
                 <span>
-                  <Clock3 size={16} style={{ color: '#d97706' }} />
+                  <Mail size={16} style={{ color: '#d97706' }} />
                   <span>
-                    <strong>Arrived consignment checked in ({arrivingPacks} pk)</strong>
-                    <small>Mark these packs ready for collection. {supplyIncomplete ? `${Math.max(0, totalOrderedPacks - totalDispatchedPacks)} pack(s) still to dispatch in a later shipment.` : 'Perform pharmacy dispensing checks before patient collection.'}</small>
+                    <strong>Arrived consignment checked in ({arrivingPacks} pk) · {collectionNotice.summary}</strong>
+                    <small>{collectionNotice.detail}{supplyIncomplete && totalOrderedPacks > totalDispatchedPacks ? ` ${totalOrderedPacks - totalDispatchedPacks} pack(s) still to dispatch in a later shipment.` : ''}</small>
                   </span>
                 </span>
-                <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onReadyForCollection(selectedShipmentId || undefined)}>
-                  <Mail size={13} /> {busy ? 'Queuing…' : 'Mark arrived packs ready to collect'}
-                </button>
               </div>
             ) : null}
             {!isCancelled && readyControl ? (
-              <div className="order-ready-control" style={{ background: 'color-mix(in srgb, var(--tenant-primary) 6%, var(--bg-surface))', borderColor: 'color-mix(in srgb, var(--tenant-primary) 25%, var(--border))' }}>
+              <div className="order-ready-control order-ready-control--notified" style={{ background: 'color-mix(in srgb, var(--tenant-primary) 6%, var(--bg-surface))', borderColor: 'color-mix(in srgb, var(--tenant-primary) 25%, var(--border))' }}>
                 <span>
                   <CheckCircle2 size={18} style={{ color: 'var(--tenant-primary)' }} />
                   <span>
-                    <strong>All packs checked in ({totalOrderedPacks} pk)</strong>
-                    <small>Verified by {prescription.goodsInBy ?? 'Pharmacy staff'}{prescription.goodsInAt ? ` on ${formatDate(prescription.goodsInAt, true)}` : ''}. Perform pharmacy dispensing checks before patient collection.</small>
+                    <strong>All packs checked in ({totalOrderedPacks} pk) · {collectionNotice.summary}</strong>
+                    <small>Verified by {prescription.goodsInBy ?? 'Pharmacy staff'}{prescription.goodsInAt ? ` on ${formatDate(prescription.goodsInAt, true)}` : ''}. {collectionNotice.detail}</small>
                   </span>
                 </span>
-                <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onReadyForCollection(selectedShipmentId || undefined)}>
-                  <Mail size={13} /> {busy ? 'Queuing email…' : 'Mark ready to collect & email patient'}
-                </button>
               </div>
             ) : null}
             {!isCancelled && partialHandoutControl && onOpenHandout ? (

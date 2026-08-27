@@ -6948,6 +6948,209 @@ html.modal-open .page-container{ overflow: hidden; }
   font-variant-numeric: tabular-nums;
 }
 
+/* Board / List switch. Segmented control so the two views read as one choice. */
+.crm-view-switch{
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-surface);
+}
+
+.crm-view-switch button{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.crm-view-switch button:hover{ color: var(--text-primary); }
+
+.crm-view-switch button:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+
+.crm-view-switch button.is-on{
+  color: var(--text-primary);
+  background: var(--tenant-primary-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tenant-primary) 32%, transparent);
+}
+
+@media (max-width: 680px){
+  .crm-view-switch{ width: 100%; justify-content: stretch; }
+  .crm-view-switch button{ flex: 1; min-height: 44px; justify-content: center; }
+}
+
+/*
+ * List view: one scrollable block, still ordered by lane priority under quiet
+ * headings. The full width is what buys room for address, phone and email, which is
+ * the whole reason this view exists next to the board.
+ */
+.crm-directory-list{
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.crm-directory-list__group{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.crm-directory-list__group > header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 65%, var(--bg-surface));
+}
+
+.crm-directory-list__group > header span{ display: grid; gap: 1px; min-width: 0; }
+.crm-directory-list__group > header strong{ color: var(--text-primary); font-size: 13px; font-weight: 700; }
+.crm-directory-list__group > header small{ color: var(--text-tertiary); font-size: 11.5px; }
+
+.crm-directory-list__group > header b{
+  display: grid;
+  min-width: 26px;
+  height: 24px;
+  place-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.crm-directory-list__group--needs-action > header{
+  background: color-mix(in srgb, var(--color-danger) 7%, var(--bg-surface));
+}
+
+.crm-directory-list__rows{ display: flex; flex-direction: column; }
+
+.patient-directory-row{
+  display: grid;
+  grid-template-columns: 32px minmax(150px, 1.1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+  align-items: center;
+  gap: 4px 14px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--transition-fast);
+}
+
+.patient-directory-row:last-child{ border-bottom: 0; }
+.patient-directory-row:hover{ background: var(--bg-elevated); }
+
+.patient-directory-row:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: -2px;
+}
+
+.patient-directory-row__stage{
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 7px;
+}
+
+.patient-directory-row__identity{ min-width: 0; }
+.patient-directory-row__identity strong{
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.patient-directory-row__identity small{
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+}
+
+.patient-directory-row__contact{
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.patient-directory-row__contact > span{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.patient-directory-row__contact svg{ flex: 0 0 auto; color: var(--text-tertiary); }
+
+/* Field name in text, not just an icon, so the value is never guesswork. */
+.patient-directory-row__contact em{
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.patient-directory-row > .order-stage-pill{ justify-self: end; }
+
+/* Tablet: contact fields drop under the name rather than shrinking to nothing. */
+@media (max-width: 1080px){
+  .patient-directory-row{
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .patient-directory-row__stage{ grid-row: 1 / span 2; }
+  .patient-directory-row__identity{ grid-column: 2; grid-row: 1; }
+  .patient-directory-row > .order-stage-pill{ grid-column: 3; grid-row: 1; }
+
+  .patient-directory-row__contact{
+    grid-column: 2 / -1;
+    grid-row: auto;
+    margin-top: 4px;
+  }
+}
+
+@media (max-width: 560px){
+  .patient-directory-row{ padding: 12px; gap: 4px 10px; }
+  .patient-directory-row__contact > span{ white-space: normal; }
+  .patient-directory-row > .order-stage-pill{ white-space: normal; text-align: right; }
+}
+
 /*
  * Vertical lanes side by side in one row, so the whole pipeline is visible at a
  * glance. Lanes scroll internally rather than stretching the page: the tallest
@@ -6956,8 +7159,15 @@ html.modal-open .page-container{ overflow: hidden; }
 .crm-lane-board{
   display: grid;
   grid-auto-flow: column;
+  /*
+   * Lanes are only rendered when they hold records, so the count varies from one to
+   * six — and every one of them shares the viewport width. The whole board has to be
+   * readable in one look: a pharmacist should never scroll sideways to find out
+   * whether anything is waiting to be collected. Cards adapt to the resulting column
+   * width through the container queries below rather than the board scrolling.
+   */
   grid-auto-columns: minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   align-items: start;
 }
 
@@ -6965,6 +7175,10 @@ html.modal-open .page-container{ overflow: hidden; }
   display: flex;
   min-width: 0;
   flex-direction: column;
+  /* Cards size themselves against their own lane, not the viewport: with a variable
+     number of lanes the column width no longer follows from the breakpoint. */
+  container-type: inline-size;
+  container-name: crm-lane;
   max-height: min(68vh, 720px);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -6972,12 +7186,15 @@ html.modal-open .page-container{ overflow: hidden; }
   overflow: hidden;
 }
 
+/* One line, one height. The lane's longer explanation lives in the header `title`
+   rather than as a permanent third line of grey copy above every column. */
 .crm-lane__header{
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 11px 14px;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg-elevated) 65%, var(--bg-surface));
 }
@@ -7043,6 +7260,59 @@ html.modal-open .page-container{ overflow: hidden; }
   flex: 0 0 auto;
 }
 
+/*
+ * Sub-sections inside a lane. Deliberately quiet — a thin sticky rule with a label and
+ * a count, not a second card. It replaces the tag that would otherwise be repeated on
+ * every row underneath it, so this adds structure without adding ink.
+ */
+.crm-lane__section{
+  display: flex;
+  min-height: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+}
+
+.crm-lane__section > h3{
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 11px 5px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-tertiary);
+  background: var(--bg-surface);
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.crm-lane__section + .crm-lane__section > h3{
+  border-top: 1px solid var(--border);
+}
+
+.crm-lane__section > h3 b{
+  color: var(--text-tertiary);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.crm-lane__section > h3 span{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The last card in a section still needs its rule, otherwise the next section heading
+   and the card above it run together. */
+.crm-lane__section > .order-crm-row:last-child{
+  border-bottom: 0;
+}
+
 .crm-lane__empty{
   margin: 0;
   padding: 14px;
@@ -7051,26 +7321,54 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 
 /*
- * Lane columns are far narrower than the old full-width list, so the row folds:
- * icon and name on the first line, then pill and date stacked beneath.
+ * Horizontal card. Row one is the line that gets scanned — name on the left, status
+ * tag hard right. Row two is the quiet meta line (reference, money, date) spanning the
+ * full card width, so nothing in it has to wrap inside a narrow column. Before this the
+ * tag sat under the name and the money wrapped over three lines, which is what made a
+ * lane of ten cards feel like a wall.
  */
 .crm-lane .order-crm-row{
-  grid-template-columns: 31px minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
-  gap: 4px 9px;
-  padding: 9px 11px 10px;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, auto);
+  grid-template-rows: auto auto;
+  align-items: start;
+  gap: 2px 8px;
+  padding: 8px 10px 9px;
+}
+
+.crm-lane .order-crm-row__stage{
+  grid-column: 1;
+  grid-row: 1 / -1;
+  width: 28px;
+  height: 28px;
+  margin-top: 0;
+}
+
+.crm-lane .order-crm-row__identity{
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.crm-lane .order-crm-row__marks{
+  grid-column: 3;
+  grid-row: 1;
+  justify-content: flex-end;
+  justify-self: end;
+  max-width: 108px;
 }
 
 .crm-lane .order-crm-row__position{
   grid-column: 2 / -1;
+  grid-row: 2;
+  justify-self: end;
   padding-top: 0;
-  text-align: left;
+  text-align: right;
 }
 
 .crm-lane .order-crm-row__position strong,
 .crm-lane .order-crm-row__position small{
   display: inline;
   font-size: 10px;
+  white-space: nowrap;
 }
 
 .crm-lane .order-crm-row__position strong{
@@ -7082,7 +7380,111 @@ html.modal-open .page-container{ overflow: hidden; }
   content: ' · ';
 }
 
-/* Stage pill plus any per-order marks (currently: split fulfilment). */
+/* Tags are short by design (see `orderCardTagLabel`), so one line is the norm; a long
+   one wraps inside its own pill rather than forcing the card wider. */
+.crm-lane .order-crm-row__marks .order-stage-pill{
+  height: auto;
+  min-height: 20px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  text-align: right;
+  white-space: normal;
+}
+
+/*
+ * Very narrow lane: the tag gives up the right-hand slot to the money and takes its own
+ * line, rather than squeezing the patient name to an initial.
+ */
+@container crm-lane (max-width: 208px){
+  .crm-lane .order-crm-row__position{
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .crm-lane .order-crm-row__marks{
+    grid-column: 2 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .crm-lane .order-crm-row__marks .order-stage-pill{
+    text-align: left;
+  }
+}
+
+/*
+ * Calmer lane cards. The status icon keeps its tone colour but loses the filled tile:
+ * a column of identical coloured squares is decoration, not information. The tag keeps
+ * its tint but loses the outline and the shadow, so exceptions still catch the eye and
+ * routine progress stops shouting.
+ */
+.crm-lane .order-crm-row__stage{
+  background: transparent;
+  border-color: transparent;
+}
+
+.crm-lane .order-crm-row .order-stage-pill{
+  border-color: transparent;
+  box-shadow: none;
+  letter-spacing: .015em;
+}
+
+/* The stage tag can be a sentence now ("3 checked in · 2 in transit"), so it wraps
+   inside its own pill rather than forcing the card wider. */
+.crm-lane .order-crm-row__marks .order-stage-pill{
+  height: auto;
+  min-height: 20px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  text-align: right;
+  white-space: normal;
+}
+
+/*
+ * Narrow lane (six columns on a laptop): there is no room for a name and a sentence
+ * side by side, so the tag drops to its own line and takes the full card width. The
+ * money keeps the top-right corner, which is where the eye already goes.
+ */
+@container crm-lane (max-width: 236px){
+  .crm-lane .order-crm-row{
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px 8px;
+  }
+
+  .crm-lane .order-crm-row__stage{
+    grid-row: 1;
+    width: 26px;
+    height: 26px;
+  }
+
+  .crm-lane .order-crm-row__identity{
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .crm-lane .order-crm-row__position{
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .crm-lane .order-crm-row__marks{
+    grid-column: 2 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .crm-lane .order-crm-row__marks .order-stage-pill{
+    text-align: left;
+  }
+}
+
+/* Right-hand tag group on a lane card. Split fulfilment now folds into the single
+   stage pill, so this normally holds one tag. */
 .order-crm-row__marks{
   display: flex;
   flex-wrap: wrap;
@@ -7090,44 +7492,52 @@ html.modal-open .page-container{ overflow: hidden; }
   gap: 5px;
 }
 
-/* Text as well as colour: "Split 2/5" says what it is without relying on the tint. */
-.order-split-badge{
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 20px;
-  padding: 0 7px;
-  border: 1px solid color-mix(in srgb, var(--color-warning) 38%, var(--border));
-  border-radius: 6px;
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--color-warning) 12%, var(--bg-surface));
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .01em;
-  white-space: nowrap;
-}
-
-/* Below the board's comfortable width, fall back to full-width stacked lanes. */
-@media (max-width: 1180px){
+/*
+ * Between the two extremes the board keeps its column width and scrolls sideways —
+ * narrowing the columns instead would wrap every status tag, and with up to seven
+ * lanes a vertical wrap would put "Ready to collect" below the fold on every screen.
+ * Only below tablet width does it fall back to full-width stacked lanes.
+ */
+@media (max-width: 860px){
   .crm-lane-board{
     grid-auto-flow: row;
     grid-auto-columns: auto;
     gap: 14px;
+    overflow-x: visible;
   }
 
   .crm-lane{
     max-height: none;
   }
 
+  /* Full width: identity, tag and money all fit on one line. */
   .crm-lane .order-crm-row{
-    grid-template-columns: 31px minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
+    grid-template-columns: 31px minmax(0, 1fr) minmax(0, auto) auto;
+    grid-template-rows: auto;
+    gap: 4px 10px;
     padding: 10px 12px 11px;
   }
 
-  .crm-lane .order-crm-row__position{
+  .crm-lane .order-crm-row__stage{
+    grid-row: 1;
+    width: 31px;
+    height: 31px;
+  }
+
+  .crm-lane .order-crm-row__identity{
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .crm-lane .order-crm-row__marks{
     grid-column: 3;
-    grid-row: 1 / -1;
+    grid-row: 1;
+    max-width: none;
+  }
+
+  .crm-lane .order-crm-row__position{
+    grid-column: 4;
+    grid-row: 1;
     padding-top: 1px;
     text-align: right;
   }
@@ -7149,6 +7559,41 @@ html.modal-open .page-container{ overflow: hidden; }
 
   .crm-lane .order-crm-row__position small::before{
     content: none;
+  }
+}
+
+/* At phone width the tag drops back under the name: three columns of content on a
+   360px row leaves nothing legible. */
+@media (max-width: 560px){
+  .crm-lane .order-crm-row{
+    grid-template-columns: 31px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    align-items: start;
+  }
+
+  .crm-lane .order-crm-row__stage{
+    grid-row: 1 / -1;
+  }
+
+  .crm-lane .order-crm-row__identity{
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .crm-lane .order-crm-row__position{
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .crm-lane .order-crm-row__marks{
+    grid-column: 2 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    justify-self: start;
+  }
+
+  .crm-lane .order-crm-row__marks .order-stage-pill{
+    text-align: left;
   }
 }
 
@@ -12181,6 +12626,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-weight: 750;
 }
 
+/* Tile count now follows the lanes that hold work, so the row is fluid rather than a
+   fixed four-up that leaves a stranded fifth tile on its own line. */
 .order-crm-summary__tiles{
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -12216,6 +12663,32 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-crm-metric small{ color: var(--text-tertiary); font-size: 10px; font-weight: 720; letter-spacing: .055em; text-transform: uppercase; }
 .order-crm-metric strong{ margin-top: 4px; color: var(--text-primary); font-size: 21px; font-weight: 650; letter-spacing: -.03em; }
 .order-crm-metric em{ margin-top: 5px; color: var(--text-secondary); font-size: 10px; font-style: normal; line-height: 1.45; }
+
+/*
+ * Orders board only. Label and number, nothing else: the lane headings directly below
+ * already name each queue, so a description per tile said the same thing twice. Admin
+ * surfaces keep the taller three-line tile, which has no board underneath it.
+ */
+.order-crm-summary--compact .order-crm-summary__tiles{
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+}
+
+.order-crm-summary--compact .order-crm-metric{
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  min-height: 0;
+  padding: 12px 14px;
+}
+
+.order-crm-summary--compact .order-crm-metric__icon{
+  width: 30px;
+  height: 30px;
+}
+
+.order-crm-summary--compact .order-crm-metric strong{
+  margin-top: 1px;
+  font-size: 19px;
+}
 
 .order-crm-controls{
   display: flex;
@@ -12513,7 +12986,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-crm-row:hover{ background: var(--bg-elevated); }
 .order-crm-row.selected{ background: var(--tenant-primary-soft); box-shadow: inset 3px 0 0 var(--tenant-primary); }
 .order-crm-row:active{ transform: translateX(1px); }
-.order-crm-row--cancelled{ min-height: 82px; }
+/* Sized for the old three-row lane card; the row is two rows now. */
+.order-crm-row--cancelled{ min-height: 0; }
 
 .order-crm-row--warning.selected, .order-crm-row--partial.selected{
   background: color-mix(in srgb, #f59e0b 14%, var(--bg-surface));

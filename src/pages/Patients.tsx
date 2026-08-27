@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Package, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, LayoutGrid, List, Lock, Mail, MapPin, Package, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { getUnresolvedReason, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry, RecordReturnTarget } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
@@ -80,6 +80,10 @@ interface CrmRecord {
   dob: string;
   primaryCondition: string;
   sourceLabel: string | null;
+  /** Street address is patient-record only; the enquiry contract exposes a postcode. */
+  address: string;
+  postcode: string;
+  caseReference: string;
   enquiry: PendingEnquiry | null;
   patient: UnifiedPatient | null;
   status: ReturnType<typeof deriveStatus>;
@@ -287,6 +291,9 @@ export default function Patients() {
   const [selectedKey, setSelectedKey] = useState<string | null>(() => selectedCrmKeyFromSearch(window.location.search));
   const [returnTarget, setReturnTarget] = useState<RecordReturnTarget | null>(null);
   const [showClosed, setShowClosed] = useState(false);
+  // Board is the triage view; List is the same records with the contact detail the
+  // narrow lane cards have no room for. Both read the same search and declined filters.
+  const [view, setView] = useState<'board' | 'list'>('board');
 
   const patients = useMemo(() => {
     const map = new Map<string, UnifiedPatient>();
@@ -325,6 +332,9 @@ export default function Patients() {
         dob: patient.dob,
         primaryCondition: patient.submission?.primaryCondition ?? patient.crmPatient?.primaryCondition ?? patient.submission?.conditions?.[0] ?? patient.crmPatient?.conditions?.[0] ?? '',
         sourceLabel: portalSourceLabel(patient.crmPatient?.referralSource ?? patient.submission?.source ?? null),
+        address: patient.crmPatient?.address ?? '',
+        postcode: patient.crmPatient?.postcode ?? '',
+        caseReference: '',
         enquiry: null,
         patient,
         status,
@@ -348,6 +358,12 @@ export default function Patients() {
         dob: enquiry.dob,
         primaryCondition: enquiry.primaryCondition ?? enquiry.conditions[0] ?? '',
         sourceLabel: portalSourceLabel(enquiry.sourceType),
+        // The enquiry contract carries a postcode and no street address, so the list
+        // shows exactly that rather than inventing a fuller address for a record the
+        // pharmacy has not been given.
+        address: '',
+        postcode: enquiry.postcode ?? '',
+        caseReference: enquiry.caseReference,
         enquiry,
         patient: null,
         status: enquiryStatus(enquiry),
@@ -461,34 +477,79 @@ export default function Patients() {
         >
           {showClosed ? 'Hide' : 'Show'} declined <strong>{closedCount}</strong>
         </button>
+        <div className="crm-view-switch" role="group" aria-label="Patient directory view">
+          <button
+            type="button"
+            aria-pressed={view === 'board'}
+            className={view === 'board' ? 'is-on' : ''}
+            onClick={() => setView('board')}
+          >
+            <LayoutGrid size={14} aria-hidden="true" />
+            <span>Board</span>
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === 'list'}
+            className={view === 'list' ? 'is-on' : ''}
+            onClick={() => setView('list')}
+          >
+            <List size={14} aria-hidden="true" />
+            <span>List</span>
+          </button>
+        </div>
       </section>
 
       {filtered.length ? (
-        <div className="crm-lane-board">
-          {visibleLanes.map(lane => {
-            const laneRecords = lanes.get(lane.key) ?? [];
-            return (
-              <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
-                <header className="crm-lane__header">
-                  <span>
-                    <strong>{lane.label}</strong>
-                    <small>{lane.detail}</small>
-                  </span>
-                  <b>{laneRecords.length}</b>
-                </header>
-                {laneRecords.length ? (
-                  <div className="crm-lane__rows">
+        view === 'board' ? (
+          <div className={`crm-lane-board crm-lane-board--count-${visibleLanes.length}`}>
+            {visibleLanes.map(lane => {
+              const laneRecords = lanes.get(lane.key) ?? [];
+              return (
+                <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
+                  <header className="crm-lane__header" title={lane.detail}>
+                    <span><strong>{lane.label}</strong></span>
+                    <b>{laneRecords.length}</b>
+                  </header>
+                  {laneRecords.length ? (
+                    <div className="crm-lane__rows">
+                      {laneRecords.map(record => (
+                        <CrmListRow key={record.key} record={record} selected={false} onSelect={() => setSelectedKey(record.key)} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="crm-lane__empty">Nothing here.</p>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          /* One scrollable list rather than column-split lanes, but still ordered by
+             lane priority under quiet headings: a flat A–Z list buries the records
+             that need action today, which is the whole job of this screen. */
+          <div className="crm-directory-list">
+            {visibleLanes.map(lane => {
+              const laneRecords = lanes.get(lane.key) ?? [];
+              if (!laneRecords.length) return null;
+              return (
+                <section className={`crm-directory-list__group crm-directory-list__group--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
+                  <header>
+                    <span>
+                      <strong>{lane.label}</strong>
+                      <small>{lane.detail}</small>
+                    </span>
+                    <b>{laneRecords.length}</b>
+                  </header>
+                  <div className="crm-directory-list__rows">
                     {laneRecords.map(record => (
-                      <CrmListRow key={record.key} record={record} selected={false} onSelect={() => setSelectedKey(record.key)} />
+                      <PatientDirectoryRow key={record.key} record={record} onSelect={() => setSelectedKey(record.key)} />
                     ))}
                   </div>
-                ) : (
-                  <p className="crm-lane__empty">Nothing here.</p>
-                )}
-              </section>
-            );
-          })}
-        </div>
+                </section>
+              );
+            })}
+          </div>
+        )
       ) : (
         <div className="order-crm-empty"><Users size={26} /><strong>{empty.title}</strong><span>{empty.detail}</span></div>
       )}
@@ -554,6 +615,61 @@ function CrmListRow({ record, selected, onSelect }: { record: CrmRecord; selecte
         <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
       </span>
       <span className="order-crm-row__position"><strong>{stamp}</strong><small>{record.kind === 'enquiry' ? 'Received' : 'Date of birth'}</small></span>
+    </button>
+  );
+}
+
+/**
+ * List-view row. Same record, same click target and same dialog as the board card —
+ * the difference is that the full width has room for the contact fields the operator
+ * would otherwise have to open the record to read.
+ */
+function PatientDirectoryRow({ record, onSelect }: { record: CrmRecord; onSelect: () => void }) {
+  const meta = crmMeta(record);
+  const Icon = CRM_ICONS[meta.icon];
+  const address = patientAddressLines(record.address, record.postcode);
+  // Enquiries only ever carry a postcode, so that is all the row claims to know.
+  const addressText = record.kind === 'enquiry'
+    ? (record.postcode || EMPTY_FIELD)
+    : [address.line, address.postcodeIsSeparate ? address.postcode : ''].filter(Boolean).join(', ') || EMPTY_FIELD;
+  const addressLabel = record.kind === 'enquiry' ? 'Postcode' : 'Address';
+  const reference = record.kind === 'enquiry' && record.enquiry
+    ? `Case ${record.caseReference} · received ${fmtDate(record.enquiry.submittedAt)}`
+    : `DOB ${formatPatientDob(record.dob)}`;
+
+  return (
+    <button
+      type="button"
+      className={`patient-directory-row patient-directory-row--${meta.tone}`}
+      aria-label={`${record.name}, ${meta.label}`}
+      title={meta.description}
+      onClick={onSelect}
+    >
+      <span className={`patient-directory-row__stage order-tone--${meta.tone}`}><Icon size={16} aria-hidden="true" /></span>
+      <span className="patient-directory-row__identity">
+        <strong title={record.name}>{record.name}</strong>
+        <small>{reference}</small>
+      </span>
+      <span className="patient-directory-row__contact">
+        <span title={`${addressLabel}: ${addressText}`}>
+          <MapPin size={12} aria-hidden="true" />
+          <em>{addressLabel}</em>
+          {addressText}
+        </span>
+      </span>
+      <span className="patient-directory-row__contact">
+        <span title={record.mobile || NOT_RECORDED}>
+          <Phone size={12} aria-hidden="true" />
+          <em>Phone</em>
+          {record.mobile || EMPTY_FIELD}
+        </span>
+        <span title={record.email || NOT_RECORDED}>
+          <Mail size={12} aria-hidden="true" />
+          <em>Email</em>
+          {record.email || EMPTY_FIELD}
+        </span>
+      </span>
+      <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
     </button>
   );
 }

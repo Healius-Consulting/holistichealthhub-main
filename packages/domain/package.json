@@ -19,6 +19,10 @@
     "./portal-route": {
       "types": "./portal-route.d.ts",
       "default": "./portal-route.js"
+    },
+    "./collection-window": {
+      "types": "./collection-window.d.ts",
+      "default": "./collection-window.js"
     }
   }
 }
