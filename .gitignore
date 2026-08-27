@@ -42,3 +42,6 @@ docs/*
 
 # Local client-review packs (not used by the app)
 artifacts/email-template-review*
+
+# Local one-off demo rollback script
+scripts/rollback-collected-demo-order.ts
