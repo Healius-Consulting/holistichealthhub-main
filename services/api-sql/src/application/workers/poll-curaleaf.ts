@@ -23,6 +23,8 @@ import { listPharmacyRecipients, queueEmailToRecipients } from '../notifications
 import { curaleafApiRequest } from '../integrations/curaleaf.service.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import type { CuraleafPurchaseOrderLike, CuraleafShipmentLike } from '../orders/curaleaf-fulfilment.js';
+import { supplierShipmentRowInput } from './poll-curaleaf-shipment-row.js';
+import type { FulfilmentRepositoryPort } from '../../repositories/ports/fulfilment.port.js';
 import type { IdentityRepositoryPort } from '../../repositories/ports/identity.port.js';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
@@ -34,6 +36,8 @@ import { SqlWorkerEventRepository } from '../../repositories/sql/worker-event.sq
 
 export type CuraleafPollDeps = {
   orderRepo: OrderRepositoryPort;
+  /** Optional so existing callers and tests keep working without a fulfilment store. */
+  fulfilmentRepo?: FulfilmentRepositoryPort;
   notificationRepo: NotificationRepositoryPort;
   identityRepo: IdentityRepositoryPort;
   organisationRepo: OrganisationRepositoryPort;
@@ -353,6 +357,28 @@ async function pollKind(
           order => shipmentBelongsToOrder(order, shipment),
         );
         for (const order of orders) {
+          /*
+           * Curaleaf creates the shipment when it dispenses, so that is when the row
+           * should exist — with Curaleaf's own dispatch time on it. Until now nothing
+           * created it here: the goods-in route upserted it lazily days later, which
+           * left `dispatchedAt` null and made in-transit consignments invisible to any
+           * SQL shipment query between dispatch and check-in. The lazy upsert stays as
+           * a backstop for orders dispatched before this ran.
+           */
+          if (deps.fulfilmentRepo) {
+            const shipmentRow = supplierShipmentRowInput(order, shipment);
+            if (shipmentRow) {
+              await deps.fulfilmentRepo.upsertSupplierShipment(shipmentRow).catch(error => {
+                // Never let a shipment row failure lose the snapshot update below; the
+                // goods-in route can still create the row when the packs arrive.
+                console.error('[Curaleaf poll] Supplier shipment row could not be recorded.', {
+                  orderId: order.id,
+                  supplierShipmentId: shipmentRow.supplierShipmentId,
+                  code: error instanceof Error ? error.name : 'UNKNOWN',
+                });
+              });
+            }
+          }
           const next = applyShipmentSnapshot(order, shipment);
           /*
            * Ratchet the supplier's view against what the dispensary already recorded.

@@ -1,4 +1,5 @@
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
+import { SqlFulfilmentRepository } from '../../repositories/sql/fulfilment.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
@@ -13,6 +14,7 @@ export function sqlWorkerDeps() {
   const orderRepo = new SqlOrderRepository();
   const integrationRepo = new SqlIntegrationRepository();
   const identityRepo = new SqlIdentityRepository();
+  const fulfilmentRepo = new SqlFulfilmentRepository();
   const patientRepo = new SqlPatientRepository();
   const patientFinanceRepo = new SqlPatientFinanceRepository();
   const notificationRepo = new SqlNotificationRepository();
@@ -23,6 +25,7 @@ export function sqlWorkerDeps() {
     orderRepo,
     integrationRepo,
     identityRepo,
+    fulfilmentRepo,
     patientRepo,
     patientFinanceRepo,
     patientFinanceDeps: { patientRepo, patientFinanceRepo },
