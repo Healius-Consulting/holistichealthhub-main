@@ -1,4 +1,4 @@
-import { MoreHorizontal, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { MoreHorizontal, Pin, PinOff, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useModalFocus } from '../accessibility/useModalFocus';
 
@@ -122,15 +122,20 @@ export default function WorkspaceNavigation<Key extends string>({
                 : <small>{brand.subtitle}</small>}
             </span>
           </div>
+          {/* A pin, not a collapse toggle: the rail already opens on hover, so the only
+              thing this button decides is whether it stays open once the pointer leaves.
+              The accessible name stays constant and aria-pressed carries the state —
+              swapping the name as well would fight the toggle semantics. The icon is
+              aria-hidden, so it is free to show the affordance instead. */}
           <button
             type="button"
             className="sidebar-collapse"
             aria-pressed={!collapsed}
-            aria-label={collapsed ? 'Keep navigation expanded' : 'Collapse navigation to a rail'}
-            title={collapsed ? 'Keep navigation expanded' : 'Collapse navigation to a rail'}
+            aria-label="Pin navigation open"
+            title={collapsed ? 'Pin navigation open' : 'Unpin navigation'}
             onClick={() => setCollapsed(value => !value)}
           >
-            {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
+            {collapsed ? <Pin size={16} aria-hidden="true" /> : <PinOff size={16} aria-hidden="true" />}
           </button>
         </div>
         <nav className="sidebar-menu" aria-label={`${ariaLabel} navigation`}>

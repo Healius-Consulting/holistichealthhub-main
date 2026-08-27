@@ -650,6 +650,18 @@ html{
   outline-offset: 2px;
 }
 
+/* Pinned. The rail looks the same open-on-hover as it does pinned, so the button
+   itself has to carry the difference — colour alone would not say it. */
+.sidebar-collapse[aria-pressed='true']{
+  border-color: rgb(255 255 255 / 18%);
+  color: var(--text-primary);
+  background: rgb(255 255 255 / 10%);
+}
+
+.sidebar-collapse[aria-pressed='true']:hover{
+  background: rgb(255 255 255 / 16%);
+}
+
 /* The collapsed rail overlays the workspace when it opens, so hovering it never
  * reflows the page underneath. The spacer holds its 64px in the shell's flex row. */
 .workspace-sidebar-rail-spacer{
