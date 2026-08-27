@@ -15,6 +15,7 @@ import {
   Link2,
   ImagePlus,
   LockKeyhole,
+  MailPlus,
   LogOut,
   MapPin,
   Pencil,
@@ -42,7 +43,7 @@ import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources'
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { useAuth } from '../auth/useAuth';
-import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, removePharmacyStaff, removePlatformAdmin, resetPharmacyStaffMfa, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
+import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
 import { isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
@@ -592,6 +593,7 @@ function PlatformAdminDialog({ onClose, focusInvite = false }: { onClose: () => 
   const [busy, setBusy] = useState(false);
   const [deletingUid, setDeletingUid] = useState<string | null>(null);
   const [resettingUid, setResettingUid] = useState<string | null>(null);
+  const [resendingUid, setResendingUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useModalFocus<HTMLElement>(true, onClose);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -662,6 +664,25 @@ function PlatformAdminDialog({ onClose, focusInvite = false }: { onClose: () => 
     }
   };
 
+  const resendAdminInvite = async (account: PlatformAdminAccount) => {
+    setResendingUid(account.uid);
+    setError(null);
+    try {
+      if (isLocalPortalPreview) {
+        dispatch({ type: 'ADD_TOAST', message: `Setup email queued for ${account.email}.`, toastType: 'success' });
+      } else {
+        const result = await resendPlatformAdminInvitation(account.uid);
+        dispatch(result.invitationQueued
+          ? { type: 'ADD_TOAST', message: `Setup email queued for ${account.email}.`, toastType: 'success' }
+          : { type: 'ADD_TOAST', message: 'That setup email is already waiting to send. Nothing new was queued.', toastType: 'warning' });
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The setup email could not be queued.');
+    } finally {
+      setResendingUid(null);
+    }
+  };
+
   const removeAdmin = async (account: PlatformAdminAccount) => {
     if (account.uid === currentUid || !window.confirm(`Remove ${account.displayName}'s admin access? Their account history will be retained in the audit trail.`)) return;
     setDeletingUid(account.uid);
@@ -707,6 +728,7 @@ function PlatformAdminDialog({ onClose, focusInvite = false }: { onClose: () => 
         <div><strong>{account.displayName}{isSelf ? ' (you)' : ''}</strong><span>{account.email}</span></div>
         <span className={`pill ${statusCopy.pill}`}>{statusCopy.label}</span>
         <div className="admin-staff-row-actions">
+          <button className="icon-btn" type="button" disabled={account.status !== 'invited' || resendingUid === account.uid} title={account.status === 'invited' ? 'Resend setup email' : 'Only pending invitations can be resent'} aria-label={`Resend setup email to ${account.displayName}`} onClick={() => void resendAdminInvite(account)}><MailPlus size={16} /></button>
           <button className="icon-btn" type="button" disabled={account.status !== 'active' || resettingUid === account.uid} title="Remove authenticator app" aria-label={`Remove authenticator for ${account.displayName}`} onClick={() => void resetMfa(account)}><ShieldOff size={16} /></button>
           <button className="icon-btn" type="button" disabled={isSelf || isLastAdmin || deletingUid === account.uid} title={isSelf ? 'You cannot remove your own access' : isLastAdmin ? 'At least one admin must remain' : 'Remove admin access'} aria-label={isSelf ? `${account.displayName} is your account` : `Remove ${account.displayName}`} onClick={() => void removeAdmin(account)}><UserX size={16} /></button>
         </div>
@@ -781,6 +803,7 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
   const [busy, setBusy] = useState(false);
   const [deletingUid, setDeletingUid] = useState<string | null>(null);
   const [resettingUid, setResettingUid] = useState<string | null>(null);
+  const [resendingUid, setResendingUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -851,6 +874,25 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
     }
   };
 
+  const resendStaffInvite = async (account: PharmacyStaffAccount) => {
+    setResendingUid(account.uid);
+    setError(null);
+    try {
+      if (isLocalPortalPreview) {
+        dispatch({ type: 'ADD_TOAST', message: `Setup email queued for ${account.email}.`, toastType: 'success' });
+      } else {
+        const result = await resendPharmacyStaffInvitation(account.uid);
+        dispatch(result.invitationQueued
+          ? { type: 'ADD_TOAST', message: `Setup email queued for ${account.email}.`, toastType: 'success' }
+          : { type: 'ADD_TOAST', message: 'That setup email is already waiting to send. Nothing new was queued.', toastType: 'warning' });
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The setup email could not be queued.');
+    } finally {
+      setResendingUid(null);
+    }
+  };
+
   const removeStaff = async (account: PharmacyStaffAccount) => {
     if (account.contactRole === 'owner' || !window.confirm(`Remove ${account.displayName}'s access? Their account history will be retained in the audit trail.`)) return;
     setDeletingUid(account.uid);
@@ -897,7 +939,7 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
       <div className="admin-staff-list">
         {loading && <div className="empty-state">Loading staff accounts…</div>}
         {!loading && staff.length === 0 && <div className="empty-state">No pharmacy staff accounts yet. The first person added will be tagged Owner.</div>}
-        {staff.map(account => <div className="admin-staff-row" key={account.uid}><div className="staff-avatar">{account.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{account.displayName}</strong><span>{account.email}</span></div><span className={`pill ${account.contactRole === 'owner' ? 'pill-info' : 'pill-neutral'}`}>{account.contactRole === 'owner' ? 'Owner' : 'Staff'}</span><span className={`pill ${account.status === 'active' ? 'pill-green' : account.status === 'disabled' ? 'pill-red' : 'pill-amber'}`}>{account.status}</span><div className="admin-staff-row-actions"><button className="icon-btn" type="button" disabled={account.status === 'disabled' || resettingUid === account.uid} title="Remove authenticator app" aria-label={`Remove authenticator for ${account.displayName}`} onClick={() => void resetMfa(account)}><ShieldOff size={16} /></button><button className="icon-btn" type="button" disabled={account.contactRole === 'owner' || deletingUid === account.uid} title={account.contactRole === 'owner' ? 'Owner account is protected' : 'Remove staff access'} aria-label={account.contactRole === 'owner' ? `${account.displayName} is the protected owner account` : `Remove ${account.displayName}`} onClick={() => void removeStaff(account)}><UserX size={16} /></button></div></div>)}
+        {staff.map(account => <div className="admin-staff-row" key={account.uid}><div className="staff-avatar">{account.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{account.displayName}</strong><span>{account.email}</span></div><span className={`pill ${account.contactRole === 'owner' ? 'pill-info' : 'pill-neutral'}`}>{account.contactRole === 'owner' ? 'Owner' : 'Staff'}</span><span className={`pill ${account.status === 'active' ? 'pill-green' : account.status === 'disabled' ? 'pill-red' : 'pill-amber'}`}>{account.status}</span><div className="admin-staff-row-actions"><button className="icon-btn" type="button" disabled={account.status !== 'invited' || resendingUid === account.uid} title={account.status === 'invited' ? 'Resend setup email' : 'Only pending invitations can be resent'} aria-label={`Resend setup email to ${account.displayName}`} onClick={() => void resendStaffInvite(account)}><MailPlus size={16} /></button><button className="icon-btn" type="button" disabled={account.status === 'disabled' || resettingUid === account.uid} title="Remove authenticator app" aria-label={`Remove authenticator for ${account.displayName}`} onClick={() => void resetMfa(account)}><ShieldOff size={16} /></button><button className="icon-btn" type="button" disabled={account.contactRole === 'owner' || deletingUid === account.uid} title={account.contactRole === 'owner' ? 'Owner account is protected' : 'Remove staff access'} aria-label={account.contactRole === 'owner' ? `${account.displayName} is the protected owner account` : `Remove ${account.displayName}`} onClick={() => void removeStaff(account)}><UserX size={16} /></button></div></div>)}
       </div>
     </section>
   );

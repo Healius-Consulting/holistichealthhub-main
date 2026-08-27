@@ -51,8 +51,9 @@ export async function queueEmailToRecipients(
   },
 ) {
   const unique = dedupeRecipients(recipients);
+  let queued = 0;
   for (const recipient of unique) {
-    await notificationRepo.enqueue({
+    const outcome = await notificationRepo.enqueue({
       organisationId: meta?.organisationId ?? null,
       patientId: meta?.patientId ?? null,
       orderId: meta?.orderId ?? null,
@@ -69,7 +70,12 @@ export async function queueEmailToRecipients(
         ? (meta.nextAttemptAt instanceof Date ? meta.nextAttemptAt.toISOString() : meta.nextAttemptAt)
         : null,
     });
+    if (outcome.created) queued += 1;
   }
+  // An idempotency-key collision makes `enqueue` a silent no-op. Callers that tell an
+  // operator "setup email queued" need to know that happened, or the portal reports a
+  // send that no worker will ever pick up.
+  return { queued, suppressed: unique.length - queued };
 }
 
 export async function listPlatformAdminRecipients(identityRepo: IdentityRepositoryPort) {

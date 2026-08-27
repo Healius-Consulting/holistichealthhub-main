@@ -36,6 +36,27 @@ export function staffInviteEmailKey(input: {
     : base;
 }
 
+/**
+ * Key for an invite an admin has explicitly asked to send again.
+ *
+ * Deliberately never collides. The first-invite key is stable so a double-submit cannot
+ * send two emails, but that same stability silently swallows a genuine resend — which is
+ * exactly the case where the operator already knows the first email never landed. Intent
+ * to resend is the operator's to declare, so honour it rather than dedupe it away.
+ */
+export function staffInviteResendEmailKey(input: {
+  role: 'pharmacy_staff' | 'hhh_admin';
+  uid: string;
+  organisationId?: string | null;
+  requestId: string;
+  issuedAt: number;
+}) {
+  const base = input.role === 'pharmacy_staff'
+    ? ['pharmacy-staff-invite', input.uid, input.organisationId]
+    : ['platform-admin-invite', input.uid];
+  return [...base, 'resend', input.issuedAt, input.requestId];
+}
+
 function lowerStaffStatus(status: StaffUserRecord['status']): PortalPharmacyStaffAccount['status'] {
   if (status === 'ACTIVE') return 'active';
   if (status === 'DISABLED') return 'disabled';

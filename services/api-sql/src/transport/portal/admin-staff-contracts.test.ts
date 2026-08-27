@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
-import { resolveOwnerUid, staffInviteEmailKey, toPortalPharmacyStaffAccounts, toPortalPlatformAdminAccounts } from './admin-staff-contracts.js';
+import { resolveOwnerUid, staffInviteEmailKey, staffInviteResendEmailKey, toPortalPharmacyStaffAccounts, toPortalPlatformAdminAccounts } from './admin-staff-contracts.js';
 
 const organisationId = '70913a3071c34a41952ed532927af58c';
 
@@ -108,5 +108,53 @@ describe('admin staff contracts', () => {
       existingInvite: true,
       requestId: 'request-three',
     }), ['pharmacy-staff-invite', 'staff-uid', organisationId, 'resend', 'request-three']);
+  });
+});
+
+describe('explicit invite resend key', () => {
+  it('never collides with the first-invite key, so a resend is not deduped away', () => {
+    const first = staffInviteEmailKey({
+      role: 'pharmacy_staff',
+      uid: 'staff-uid',
+      organisationId,
+      existingInvite: false,
+      requestId: 'request-one',
+    });
+    const resend = staffInviteResendEmailKey({
+      role: 'pharmacy_staff',
+      uid: 'staff-uid',
+      organisationId,
+      requestId: 'request-two',
+      issuedAt: 1_760_000_000_000,
+    });
+    assert.notDeepEqual(resend, first);
+    assert.deepEqual(resend, ['pharmacy-staff-invite', 'staff-uid', organisationId, 'resend', 1_760_000_000_000, 'request-two']);
+  });
+
+  it('differs between two resends of the same account', () => {
+    const one = staffInviteResendEmailKey({
+      role: 'pharmacy_staff',
+      uid: 'staff-uid',
+      organisationId,
+      requestId: 'request-two',
+      issuedAt: 1_760_000_000_000,
+    });
+    const two = staffInviteResendEmailKey({
+      role: 'pharmacy_staff',
+      uid: 'staff-uid',
+      organisationId,
+      requestId: 'request-three',
+      issuedAt: 1_760_000_060_000,
+    });
+    assert.notDeepEqual(one, two);
+  });
+
+  it('scopes platform admin resends without an organisation', () => {
+    assert.deepEqual(staffInviteResendEmailKey({
+      role: 'hhh_admin',
+      uid: 'admin-uid',
+      requestId: 'request-four',
+      issuedAt: 1_760_000_000_000,
+    }), ['platform-admin-invite', 'admin-uid', 'resend', 1_760_000_000_000, 'request-four']);
   });
 });

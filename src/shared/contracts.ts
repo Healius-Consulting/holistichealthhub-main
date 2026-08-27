@@ -1515,6 +1515,12 @@ export interface PharmacyStaffInvitation extends PharmacyStaffAccount {
   invitationQueued: boolean;
 }
 
+export interface StaffInvitationResend {
+  uid: string;
+  email: string;
+  invitationQueued: boolean;
+}
+
 export interface PlatformAdminAccount {
   uid: string;
   email: string;
