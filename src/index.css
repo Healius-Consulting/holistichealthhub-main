@@ -6699,6 +6699,176 @@ html.modal-open .page-container{ overflow: hidden; }
   font-weight: 550;
 }
 .patient-chart__actions{ flex: 0 0 auto; }
+/* ---- Patient CRM lane board ---- */
+
+.patient-lane-toggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.patient-lane-toggle:hover{
+  border-color: var(--border-strong, var(--border));
+  color: var(--text-primary);
+}
+
+.patient-lane-toggle:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+
+.patient-lane-toggle.is-on{
+  border-color: color-mix(in srgb, var(--tenant-primary) 40%, var(--border));
+  color: var(--text-primary);
+  background: var(--tenant-primary-soft);
+}
+
+.patient-lane-toggle strong{
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Full-width lanes stacked down the page, not a cramped list beside a pane. */
+.patient-lane-board{
+  display: grid;
+  gap: 14px;
+}
+
+.patient-lane{
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.patient-lane__header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 65%, var(--bg-surface));
+}
+
+.patient-lane__header span{
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.patient-lane__header strong{
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.patient-lane__header small{
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+/* Count lives in the lane header now that the summary tiles are gone. */
+.patient-lane__header b{
+  display: grid;
+  min-width: 26px;
+  height: 24px;
+  place-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.patient-lane--needs-action .patient-lane__header{
+  background: color-mix(in srgb, var(--color-danger) 7%, var(--bg-surface));
+}
+
+.patient-lane--needs-action .patient-lane__header b{
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, var(--bg-surface));
+}
+
+.patient-lane--ready .patient-lane__header{
+  background: color-mix(in srgb, var(--color-success) 7%, var(--bg-surface));
+}
+
+.patient-lane__rows{
+  display: grid;
+}
+
+.patient-lane__empty{
+  margin: 0;
+  padding: 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+/* ---- Patient CRM dialog ---- */
+
+.patient-crm-dialog__scrim{
+  position: fixed;
+  inset: 0;
+  /* Matches the command palette so the dialog clears the workspace header. */
+  z-index: 1400;
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  padding: 24px 16px;
+  background: var(--bg-overlay, rgba(15, 23, 42, 0.5));
+  overflow-y: auto;
+}
+
+.patient-crm-dialog{
+  position: relative;
+  width: min(980px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-app);
+  box-shadow: 0 24px 60px rgb(2 6 12 / 28%);
+}
+
+.patient-crm-dialog:focus{ outline: none; }
+
+.patient-crm-dialog__close{
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+}
+
+.patient-crm-dialog__body{
+  padding: 4px;
+}
+
+.patient-crm-dialog .order-crm-record{
+  border: 0;
+  background: transparent;
+}
+
+/* Keep the stage pill clear of the floating close button. */
+.patient-crm-dialog .order-crm-record__hero{
+  padding-right: 34px;
+}
+
+@media (max-width: 680px){
+  .patient-crm-dialog__scrim{ padding: 0; }
+  .patient-crm-dialog{ width: 100%; min-height: 100%; border: 0; border-radius: 0; }
+}
+
 .patient-chart__panels{
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -6787,92 +6957,91 @@ html.modal-open .page-container{ overflow: hidden; }
   justify-content: space-between;
   gap: 10px;
 }
+/*
+ * Compact ledger rows, like the Orders list. The whole row is the control, so
+ * there is no thick stripe or twin-button treatment fighting for attention.
+ */
 .patient-chart-order{
   display: grid;
-  gap: 10px;
-  padding: 14px 16px 14px 15px;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
   border: 1px solid var(--border);
-  border-left-width: 4px;
-  border-left-color: var(--border-strong, var(--border));
-  border-radius: 12px;
+  border-radius: 10px;
+  color: var(--text-secondary);
   background: var(--bg-surface);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 6%, transparent);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
-.patient-chart-order--paid,
-.patient-chart-order--resolved{
-  border-left-color: var(--color-success);
+.patient-chart-order:hover{
+  border-color: var(--border-strong, var(--border));
+  background: var(--bg-elevated);
+}
+.patient-chart-order:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
 }
 .patient-chart-order--awaiting,
 .patient-chart-order--expired{
-  border-left-color: var(--color-warning);
   background: color-mix(in srgb, var(--color-warning) 5%, var(--bg-surface));
 }
 .patient-chart-order--cancelled,
 .patient-chart-order--rejected{
-  border-left-color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--border));
   background: color-mix(in srgb, var(--color-danger) 5%, var(--bg-surface));
 }
-.patient-chart-order > header{
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.patient-chart-order__head{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 16px;
+  align-items: center;
+  gap: 10px;
 }
-.patient-chart-order > header strong{
-  display: block;
+.patient-chart-order__head strong{
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 750;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: -.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .patient-chart-order__amount{
-  display: block;
-  margin-top: 4px;
   color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .patient-chart-order .order-stage-pill{
   flex: 0 0 auto;
-  min-height: 24px;
-  padding: 0 10px;
-  font-size: 11px;
+  min-height: 22px;
+  padding: 0 9px;
+  font-size: 10.5px;
 }
-.patient-chart-order__facts{
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 14px;
-  margin: 0;
+.patient-chart-order__chevron{
+  color: var(--text-tertiary);
 }
-.patient-chart-order__facts dt{
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-.patient-chart-order__facts dd{
-  margin: 2px 0 0;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 650;
-  overflow-wrap: anywhere;
+.patient-chart-order__meta{
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 .patient-chart-order__items{
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 550;
-  line-height: 1.45;
-}
-.patient-chart-order__open{
-  width: fit-content;
-  min-height: 36px;
-  justify-self: start;
+  display: block;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .patient-chart-order .patient-order-resolution{
-  margin: 0;
+  display: grid;
+  margin: 4px 0 0;
   grid-template-columns: auto minmax(0, 1fr);
 }
 .patient-chart-order .patient-order-resolution strong{

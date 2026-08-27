@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Package, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AlertTriangle, CheckCircle, ChevronRight, Clock3, Inbox, Lock, Package, Plus, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { getUnresolvedReason, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
@@ -22,19 +22,23 @@ import {
   directoryContextFromHistory,
   patientCrmUrl,
   selectedCrmKeyFromSearch,
-  type PatientDirectoryContext,
   type PatientDirectoryFilter,
 } from '../utils/patientDirectoryNavigation';
 import {
-  PATIENT_CRM_PRIMARY_FILTERS,
-  PATIENT_CRM_SECONDARY_FILTERS,
+  PATIENT_CRM_CLOSED_LANE,
+  PATIENT_CRM_LANES,
   patientCrmGroup,
+  patientCrmLane,
   patientCrmRecordKey,
   patientCrmStatusMeta,
   recordMatchesPatientFilter,
-  type PatientCrmGroup,
   type PatientCrmIcon,
+  type PatientCrmLane,
 } from '../utils/patientCrm';
+
+/** Placeholders keep every row present so a gap reads as "we do not hold this". */
+const NOT_RECORDED = 'Not recorded';
+const EMPTY_FIELD = '—';
 
 interface UnifiedPatient {
   id: string;
@@ -77,15 +81,6 @@ const CRM_ICONS: Record<PatientCrmIcon, LucideIcon> = {
   clock: Clock3,
   lock: Lock,
 };
-
-const CRM_GROUPS: Array<{ key: PatientCrmGroup; label: string; detail: string }> = [
-  { key: 'needs-action', label: 'Needs action', detail: 'Paid exceptions, cancellations and refunds' },
-  { key: 'enquiries', label: 'Enquiries', detail: 'Assigned to this pharmacy, awaiting HHH referral' },
-  { key: 'ready', label: 'Ready to collect', detail: 'Checked in and waiting for the patient' },
-  { key: 'on-order', label: 'On order', detail: 'Draft, payment or fulfilment in progress' },
-  { key: 'care', label: 'In care', detail: 'Referred or active without an open order' },
-  { key: 'declined', label: 'Closed', detail: 'Declined, rejected or suspended records' },
-];
 
 function supplierOrderCancelled(order: PatientOrder) {
   return order.prescriptions.some(prescription => prescription.purchaseOrderState === 'CANCELLED' || prescription.status === 'cancelled')
@@ -271,8 +266,7 @@ export default function Patients() {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<PatientDirectoryFilter>('all');
   const [selectedKey, setSelectedKey] = useState<string | null>(() => selectedCrmKeyFromSearch(window.location.search));
-  const listRowsRef = useRef<HTMLDivElement>(null);
-  const [listOverflow, setListOverflow] = useState({ top: false, bottom: false });
+  const [showClosed, setShowClosed] = useState(false);
 
   const patients = useMemo(() => {
     const map = new Map<string, UnifiedPatient>();
@@ -355,23 +349,19 @@ export default function Patients() {
     records.filter(record => recordMatchesPatientFilter(record, activeFilter) && recordMatchesQuery(record, search))
   ), [activeFilter, records, search]);
 
-  const grouped = useMemo(() => {
-    const buckets = new Map<PatientCrmGroup, CrmRecord[]>();
+  const lanes = useMemo(() => {
+    const buckets = new Map<PatientCrmLane, CrmRecord[]>();
     for (const record of filtered) {
-      const group = patientCrmGroup(record);
-      const list = buckets.get(group) ?? [];
+      const lane = patientCrmLane(record);
+      const list = buckets.get(lane) ?? [];
       list.push(record);
-      buckets.set(group, list);
+      buckets.set(lane, list);
     }
     return buckets;
   }, [filtered]);
 
-  const selected = filtered.find(record => record.key === selectedKey) ?? filtered[0] ?? null;
-
-  useEffect(() => {
-    if (selected && selected.key !== selectedKey) setSelectedKey(selected.key);
-    if (!selected) setSelectedKey(null);
-  }, [selected, selectedKey]);
+  // Nothing is auto-selected any more: the board is the view, the dialog is opt-in.
+  const selected = records.find(record => record.key === selectedKey) ?? null;
 
   useEffect(() => {
     const selection = selected ? { kind: selected.kind, id: selected.id } : null;
@@ -379,30 +369,6 @@ export default function Patients() {
     const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (next !== current) window.history.replaceState(window.history.state, '', next);
   }, [selected]);
-
-  const syncListOverflow = useCallback(() => {
-    const el = listRowsRef.current;
-    if (!el) {
-      setListOverflow({ top: false, bottom: false });
-      return;
-    }
-    const top = el.scrollTop > 6;
-    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 6;
-    setListOverflow(current => current.top === top && current.bottom === bottom ? current : { top, bottom });
-  }, []);
-
-  useEffect(() => {
-    const el = listRowsRef.current;
-    syncListOverflow();
-    if (!el) return;
-    el.addEventListener('scroll', syncListOverflow, { passive: true });
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(syncListOverflow);
-    observer?.observe(el);
-    return () => {
-      el.removeEventListener('scroll', syncListOverflow);
-      observer?.disconnect();
-    };
-  }, [syncListOverflow, filtered.length, activeFilter]);
 
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
@@ -440,35 +406,12 @@ export default function Patients() {
     dispatch({ type: 'SET_SCREEN', screen: 'create' });
   };
 
-  const persistDirectoryContext = (patch: Partial<PatientDirectoryContext> = {}) => {
-    const context: PatientDirectoryContext = {
-      search,
-      filter: activeFilter,
-      sort: 'name',
-      scrollTop: listRowsRef.current?.scrollTop ?? 0,
-      pageScrollY: window.scrollY,
-      focusPatientId: selected?.key ?? null,
-      ...patch,
-    };
-    window.history.replaceState({ ...(window.history.state ?? {}), patientDirectoryContext: context }, '', window.location.href);
-  };
-
-  const filterCount = (key: PatientDirectoryFilter) => records.filter(record => recordMatchesPatientFilter(record, key)).length;
   const empty = emptyCopy(activeFilter, Boolean(search.trim()));
-  const patientCount = records.filter(record => record.kind === 'patient').length;
-  const enquiryCount = records.filter(record => record.kind === 'enquiry').length;
-  const onOrderCount = records.filter(record => record.hasOpenOrder).length;
-  const needsActionCount = records.filter(record => record.needsAction).length;
+  const closedCount = records.filter(record => patientCrmLane(record) === 'declined').length;
+  const visibleLanes = showClosed ? [...PATIENT_CRM_LANES, PATIENT_CRM_CLOSED_LANE] : PATIENT_CRM_LANES;
 
   return (
     <div className="page-body order-crm patient-crm">
-      <section className="order-crm-summary" aria-label="Patient CRM summary">
-        <SummaryMetric label="Patients" value={String(patientCount)} detail="Referred and active records" icon={Users} tone="primary" />
-        <SummaryMetric label="Enquiries" value={String(enquiryCount)} detail="Assigned, awaiting HHH referral" icon={Inbox} tone="primary" />
-        <SummaryMetric label="On order" value={String(onOrderCount)} detail="Draft, payment or fulfilment" icon={Package} tone="warning" />
-        <SummaryMetric label="Needs action" value={String(needsActionCount)} detail="Exceptions, refunds and cancellations" icon={AlertTriangle} tone="warning" />
-      </section>
-
       <section className="order-crm-controls">
         <div className="order-crm-search">
           <Search size={15} />
@@ -480,75 +423,49 @@ export default function Patients() {
             aria-label="Search patient CRM"
           />
         </div>
-        <div className="order-crm-filters" role="group" aria-label="Filter patients by status">
-          {PATIENT_CRM_PRIMARY_FILTERS.map(filter => (
-            <button
-              type="button"
-              key={filter.key}
-              className={activeFilter === filter.key ? 'active' : ''}
-              aria-pressed={activeFilter === filter.key}
-              onClick={() => { persistDirectoryContext({ filter: filter.key }); setActiveFilter(filter.key); }}
-            >
-              <span>{filter.label}</span><strong>{filterCount(filter.key)}</strong>
-            </button>
-          ))}
-          <details className={`order-filter-more${PATIENT_CRM_SECONDARY_FILTERS.some(filter => filter.key === activeFilter) ? ' active' : ''}`}>
-            <summary>
-              <span>{PATIENT_CRM_SECONDARY_FILTERS.find(filter => filter.key === activeFilter)?.label ?? 'More'}</span>
-              <ChevronDown size={13} aria-hidden="true" />
-            </summary>
-            <div role="group" aria-label="More patient filters">
-              {PATIENT_CRM_SECONDARY_FILTERS.map(filter => (
-                <button
-                  type="button"
-                  key={filter.key}
-                  className={activeFilter === filter.key ? 'active' : ''}
-                  aria-pressed={activeFilter === filter.key}
-                  onClick={event => {
-                    persistDirectoryContext({ filter: filter.key });
-                    setActiveFilter(filter.key);
-                    event.currentTarget.closest('details')?.removeAttribute('open');
-                  }}
-                >
-                  <span>{filter.label}</span><strong>{filterCount(filter.key)}</strong>
-                </button>
-              ))}
-            </div>
-          </details>
-        </div>
+        <button
+          type="button"
+          className={`patient-lane-toggle${showClosed ? ' is-on' : ''}`}
+          aria-pressed={showClosed}
+          onClick={() => setShowClosed(value => !value)}
+        >
+          {showClosed ? 'Hide' : 'Show'} declined <strong>{closedCount}</strong>
+        </button>
       </section>
 
-      <div className="order-crm-workspace">
-        <aside className={`order-crm-list${listOverflow.top ? ' is-overflow-top' : ''}${listOverflow.bottom ? ' is-overflow-bottom' : ''}`} aria-label="Patients">
-          <header><span><small>Patient CRM</small><strong>{filtered.length} result{filtered.length === 1 ? '' : 's'}</strong></span></header>
-          <div className="order-crm-list__scroller">
-            <div className="order-crm-list__rows" ref={listRowsRef}>
-              {filtered.length ? (
-                activeFilter === 'all' ? (
-                  CRM_GROUPS.map(group => (
-                    <CrmListGroup
-                      key={group.key}
-                      label={group.label}
-                      detail={group.detail}
-                      records={grouped.get(group.key) ?? []}
-                      selectedKey={selected?.key ?? null}
-                      onSelect={setSelectedKey}
-                    />
-                  ))
+      {filtered.length ? (
+        <div className="patient-lane-board">
+          {visibleLanes.map(lane => {
+            const laneRecords = lanes.get(lane.key) ?? [];
+            return (
+              <section className={`patient-lane patient-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
+                <header className="patient-lane__header">
+                  <span>
+                    <strong>{lane.label}</strong>
+                    <small>{lane.detail}</small>
+                  </span>
+                  <b>{laneRecords.length}</b>
+                </header>
+                {laneRecords.length ? (
+                  <div className="patient-lane__rows">
+                    {laneRecords.map(record => (
+                      <CrmListRow key={record.key} record={record} selected={false} onSelect={() => setSelectedKey(record.key)} />
+                    ))}
+                  </div>
                 ) : (
-                  filtered.map(record => (
-                    <CrmListRow key={record.key} record={record} selected={selected?.key === record.key} onSelect={() => setSelectedKey(record.key)} />
-                  ))
-                )
-              ) : (
-                <div className="order-crm-empty"><Users size={26} /><strong>{empty.title}</strong><span>{empty.detail}</span></div>
-              )}
-            </div>
-          </div>
-        </aside>
+                  <p className="patient-lane__empty">Nothing here.</p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="order-crm-empty"><Users size={26} /><strong>{empty.title}</strong><span>{empty.detail}</span></div>
+      )}
 
-        <main className="order-crm-detail">
-          {selected?.patient ? (
+      {selected ? (
+        <PatientCrmDialog record={selected} onClose={() => setSelectedKey(null)}>
+          {selected.patient ? (
             <PatientCrmDetail
               record={selected}
               workspaceLive={state.workspaceMode === 'live' || state.workspaceMode === 'training'}
@@ -558,40 +475,51 @@ export default function Patients() {
                 dispatch({ type: 'SET_SCREEN', screen: 'orders' });
               }}
             />
-          ) : selected?.enquiry ? (
-            <EnquiryCrmDetail record={selected} />
           ) : (
-            <div className="order-crm-empty order-crm-empty--detail">
-              <Users size={38} />
-              <strong>Select a patient</strong>
-              <span>Status, contact details and order history will appear here.</span>
-            </div>
+            <EnquiryCrmDetail record={selected} />
           )}
-        </main>
-      </div>
+        </PatientCrmDialog>
+      ) : null}
     </div>
   );
 }
 
-function SummaryMetric({ label, value, detail, icon: Icon, tone }: { label: string; value: string; detail: string; icon: LucideIcon; tone: string }) {
-  return <article className={`order-crm-metric order-crm-metric--${tone}`}><span className="order-crm-metric__icon"><Icon size={16} /></span><span><small>{label}</small><strong>{value}</strong><em>{detail}</em></span></article>;
-}
+/** Focus-trapped dialog so the record reads full width instead of in a cramped pane. */
+function PatientCrmDialog({ record, onClose, children }: { record: CrmRecord; onClose: () => void; children: ReactNode }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-function CrmListGroup({ label, detail, records, selectedKey, onSelect }: {
-  label: string;
-  detail: string;
-  records: CrmRecord[];
-  selectedKey: string | null;
-  onSelect: (key: string) => void;
-}) {
-  if (!records.length) return null;
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    const previous = document.activeElement as HTMLElement | null;
+    const bodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = bodyOverflow;
+      previous?.focus?.();
+    };
+  }, [onClose]);
+
   return (
-    <section className="order-crm-list-group" aria-label={label}>
-      <header><span><strong>{label}</strong><small>{detail}</small></span><b>{records.length}</b></header>
-      {records.map(record => (
-        <CrmListRow key={record.key} record={record} selected={selectedKey === record.key} onSelect={() => onSelect(record.key)} />
-      ))}
-    </section>
+    <div className="patient-crm-dialog__scrim" role="presentation" onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <div
+        className="patient-crm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${record.name} record`}
+        ref={dialogRef}
+        tabIndex={-1}
+      >
+        <button type="button" className="patient-crm-dialog__close icon-button" aria-label="Close record" onClick={onClose}>
+          <X size={16} aria-hidden="true" />
+        </button>
+        <div className="patient-crm-dialog__body">{children}</div>
+      </div>
+    </div>
   );
 }
 
@@ -660,15 +588,12 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
   const clinical = patientClinicalProfile({ crmPatient: patient.crmPatient, submission: patient.submission });
   const conditions = clinical.conditions;
   const primaryCondition = clinical.primaryCondition;
-  const dob = formatPatientDob(patient.dob) !== 'Not recorded' ? formatPatientDob(patient.dob) : null;
-  const contactLine = [dob, patient.mobile || null, patient.email || null].filter(Boolean).join(' · ');
   const canOrder = workspaceLive && canCreateOrderForPatient(patient.crmPatient);
   const orderGate = newOrderGateMessage(workspaceLive, patient);
   const foundService = clinical.heardAbout || portalSourceLabel(clinical.referralSource) || null;
   const treatmentCheck = clinical.triedTwoTreatments === true ? 'Yes' : clinical.triedTwoTreatments === false ? 'No' : null;
   const psychosisCheck = clinical.psychiatricExclusion === true ? 'Excluded' : clinical.psychiatricExclusion === false ? 'Passed' : null;
   const marketing = clinical.marketingConsent === null ? null : clinical.marketingConsent ? 'Consent given' : 'No consent';
-  const hasClinical = conditions.length > 0 || Boolean(primaryCondition) || Boolean(foundService) || Boolean(treatmentCheck) || Boolean(psychosisCheck) || marketing !== null || Boolean(patient.submission?.reviewerDisplay) || Boolean(patient.submission && isNegativeEligibilityStatus(patient.submission.status));
   const eligibilityLabel = patient.submission ? onboardingStatusLabel(patient.submission.status) : null;
 
   return (
@@ -679,7 +604,6 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
             <span className={`order-crm-record__stage order-tone--${meta.tone}`} aria-hidden="true"><Icon size={20} /></span>
             <div className="order-crm-record__titles">
               <strong>{patient.name}</strong>
-              <span className="order-crm-record__ref">{contactLine || 'Contact details not recorded'}</span>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
@@ -721,42 +645,39 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
         ) : null}
 
         <div className="patient-chart__panels">
-          {patient.crmPatient?.address || patient.crmPatient?.postcode ? (
-            <section className="patient-chart-card" aria-labelledby="patient-contact-title">
-              <header><h3 id="patient-contact-title">Address</h3></header>
-              <dl className="patient-chart-facts">
-                {patient.crmPatient?.address ? <div><dt>Street</dt><dd>{patient.crmPatient.address}</dd></div> : null}
-                {patient.crmPatient?.postcode ? <div><dt>Postcode</dt><dd>{patient.crmPatient.postcode}</dd></div> : null}
-              </dl>
-            </section>
-          ) : null}
+          {/* Every row renders even when empty: a missing detail is itself information. */}
+          <section className="patient-chart-card" aria-labelledby="patient-contact-title">
+            <header><h3 id="patient-contact-title">Contact</h3></header>
+            <dl className="patient-chart-facts">
+              <div><dt>Date of birth</dt><dd>{formatPatientDob(patient.dob)}</dd></div>
+              <div><dt>Email</dt><dd>{patient.email || NOT_RECORDED}</dd></div>
+              <div><dt>Phone</dt><dd>{patient.mobile || NOT_RECORDED}</dd></div>
+              <div><dt>Address</dt><dd>{patient.crmPatient?.address || NOT_RECORDED}</dd></div>
+              <div><dt>Postcode</dt><dd>{patient.crmPatient?.postcode || NOT_RECORDED}</dd></div>
+            </dl>
+          </section>
 
           <section className="patient-chart-card" aria-labelledby="patient-clinical-title">
-            <header><h3 id="patient-clinical-title">Clinical</h3></header>
-            {!hasClinical ? (
-              <p className="patient-chart-empty">No eligibility details on this record.</p>
-            ) : (
-              <>
-                {patient.submission && isNegativeEligibilityStatus(patient.submission.status) ? (
-                  <div className="patient-eligibility-reason"><span>Reason</span><strong>{pharmacyDecisionReason(patient.submission)}</strong></div>
-                ) : null}
-                {conditions.length > 0 ? (
-                  <div className="patient-chart-conditions">
-                    <span>Conditions</span>
-                    <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
-                  </div>
-                ) : null}
-                <dl className="patient-chart-facts">
-                  {primaryCondition && conditions.length === 0 ? <div><dt>Primary condition</dt><dd>{conditionLabel(primaryCondition)}</dd></div> : null}
-                  {treatmentCheck ? <div><dt>Tried two or more treatments</dt><dd>{treatmentCheck}</dd></div> : null}
-                  {psychosisCheck ? <div><dt>Psychosis check</dt><dd>{psychosisCheck}</dd></div> : null}
-                  {foundService ? <div><dt>How they found the service</dt><dd>{foundService}</dd></div> : null}
-                  {marketing ? <div><dt>Marketing contact</dt><dd>{marketing}</dd></div> : null}
-                  {patient.submission?.reviewerDisplay ? <div><dt>Reviewed by</dt><dd>{patient.submission.reviewerDisplay}</dd></div> : null}
-                  {patient.submission?.reviewedAt ? <div><dt>Decision recorded</dt><dd>{fmtDate(patient.submission.reviewedAt)}</dd></div> : null}
-                </dl>
-              </>
-            )}
+            <header><h3 id="patient-clinical-title">Eligibility Form Info</h3></header>
+            {patient.submission && isNegativeEligibilityStatus(patient.submission.status) ? (
+              <div className="patient-eligibility-reason"><span>Reason</span><strong>{pharmacyDecisionReason(patient.submission)}</strong></div>
+            ) : null}
+            {conditions.length > 0 ? (
+              <div className="patient-chart-conditions">
+                <span>Conditions</span>
+                <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
+              </div>
+            ) : null}
+            <dl className="patient-chart-facts">
+              <div><dt>Primary condition</dt><dd>{primaryCondition ? conditionLabel(primaryCondition) : EMPTY_FIELD}</dd></div>
+              <div><dt>Conditions</dt><dd>{conditions.length ? conditions.map(condition => conditionLabel(condition)).join(', ') : EMPTY_FIELD}</dd></div>
+              <div><dt>Tried two or more treatments</dt><dd>{treatmentCheck ?? EMPTY_FIELD}</dd></div>
+              <div><dt>Psychosis check</dt><dd>{psychosisCheck ?? EMPTY_FIELD}</dd></div>
+              <div><dt>How they found the service</dt><dd>{foundService ?? EMPTY_FIELD}</dd></div>
+              <div><dt>Marketing contact</dt><dd>{marketing ?? EMPTY_FIELD}</dd></div>
+              <div><dt>Reviewed by</dt><dd>{patient.submission?.reviewerDisplay ?? EMPTY_FIELD}</dd></div>
+              <div><dt>Decision recorded</dt><dd>{patient.submission?.reviewedAt ? fmtDate(patient.submission.reviewedAt) : EMPTY_FIELD}</dd></div>
+            </dl>
             {patient.submission && patient.submission.calls.length > 0 ? (
               <p className="patient-chart-calls">{patient.submission.calls.length} patient call{patient.submission.calls.length === 1 ? '' : 's'} logged</p>
             ) : null}
@@ -888,30 +809,33 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
                       ? 'Payment stays paid until you refund or replace this order.'
                       : 'Choose replacement or refund in Orders.';
                 const AlertIcon = curaleafLock || exceptionReason === 'cancelled' ? XCircle : refunded ? CheckCircle : AlertTriangle;
+                const orderTitle = `${order.redoContext ? 'Replacement' : 'Order'} ${orderReference(order)}`;
                 return (
-                  <article className={`patient-chart-order patient-chart-order--${cardTone}`} key={order.id}>
-                    <header>
-                      <div>
-                        <strong>{order.redoContext ? 'Replacement' : 'Order'} {orderReference(order)}</strong>
-                        <span className="patient-chart-order__amount">{money(order.payment.amount || orderRevenue(order))}</span>
-                      </div>
+                  /* The whole row opens the order — no separate button competing with it. */
+                  <button
+                    type="button"
+                    className={`patient-chart-order patient-chart-order--${cardTone}`}
+                    key={order.id}
+                    aria-label={`Open ${orderTitle}, ${paymentLabel}`}
+                    onClick={() => onOpenOrder(order)}
+                  >
+                    <span className="patient-chart-order__head">
+                      <strong>{orderTitle}</strong>
+                      <span className="patient-chart-order__amount">{money(order.payment.amount || orderRevenue(order))}</span>
                       <span className={`order-stage-pill ${paymentPill}`}>{paymentLabel}</span>
-                    </header>
-                    <dl className="patient-chart-order__facts">
-                      <div><dt>Opened</dt><dd>{fmtDate(order.date)}</dd></div>
-                      <div><dt>Supplier</dt><dd>{fulfilmentLabel}</dd></div>
-                    </dl>
-                    {productNames.length ? <p className="patient-chart-order__items">{productNames.join(', ')}</p> : null}
+                      <ChevronRight className="patient-chart-order__chevron" size={15} aria-hidden="true" />
+                    </span>
+                    <span className="patient-chart-order__meta">
+                      {fmtDate(order.date)} · {fulfilmentLabel}
+                    </span>
+                    {productNames.length ? <span className="patient-chart-order__items">{productNames.join(', ')}</span> : null}
                     {exceptionReason || curaleafLock ? (
-                      <div className={`patient-order-resolution${refunded ? ' is-complete' : exceptionReason === 'cancelled' ? ' is-cancelled' : ''}`}>
-                        <AlertIcon size={18} aria-hidden="true" />
+                      <span className={`patient-order-resolution${refunded ? ' is-complete' : exceptionReason === 'cancelled' ? ' is-cancelled' : ''}`}>
+                        <AlertIcon size={16} aria-hidden="true" />
                         <span><strong>{alertTitle}</strong><small>{alertDetail}</small></span>
-                      </div>
+                      </span>
                     ) : null}
-                    <button type="button" className="btn btn-secondary btn-sm patient-chart-order__open" onClick={() => onOpenOrder(order)}>
-                      Open order <ChevronRight size={14} aria-hidden="true" />
-                    </button>
-                  </article>
+                  </button>
                 );
               })
           )}
@@ -927,7 +851,6 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
   const Icon = CRM_ICONS[meta.icon];
   const conditions = enquiry.conditions;
   const primaryCondition = enquiry.primaryCondition ?? conditions[0] ?? '';
-  const contactLine = [formatPatientDob(enquiry.dob), enquiry.mobile, enquiry.email].filter(Boolean).join(' · ');
   return (
     <article className="order-crm-record">
       <header className="order-crm-record__header">
@@ -945,7 +868,6 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
           <div className="order-crm-record__value">
             <small>Received</small>
             <strong>{fmtDate(enquiry.submittedAt)}</strong>
-            <span className="order-crm-record__opened">{contactLine}</span>
           </div>
           <div className="order-crm-record__actions" role="group" aria-label="Enquiry actions">
             <button className="btn btn-primary btn-sm" type="button" disabled>
@@ -958,24 +880,28 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
       <PatientJourneyRail stage="enquiry" />
       <div className="patient-crm-detail__body">
         <div className="patient-chart__panels">
-          {enquiry.postcode ? (
-            <section className="patient-chart-card" aria-labelledby="enquiry-contact-title">
-              <header><h3 id="enquiry-contact-title">Address</h3></header>
-              <dl className="patient-chart-facts">
-                <div><dt>Postcode</dt><dd>{enquiry.postcode}</dd></div>
-              </dl>
-            </section>
-          ) : null}
+          <section className="patient-chart-card" aria-labelledby="enquiry-contact-title">
+            <header><h3 id="enquiry-contact-title">Contact</h3></header>
+            <dl className="patient-chart-facts">
+              <div><dt>Date of birth</dt><dd>{formatPatientDob(enquiry.dob)}</dd></div>
+              <div><dt>Email</dt><dd>{enquiry.email || NOT_RECORDED}</dd></div>
+              <div><dt>Phone</dt><dd>{enquiry.mobile || NOT_RECORDED}</dd></div>
+              <div><dt>Postcode</dt><dd>{enquiry.postcode || NOT_RECORDED}</dd></div>
+            </dl>
+          </section>
           <section className="patient-chart-card" aria-labelledby="enquiry-clinical-title">
-            <header><h3 id="enquiry-clinical-title">Clinical</h3></header>
+            <header><h3 id="enquiry-clinical-title">Eligibility Form Info</h3></header>
             {conditions.length > 0 ? (
               <div className="patient-chart-conditions">
                 <span>Conditions</span>
                 <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
               </div>
-            ) : (
-              <p className="patient-chart-empty">No eligibility details on this enquiry.</p>
-            )}
+            ) : null}
+            <dl className="patient-chart-facts">
+              <div><dt>Primary condition</dt><dd>{primaryCondition ? conditionLabel(primaryCondition) : EMPTY_FIELD}</dd></div>
+              <div><dt>Conditions</dt><dd>{conditions.length ? conditions.map(condition => conditionLabel(condition)).join(', ') : EMPTY_FIELD}</dd></div>
+              <div><dt>Referral source</dt><dd>{record.sourceLabel ?? EMPTY_FIELD}</dd></div>
+            </dl>
           </section>
         </div>
       </div>
