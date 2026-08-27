@@ -6,6 +6,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--config", "vite.pharmacy.config.ts", "--port", "5183"],
       "port": 5183
+    },
+    {
+      "name": "eligibility",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:eligibility"],
+      "port": 5174
     }
   ]
 }
