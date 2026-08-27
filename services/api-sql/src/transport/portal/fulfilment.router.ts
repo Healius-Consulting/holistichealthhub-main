@@ -41,6 +41,45 @@ function snapshotObject(value: unknown): Record<string, any> {
   return value && typeof value === 'object' && !Array.isArray(value) ? { ...value as Record<string, any> } : {};
 }
 
+
+/**
+ * Goods-in is the regulated record that stock entered this dispensary, and it names the
+ * member of staff who verified it. Both callers below write it before any pack count
+ * moves and let a failure here abort the request: booking stock in while silently
+ * dropping the receipt would leave verified packs on the shelf with nothing recording
+ * who received them. The route used to fall back to a synthetic `gr-<timestamp>` id and
+ * still answer 201, so the loss was invisible to the pharmacy.
+ */
+export function assertGoodsReceiptRecorded(input: {
+  shipmentId: string | null | undefined;
+  receiptId: string | null | undefined;
+}): string {
+  if (!input.shipmentId) {
+    throw new HttpError(
+      409,
+      'This consignment is not linked to the order yet, so the goods-in record cannot be saved. Refresh the order and try again.',
+      'SHIPMENT_NOT_LINKED',
+    );
+  }
+  if (!input.receiptId) {
+    throw new HttpError(
+      503,
+      'The goods-in record could not be saved, so no stock was booked in. Try again in a moment.',
+      'GOODS_RECEIPT_NOT_RECORDED',
+    );
+  }
+  return input.receiptId;
+}
+
+/** A receipt short of what the consignment promised is recorded as PARTIAL, not COMPLETE. */
+export function goodsReceiptStatus(
+  items: Array<{ expectedQuantity?: number; receivedQuantity: number }>,
+): 'COMPLETE' | 'PARTIAL' {
+  return items.some(item => (item.expectedQuantity ?? item.receivedQuantity) > item.receivedQuantity)
+    ? 'PARTIAL'
+    : 'COMPLETE';
+}
+
 export function createPortalFulfilmentRouter(): Router {
   const router = Router();
   const fulfilmentRepo = new SqlFulfilmentRepository();
@@ -94,7 +133,14 @@ export function createPortalFulfilmentRouter(): Router {
             result.id
               ? { id: result.id, orderId: order.id, supplierPurchaseOrderId: String(poId), supplierShipmentId, supplierCustomerReference: order.orderNumber, status: 'DISPATCHED', dispatchedAt: null, createdAt: new Date().toISOString() }
               : null
-          )).catch(() => null);
+          )).catch(error => {
+            console.error('[Goods-in] Supplier shipment row could not be created.', {
+              orderId: order.id,
+              supplierShipmentId,
+              code: error instanceof Error ? error.name : 'UNKNOWN',
+            });
+            return null;
+          });
         }
       }
       if (!targetOrderId) {
@@ -107,20 +153,24 @@ export function createPortalFulfilmentRouter(): Router {
           ? `Shipment ${supplierShipmentId} items check-in: ${JSON.stringify(itemsPayload)}`
           : `Shipment ${supplierShipmentId} goods receipt verified`;
 
-      let recordId = `gr-${Date.now()}`;
-      if (sqlShipment?.id) {
-        const result = await fulfilmentRepo.createGoodsReceipt({
+      const receipt = sqlShipment?.id
+        ? await fulfilmentRepo.createGoodsReceipt({
           organisationId: scope.organisationId,
           shipmentId: sqlShipment.id,
           receivedByUid: scope.uid,
-          status: itemsPayload.some(item => (item.expectedQuantity ?? item.receivedQuantity) > item.receivedQuantity) ? 'PARTIAL' : 'COMPLETE',
+          status: goodsReceiptStatus(itemsPayload),
           notes: notesContent,
-        }).catch(err => {
-          console.warn('Fulfilment SQL persistence fallback:', err);
+        }).catch(error => {
+          console.error('[Goods-in] Receipt could not be persisted; no stock was booked in.', {
+            orderId: targetOrderId,
+            supplierShipmentId,
+            code: error instanceof Error ? error.name : 'UNKNOWN',
+          });
           return null;
-        });
-        if (result?.id) recordId = result.id;
-      }
+        })
+        : null;
+      // Throws before a single pack count moves. See `assertGoodsReceiptRecorded`.
+      const recordId = assertGoodsReceiptRecorded({ shipmentId: sqlShipment?.id, receiptId: receipt?.id });
 
       const order = await orderRepo.findOrderById(targetOrderId, scope.organisationId);
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
