@@ -29,10 +29,14 @@ const LIST_PENDING_GQL = `
   query ListPendingNotifications($limit: Int!, $now: Timestamp!) {
     notificationOutboxes(
       where: {
-        status: { eq: PENDING }
-        _or: [
-          { nextAttemptAt: { isNull: true } }
-          { nextAttemptAt: { le: $now } }
+        _and: [
+          { status: { eq: PENDING } }
+          {
+            _or: [
+              { nextAttemptAt: { isNull: true } }
+              { nextAttemptAt: { le: $now } }
+            ]
+          }
         ]
       }
       limit: $limit
