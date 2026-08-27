@@ -4,6 +4,7 @@ import { HttpError } from '../../domain/common/errors.js';
 import { executeCuraleafOrderPlacement } from '../../application/integrations/curaleaf.service.js';
 import { fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
 import { quoteCheckInput, quoteGateAllowsPayment } from '../../application/orders/quote-gate.js';
+import { stampPaidQuoteOnSnapshot } from '../../application/orders/finance-costing.js';
 import { persistCuraleafPrescriptionIdentity } from '../../application/prescriptions/curaleaf-prescription-record.js';
 import { promotePatientAfterCuraleafPlacement } from '../../application/patient-finance/patient-finance.js';
 import { createWorldpayHostedSession } from '../../application/integrations/worldpay.service.js';
@@ -139,7 +140,9 @@ export function createPortalPaymentRouter(): Router {
       id: order.id,
       organisationId,
       quoteSnapshot: {
-        ...(order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot as Record<string, unknown> : {}),
+        // Every payment route passes through here, so this is the one place that can
+        // guarantee the paid Curaleaf quote is frozen before money moves.
+        ...stampPaidQuoteOnSnapshot(order.quoteSnapshot, rawQuote),
         paymentQuote: {
           id: check.id,
           phase: check.phase,
@@ -189,7 +192,9 @@ export function createPortalPaymentRouter(): Router {
 
       const baseline = await createPrePaymentQuote(order, scope.organisationId);
       const quoteSnapshotWithBaseline = {
-        ...(order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot as Record<string, unknown> : {}),
+        // Freeze the paid per-pack quote if order creation never did. Without this the
+        // order pays a real Curaleaf cost that finance can only ever call "awaiting quote".
+        ...stampPaidQuoteOnSnapshot(order.quoteSnapshot, baseline.rawQuote),
         paymentQuote: {
           id: baseline.id,
           phase: baseline.phase,
@@ -438,8 +443,8 @@ export function createPortalPaymentRouter(): Router {
       const connection = await integrationRepo.findConnection(scope.organisationId, 'WORLDPAY').catch(() => null);
       const transactionReference = createWorldpayTransactionReference();
 
-      const successUrl = `https://holistichealthhub.cc/payment/success?ref=${encodeURIComponent(transactionReference)}`;
-      const cancelUrl = `https://holistichealthhub.cc/payment/cancelled?ref=${encodeURIComponent(transactionReference)}`;
+      const successUrl = `https://holistichealthhub.live/payment/success?ref=${encodeURIComponent(transactionReference)}`;
+      const cancelUrl = `https://holistichealthhub.live/payment/cancelled?ref=${encodeURIComponent(transactionReference)}`;
 
       const session = await createWorldpayHostedSession(connection, scope.organisationId, {
         orderNumber: order.orderNumber || orderId,
@@ -517,8 +522,8 @@ export function createPortalPaymentRouter(): Router {
       const baseline = await createPrePaymentQuote(order, scope.organisationId);
       const connection = await integrationRepo.findConnection(scope.organisationId, 'WORLDPAY').catch(() => null);
       const transactionReference = createWorldpayTransactionReference();
-      const successUrl = `https://holistichealthhub.cc/payment/success?ref=${encodeURIComponent(transactionReference)}`;
-      const cancelUrl = `https://holistichealthhub.cc/payment/cancelled?ref=${encodeURIComponent(transactionReference)}`;
+      const successUrl = `https://holistichealthhub.live/payment/success?ref=${encodeURIComponent(transactionReference)}`;
+      const cancelUrl = `https://holistichealthhub.live/payment/cancelled?ref=${encodeURIComponent(transactionReference)}`;
 
       const session = await createWorldpayHostedSession(connection, scope.organisationId, {
         orderNumber: order.orderNumber || orderId,

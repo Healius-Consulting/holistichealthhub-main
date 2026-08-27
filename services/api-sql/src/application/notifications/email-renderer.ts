@@ -21,7 +21,7 @@ function value(payload: unknown, key: string) {
 }
 
 function paymentReceiptUrl(receiptHash: string) {
-  return `https://holistichealthhub.cc/receipt/${encodeURIComponent(receiptHash)}`;
+  return `https://holistichealthhub.live/receipt/${encodeURIComponent(receiptHash)}`;
 }
 
 function enquirySourceLabel(sourceType: string) {
@@ -197,7 +197,7 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
         paragraphs: [
           'A patient has submitted an eligibility enquiry. Identifiable details are masked here. Open the portal to view the full name, phone number and email address.',
         ],
-        cta: { label: 'Open portal', href: 'https://portal.holistichealthhub.cc' },
+        cta: { label: 'Open portal', href: 'https://portal.holistichealthhub.live' },
         detailsTitle: 'Patient details',
         details: [
           { label: 'Name', value: enquiry.name },

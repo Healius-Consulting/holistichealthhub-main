@@ -141,8 +141,17 @@ function pounds(pence: number) {
   return money(pence / 100);
 }
 
-function FinancialValue({ value }: { value: number | null }) {
+function FinancialValue({ value, estimated }: { value: number | null; estimated?: boolean }) {
   if (value === null) return <span className="pharmacy-finance__awaiting">Awaiting quote</span>;
+  // A quote-bank figure is today's catalogue price, not the frozen paid quote. Say so
+  // in text as well as styling so nobody reads it as a settled cost.
+  if (estimated) {
+    return (
+      <span className="pharmacy-finance__estimated" title="Estimated from the Curaleaf quote bank; no paid quote was frozen on this order.">
+        {pounds(value)} <small>est.</small>
+      </span>
+    );
+  }
   return <>{pounds(value)}</>;
 }
 
@@ -173,6 +182,7 @@ function financeRowFlags(row: FinanceRow) {
 function summariseRealisedRows(rows: FinanceRow[]) {
   const costed = rows.filter(row => row.wholesaleComplete);
   return {
+    wholesaleEstimatedForCount: costed.filter(row => row.wholesaleEstimated).length,
     paidPrescriptionCount: rows.length,
     patientRevenuePence: rows.reduce((sum, row) => sum + row.patientRevenuePence, 0),
     productRevenuePence: rows.reduce((sum, row) => sum + row.productRevenuePence, 0),
@@ -180,7 +190,7 @@ function summariseRealisedRows(rows: FinanceRow[]) {
     wholesaleKnownForCount: costed.length,
     wholesalePendingForCount: rows.length - costed.length,
     wholesaleProductPence: costed.reduce((sum, row) => sum + (row.wholesaleProductPence ?? 0), 0),
-    shippingPence: costed.reduce((sum, row) => sum + (row.shippingPence ?? 0), 0),
+    shippingPence: costed.reduce((sum, row) => sum + (row.shippingKnown === false ? 0 : row.shippingPence ?? 0), 0),
     wholesalePence: costed.reduce((sum, row) => sum + (row.wholesalePence ?? 0), 0),
     productMarginPence: costed.reduce((sum, row) => sum + (row.productMarginPence ?? 0), 0),
     totalContributionPence: costed.reduce((sum, row) => sum + (row.totalContributionPence ?? 0), 0),
@@ -321,6 +331,9 @@ export default function PharmacyFinance() {
                 {totals.wholesalePendingForCount
                   ? `${totals.wholesaleKnownForCount} of ${totals.paidPrescriptionCount} realised orders costed`
                   : 'Patient total − quoted products and shipping'}
+                {totals.wholesaleEstimatedForCount
+                  ? ` · ${totals.wholesaleEstimatedForCount} estimated from the quote bank`
+                  : ''}
               </span>
             </div>
             <dl className="pharmacy-finance__metrics">
@@ -408,12 +421,12 @@ export default function PharmacyFinance() {
                             </span>
                           </td>
                           <td data-label="Patient total"><FinancialValue value={record.patientRevenuePence} /></td>
-                          <td data-label="Quoted cost"><FinancialValue value={record.wholesalePence} /></td>
-                          <td data-label="Margin"><FinancialValue value={record.productMarginPence} /></td>
+                          <td data-label="Quoted cost"><FinancialValue value={record.wholesalePence} estimated={record.wholesaleEstimated} /></td>
+                          <td data-label="Margin"><FinancialValue value={record.productMarginPence} estimated={record.wholesaleEstimated} /></td>
                           <td data-label="Contribution" className="pharmacy-finance__contribution">
                             {pending
                               ? <span className="pharmacy-finance__awaiting">—</span>
-                              : <FinancialValue value={record.totalContributionPence} />}
+                              : <FinancialValue value={record.totalContributionPence} estimated={record.wholesaleEstimated} />}
                           </td>
                         </tr>
                       );
@@ -426,6 +439,9 @@ export default function PharmacyFinance() {
 
           <p className="pharmacy-finance__footnote">
             Operational estimate for this pharmacy only—not a Curaleaf settlement statement.
+            {totals.wholesaleEstimatedForCount
+              ? ` Rows marked “est.” are priced from the Curaleaf quote bank because no paid quote was frozen on the order, and exclude delivery cost.`
+              : ''}
             {totals.refundedPrescriptionCount > 0 || totals.refundPendingCount > 0
               ? ` Refunded and refund-pending orders are excluded (${totals.refundedPrescriptionCount} completed / ${totals.refundPendingCount} pending).`
               : ' Refunded and refund-pending orders are excluded.'}

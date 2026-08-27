@@ -24,18 +24,18 @@ test('unknown root modes remain on the public site', () => {
   assert.equal(resolvePublicView('/about', '?mode=eligibility'), 'site');
 });
 
-test('legacy eligibility URLs redirect to the rehearsal domain without changing pharmacy tokens', () => {
+test('retired .cc eligibility URLs canonicalise onto the brand domain without changing pharmacy tokens', () => {
   assert.equal(
     canonicalEligibilityRedirect(
-      'holistichealthhub.live',
+      'holistichealthhub.cc',
       '/',
       '?mode=eligibility&token=bbd8fc4749934797a49398c0b95e68cf873d4868c33c42a2949d6f65359d44c5',
     ),
-    'https://holistichealthhub.cc/eligibility?token=bbd8fc4749934797a49398c0b95e68cf873d4868c33c42a2949d6f65359d44c5',
+    'https://holistichealthhub.live/eligibility?token=bbd8fc4749934797a49398c0b95e68cf873d4868c33c42a2949d6f65359d44c5',
   );
   assert.equal(
-    canonicalEligibilityRedirect('holistichealthhub.live', '/eligibility', '?token=eastwood&source=qr&postcode=SW1A1AA&email=person%40example.com&utm_campaign=poster'),
-    'https://holistichealthhub.cc/eligibility?token=eastwood&source=qr&utm_campaign=poster',
+    canonicalEligibilityRedirect('holistichealthhub.cc', '/eligibility', '?token=eastwood&source=qr&postcode=SW1A1AA&email=person%40example.com&utm_campaign=poster'),
+    'https://holistichealthhub.live/eligibility?token=eastwood&source=qr&utm_campaign=poster',
   );
 });
 
@@ -49,7 +49,7 @@ test('all protected production tokens retain every supported URL shape', () => {
   for (const token of tokens) {
     assert.equal(resolvePublicView('/', `?mode=eligibility&token=${token}`), 'eligibility');
     assert.equal(resolvePublicView('/eligibility', `?token=${token}`), 'eligibility');
-    assert.equal(canonicalEligibilityRedirect('holistichealthhub.live', '/eligibility', `?token=${token}`), `https://holistichealthhub.cc/eligibility?token=${token}`);
+    assert.equal(canonicalEligibilityRedirect('holistichealthhub.cc', '/eligibility', `?token=${token}`), `https://holistichealthhub.live/eligibility?token=${token}`);
   }
   for (const token of ['kchem-7x4p9k', 'eastwood-3m8q2v']) assert.equal(resolvePublicView('/eligibility', `?token=${token}`), 'eligibility');
 });
@@ -59,11 +59,11 @@ test('printed thinktimeless stone URLs with a second ? still open eligibility', 
   assert.equal(resolvePublicView('/', stone), 'eligibility');
   assert.equal(
     canonicalEligibilityRedirect('hhh.thinktimeless.co.uk', '/', stone),
-    'https://holistichealthhub.cc/eligibility?token=eastwood-3m8q2v',
+    'https://holistichealthhub.live/eligibility?token=eastwood-3m8q2v',
   );
 });
 
-test('the exact printed Eastwood and K-Chem URLs redirect onto holistichealthhub.cc', () => {
+test('the exact printed Eastwood and K-Chem URLs redirect onto holistichealthhub.live', () => {
   const links = [
     'bbd8fc4749934797a49398c0b95e68cf873d4868c33c42a2949d6f65359d44c5',
     '0a93ebde7ab143cfafd7c2a34329b3587148fb1ff9fb4e6fbf02f517fac05d30',
@@ -73,7 +73,7 @@ test('the exact printed Eastwood and K-Chem URLs redirect onto holistichealthhub
     assert.equal(resolvePublicView('/', search), 'eligibility');
     assert.equal(
       canonicalEligibilityRedirect('hhh.thinktimeless.co.uk', '/', search),
-      `https://holistichealthhub.cc/eligibility?token=${token}`,
+      `https://holistichealthhub.live/eligibility?token=${token}`,
     );
   }
 });
@@ -85,8 +85,17 @@ test('the shared public header stays in marketing mode except on pharmacy token 
 });
 
 test('the canonical and unrelated public hosts never redirect themselves', () => {
-  assert.equal(canonicalEligibilityRedirect('holistichealthhub.cc', '/eligibility', '?token=value'), null);
-  assert.equal(canonicalEligibilityRedirect('www.holistichealthhub.cc', '/', '?mode=eligibility?token=eastwood-3m8q2v'), null);
-  assert.equal(canonicalEligibilityRedirect('holistichealthhub.live', '/about', '?token=value'), null);
-  assert.equal(canonicalEligibilityRedirect('holistichealthhub.live', '/eligibility', ''), null);
+  assert.equal(canonicalEligibilityRedirect('holistichealthhub.live', '/eligibility', '?token=value'), null);
+  assert.equal(canonicalEligibilityRedirect('www.holistichealthhub.live', '/', '?mode=eligibility?token=eastwood-3m8q2v'), null);
+  assert.equal(canonicalEligibilityRedirect('holistichealthhub.cc', '/about', '?token=value'), null);
+  assert.equal(canonicalEligibilityRedirect('holistichealthhub.cc', '/eligibility', ''), null);
+});
+
+// `.cc` remains an attachable Vercel host for preview/flicker testing. Only its
+// tokenised eligibility links canonicalise; every other path is left alone so the
+// host keeps serving whatever deployment it is attached to.
+test('only tokenised eligibility links are canonicalised away from the .cc flicker host', () => {
+  assert.equal(canonicalEligibilityRedirect('holistichealthhub.cc', '/', '?mode=eligibility'), null);
+  assert.equal(canonicalEligibilityRedirect('holistichealthhub.cc', '/faq', ''), null);
+  assert.equal(canonicalEligibilityRedirect('portal.holistichealthhub.cc', '/eligibility', '?token=value'), null);
 });

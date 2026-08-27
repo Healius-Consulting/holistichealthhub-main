@@ -17,12 +17,16 @@ export interface WorkspaceNavGroup<Key extends string = string> {
 
 const COLLAPSE_STORAGE_KEY = 'hhh_workspace_sidebar_collapsed';
 
-/** Reading storage can throw in private modes, so a failure just means expanded. */
-function readCollapsedPreference() {
+/**
+ * The rail is no longer a remembered mode: every load starts collapsed and the rail
+ * expands on hover or keyboard focus. Clear the old preference so a stale "expanded"
+ * value cannot survive as a permanently pinned sidebar.
+ */
+function forgetCollapsePreference() {
   try {
-    return window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === 'true';
+    window.localStorage.removeItem(COLLAPSE_STORAGE_KEY);
   } catch {
-    return false;
+    // A viewer preference is not worth failing the render over.
   }
 }
 
@@ -52,7 +56,8 @@ export default function WorkspaceNavigation<Key extends string>({
   moreTitle = 'More workspace tools',
 }: WorkspaceNavigationProps<Key>) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(readCollapsedPreference);
+  // Always collapsed on first paint. Hover, keyboard focus, or the pin button expand it.
+  const [collapsed, setCollapsed] = useState(true);
   const mobileMenuRef = useModalFocus<HTMLElement>(mobileMenuOpen, () => setMobileMenuOpen(false));
   const items = groups.flatMap(group => group.items);
   const mobilePrimary = mobilePrimaryKeys.map(key => items.find(item => item.key === key)).filter((item): item is WorkspaceNavItem<Key> => Boolean(item));
@@ -69,12 +74,11 @@ export default function WorkspaceNavigation<Key extends string>({
   }, []);
 
   useEffect(() => {
+    forgetCollapsePreference();
+  }, []);
+
+  useEffect(() => {
     document.body.classList.toggle('has-collapsed-sidebar', collapsed);
-    try {
-      window.localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
-    } catch {
-      // A viewer preference is not worth failing the render over.
-    }
     return () => document.body.classList.remove('has-collapsed-sidebar');
   }, [collapsed]);
 
@@ -100,6 +104,9 @@ export default function WorkspaceNavigation<Key extends string>({
 
   return (
     <>
+      {/* Holds the rail's 64px in the flex row so hovering overlays the workspace
+          instead of shoving every page against the edge of the screen. */}
+      {collapsed ? <div className="workspace-sidebar-rail-spacer" aria-hidden="true" /> : null}
       <aside className={`sidebar workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label={ariaLabel}>
         <div className="sidebar-header">
           <div className="sidebar-brand" title={brand.title}>
@@ -118,9 +125,9 @@ export default function WorkspaceNavigation<Key extends string>({
           <button
             type="button"
             className="sidebar-collapse"
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-            title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            aria-pressed={!collapsed}
+            aria-label={collapsed ? 'Keep navigation expanded' : 'Collapse navigation to a rail'}
+            title={collapsed ? 'Keep navigation expanded' : 'Collapse navigation to a rail'}
             onClick={() => setCollapsed(value => !value)}
           >
             {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}

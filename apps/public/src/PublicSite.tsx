@@ -24,7 +24,7 @@ const TEAM_SPECIALIST_IMAGE = '/hhh-team-specialist.jpg';
 const TEAM_PHARMACIST_IMAGE = '/hhh-team-pharmacist.jpg';
 const TEAM_NURSE_IMAGE = '/hhh-team-nurse.jpg';
 
-const CANONICAL_ORIGIN = 'https://holistichealthhub.cc';
+const CANONICAL_ORIGIN = 'https://holistichealthhub.live';
 const ECOLOGI_PROFILE_HREF = 'https://ecologi.com/holistichealthhub?r=657837efdee615d57964704e';
 const ECOLOGI_FUND_HREF = 'https://ecologi.com/holistichealthhub?gift=true&r=657837efdee615d57964704e';
 const ECOLOGI_IMPACT_URL = 'https://public.ecologi.com/users/holistichealthhub/impact';
@@ -155,7 +155,7 @@ function SiteFooter() {
           <PublicLink href="/how-it-works">How it works</PublicLink>
           <PublicLink href="/conditions">Treatable conditions</PublicLink>
           <PublicLink href="/eligibility">Eligibility check</PublicLink>
-          <a href="https://portal.holistichealthhub.cc" rel="nofollow">Pharmacy portal</a>
+          <a href="https://portal.holistichealthhub.live" rel="nofollow">Pharmacy portal</a>
         </div>
         <div>
           <strong>Company</strong>

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronRight, Clock3, Inbox, Lock, Package, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Package, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { getUnresolvedReason, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
-import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
+import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry, RecordReturnTarget } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
 import { conditionLabel } from '@hhh/domain';
 import RecordDialog from '../components/RecordDialog';
 import ConditionList from '../components/ConditionList';
+import MedicineLabel from '../components/MedicineLabel';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { isNegativeEligibilityStatus, pharmacyDecisionReason } from '../utils/eligibilityPresentation';
 import {
@@ -40,6 +41,23 @@ import {
 /** Placeholders keep every row present so a gap reads as "we do not hold this". */
 const NOT_RECORDED = 'Not recorded';
 const EMPTY_FIELD = '—';
+
+/**
+ * Older eligibility records often stored the postcode as the whole address, which
+ * then rendered twice in the contact card. Collapse that case to a single line.
+ */
+function patientAddressLines(address: string | undefined, postcode: string | undefined) {
+  const line = (address ?? '').trim();
+  const code = (postcode ?? '').trim();
+  const comparable = (value: string) => value.replace(/\s+/g, '').toLowerCase();
+  if (!code) return { line, postcode: '', postcodeIsSeparate: false };
+  if (!line) return { line: code, postcode: code, postcodeIsSeparate: false };
+  return {
+    line,
+    postcode: code,
+    postcodeIsSeparate: comparable(line) !== comparable(code),
+  };
+}
 
 interface UnifiedPatient {
   id: string;
@@ -267,6 +285,7 @@ export default function Patients() {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<PatientDirectoryFilter>('all');
   const [selectedKey, setSelectedKey] = useState<string | null>(() => selectedCrmKeyFromSearch(window.location.search));
+  const [returnTarget, setReturnTarget] = useState<RecordReturnTarget | null>(null);
   const [showClosed, setShowClosed] = useState(false);
 
   const patients = useMemo(() => {
@@ -392,9 +411,19 @@ export default function Patients() {
       setActiveFilter('all');
       setSearch('');
       setSelectedKey(record.key);
+      // Opening a patient from an order is a detour. Closing returns to that order.
+      setReturnTarget(target.returnTo ?? null);
     }
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, records, state.navigationTarget]);
+
+  const closeRecord = () => {
+    setSelectedKey(null);
+    if (!returnTarget) return;
+    dispatch({ type: 'SET_NAVIGATION_TARGET', target: returnTarget });
+    dispatch({ type: 'SET_SCREEN', screen: 'orders' });
+    setReturnTarget(null);
+  };
 
   const handleCreateOrder = (patient: UnifiedPatient) => {
     const crmPatient = patient.crmPatient;
@@ -465,14 +494,23 @@ export default function Patients() {
       )}
 
       {selected ? (
-        <RecordDialog label={`${selected.name} record`} onClose={() => setSelectedKey(null)}>
+        <RecordDialog label={`${selected.name} record`} onClose={closeRecord}>
           {selected.patient ? (
             <PatientCrmDetail
               record={selected}
               workspaceLive={state.workspaceMode === 'live' || state.workspaceMode === 'training'}
               onCreateOrder={() => handleCreateOrder(selected.patient!)}
               onOpenOrder={order => {
-                dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'order', key: String(order.id) } });
+                // Carry the patient back with us: closing the order returns here with
+                // this record still open, instead of dumping the operator on the board.
+                dispatch({
+                  type: 'SET_NAVIGATION_TARGET',
+                  target: {
+                    kind: 'order',
+                    key: String(order.id),
+                    ...(selected.patient?.crmPatient?.id ? { returnTo: { kind: 'patient' as const, id: selected.patient.crmPatient.id } } : {}),
+                  },
+                });
                 dispatch({ type: 'SET_SCREEN', screen: 'orders' });
               }}
             />
@@ -557,6 +595,8 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
   const psychosisCheck = clinical.psychiatricExclusion === true ? 'Excluded' : clinical.psychiatricExclusion === false ? 'Passed' : null;
   const marketing = clinical.marketingConsent === null ? null : clinical.marketingConsent ? 'Consent given' : 'No consent';
   const eligibilityLabel = patient.submission ? onboardingStatusLabel(patient.submission.status) : null;
+  const address = patientAddressLines(patient.crmPatient?.address, patient.crmPatient?.postcode);
+  const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
 
   return (
     <article className="order-crm-record">
@@ -566,6 +606,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
             <span className={`order-crm-record__stage order-tone--${meta.tone}`} aria-hidden="true"><Icon size={20} /></span>
             <div className="order-crm-record__titles">
               <strong>{patient.name}</strong>
+              <span className="order-crm-record__ref">DOB {formatPatientDob(patient.dob)}</span>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
@@ -610,12 +651,12 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
           {/* Every row renders even when empty: a missing detail is itself information. */}
           <section className="patient-chart-card" aria-labelledby="patient-contact-title">
             <header><h3 id="patient-contact-title">Contact</h3></header>
+            {/* Date of birth sits under the name in the header, so it is not repeated here. */}
             <dl className="patient-chart-facts">
-              <div><dt>Date of birth</dt><dd>{formatPatientDob(patient.dob)}</dd></div>
               <div><dt>Email</dt><dd>{patient.email || NOT_RECORDED}</dd></div>
               <div><dt>Phone</dt><dd>{patient.mobile || NOT_RECORDED}</dd></div>
-              <div><dt>Address</dt><dd>{patient.crmPatient?.address || NOT_RECORDED}</dd></div>
-              <div><dt>Postcode</dt><dd>{patient.crmPatient?.postcode || NOT_RECORDED}</dd></div>
+              <div><dt>Address</dt><dd>{address.line || NOT_RECORDED}</dd></div>
+              {address.postcodeIsSeparate ? <div><dt>Postcode</dt><dd>{address.postcode}</dd></div> : null}
             </dl>
           </section>
 
@@ -630,9 +671,10 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
                 <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
               </div>
             ) : null}
+            {/* The pills above already carry the primary and secondary conditions.
+                These rows only appear when there are no pills to show. */}
             <dl className="patient-chart-facts">
-              <div><dt>Primary condition</dt><dd>{primaryCondition ? conditionLabel(primaryCondition) : EMPTY_FIELD}</dd></div>
-              <div><dt>Conditions</dt><dd>{conditions.length ? conditions.map(condition => conditionLabel(condition)).join(', ') : EMPTY_FIELD}</dd></div>
+              {conditions.length === 0 ? <div><dt>Conditions</dt><dd>{EMPTY_FIELD}</dd></div> : null}
               <div><dt>Tried two or more treatments</dt><dd>{treatmentCheck ?? EMPTY_FIELD}</dd></div>
               <div><dt>Psychosis check</dt><dd>{psychosisCheck ?? EMPTY_FIELD}</dd></div>
               <div><dt>How they found the service</dt><dd>{foundService ?? EMPTY_FIELD}</dd></div>
@@ -772,32 +814,83 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
                       : 'Choose replacement or refund in Orders.';
                 const AlertIcon = curaleafLock || exceptionReason === 'cancelled' ? XCircle : refunded ? CheckCircle : AlertTriangle;
                 const orderTitle = `${order.redoContext ? 'Replacement' : 'Order'} ${orderReference(order)}`;
+                const lines = order.prescriptions.flatMap(prescription => prescription.items);
+                const expanded = expandedOrderId === order.id;
+                const panelId = `patient-order-lines-${order.id}`;
                 return (
-                  /* The whole row opens the order — no separate button competing with it. */
-                  <button
-                    type="button"
-                    className={`patient-chart-order patient-chart-order--${cardTone}`}
-                    key={order.id}
-                    aria-label={`Open ${orderTitle}, ${paymentLabel}`}
-                    onClick={() => onOpenOrder(order)}
-                  >
-                    <span className="patient-chart-order__head">
-                      <strong>{orderTitle}</strong>
-                      <span className="patient-chart-order__amount">{money(order.payment.amount || orderRevenue(order))}</span>
-                      <span className={`order-stage-pill ${paymentPill}`}>{paymentLabel}</span>
-                      <ChevronRight className="patient-chart-order__chevron" size={15} aria-hidden="true" />
-                    </span>
-                    <span className="patient-chart-order__meta">
-                      {fmtDate(order.date)} · {fulfilmentLabel}
-                    </span>
-                    {productNames.length ? <span className="patient-chart-order__items">{productNames.join(', ')}</span> : null}
+                  <div className={`patient-chart-order patient-chart-order--${cardTone}`} key={order.id}>
+                    {/* Collapsed the row is a glance: reference, money, state, date. The
+                        line items and their margins live behind the disclosure so the
+                        list stays scannable when a patient has a dozen orders. */}
+                    <button
+                      type="button"
+                      className="patient-chart-order__summary"
+                      aria-expanded={expanded}
+                      aria-controls={panelId}
+                      onClick={() => setExpandedOrderId(expanded ? null : order.id)}
+                    >
+                      <span className="patient-chart-order__head">
+                        <strong>{orderTitle}</strong>
+                        <span className="patient-chart-order__amount">{money(order.payment.amount || orderRevenue(order))}</span>
+                        <span className={`order-stage-pill ${paymentPill}`}>{paymentLabel}</span>
+                        <ChevronDown className={`patient-chart-order__chevron${expanded ? ' is-open' : ''}`} size={15} aria-hidden="true" />
+                      </span>
+                      <span className="patient-chart-order__meta">
+                        {fmtDate(order.date)} · {fulfilmentLabel}
+                        {productNames.length ? ` · ${productNames.length} item${productNames.length === 1 ? '' : 's'}` : ''}
+                      </span>
+                    </button>
+
                     {exceptionReason || curaleafLock ? (
                       <span className={`patient-order-resolution${refunded ? ' is-complete' : exceptionReason === 'cancelled' ? ' is-cancelled' : ''}`}>
                         <AlertIcon size={16} aria-hidden="true" />
                         <span><strong>{alertTitle}</strong><small>{alertDetail}</small></span>
                       </span>
                     ) : null}
-                  </button>
+
+                    <div className="patient-chart-order__panel" id={panelId} hidden={!expanded}>
+                      {lines.length ? (
+                        <table className="patient-order-lines">
+                          <thead>
+                            <tr>
+                              <th scope="col">Item</th>
+                              <th scope="col">Qty</th>
+                              <th scope="col">Patient</th>
+                              <th scope="col">Cost</th>
+                              <th scope="col">Margin</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lines.map((item, index) => {
+                              const quantity = item.qty || 1;
+                              const patientTotal = item.retail * quantity;
+                              // Wholesale is quote-derived; when it is missing the margin is
+                              // unknown, and an unknown margin is shown as unknown.
+                              const costKnown = typeof item.cost === 'number' && item.cost > 0;
+                              return (
+                                <tr key={`${item.productId}-${index}`}>
+                                  <th scope="row"><MedicineLabel name={item.name} /></th>
+                                  <td>{quantity}</td>
+                                  <td>{money(patientTotal)}</td>
+                                  <td>{costKnown ? money(item.cost! * quantity) : EMPTY_FIELD}</td>
+                                  <td className="patient-order-lines__margin">
+                                    {costKnown ? money(patientTotal - item.cost! * quantity) : <span className="patient-order-lines__unknown">Awaiting quote</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <p className="patient-chart-order__no-lines">No prescription items recorded on this order.</p>
+                      )}
+                      <div className="patient-chart-order__panel-actions">
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenOrder(order)}>
+                          Open order <ChevronRight size={14} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 );
               })
           )}
@@ -821,7 +914,7 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
             <span className={`order-crm-record__stage order-tone--${meta.tone}`} aria-hidden="true"><Icon size={20} /></span>
             <div className="order-crm-record__titles">
               <strong>{record.name}</strong>
-              <span className="order-crm-record__ref">{enquiry.caseReference}{record.sourceLabel ? ` · ${record.sourceLabel}` : ''}</span>
+              <span className="order-crm-record__ref">DOB {formatPatientDob(enquiry.dob)} · {enquiry.caseReference}{record.sourceLabel ? ` · ${record.sourceLabel}` : ''}</span>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
@@ -844,8 +937,8 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
         <div className="patient-chart__panels">
           <section className="patient-chart-card" aria-labelledby="enquiry-contact-title">
             <header><h3 id="enquiry-contact-title">Contact</h3></header>
+            {/* Date of birth sits under the name in the header, so it is not repeated here. */}
             <dl className="patient-chart-facts">
-              <div><dt>Date of birth</dt><dd>{formatPatientDob(enquiry.dob)}</dd></div>
               <div><dt>Email</dt><dd>{enquiry.email || NOT_RECORDED}</dd></div>
               <div><dt>Phone</dt><dd>{enquiry.mobile || NOT_RECORDED}</dd></div>
               <div><dt>Postcode</dt><dd>{enquiry.postcode || NOT_RECORDED}</dd></div>
@@ -859,9 +952,9 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
                 <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
               </div>
             ) : null}
+            {/* The pills above already carry the conditions; this row is the empty fallback. */}
             <dl className="patient-chart-facts">
-              <div><dt>Primary condition</dt><dd>{primaryCondition ? conditionLabel(primaryCondition) : EMPTY_FIELD}</dd></div>
-              <div><dt>Conditions</dt><dd>{conditions.length ? conditions.map(condition => conditionLabel(condition)).join(', ') : EMPTY_FIELD}</dd></div>
+              {conditions.length === 0 ? <div><dt>Conditions</dt><dd>{EMPTY_FIELD}</dd></div> : null}
               <div><dt>Referral source</dt><dd>{record.sourceLabel ?? EMPTY_FIELD}</dd></div>
             </dl>
           </section>

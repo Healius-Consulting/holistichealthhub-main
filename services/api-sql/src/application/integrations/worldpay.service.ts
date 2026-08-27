@@ -328,8 +328,8 @@ export async function createWorldpayHostedSession(
       value: { currency: input.currency || 'GBP', amount: input.amountPence },
       expiry: String(expirySeconds),
       resultURLs: {
-        successURL: input.successUrl || `https://holistichealthhub.cc/payment/success?ref=${encodeURIComponent(input.transactionReference)}`,
-        cancelURL: input.cancelUrl || `https://holistichealthhub.cc/payment/cancelled?ref=${encodeURIComponent(input.transactionReference)}`,
+        successURL: input.successUrl || `https://holistichealthhub.live/payment/success?ref=${encodeURIComponent(input.transactionReference)}`,
+        cancelURL: input.cancelUrl || `https://holistichealthhub.live/payment/cancelled?ref=${encodeURIComponent(input.transactionReference)}`,
       },
     };
     if (credential.customisationId) {

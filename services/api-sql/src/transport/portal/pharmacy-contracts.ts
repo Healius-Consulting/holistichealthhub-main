@@ -724,21 +724,56 @@ export type OverviewIntegrationConnection = {
   validatedAt: string | null;
 };
 
+/**
+ * Integration health for the Overview.
+ *
+ * `connected` means one thing only: the last real call to the vendor succeeded, and
+ * `checkedAt` says when. Credentials sitting in Secret Manager are not evidence that
+ * the integration works — a rotated key, a revoked customer id or a vendor outage all
+ * leave the stored credential untouched. Reporting those as Connected with "no recent
+ * check" underneath told pharmacy staff the supply chain was healthy while orders were
+ * failing to place, so anything unverified is reported as `degraded` instead.
+ *
+ * The state vocabulary stays fixed at connected / degraded / unavailable /
+ * not-configured; `detail` carries the plain-language reason.
+ */
 export function overviewIntegrationHealth(connections: OverviewIntegrationConnection[] = []) {
   return (['CURALEAF', 'WORLDPAY'] as const).map(integration => {
     const connection = connections.find(item => item.integration === integration);
     const configured = Boolean(connection?.secretResourceName);
     const environment = !connection ? null : connection.environment === 'PRODUCTION' ? 'production' as const : 'test' as const;
-    const checkedAt = connection?.lastSuccessfulAt || connection?.validatedAt || null;
+    const name = integration.toLowerCase() as 'curaleaf' | 'worldpay';
     if (!configured) {
-      return { integration: integration.toLowerCase() as 'curaleaf' | 'worldpay', state: 'not-configured' as const, environment, checkedAt: null };
+      return {
+        integration: name,
+        state: 'not-configured' as const,
+        environment,
+        checkedAt: null,
+        detail: 'No credentials on file. HHH sets this up.',
+      };
     }
-    const state = connection!.status === 'ERROR'
-      ? 'degraded' as const
-      : connection!.status === 'PAUSED'
-        ? 'unavailable' as const
-        : 'connected' as const;
-    return { integration: integration.toLowerCase() as 'curaleaf' | 'worldpay', state, environment, checkedAt };
+    // Only a successful call counts as a check. `validatedAt` records when a credential
+    // was accepted for storage, which is not the same as the vendor answering today.
+    const checkedAt = connection!.lastSuccessfulAt ?? null;
+    if (connection!.status === 'PAUSED') {
+      return { integration: name, state: 'unavailable' as const, environment, checkedAt, detail: 'Paused by HHH.' };
+    }
+    if (connection!.status === 'ERROR') {
+      return { integration: name, state: 'degraded' as const, environment, checkedAt, detail: 'The last attempt failed. HHH is notified.' };
+    }
+    if (!checkedAt) {
+      return {
+        integration: name,
+        state: 'degraded' as const,
+        environment,
+        checkedAt: null,
+        detail: 'Credentials stored but never confirmed with the supplier.',
+      };
+    }
+    if (connection!.status === 'PENDING_VALIDATION') {
+      return { integration: name, state: 'degraded' as const, environment, checkedAt, detail: 'Awaiting re-validation since the credential changed.' };
+    }
+    return { integration: name, state: 'connected' as const, environment, checkedAt, detail: 'Last call to the supplier succeeded.' };
   });
 }
 

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { brandSwatchStyle } from '../utils/tenantTheme';
-import { getCuraleafConnectionStatus, getReferralLink, isApiConfigured, refreshCuraleafConnection, updatePaymentSettings, updatePharmacyProfile } from '../shared/api';
+import { ApiRequestError, getCuraleafConnectionStatus, getReferralLink, isApiConfigured, refreshCuraleafConnection, updatePaymentSettings, updatePharmacyProfile } from '../shared/api';
 import type { CuraleafConnectionStatus } from '../shared/contracts';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
@@ -120,10 +120,31 @@ export default function PharmacySettings() {
       // Preview has no write endpoint, so re-read the status instead of forcing a refresh.
       const status = isLocalPortalPreview
         ? await getCuraleafConnectionStatus(organisation.id)
-        : await refreshCuraleafConnection(organisation.id);
+        : await refreshCuraleafConnection(organisation.id).catch(async error => {
+          // A role wall on the probe is not an outage. Fall back to the read-only
+          // status endpoint so staff still see the truth about the connection.
+          if (error instanceof ApiRequestError && error.status === 403) {
+            const readOnly = await getCuraleafConnectionStatus(organisation.id);
+            dispatch({
+              type: 'ADD_TOAST',
+              message: 'Your role cannot re-test the Curaleaf credential. Showing the last recorded connection state instead.',
+              toastType: 'warning',
+            });
+            return readOnly;
+          }
+          throw error;
+        });
       setCuraleafStatus(status);
+      // The catalogue is the thing staff actually came here to unstick.
+      dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' });
     } catch (error) {
-      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The Curaleaf connection could not be refreshed.', toastType: 'error' });
+      dispatch({
+        type: 'ADD_TOAST',
+        message: error instanceof ApiRequestError && error.status >= 500
+          ? 'Curaleaf did not respond. The connection is unchanged — try again shortly.'
+          : error instanceof Error ? error.message : 'The Curaleaf connection could not be refreshed.',
+        toastType: 'error',
+      });
     } finally {
       setCuraleafRefreshing(false);
     }
@@ -310,69 +331,62 @@ export default function PharmacySettings() {
         <div className="pharmacy-settings__flow" id="settings-panel-assets" role="tabpanel" aria-labelledby="settings-tab-assets">
           {linkError ? <div className="banner banner-red" role="alert"><AlertTriangle size={16} /><span>{linkError}</span><button className="btn btn-sm" type="button" onClick={() => setLinkRefresh(value => value + 1)}><RefreshCw size={14} /> Retry</button></div> : null}
 
-          <section className="pharmacy-settings-section">
-            <div className="pharmacy-settings-step">
-              <span className="pharmacy-settings-step__number" aria-hidden="true">1</span>
-              <div className="pharmacy-settings-step__body">
-                <header><h3><Link2 size={16} aria-hidden="true" /> Share the eligibility form</h3></header>
-                <p className="pharmacy-settings-section__lead">The form stays hosted by HHH. Use this URL on the pharmacy website, email, or counter materials.</p>
-                <p className="pharmacy-settings-url" aria-live="polite">{linkLoading ? 'Loading the protected pharmacy link…' : formUrl || 'Link unavailable'}</p>
-                <div className="pharmacy-settings-actions">
-                  <button className="btn btn-primary" type="button" disabled={!formUrl} onClick={copyLink}><Copy size={14} /> Copy link</button>
-                  {formUrl ? <a className="btn btn-secondary" href={formUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Preview form</a> : <button className="btn btn-secondary" type="button" disabled><ExternalLink size={14} /> Preview form</button>}
-                </div>
-              </div>
-            </div>
-          </section>
+          <p className="pharmacy-settings-assets__intro">
+            Everything you need to point patients at your eligibility form — a link to share, a QR
+            code to print, and a pack for whoever looks after your website. Use whichever you need,
+            in any order.
+          </p>
 
-          <section className="pharmacy-settings-section">
-            <div className="pharmacy-settings-step">
-              <span className="pharmacy-settings-step__number" aria-hidden="true">2</span>
-              <div className="pharmacy-settings-step__body">
-                <header><h3><QrCode size={16} aria-hidden="true" /> Print-ready QR</h3></header>
-                <p className="pharmacy-settings-section__lead">For leaflets and counter cards.</p>
-                {qr ? (
-                  <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
-                ) : (
-                  <div className="pharmacy-settings-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>
-                )}
-                <div className="pharmacy-settings-actions">
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={!qr}
-                    onClick={() => { downloadDataUrl(qr, `${organisation.slug}-eligibility-qr.png`); notify('High-resolution QR code saved.'); }}
-                  >
-                    <Download size={14} /> Save QR code
-                  </button>
-                </div>
+          <div className="pharmacy-settings-assets__tools">
+            <section className="pharmacy-settings-section pharmacy-settings-tool">
+              <header><h3><Link2 size={16} aria-hidden="true" /> Your eligibility link</h3></header>
+              <p className="pharmacy-settings-section__lead">The form stays hosted by HHH. Put this URL on your website, in emails, or on counter materials.</p>
+              <p className="pharmacy-settings-url" aria-live="polite">{linkLoading ? 'Loading the protected pharmacy link…' : formUrl || 'Link unavailable'}</p>
+              <div className="pharmacy-settings-actions">
+                <button className="btn btn-primary" type="button" disabled={!formUrl} onClick={copyLink}><Copy size={14} /> Copy link</button>
+                {formUrl ? <a className="btn btn-secondary" href={formUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Preview form</a> : <button className="btn btn-secondary" type="button" disabled><ExternalLink size={14} /> Preview form</button>}
               </div>
-            </div>
-          </section>
+            </section>
 
-          <section className="pharmacy-settings-section">
-            <div className="pharmacy-settings-step">
-              <span className="pharmacy-settings-step__number" aria-hidden="true">3</span>
-              <div className="pharmacy-settings-step__body">
-                <header><h3><FileArchive size={16} aria-hidden="true" /> Website content pack</h3></header>
-                <p className="pharmacy-settings-section__lead">Suggested page copy, hosted-form link, QR usage notes and high-resolution QR image, for your developer.</p>
-                <div className="pharmacy-settings-actions">
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={!formUrl}
-                    onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}
-                  >
-                    <FileArchive size={15} /> Download content pack (.zip)
-                  </button>
-                </div>
+            <section className="pharmacy-settings-section pharmacy-settings-tool">
+              <header><h3><QrCode size={16} aria-hidden="true" /> Print-ready QR code</h3></header>
+              <p className="pharmacy-settings-section__lead">The same link as a high-resolution image, for leaflets, posters and counter cards.</p>
+              {qr ? (
+                <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
+              ) : (
+                <div className="pharmacy-settings-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>
+              )}
+              <div className="pharmacy-settings-actions">
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  disabled={!qr}
+                  onClick={() => { downloadDataUrl(qr, `${organisation.slug}-eligibility-qr.png`); notify('High-resolution QR code saved.'); }}
+                >
+                  <Download size={14} /> Save QR code
+                </button>
               </div>
+            </section>
+          </div>
+
+          <section className="pharmacy-settings-section pharmacy-settings-tool pharmacy-settings-tool--secondary">
+            <header><h3><FileArchive size={16} aria-hidden="true" /> Pack for your web developer</h3></header>
+            <p className="pharmacy-settings-section__lead">Suggested page copy, the hosted-form link, QR usage notes and the high-resolution image, zipped up to hand over.</p>
+            <div className="pharmacy-settings-actions">
+              <button
+                className="btn btn-secondary"
+                type="button"
+                disabled={!formUrl}
+                onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}
+              >
+                <FileArchive size={15} /> Download content pack (.zip)
+              </button>
             </div>
           </section>
 
           <p className="pharmacy-settings-attribution">
             <Link2 size={14} aria-hidden="true" />
-            <span>Submissions from this link are attributed to {organisation.name}. Keep the token pharmacy-specific — do not share another pharmacy&rsquo;s URL.</span>
+            <span>Submissions from this link are attributed to {organisation.name}. The token is specific to your pharmacy — do not share another pharmacy&rsquo;s URL.</span>
           </p>
         </div>
       )}

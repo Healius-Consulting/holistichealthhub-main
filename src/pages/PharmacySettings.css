@@ -49,7 +49,10 @@
 /* ---- Segmented nav ---- */
 
 .pharmacy-settings__nav{
+  /* Hug the two tabs instead of stretching the full 860px column. */
   display: inline-flex;
+  width: fit-content;
+  align-self: center;
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -311,33 +314,48 @@
 
 .pharmacy-settings-note svg{ flex: 0 0 auto; margin-top: 1px; }
 
-/* ---- Assets: one linear flow, link then QR then pack ---- */
+/* ---- Assets: a small set of tools, not a wizard ----
+ * These are three things a pharmacy picks up as needed, in any order, and returns to
+ * later. Numbering them implied a sequence that has to be completed once, which is
+ * both wrong and faintly stressful. Link and QR are the two everyday tools and sit
+ * side by side; the developer pack is a one-off and sits underneath.
+ */
 
-.pharmacy-settings-step{
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 4px 12px;
+.pharmacy-settings-assets__intro{
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-.pharmacy-settings-step__number{
+.pharmacy-settings-assets__tools{
   display: grid;
-  width: 26px;
-  height: 26px;
-  place-items: center;
-  border-radius: 50%;
-  color: var(--tenant-primary-strong);
-  background: var(--tenant-primary-soft);
-  font-size: 12px;
-  font-weight: 750;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
-.pharmacy-settings-step__body{ min-width: 0; }
+.pharmacy-settings-tool{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+
+/* Push the actions to the bottom so the two hero tools line their buttons up. */
+.pharmacy-settings-tool .pharmacy-settings-actions{ margin-top: auto; }
+
+.pharmacy-settings-tool--secondary{
+  border-style: dashed;
+  background: var(--bg-elevated);
+}
 
 .pharmacy-settings-qr{
   display: block;
-  width: 180px;
-  height: 180px;
-  margin: 12px 0 0;
+  width: min(180px, 100%);
+  height: auto;
+  aspect-ratio: 1;
+  margin: 4px 0 0;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -346,9 +364,9 @@
 
 .pharmacy-settings-qr-placeholder{
   display: grid;
-  width: 180px;
-  height: 180px;
-  margin: 12px 0 0;
+  width: min(180px, 100%);
+  aspect-ratio: 1;
+  margin: 4px 0 0;
   place-items: center;
   border: 1px dashed var(--border-strong, var(--border));
   border-radius: 12px;
@@ -390,6 +408,5 @@
   .pharmacy-settings-connection{ grid-template-columns: 1fr; }
   .pharmacy-settings-curaleaf{ align-items: stretch; }
   .pharmacy-settings-curaleaf .btn{ width: 100%; justify-content: center; }
-  .pharmacy-settings-step{ grid-template-columns: 1fr; }
-  .pharmacy-settings-step__number{ display: none; }
+  .pharmacy-settings-assets__tools{ grid-template-columns: 1fr; }
 }

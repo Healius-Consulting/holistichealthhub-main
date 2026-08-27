@@ -50,7 +50,14 @@ export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') 
       });
 
       if (failure) {
-        throw new HttpError(failure.status, 'Session admission failed.', failure.code);
+        // A 401 stays deliberately generic: the session itself is the thing in doubt.
+        // A 403 is an authenticated staff member hitting a permission wall, and
+        // "Session admission failed." reads as a scary auth outage instead of the
+        // plain "your role cannot do this" that it actually is.
+        const message = failure.status === 403
+          ? 'Your staff role is not permitted to perform this action.'
+          : 'Session admission failed.';
+        throw new HttpError(failure.status, message, failure.code);
       }
 
       const session = admission.session!;

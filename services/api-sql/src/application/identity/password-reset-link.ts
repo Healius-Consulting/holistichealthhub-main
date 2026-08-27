@@ -4,7 +4,7 @@ export function portalAppOrigin() {
   for (const origin of portalAppOrigins) {
     if (origin.includes('portal.')) return origin;
   }
-  return 'https://portal.holistichealthhub.cc';
+  return 'https://portal.holistichealthhub.live';
 }
 
 export function firstPartyPasswordResetLink(firebaseLink: string, appOrigin = portalAppOrigin()) {

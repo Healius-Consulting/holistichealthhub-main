@@ -38,6 +38,11 @@ async function readResendApiKey() {
 
 async function providerConfig(): Promise<ProviderConfig | null> {
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  // The sending domain deliberately lags the brand domain. Public links and portal
+  // CTAs are on holistichealthhub.live, but the Resend DKIM key and SES feedback MX
+  // are published on holistichealthhub.cc only. Moving the From address before those
+  // records exist on .live would silently break outbound mail, so this stays on .cc
+  // until DNS is cut over (then set EMAIL_FROM_ADDRESS; no code change needed).
   const resendFrom = process.env.EMAIL_FROM_ADDRESS?.trim() || 'noreply@holistichealthhub.cc';
   const resolvedResendApiKey = resendApiKey || await readResendApiKey();
   if (resolvedResendApiKey && resendFrom) {

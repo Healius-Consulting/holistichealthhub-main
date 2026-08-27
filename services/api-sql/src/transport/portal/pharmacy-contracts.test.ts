@@ -1010,8 +1010,8 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(JSON.stringify(overview.enquiries).includes(patient.email), false);
     assert.equal('platformFeeMonthly' in overview.organisation, false);
     assert.deepEqual(overview.integrations, [
-      { integration: 'curaleaf', state: 'not-configured', environment: null, checkedAt: null },
-      { integration: 'worldpay', state: 'not-configured', environment: null, checkedAt: null },
+      { integration: 'curaleaf', state: 'not-configured', environment: null, checkedAt: null, detail: 'No credentials on file. HHH sets this up.' },
+      { integration: 'worldpay', state: 'not-configured', environment: null, checkedAt: null, detail: 'No credentials on file. HHH sets this up.' },
     ]);
     assert.deepEqual(overview.prescriptionStarts, { firstCount: 0, repeatCount: 0, items: [] });
   });
@@ -1066,7 +1066,7 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(JSON.stringify(starts).includes('Casey'), false);
   });
 
-  it('treats stored test credentials as connected without a live vendor check', () => {
+  it('never reports connected without a successful vendor call to point at', () => {
     const integrations = overviewIntegrationHealth([
       {
         integration: 'CURALEAF',
@@ -1086,9 +1086,43 @@ describe('SQL pharmacy compatibility contracts', () => {
       },
     ]);
     assert.deepEqual(integrations, [
-      { integration: 'curaleaf', state: 'connected', environment: 'test', checkedAt: null },
-      { integration: 'worldpay', state: 'connected', environment: 'test', checkedAt: '2026-08-16T09:00:00.000Z' },
+      {
+        integration: 'curaleaf',
+        state: 'degraded',
+        environment: 'test',
+        checkedAt: null,
+        detail: 'Credentials stored but never confirmed with the supplier.',
+      },
+      {
+        integration: 'worldpay',
+        state: 'connected',
+        environment: 'test',
+        checkedAt: '2026-08-16T09:00:00.000Z',
+        detail: 'Last call to the supplier succeeded.',
+      },
     ]);
+  });
+
+  it('does not treat a stored-credential timestamp as a successful check', () => {
+    const [curaleaf] = overviewIntegrationHealth([
+      {
+        integration: 'CURALEAF',
+        environment: 'PRODUCTION',
+        status: 'ACTIVE',
+        secretResourceName: 'projects/demo/secrets/curaleaf',
+        lastSuccessfulAt: null,
+        // Accepted for storage, never actually exercised against Curaleaf.
+        validatedAt: '2026-08-15T09:00:00.000Z',
+      },
+    ]);
+    assert.equal(curaleaf?.state, 'degraded');
+    assert.equal(curaleaf?.checkedAt, null);
+  });
+
+  it('reports a pharmacy with no credentials as not configured', () => {
+    const [curaleaf] = overviewIntegrationHealth([]);
+    assert.equal(curaleaf?.state, 'not-configured');
+    assert.equal(curaleaf?.checkedAt, null);
   });
 
   it('maps failed and paused connections without exposing credential material', () => {
@@ -1111,8 +1145,20 @@ describe('SQL pharmacy compatibility contracts', () => {
       },
     ]);
     assert.deepEqual(integrations, [
-      { integration: 'curaleaf', state: 'degraded', environment: 'production', checkedAt: '2026-08-10T09:00:00.000Z' },
-      { integration: 'worldpay', state: 'unavailable', environment: 'production', checkedAt: null },
+      {
+        integration: 'curaleaf',
+        state: 'degraded',
+        environment: 'production',
+        checkedAt: '2026-08-10T09:00:00.000Z',
+        detail: 'The last attempt failed. HHH is notified.',
+      },
+      {
+        integration: 'worldpay',
+        state: 'unavailable',
+        environment: 'production',
+        checkedAt: null,
+        detail: 'Paused by HHH.',
+      },
     ]);
     assert.equal(JSON.stringify(integrations).includes('secrets/'), false);
   });

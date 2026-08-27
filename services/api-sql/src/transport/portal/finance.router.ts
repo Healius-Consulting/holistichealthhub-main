@@ -5,6 +5,8 @@ import { HttpError } from '../../domain/common/errors.js';
 import { assertPlatformScope, assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { quotedCostFromSnapshot } from '../../application/orders/finance-costing.js';
+import { SqlCuraleafQuoteBankRepository } from '../../repositories/sql/curaleaf-quote-bank.sql.js';
+import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
@@ -70,6 +72,25 @@ export function createPortalFinanceRouter(): Router {
   const orderRepo = new SqlOrderRepository();
   const patientRepo = new SqlPatientRepository();
   const paymentRepo = new SqlPaymentRepository();
+  const integrationRepo = new SqlIntegrationRepository();
+  const quoteBankRepo = new SqlCuraleafQuoteBankRepository();
+
+  /**
+   * Wholesale pack prices from the shared Curaleaf quote bank, used only to estimate
+   * orders that never had a paid quote frozen. Never fatal: a bank outage just means
+   * those rows stay honestly "awaiting quote".
+   */
+  const quoteBankWholesaleByPack = async (organisationId: string) => {
+    try {
+      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
+      if (!connection) return new Map<string, number>();
+      const entries = await quoteBankRepo.listEntries(connection.environment);
+      return new Map(entries.map(entry => [entry.packId, entry.wholesalePackPricePence]));
+    } catch (error) {
+      console.warn('[Finance] Curaleaf quote bank unavailable for cost estimates:', error);
+      return new Map<string, number>();
+    }
+  };
 
   router.get('/portal/finance/prescriptions', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -81,10 +102,11 @@ export function createPortalFinanceRouter(): Router {
         to: req.query.to,
       });
 
-      const [rawOrders, rawPatients, rawAllocations] = await Promise.all([
+      const [rawOrders, rawPatients, rawAllocations, bankWholesalePenceByPackId] = await Promise.all([
         orderRepo.listTenantOrders(organisationId, 2000),
         patientRepo.listTenantPatients(organisationId, 2000),
         paymentRepo.listTenantPaymentAllocations(organisationId, 4000),
+        quoteBankWholesaleByPack(organisationId),
       ]);
 
       const patientMap = new Map(rawPatients.map(p => [p.id, `${p.firstName} ${p.surname}`.trim() || p.email]));
@@ -100,7 +122,7 @@ export function createPortalFinanceRouter(): Router {
         const sourceRetainsAllocation = Boolean(order.redoOfId && (activeAllocationByOrder.get(order.redoOfId) ?? 0) > 0);
         const flags = pharmacyFinanceRecognition({ ...order, activeAllocationPence });
         const snapshot = (order.quoteSnapshot ?? {}) as any;
-        const quoted = quotedCostFromSnapshot(snapshot);
+        const quoted = quotedCostFromSnapshot(snapshot, { bankWholesalePenceByPackId });
         const rawLines = snapshot?.lineItems || snapshot?.items || snapshot?.prescriptions?.flatMap((rx: any) => rx.items) || [];
         const lines = Array.isArray(rawLines) ? rawLines.map((item: any) => {
           const qty = Number(item.quantity || item.qty || 1);
@@ -140,6 +162,8 @@ export function createPortalFinanceRouter(): Router {
         const shippingPence = quoted.shippingPence;
         const wholesalePence = quoted.wholesalePence;
         const productMarginPence = quoted.wholesaleComplete ? productRevenuePence - wholesaleProductPence! : null;
+        // A quote-bank row has no delivery cost, so its contribution is product-only and
+        // is labelled an estimate rather than passed off as the frozen paid figure.
         const totalContributionPence = quoted.wholesaleComplete ? patientRevenuePence - wholesalePence! : null;
 
         const paidEventAt = order.paidAt ? String(order.paidAt) : null;
@@ -179,6 +203,9 @@ export function createPortalFinanceRouter(): Router {
           productMarginPence,
           totalContributionPence,
           wholesaleComplete: quoted.wholesaleComplete,
+          wholesaleCostBasis: quoted.costBasis,
+          wholesaleEstimated: quoted.costBasis === 'quote_bank',
+          shippingKnown: quoted.shippingKnown,
           lines,
         };
       });
@@ -209,8 +236,9 @@ export function createPortalFinanceRouter(): Router {
         dispensingFeesPence: realisedRows.reduce((sum, r) => sum + r.dispensingFeePence, 0),
         wholesaleKnownForCount: costedRows.length,
         wholesalePendingForCount: realisedRows.length - costedRows.length,
+        wholesaleEstimatedForCount: costedRows.filter(r => r.wholesaleEstimated).length,
         wholesaleProductPence: costedRows.reduce((sum, r) => sum + (r.wholesaleProductPence ?? 0), 0),
-        shippingPence: costedRows.reduce((sum, r) => sum + (r.shippingPence ?? 0), 0),
+        shippingPence: costedRows.reduce((sum, r) => sum + (r.shippingKnown ? r.shippingPence ?? 0 : 0), 0),
         wholesalePence: costedRows.reduce((sum, r) => sum + (r.wholesalePence ?? 0), 0),
         productMarginPence: costedRows.reduce((sum, r) => sum + (r.productMarginPence ?? 0), 0),
         totalContributionPence: costedRows.reduce((sum, r) => sum + (r.totalContributionPence ?? 0), 0),

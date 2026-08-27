@@ -6,7 +6,7 @@ import type { OrganisationRepositoryPort } from '../../repositories/ports/organi
 
 const secretClient = new SecretManagerServiceClient();
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{12,160}$/;
-const ELIGIBILITY_URL = 'https://holistichealthhub.cc/eligibility';
+const ELIGIBILITY_URL = 'https://holistichealthhub.live/eligibility';
 
 function errorCode(error: unknown) {
   return typeof error === 'object' && error !== null && 'code' in error

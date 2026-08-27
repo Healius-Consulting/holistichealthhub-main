@@ -89,7 +89,11 @@ function curaleafStatusPayload(
     connected,
     status: !configured ? 'not_configured' as const : connected ? 'connected' as const : connection?.status === 'PENDING_VALIDATION' ? 'validated' as const : 'attention' as const,
     environment: connection?.environment === 'PRODUCTION' ? 'production' as const : 'test' as const,
-    checkedAt: extras?.checkedAt ?? new Date().toISOString(),
+    // A plain status read is not a check. Stamping "now" here made every screen that
+    // showed checkedAt claim the credential had just been confirmed against Curaleaf.
+    // Only a probe or a validation supplies a timestamp; otherwise report the last
+    // real success, or null when there has never been one.
+    checkedAt: extras?.checkedAt ?? connection?.lastSuccessfulAt ?? null,
     message: extras?.message ?? (!configured
       ? 'Curaleaf is not connected for this pharmacy.'
       : connected
@@ -169,7 +173,10 @@ export function createPortalIntegrationRouter(): Router {
     } catch (error) { next(error); }
   });
 
-  router.post('/portal/integrations/curaleaf/refresh', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+  // Pharmacy-safe: this re-probes the credential already on file for the caller's own
+  // tenant and records the result. It never accepts, returns or rewrites a secret, so
+  // pharmacy staff may run it to clear a stale connection without an HHH admin.
+  router.post('/portal/integrations/curaleaf/refresh', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = curaleafOrganisationSchema.parse(req.body ?? {});
       const organisationId = await authorisedOrganisationId(req.context, input.organisationId, organisationRepo);

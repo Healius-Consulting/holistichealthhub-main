@@ -2,11 +2,21 @@ import { normaliseEligibilitySearch, parseEligibilityReferralRoute } from '../..
 
 export type PublicView = 'site' | 'eligibility' | 'payment-complete' | 'payment-cancelled';
 
-export const CANONICAL_ELIGIBILITY_ORIGIN = 'https://holistichealthhub.cc';
-export const LEGACY_PUBLIC_HOST = 'holistichealthhub.live';
-/** Printed pharmacy QR host. Live traffic is a Cloudflare 301 onto `.cc`; keep this so a missed DNS change still canonicalises. Never include staging.thinktimeless.co.uk. */
+export const CANONICAL_ELIGIBILITY_ORIGIN = 'https://holistichealthhub.live';
+export const LEGACY_PUBLIC_HOST = 'holistichealthhub.cc';
+/**
+ * Hosts whose *tokenised eligibility* URLs canonicalise onto the brand origin.
+ *
+ * `hhh.thinktimeless.co.uk` is the printed pharmacy QR host: live traffic is a
+ * Cloudflare 301, and this stays so a missed DNS change still lands patients on a
+ * working form with the token intact. `.cc` is the retired brand host, kept
+ * attachable for preview/flicker testing — only its eligibility links are
+ * canonicalised, so the rest of `.cc` keeps serving whatever it is attached to.
+ * Never include staging.thinktimeless.co.uk.
+ */
 const LEGACY_ELIGIBILITY_HOSTS = new Set([
   LEGACY_PUBLIC_HOST,
+  'www.holistichealthhub.cc',
   'hhh.thinktimeless.co.uk',
   'www.hhh.thinktimeless.co.uk',
 ]);

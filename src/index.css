@@ -315,10 +315,122 @@
 .handover-grid strong { font-size: 2.75rem; }
 .integration-health li { display: grid; grid-template-columns: 1fr auto minmax(10rem, auto); align-items: center; gap: 1rem; padding: 0.875rem 0; border-top: 1px solid var(--border-subtle, #d9e0da); text-transform: capitalize; }
 .integration-health li small { color: var(--text-muted, #526157); text-align: right; }
-.integration-state { display: inline-flex; padding-left: 0.75rem; border-left: 0.3rem solid #9dad9f; text-transform: capitalize; }
+.integration-state { display: inline-flex; padding-left: 0.75rem; border-left: 0.3rem solid #9dad9f; }
 .integration-state--connected { border-color: #17854f; }
 .integration-state--degraded { border-color: #d18416; }
 .integration-state--unavailable { border-color: #b23b36; }
+
+/* ---- Overview: action desk ----
+ * Needs you owns the top of the page. Everything below is context: what to start
+ * next, where the rest of the work is, and whether the plumbing is healthy.
+ */
+
+.overview-secondary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(16rem, 0.9fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.overview-pipeline__counts {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-pipeline__counts button {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-subtle, #d9e0da);
+  border-radius: 0.6rem;
+  background: var(--surface-elevated, #fff);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.overview-pipeline__counts button:hover { border-color: var(--border-strong, #b9c6bc); }
+
+.overview-pipeline__counts button:focus-visible {
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+
+.overview-pipeline__counts strong {
+  min-width: 2ch;
+  color: var(--text-primary, #17241c);
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-pipeline__counts span { color: var(--text-muted, #526157); font-size: 0.8125rem; }
+
+/* Quiet chips: a standing fact about the plumbing, not a task card. */
+.overview-integrations { display: grid; gap: 0.5rem; }
+
+.overview-integrations__chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-integration-chip {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-subtle, #d9e0da);
+  border-radius: 0.6rem;
+  background: var(--surface-elevated, #fff);
+}
+
+.overview-integration-chip__name {
+  color: var(--text-muted, #526157);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.overview-integration-chip small { color: var(--text-muted, #526157); font-size: 0.75rem; }
+.overview-integration-chip__checked { font-variant-numeric: tabular-nums; opacity: 0.85; }
+
+/* Anything not confirmed gets a visible edge as well as its words. */
+.overview-integration-chip--degraded { border-color: #e0be86; background: #fffaf2; }
+.overview-integration-chip--unavailable { border-color: #e3aaa7; background: #fff7f6; }
+
+.overview-integrations__link {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: 0;
+  color: var(--accent, #146c43);
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.overview-integrations__link:hover { text-decoration: underline; }
+
+.overview-integrations__link:focus-visible {
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1000px) {
+  .overview-secondary { grid-template-columns: 1fr; }
+}
 
 @media (max-width: 1000px) {
   .overview-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -538,61 +650,88 @@ html{
   outline-offset: 2px;
 }
 
-.sidebar.is-collapsed{
+/* The collapsed rail overlays the workspace when it opens, so hovering it never
+ * reflows the page underneath. The spacer holds its 64px in the shell's flex row. */
+.workspace-sidebar-rail-spacer{
   width: 64px;
+  flex: 0 0 64px;
+  height: 100%;
 }
 
-.sidebar.is-collapsed .sidebar-header{
+.sidebar.is-collapsed{
+  position: fixed;
+  z-index: 60;
+  inset-block: 0;
+  left: 0;
+  width: 64px;
+  transition: width var(--transition-base, 180ms) ease;
+}
+
+/* Hover opens the rail; :focus-within does the same job for keyboard users, so
+ * tabbing into navigation reveals the labels without needing a pointer. */
+.sidebar.is-collapsed:is(:hover, :focus-within){
+  width: 260px;
+  box-shadow: 0 18px 48px rgb(2 6 23 / 34%);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .sidebar.is-collapsed{ transition: none; }
+}
+
+/* Everything below is the rail's resting appearance. It is switched off the moment
+ * the rail is hovered or holds focus, which is what turns it back into the full panel. */
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-header{
   padding: 20px 0;
   justify-content: center;
 }
 
-.sidebar.is-collapsed .sidebar-brand,
-.sidebar.is-collapsed .sidebar-menu-label,
-.sidebar.is-collapsed .sidebar-item-content > span,
-.sidebar.is-collapsed .nav-queue-count,
-.sidebar.is-collapsed .user-profile-info,
-.sidebar.is-collapsed .sidebar-footer-action span,
-.sidebar.is-collapsed .sidebar-exit span{
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-brand,
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-menu-label,
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-item-content > span,
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .nav-queue-count,
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .user-profile-info,
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-footer-action span,
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-exit span{
   display: none;
 }
 
-.sidebar.is-collapsed .sidebar-collapse{
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-collapse{
   margin: 0;
 }
 
-.sidebar.is-collapsed .sidebar-menu{
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-menu{
   padding-inline: 8px;
 }
 
-.sidebar.is-collapsed .sidebar-item{
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-item{
   justify-content: center;
   padding: 10px 0;
 }
 
-.sidebar.is-collapsed .sidebar-item-content{
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-item-content{
   justify-content: center;
   gap: 0;
 }
 
-.sidebar.is-collapsed .sidebar-footer{
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-footer{
   padding-inline: 8px;
 }
 
-.sidebar.is-collapsed .user-profile-card{
+.sidebar.is-collapsed:not(:hover):not(:focus-within) .user-profile-card{
   justify-content: center;
   padding-inline: 0;
 }
 
-.sidebar.is-collapsed :is(.sidebar-footer-action, .sidebar-exit){
+.sidebar.is-collapsed:not(:hover):not(:focus-within) :is(.sidebar-footer-action, .sidebar-exit){
   justify-content: center;
   padding-inline: 0;
 }
 
-/* The rail is a preference, not a layout mode — it never applies to the
+/* The rail is a desktop affordance, not a layout mode — it never applies to the
  * mobile sheet, where the bottom nav is the navigation. */
 @media (max-width: 760px){
-  .sidebar.is-collapsed{ width: 260px; }
+  .workspace-sidebar-rail-spacer{ display: none; }
+  .sidebar.is-collapsed{ position: static; width: 260px; box-shadow: none; }
   .sidebar-collapse{ display: none; }
 }
 
@@ -6923,6 +7062,31 @@ html.modal-open .page-container{ overflow: hidden; }
   content: ' · ';
 }
 
+/* Stage pill plus any per-order marks (currently: split fulfilment). */
+.order-crm-row__marks{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Text as well as colour: "Split 2/5" says what it is without relying on the tint. */
+.order-split-badge{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 38%, var(--border));
+  border-radius: 6px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--bg-surface));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+
 /* Below the board's comfortable width, fall back to full-width stacked lanes. */
 @media (max-width: 1180px){
   .crm-lane-board{
@@ -6985,7 +7149,9 @@ html.modal-open .page-container{ overflow: hidden; }
 
 .crm-dialog{
   position: relative;
-  width: min(980px, 100%);
+  /* The record carries two fact panels, an order list and an activity log; at 980px
+     they were all squeezed into narrow columns for no reason on a desktop screen. */
+  width: min(1160px, 100%);
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--bg-app);
@@ -7002,7 +7168,7 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 
 .crm-dialog__body{
-  padding: 4px;
+  padding: 10px;
 }
 
 .crm-dialog .order-crm-record{
@@ -7109,8 +7275,9 @@ html.modal-open .page-container{ overflow: hidden; }
   gap: 10px;
 }
 /*
- * Compact ledger rows, like the Orders list. The whole row is the control, so
- * there is no thick stripe or twin-button treatment fighting for attention.
+ * Compact ledger rows, like the Orders list. The row itself is a disclosure: it
+ * summarises at a glance and opens to the priced line items, which is where the
+ * comma-joined product string used to be crushed into one unreadable line.
  */
 .patient-chart-order{
   display: grid;
@@ -7121,18 +7288,80 @@ html.modal-open .page-container{ overflow: hidden; }
   border-radius: 10px;
   color: var(--text-secondary);
   background: var(--bg-surface);
-  cursor: pointer;
   font: inherit;
   text-align: left;
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
-.patient-chart-order:hover{
+.patient-chart-order:has(.patient-chart-order__summary:hover){
   border-color: var(--border-strong, var(--border));
   background: var(--bg-elevated);
 }
-.patient-chart-order:focus-visible{
+.patient-chart-order__summary{
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.patient-chart-order__summary:focus-visible{
   outline: 2px solid var(--tenant-primary);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+.patient-chart-order__panel{
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.patient-chart-order__panel[hidden]{ display: none; }
+.patient-chart-order__panel-actions{ display: flex; justify-content: flex-end; }
+.patient-chart-order__no-lines{
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.patient-order-lines{
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.patient-order-lines th,
+.patient-order-lines td{
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  vertical-align: top;
+  font-variant-numeric: tabular-nums;
+}
+.patient-order-lines thead th{
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.patient-order-lines :is(thead th, tbody th):first-child,
+.patient-order-lines tbody th[scope='row']{
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: left;
+}
+.patient-order-lines tbody tr:last-child :is(th, td){ border-bottom: 0; }
+.patient-order-lines__margin{ color: var(--text-primary); font-weight: 700; }
+/* The medicine label styles itself as a block chip elsewhere; in a table cell it is
+   just the row's name, so it sits inline and lets the row set the rhythm. */
+.patient-order-lines .pendulum-text{ display: inline; background: none; padding: 0; }
+.patient-order-lines__unknown{
+  color: var(--text-tertiary);
+  font-weight: 600;
+  font-size: 11px;
 }
 .patient-chart-order--awaiting,
 .patient-chart-order--expired{
@@ -7174,6 +7403,11 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 .patient-chart-order__chevron{
   color: var(--text-tertiary);
+  transition: transform var(--transition-fast);
+}
+.patient-chart-order__chevron.is-open{ transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce){
+  .patient-chart-order__chevron{ transition: none; }
 }
 .patient-chart-order__meta{
   color: var(--text-tertiary);
@@ -11911,9 +12145,26 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .order-crm-summary{
   display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.order-crm-summary__total{
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.order-crm-summary__total strong{
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.order-crm-summary__tiles{
+  display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
-  margin-bottom: 14px;
 }
 
 .order-crm-metric{
@@ -11947,8 +12198,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-crm-metric em{ margin-top: 5px; color: var(--text-secondary); font-size: 10px; font-style: normal; line-height: 1.45; }
 
 .order-crm-controls{
-  display: grid;
-  grid-template-columns: minmax(420px, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-bottom: 14px;
@@ -11960,18 +12211,22 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .order-crm-search{
   display: flex;
-  min-height: 39px;
+  min-height: 46px;
   align-items: center;
-  gap: 9px;
-  padding: 0 11px;
+  gap: 10px;
+  padding: 0 14px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  /* A soft rectangle, not a pill: this is the page's main input, and a 999px
+     radius made it read as one more filter chip in a row of chips. */
+  border-radius: 12px;
   color: var(--text-tertiary);
   background: var(--bg-elevated);
 }
 
+.order-crm-controls > .order-crm-search{ flex: 1 1 360px; min-width: 0; }
+
 .order-crm-search:focus-within{ color: var(--tenant-primary-strong); border-color: var(--tenant-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tenant-primary) 10%, transparent); }
-.order-crm-search input{ width: 100%; border: 0; outline: 0; color: var(--text-primary); background: transparent; font: inherit; font-size: 12px; }
+.order-crm-search input{ width: 100%; border: 0; outline: 0; color: var(--text-primary); background: transparent; font: inherit; font-size: 13.5px; }
 .order-crm-search input::placeholder{ color: var(--text-tertiary); }
 
 .order-crm-filters{
@@ -14779,8 +15034,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .patient-crm .order-crm-row__position{ padding-top: 0; }
 
 @media (max-width: 1180px){
-  .order-crm-controls{ grid-template-columns: 1fr; }
-  .order-crm-summary{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .order-crm-summary__tiles{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .order-crm-workspace{ grid-template-columns: 300px minmax(0, 1fr); }
   .order-crm-record__header{ gap: 12px; padding: 16px; }
   .order-crm-record__hero{ flex-direction: column; align-items: stretch; }
@@ -14811,7 +15065,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .patient-crm .order-journey-rail--premium{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .patient-crm .patient-chart-order__open,
   .patient-crm .order-crm-record__actions .btn{ min-height: 44px; }
-  .order-crm-summary{ grid-template-columns: 1fr 1fr; }
+  .order-crm-summary__tiles{ grid-template-columns: 1fr 1fr; }
   .order-crm-metric{ grid-template-columns: 28px minmax(0, 1fr); min-height: 92px; padding: 11px; }
   .order-crm-metric__icon{ width: 27px; height: 27px; }
   .order-crm-metric strong{ font-size: 17px; }

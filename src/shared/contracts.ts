@@ -193,7 +193,8 @@ export interface CuraleafConnectionStatus {
   approved?: boolean;
   status?: 'not_configured' | 'credential_update_required' | 'validated' | 'connected' | 'attention';
   environment: 'test' | 'production';
-  checkedAt: string;
+  /** When the credential last succeeded against Curaleaf. Null means never confirmed. */
+  checkedAt: string | null;
   message?: string;
   activated?: boolean;
   maskedIdentifier?: string;
@@ -1176,9 +1177,13 @@ export interface PharmacyOverview {
   };
   integrations: Array<{
     integration: 'curaleaf' | 'worldpay';
+    /** Fixed vocabulary. `connected` requires a real successful check behind `checkedAt`. */
     state: 'connected' | 'degraded' | 'unavailable' | 'not-configured';
     environment: 'test' | 'production' | null;
+    /** When the last call to the vendor actually succeeded. Null means never. */
     checkedAt: string | null;
+    /** Plain-language reason; absent on older API deployments. */
+    detail?: string;
   }>;
 }
 
@@ -1202,6 +1207,8 @@ export interface PharmacyPrescriptionFinanceReport {
     dispensingFeesPence: number;
     wholesaleKnownForCount: number;
     wholesalePendingForCount: number;
+    /** Subset of costed rows priced from the shared quote bank rather than a paid quote. */
+    wholesaleEstimatedForCount?: number;
     wholesaleProductPence: number;
     shippingPence: number;
     wholesalePence: number;
@@ -1233,6 +1240,10 @@ export interface PharmacyPrescriptionFinanceReport {
     productMarginPence: number | null;
     totalContributionPence: number | null;
     wholesaleComplete: boolean;
+    /** How the wholesale figure was resolved; absent on older API deployments. */
+    wholesaleCostBasis?: 'paid_quote' | 'paid_quote_totals' | 'quote_bank' | null;
+    wholesaleEstimated?: boolean;
+    shippingKnown?: boolean;
     lines: Array<{
       packId: string;
       name: string;

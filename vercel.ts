@@ -20,8 +20,8 @@ const surface: Surface = resolveSurface();
 const apiOrigin = (process.env.HHH_FIREBASE_API_ORIGIN ?? 'https://europe-west2-hhh26-4ebd2.cloudfunctions.net/apiLondon').replace(/\/$/, '');
 
 const portalSurface = surface === 'portal';
-const CANONICAL_PUBLIC_ORIGIN = 'https://holistichealthhub.cc';
-// Pharmacy QR host. Cloudflare owns the live 301. These Vercel host redirects are only a backstop if hhh is re-attached to a public project. Do not add staging.thinktimeless.co.uk.
+const CANONICAL_PUBLIC_ORIGIN = 'https://holistichealthhub.live';
+// Pharmacy QR host. Cloudflare owns the live 301. These Vercel host redirects are only a backstop if hhh is re-attached to a public project. Do not add staging.thinktimeless.co.uk, and never add holistichealthhub.cc here: that host must stay attachable to a preview deployment for flicker testing.
 const THINKTIMELESS_PUBLIC_HOSTS = ['hhh.thinktimeless.co.uk', 'www.hhh.thinktimeless.co.uk'] as const;
 
 const thinktimelessPublicRedirects = THINKTIMELESS_PUBLIC_HOSTS.flatMap(host => [
@@ -72,8 +72,8 @@ export const config = {
   } : undefined,
   redirects: portalSurface ? [
     { source: '/', destination: '/login', permanent: false },
-    { source: '/payment/(.*)', destination: 'https://holistichealthhub.cc/payment/$1', permanent: false },
-    { source: '/payments/(.*)', destination: 'https://holistichealthhub.cc/payments/$1', permanent: false },
+    { source: '/payment/(.*)', destination: `${CANONICAL_PUBLIC_ORIGIN}/payment/$1`, permanent: false },
+    { source: '/payments/(.*)', destination: `${CANONICAL_PUBLIC_ORIGIN}/payments/$1`, permanent: false },
     { source: '/pharmacy/login', destination: '/login', permanent: true },
     { source: '/admin/login', destination: '/login', permanent: true },
     { source: '/pharmacy/reset-password', destination: '/reset-password', permanent: true },

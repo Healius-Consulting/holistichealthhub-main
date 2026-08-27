@@ -13,8 +13,8 @@
     "value": { "currency": "GBP", "amount": 1500 },
     "expiry": "604800",
     "resultURLs": {
-      "successURL": "https://holistichealthhub.cc/payment/success?ref=ORD-MSWKEMXR",
-      "cancelURL": "https://holistichealthhub.cc/payment/cancelled?ref=ORD-MSWKEMXR"
+      "successURL": "https://holistichealthhub.live/payment/success?ref=ORD-MSWKEMXR",
+      "cancelURL": "https://holistichealthhub.live/payment/cancelled?ref=ORD-MSWKEMXR"
     }
   }
   ```
@@ -23,6 +23,6 @@
 ---
 
 ## 2. Custom Branded Payment View Pattern
-- Route: `/pay/:transactionReference` (e.g. `https://holistichealthhub.cc/pay/ORD-MSWKEMXR`).
+- Route: `/pay/:transactionReference` (e.g. `https://holistichealthhub.live/pay/ORD-MSWKEMXR`).
 - Displays pharmacy branding, itemized prescribed medications, pack quantities, unit prices, dispensing fee, and total amount due.
 - Provides embedded card checkout / Apple Pay / Google Pay and 1-click payment confirmation gate with live polling until cleared.

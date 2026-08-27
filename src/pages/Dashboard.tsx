@@ -131,27 +131,18 @@ export default function Dashboard() {
 
   return (
     <div className="page-body operations-dashboard">
-      {totalUrgent > 0 && (
-        <p className="page-status-note" role="status">
-          <strong>{totalUrgent}</strong> urgent item{totalUrgent === 1 ? '' : 's'} require attention today.
-        </p>
-      )}
-
-      <section className="operations-brief">
-        <SummaryTiles label="Pharmacy workflow summary" items={[
-          { label: 'Patients', value: tenantPatients.length, detail: 'activated by HHH', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'patients' }) },
-          { label: 'Payments', value: awaitingPayment, detail: 'awaiting action', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'orders' }) },
-          { label: 'Supplier', value: inFulfilment, detail: 'in fulfilment', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'orders' }) },
-          { label: 'Collection', value: readyForCollection, detail: 'ready', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'orders' }) },
-        ]} />
-      </section>
-
+      {/* Pipeline counts, not headline metrics. The first thing on this page is the
+          work that needs a person; how many patients exist is context, and it moved
+          below the queue rather than above it. */}
       <div className="page-grid-main">
         <div className="page-stack">
-          
+
           {totalUrgent > 0 && (
             <section className="card card-urgent priority-queue">
-              <div className="section-heading"><div><p className="section-label">Attention required</p><h3><Activity size={17} /> Priority work queue</h3></div><span>{totalUrgent} open</span></div>
+              {/* The count lives in this heading. A separate "N urgent items require
+                  attention today" strip repeated it one line above the list that
+                  already shows every item. */}
+              <div className="section-heading"><div><p className="section-label">Needs you</p><h3><Activity size={17} /> {totalUrgent} item{totalUrgent === 1 ? '' : 's'} need attention</h3></div></div>
               <div className="alert-list">
                 {cancellationAlerts.map(alert => (
                   <div key={alert.id} className="alert-item alert-item--danger">
@@ -245,6 +236,15 @@ export default function Dashboard() {
               </div>
             </section>
           )}
+
+          <section className="operations-brief" aria-label="Pipeline">
+            <SummaryTiles className="summary-tiles--compact" label="Pipeline" items={[
+              { label: 'Awaiting payment', value: awaitingPayment, detail: 'with the patient', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'orders' }) },
+              { label: 'With Curaleaf', value: inFulfilment, detail: 'placement to goods-in', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'orders' }) },
+              { label: 'Ready to collect', value: readyForCollection, detail: 'waiting for the patient', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'orders' }) },
+              { label: 'Patients', value: tenantPatients.length, detail: 'activated by HHH', onClick: () => dispatch({ type: 'SET_SCREEN', screen: 'patients' }) },
+            ]} />
+          </section>
 
           {/* Recent Pharmacy Sessions */}
           <section className="card card-flush activity-ledger">

@@ -126,7 +126,9 @@ export default function CuraleafConnectionPanel({
           <div><span>Connection</span><strong>{status.connected ? 'Connected' : status.status?.replaceAll('_', ' ') ?? 'Not configured'}</strong></div>
           <div><span>Environment</span><strong>{status.environment}</strong></div>
           <div><span>Customer ID</span><strong>{status.customerId ?? 'Not recorded'}</strong></div>
-          <div><span>Last checked</span><strong>{new Date(status.checkedAt).toLocaleString('en-GB')}</strong></div>
+          {/* Null means the credential has never succeeded against Curaleaf — say that
+              rather than printing today's date as if it had just been confirmed. */}
+          <div><span>Last confirmed</span><strong>{status.checkedAt ? new Date(status.checkedAt).toLocaleString('en-GB') : 'Never confirmed'}</strong></div>
         </div>
       ) : (
         <div className="empty-state">{busy ? 'Loading the connection status…' : 'Connection status unavailable.'}</div>

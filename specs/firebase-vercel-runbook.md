@@ -2,7 +2,7 @@
 
 > **Hobby staging is retired.** Live frontend deploys come from GitHub `main` → HHH Vercel team only. See [`.agents/skills/production-hosting/SKILL.md`](../.agents/skills/production-hosting/SKILL.md).
 
-Live hostnames: production public is `holistichealthhub.cc`, portal is `portal.holistichealthhub.cc`, and `hhh.thinktimeless.co.uk` is a Cloudflare pharmacy QR redirect (not Vercel).
+Live hostnames: production public is `holistichealthhub.live`, portal is `portal.holistichealthhub.live`, `holistichealthhub.cc` / `portal.holistichealthhub.cc` are retired brand hosts kept for preview flicker, and `hhh.thinktimeless.co.uk` is a Cloudflare pharmacy QR redirect (not Vercel).
 
 The sections below describe the **HHH production** Vercel topology. Historical Hobby staging notes are kept for reference only.
 

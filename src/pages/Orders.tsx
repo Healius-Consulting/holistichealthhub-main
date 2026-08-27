@@ -44,6 +44,7 @@ import {
   type PatientOrder,
   type PaymentStatus,
   type Prescription,
+  type RecordReturnTarget,
 } from '../context/AppContext';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink, updatePortalShipmentStatus } from '../shared/api';
@@ -187,6 +188,36 @@ function orderRecordPriority(record: OrderRecord) {
   if (record.stage === 'collected') return 90;
   if (cancellationResolution !== 'none' || record.stage === 'archived' || record.stage === 'cancelled') return 99;
   return 70;
+}
+
+/**
+ * The board has exactly three stable lanes, and these predicates define them. The
+ * summary tiles count with the same functions, so a tile can never disagree with the
+ * column it is describing. Split fulfilment is a property of an order, not a stage,
+ * so it is a badge on the card and never a lane of its own.
+ */
+function recordNeedsAction(record: OrderRecord) {
+  const resolution = orderCancellationResolution(record.order);
+  return resolution === 'needs-action'
+    || quoteReviewIsOpen(record.order)
+    || record.stage === 'rejected'
+    || record.stage === 'awaiting-payment';
+}
+
+function recordReadyToCollect(record: OrderRecord) {
+  return !recordNeedsAction(record) && record.stage === 'ready';
+}
+
+function recordWithCuraleaf(record: OrderRecord) {
+  return !recordNeedsAction(record) && !recordReadyToCollect(record);
+}
+
+/** Left-to-right reading order inside the Curaleaf lane: placement → transit → goods-in. */
+const CURALEAF_LANE_ORDER: OrderStage[] = ['paid', 'curaleaf-pending', 'curaleaf-approved', 'dispatched', 'delivered'];
+
+function curaleafLaneRank(record: OrderRecord) {
+  const rank = CURALEAF_LANE_ORDER.indexOf(record.stage);
+  return rank === -1 ? CURALEAF_LANE_ORDER.length : rank;
 }
 
 function recordMatchesFilter(record: OrderRecord, filter: StageFilter) {
@@ -392,6 +423,7 @@ export default function Orders() {
   const [query, setQuery] = useState('');
   const [searchScope, setSearchScope] = useState<OrderSearchScope>('all');
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [returnTarget, setReturnTarget] = useState<RecordReturnTarget | null>(null);
   const [manualForms, setManualForms] = useState<Record<number, ManualPaymentForm>>({});
   const [submittingOrderId, setSubmittingOrderId] = useState<number | null>(null);
   const [receiptDrafts, setReceiptDrafts] = useState<Record<number, GoodsReceiptDraft>>({});
@@ -489,79 +521,46 @@ export default function Orders() {
       setActiveFilter(['resolved', 'refunded'].includes(orderCancellationResolution(targetRecord.order)) ? 'cancelled' : 'current');
       setQuery('');
       setSelectedOrderId(orderId);
+      // Opening an order from a patient is a detour. Closing returns to that patient.
+      setReturnTarget(target.returnTo ?? null);
     }
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, records, state.navigationTarget]);
 
+  const closeOrderRecord = () => {
+    setSelectedOrderId(null);
+    if (!returnTarget) return;
+    dispatch({ type: 'SET_NAVIGATION_TARGET', target: returnTarget });
+    dispatch({ type: 'SET_SCREEN', screen: 'patients' });
+    setReturnTarget(null);
+  };
+
   const selected = selectedOrderId === null ? null : filtered.find(record => record.order.id === selectedOrderId) ?? null;
   const outstandingValue = records.filter(record => orderCancellationResolution(record.order) === 'none' && record.stage === 'awaiting-payment').reduce((sum, record) => sum + record.order.payment.amount, 0);
-  const needsAction = records.filter(record => {
-    const cancellationResolution = orderCancellationResolution(record.order);
-    return cancellationResolution === 'needs-action'
-      || cancellationResolution === 'none' && ['awaiting-payment', 'paid', 'rejected', 'delivered'].includes(record.stage);
-  }).length;
-  const readyCount = records.filter(record => orderCancellationResolution(record.order) === 'none' && record.stage === 'ready').length;
-  const activeCount = records.filter(record => orderCancellationResolution(record.order) === 'none' && !['collected', 'archived', 'rejected', 'cancelled'].includes(record.stage)).length;
+  // Counted over the same live set the board shows, with the same predicates the lanes
+  // use, so "Needs action 4" always means the four cards in the Needs action column.
+  const liveRecords = records.filter(record => recordMatchesFilter(record, 'current'));
+  const needsAction = liveRecords.filter(recordNeedsAction).length;
+  const readyCount = liveRecords.filter(recordReadyToCollect).length;
+  const withCuraleafCount = liveRecords.filter(recordWithCuraleaf).length;
+  const activeCount = liveRecords.length;
 
   const filterCount = (filter: StageFilter) => records.filter(record => recordMatchesFilter(record, filter)).length;
   const cancellationNeedsAction = activeFilter === 'cancelled' ? filtered.filter(record => orderCancellationResolution(record.order) === 'needs-action') : [];
   const cancellationClosed = activeFilter === 'cancelled' ? filtered.filter(record => ['resolved', 'refunded'].includes(orderCancellationResolution(record.order))) : [];
 
-  const currentNeedsAction = activeFilter === 'current' ? filtered.filter(record => {
-    const resolution = orderCancellationResolution(record.order);
-    return resolution === 'needs-action' || quoteReviewIsOpen(record.order) || record.stage === 'rejected' || record.stage === 'awaiting-payment';
-  }).sort((left, right) => orderRecordPriority(left) - orderRecordPriority(right)) : [];
+  // The three lanes partition the current view exactly, so no order can fall between
+  // buckets and vanish from the board — which is what a fourth conditional Split
+  // column used to risk every time its own predicate changed.
+  const currentNeedsAction = activeFilter === 'current'
+    ? filtered.filter(recordNeedsAction).sort((left, right) => orderRecordPriority(left) - orderRecordPriority(right))
+    : [];
 
-  const currentReady = activeFilter === 'current' ? filtered.filter(record =>
-    record.stage === 'ready'
-  ) : [];
+  const currentReady = activeFilter === 'current' ? filtered.filter(recordReadyToCollect) : [];
 
-  const deliveryCandidate = activeFilter === 'current' ? filtered.filter(record => {
-    if (record.stage === 'ready') return false;
-    const isDeliveryOrPartial = record.stage === 'dispatched' || record.stage === 'delivered' || record.order.prescriptions.some(rx =>
-      rx.status === 'partially-received' || rx.dispatchStatus === 'partial' || rx.status === 'dispatched' || Boolean(rx.shipmentIds?.length)
-    );
-    return isDeliveryOrPartial;
-  }) : [];
-
-  const currentSplitDelivery = activeFilter === 'current' ? filtered.filter(record => {
-    if (currentNeedsAction.includes(record) || currentReady.includes(record)) return false;
-    return orderIsSplitFulfilment(record.order);
-  }) : [];
-
-  const currentDelivery = deliveryCandidate.filter(record => !currentSplitDelivery.includes(record));
-
-  const currentPicking = activeFilter === 'current' ? filtered.filter(record => {
-    if (quoteReviewIsOpen(record.order)) return false;
-    if (currentSplitDelivery.includes(record)) return false;
-    if (['ready', 'dispatched', 'delivered'].includes(record.stage)) return false;
-    const isDeliveryOrPartial = record.order.prescriptions.some(rx =>
-      rx.status === 'partially-received' || rx.dispatchStatus === 'partial' || rx.status === 'dispatched' || Boolean(rx.shipmentIds?.length)
-    );
-    if (isDeliveryOrPartial) return false;
-    const isPicking = record.stage === 'curaleaf-approved' || record.order.prescriptions.some(rx =>
-      rx.purchaseOrderState === 'PROCESSING' || rx.purchaseOrderState === 'FULLY_ALLOCATED' || (rx.supplierItems ?? []).some(si => (si.packsAllocatedCount ?? 0) > 0)
-    );
-    return isPicking;
-  }) : [];
-
-  const currentProcessing = activeFilter === 'current' ? filtered.filter(record => {
-    if (quoteReviewIsOpen(record.order)) return false;
-    if (currentSplitDelivery.includes(record)) return false;
-    if (['ready', 'dispatched', 'delivered', 'awaiting-payment'].includes(record.stage)) return false;
-    const isDeliveryOrPartial = record.order.prescriptions.some(rx =>
-      rx.status === 'partially-received' || rx.dispatchStatus === 'partial' || rx.status === 'dispatched' || Boolean(rx.shipmentIds?.length)
-    );
-    if (isDeliveryOrPartial) return false;
-    const isPicking = record.stage === 'curaleaf-approved' || record.order.prescriptions.some(rx =>
-      rx.purchaseOrderState === 'PROCESSING' || rx.purchaseOrderState === 'FULLY_ALLOCATED' || (rx.supplierItems ?? []).some(si => (si.packsAllocatedCount ?? 0) > 0)
-    );
-    if (isPicking) return false;
-    return ['paid', 'curaleaf-pending'].includes(record.stage);
-  }) : [];
-
-  // One Curaleaf lane covers everything sitting with the supplier or in transit.
-  const curaleafLane = [...currentProcessing, ...currentPicking, ...currentDelivery];
+  const curaleafLane = activeFilter === 'current'
+    ? filtered.filter(recordWithCuraleaf).sort((left, right) => curaleafLaneRank(left) - curaleafLaneRank(right))
+    : [];
 
   const applyCancellationResponse = (order: PatientOrder, record: Awaited<ReturnType<typeof requestPortalOrderCancellation>>) => {
     const moneyStillHeld = Boolean(order.payment.paidAt) && record.refund?.status !== 'completed' && record.paymentStatus !== 'refunded';
@@ -936,19 +935,24 @@ export default function Orders() {
 
   const lanes: Array<{ key: string; label: string; detail: string; records: OrderRecord[] }> = [
     { key: 'needs-action', label: 'Needs action', detail: 'Payment, exceptions and cancellations', records: currentNeedsAction },
-    { key: 'curaleaf', label: 'Curaleaf', detail: 'Placement, dispensing and delivery', records: curaleafLane },
-    { key: 'collections', label: 'Collections', detail: 'Ready for patient pickup', records: currentReady },
-    // Split only earns a lane when an order is genuinely split across consignments.
-    ...(currentSplitDelivery.length ? [{ key: 'split', label: 'Split', detail: 'Part dispensed, remainder outstanding', records: currentSplitDelivery }] : []),
+    { key: 'curaleaf', label: 'With Curaleaf', detail: 'Placement, dispensing, transit and goods-in', records: curaleafLane },
+    { key: 'collections', label: 'Ready to collect', detail: 'Verified and waiting for the patient', records: currentReady },
   ];
 
   return (
     <div className="page-body order-crm">
+      {/* One tile per column of the board, plus the money that is still outstanding.
+          The overall total is a header fact, not a fourth competing metric. */}
       <section className="order-crm-summary" aria-label="Order pipeline summary">
-        <SummaryMetric label="Active Orders" value={String(activeCount)} detail="Across payment, Curaleaf and fulfilment" icon={Package} tone="primary" />
-        <SummaryMetric label="Needs Action" value={String(needsAction)} detail="Payment, submission or exception" icon={AlertTriangle} tone="warning" />
-        <SummaryMetric label="Outstanding" value={money(outstandingValue)} detail="Awaiting patient payment" icon={CreditCard} tone="warning" />
-        <SummaryMetric label="Ready to Collect" value={String(readyCount)} detail="Patient collection queue" icon={PackageCheck} tone="success" />
+        <p className="order-crm-summary__total">
+          <strong>{activeCount}</strong> live order{activeCount === 1 ? '' : 's'}
+        </p>
+        <div className="order-crm-summary__tiles">
+          <SummaryMetric label="Needs Action" value={String(needsAction)} detail="Payment, exception or cancellation" icon={AlertTriangle} tone="warning" />
+          <SummaryMetric label="Outstanding" value={money(outstandingValue)} detail="Awaiting patient payment" icon={CreditCard} tone="warning" />
+          <SummaryMetric label="With Curaleaf" value={String(withCuraleafCount)} detail="Placement through goods-in" icon={Package} tone="primary" />
+          <SummaryMetric label="Ready to Collect" value={String(readyCount)} detail="Patient collection queue" icon={PackageCheck} tone="success" />
+        </div>
       </section>
 
       <section className="order-crm-controls">
@@ -962,6 +966,10 @@ export default function Orders() {
             aria-label="Search orders"
           />
         </div>
+        {/* The scope pills are a refinement of a search in progress, not permanent
+            chrome. Searching defaults to every field, so they only appear once
+            there is something to narrow. */}
+        {query.trim() ? (
         <div className="order-search-scope" role="group" aria-label="Search field">
           {ORDER_SEARCH_SCOPES.map(scope => (
             <button
@@ -975,6 +983,7 @@ export default function Orders() {
             </button>
           ))}
         </div>
+        ) : null}
         <OrderFilterControl activeFilter={activeFilter} filterCount={filterCount} onChange={setActiveFilter} />
       </section>
 
@@ -1025,7 +1034,7 @@ export default function Orders() {
       ) : <div className="order-crm-empty"><Package size={26} /><strong>No orders in this stage</strong><span>Try another filter or search term.</span></div>}
 
       {selected ? (
-        <RecordDialog label={`Order ${orderReference(selected.order)}`} onClose={() => setSelectedOrderId(null)}>
+        <RecordDialog label={`Order ${orderReference(selected.order)}`} onClose={closeOrderRecord}>
           <OrderDetail
               key={selected.order.id}
               record={selected}
@@ -1320,6 +1329,10 @@ function OrderListRow({ record, selected, now, onSelect }: { record: OrderRecord
   const patientName = record.patient?.name ?? 'Unknown patient';
   const cancellationResolution = orderCancellationResolution(record.order);
   const isCancellation = cancellationResolution !== 'none';
+  // Split fulfilment describes how one order is arriving, not where it sits in the
+  // pipeline, so it rides on the card next to the stage rather than pulling the order
+  // out into a column of its own.
+  const split = orderIsSplitFulfilment(record.order) ? orderSplitPackSnapshot(record.order) : null;
   return (
     <button
       type="button"
@@ -1331,7 +1344,15 @@ function OrderListRow({ record, selected, now, onSelect }: { record: OrderRecord
       <span className={`order-crm-row__stage order-tone--${meta.tone}`}><Icon size={15} /></span>
       <span className="order-crm-row__identity"><strong title={patientName}>{compactPatientName(patientName)}</strong><small>{record.order.redoContext ? 'Replacement' : 'Order'} {orderReference(record.order)} · {record.order.prescriptions.length} Rx</small></span>
       <span className="order-crm-row__position"><strong>{money(record.order.payment.amount)}</strong><small>{formatDate(record.order.date)}</small></span>
-      <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
+      <span className="order-crm-row__marks">
+        <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
+        {split ? (
+          <span className="order-split-badge">
+            <Layers2 size={11} aria-hidden="true" />
+            Split {split.atPharmacy}/{split.total}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 }
@@ -1467,7 +1488,11 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
 
   const openPatientRecord = () => {
     if (!order.patientId) return;
-    dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient', id: order.patientId } });
+    // Carry the order back with us so closing the patient returns to this record.
+    dispatch({
+      type: 'SET_NAVIGATION_TARGET',
+      target: { kind: 'patient', id: order.patientId, returnTo: { kind: 'order', key: String(order.id) } },
+    });
     dispatch({ type: 'SET_SCREEN', screen: 'patients' });
   };
 

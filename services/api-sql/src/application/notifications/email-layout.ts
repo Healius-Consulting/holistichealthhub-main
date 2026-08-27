@@ -1,4 +1,4 @@
-export const EMAIL_PUBLIC_ORIGIN = 'https://holistichealthhub.cc';
+export const EMAIL_PUBLIC_ORIGIN = 'https://holistichealthhub.live';
 
 export const EMAIL_CID = {
   header: 'email-header-logo',

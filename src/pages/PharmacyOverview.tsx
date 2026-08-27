@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, ListChecks, RefreshCw, ShieldCheck } from 'lucide-react';
-import SummaryTiles from '../components/SummaryTiles';
 import { useApp } from '../context/AppContext';
 import { getPharmacyOverview } from '../shared/api';
 import type { PharmacyOverview as PharmacyOverviewContract } from '../shared/contracts';
@@ -38,10 +37,32 @@ function startAgeLabel(kind: PharmacyOverviewContract['prescriptionStarts']['ite
   return `Last order ${ageDays} day${ageDays === 1 ? '' : 's'} ago`;
 }
 
+const INTEGRATION_STATE_LABELS: Record<PharmacyOverviewContract['integrations'][number]['state'], string> = {
+  connected: 'Connected',
+  degraded: 'Needs a check',
+  unavailable: 'Unavailable',
+  'not-configured': 'Not set up',
+};
+
+const INTEGRATION_NAMES: Record<PharmacyOverviewContract['integrations'][number]['integration'], string> = {
+  curaleaf: 'Curaleaf',
+  worldpay: 'Worldpay',
+};
+
 function stateLabel(item: PharmacyOverviewContract['integrations'][number]) {
-  const label = item.state.replace('-', ' ');
+  const label = INTEGRATION_STATE_LABELS[item.state] ?? item.state.replace('-', ' ');
   if (item.state === 'not-configured' || item.environment !== 'test') return label;
   return `${label} (Test)`;
+}
+
+/**
+ * The check line is the honest part of this chip. "Connected" with nothing behind it
+ * was the old lie, so a state with no successful check says so in words.
+ */
+function integrationCheckLabel(item: PharmacyOverviewContract['integrations'][number]) {
+  if (item.checkedAt) return `Last confirmed ${formatAsOf(item.checkedAt)}`;
+  if (item.state === 'not-configured') return 'Set up by HHH';
+  return 'Never confirmed';
 }
 
 export default function PharmacyOverview() {
@@ -130,7 +151,10 @@ export default function PharmacyOverview() {
     <div className="page-body secure-overview">
       <header className="secure-overview__header">
         <div>
-          <p className="section-label">Authenticated pharmacy workspace</p>
+          {/* The screen already sits behind a server-verified session; announcing that in
+              48pt type told staff nothing they could act on. The landmark keeps the
+              meaning for assistive technology without spending the top of the page. */}
+          <p className="sr-only">Authenticated pharmacy workspace</p>
           <h1>{overview.organisation.tradingName}</h1>
           <div className="secure-overview__identity">
             <span className={`status-badge status-badge--${state.workspaceMode === 'live' ? 'live' : 'training'}`}>
@@ -174,31 +198,52 @@ export default function PharmacyOverview() {
       )}
 
       <section className="overview-panel overview-today" aria-label="Today">
-        {overview.summary.urgentTotal > 0 && (
-          <p className="page-status-note" role="status">
-            <strong>{overview.summary.urgentTotal}</strong> item{overview.summary.urgentTotal === 1 ? '' : 's'} need attention today.
-          </p>
-        )}
+        {/* Needs you comes first and owns the attention count. The separate
+            "N items need attention today" strip said the same thing one line above
+            the list that already showed each item, so it is gone. */}
+        <section className="card overview-queue" aria-labelledby="overview-needs-you">
+          <div className="section-heading">
+            <div>
+              <p className="section-label">Needs you</p>
+              <h2 id="overview-needs-you">
+                <ListChecks size={18} aria-hidden="true" />
+                {overview.priorityItems.length === 0
+                  ? 'Nothing waiting on you'
+                  : `${overview.priorityItems.length} item${overview.priorityItems.length === 1 ? '' : 's'} need attention`}
+              </h2>
+            </div>
+          </div>
+          {overview.priorityItems.length === 0 ? (
+            <div className="overview-empty">
+              <CheckCircle2 aria-hidden="true" />
+              <strong>No priority exceptions</strong>
+              <span>There are no awaiting payments or aged collections in this summary.</span>
+            </div>
+          ) : (
+            <ul className="overview-priority-list">
+              {overview.priorityItems.map(item => (
+                <li key={item.id} className={`overview-priority-item overview-priority-item--${item.kind}`}>
+                  <div>
+                    <span className="overview-kind">{kindLabels[item.kind]}</span>
+                    <strong>{item.maskedPatientLabel}</strong>
+                    <p className="overview-priority-meta">
+                      {item.orderReference && <span>{item.orderReference}</span>}
+                      <span>{ageLabel(item.kind, item.ageDays)}</span>
+                    </p>
+                    <p>{item.summary}</p>
+                  </div>
+                  <button className="priority-action" onClick={() => openRecord(item.recordTarget)}>
+                    {item.actionLabel} <ArrowRight size={14} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-        <SummaryTiles
-          className="summary-tiles--compact summary-tiles--two"
-          label="Today's workflow"
-          items={[
-            {
-              label: 'Patients',
-              value: overview.summary.activePatients,
-              detail: 'Activated by HHH',
-              onClick: () => openScreen('patients'),
-            },
-            {
-              label: 'Orders queue',
-              value: ordersQueueTotal,
-              detail: 'Payment, supplier, and collection',
-              onClick: () => openScreen('orders'),
-            },
-          ]}
-        />
-
+        {/* Secondary row: what to start next, and where the rest of the work is sitting.
+            Both navigate; neither is a headline metric competing with Needs you. */}
+        <div className="overview-secondary">
         <section className="card overview-rx-starts" aria-label="Start a prescription">
           <div className="section-heading">
             <div>
@@ -242,55 +287,54 @@ export default function PharmacyOverview() {
           )}
         </section>
 
-        <section className="card overview-queue">
+        <section className="card overview-pipeline" aria-labelledby="overview-pipeline-title">
           <div className="section-heading">
             <div>
-              <p className="section-label">Needs action</p>
-              <h2><ListChecks size={18} aria-hidden="true" /> Priority queue</h2>
+              <p className="section-label">Pipeline</p>
+              <h2 id="overview-pipeline-title">Where the rest is sitting</h2>
             </div>
-            <span>{overview.priorityItems.length} open</span>
+            <span>{ordersQueueTotal} in the queue</span>
           </div>
-          {overview.priorityItems.length === 0 ? (
-            <div className="overview-empty">
-              <CheckCircle2 aria-hidden="true" />
-              <strong>No priority exceptions</strong>
-              <span>There are no awaiting payments or aged collections in this summary.</span>
-            </div>
-          ) : (
-            <ul className="overview-priority-list">
-              {overview.priorityItems.map(item => (
-                <li key={item.id} className={`overview-priority-item overview-priority-item--${item.kind}`}>
-                  <div>
-                    <span className="overview-kind">{kindLabels[item.kind]}</span>
-                    <strong>{item.maskedPatientLabel}</strong>
-                    <p className="overview-priority-meta">
-                      {item.orderReference && <span>{item.orderReference}</span>}
-                      <span>{ageLabel(item.kind, item.ageDays)}</span>
-                    </p>
-                    <p>{item.summary}</p>
-                  </div>
-                  <button className="priority-action" onClick={() => openRecord(item.recordTarget)}>
-                    {item.actionLabel} <ArrowRight size={14} aria-hidden="true" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <ul className="overview-pipeline__counts">
+            <li>
+              <button type="button" onClick={() => openScreen('orders')}>
+                <strong>{overview.summary.awaitingPayment}</strong>
+                <span>Awaiting payment</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => openScreen('orders')}>
+                <strong>{overview.summary.supplierFulfilment}</strong>
+                <span>With Curaleaf</span>
+              </button>
+            </li>
+            <li>
+              <button type="button" onClick={() => openScreen('orders')}>
+                <strong>{overview.summary.readyForCollection}</strong>
+                <span>Ready to collect</span>
+              </button>
+            </li>
+          </ul>
         </section>
+        </div>
 
-        <section className="card integration-health">
-          <div className="section-heading">
-            <div><p className="section-label">Service health</p><h2>Integrations</h2></div>
-          </div>
-          <ul>
+        {/* Integrations are a standing fact, not a job. Quiet chips, and the only
+            action is to go and look at Settings — no credential editing here. */}
+        <section className="overview-integrations" aria-label="Integration health">
+          <p className="section-label">Integrations</p>
+          <ul className="overview-integrations__chips">
             {overview.integrations.map(item => (
-              <li key={item.integration}>
-                <span>{item.integration}</span>
+              <li key={item.integration} className={`overview-integration-chip overview-integration-chip--${item.state}`}>
+                <span className="overview-integration-chip__name">{INTEGRATION_NAMES[item.integration] ?? item.integration}</span>
                 <strong className={`integration-state integration-state--${item.state}`}>{stateLabel(item)}</strong>
-                <small>{item.checkedAt ? `Checked ${formatAsOf(item.checkedAt)}` : 'No recent check'}</small>
+                <small>{item.detail ?? integrationCheckLabel(item)}</small>
+                <small className="overview-integration-chip__checked">{integrationCheckLabel(item)}</small>
               </li>
             ))}
           </ul>
+          <button type="button" className="overview-integrations__link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'settings' })}>
+            Open Settings <ArrowRight size={13} aria-hidden="true" />
+          </button>
         </section>
       </section>
     </div>

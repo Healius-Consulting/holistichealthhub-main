@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { ChevronLeft, ChevronRight, CircleDollarSign, Package, Search, ShieldCheck, Tags } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CircleDollarSign, Package, RefreshCw, Search, ShieldCheck, Tags } from 'lucide-react';
 import ProviderStatusNotice from '../components/ProviderStatusNotice';
 import MedicineLabel from '../components/MedicineLabel';
 import { money, TYPE_LABELS, useApp } from '../context/AppContext';
@@ -44,6 +44,12 @@ export default function FormularyPricing() {
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, state.navigationTarget]);
 
+  const retryAction = (
+    <button type="button" className="btn btn-secondary btn-sm" onClick={() => dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' })}>
+      <RefreshCw size={14} aria-hidden="true" /> Try again
+    </button>
+  );
+
   const goToPage = (nextPage: number) => {
     setPage(nextPage);
     ledgerRef.current?.scrollIntoView({ block: 'start' });
@@ -72,12 +78,14 @@ export default function FormularyPricing() {
       ) : state.catalogueError ? (
         <ProviderStatusNotice
           title="Curaleaf information is temporarily delayed"
-          detail="You can wait and try again later. If this continues, contact your HHH administrator; pharmacy staff do not need to change any connection settings."
+          detail="Try again now. If this continues, contact your HHH administrator; pharmacy staff do not need to change any connection settings."
+          action={retryAction}
         />
       ) : state.catalogueSource !== 'curaleaf' ? (
         <ProviderStatusNotice
           title="Catalogue has not loaded"
-          detail="Wait and refresh this page. If it remains unavailable, contact your HHH administrator; pharmacy staff do not need to change any connection settings."
+          detail="Try again now. If it remains unavailable, contact your HHH administrator; pharmacy staff do not need to change any connection settings."
+          action={retryAction}
         />
       ) : null}
 

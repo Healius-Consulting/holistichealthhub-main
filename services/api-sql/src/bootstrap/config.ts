@@ -13,16 +13,21 @@ const configSchema = z.object({
   RESEND_API_KEY_SECRET_RESOURCE_NAME: z.string().optional(),
   IP_HASH_SECRET: z.string().optional(),
   SECURE_SESSION_COOKIES: z.string().default('true'),
+  // `.live` is the brand. `.cc` stays permitted because it remains an attachable
+  // host for preview/flicker testing, and `hhh.thinktimeless.co.uk` is the printed
+  // pharmacy QR origin before Cloudflare redirects. Removing either breaks live traffic.
   ALLOWED_ORIGINS: z.string().default(
-    'https://holistichealthhub.cc,https://www.holistichealthhub.cc,' +
     'https://holistichealthhub.live,https://www.holistichealthhub.live,' +
-    'https://portal.holistichealthhub.cc,https://portal.holistichealthhub.live,' +
+    'https://portal.holistichealthhub.live,' +
+    'https://holistichealthhub.cc,https://www.holistichealthhub.cc,' +
+    'https://portal.holistichealthhub.cc,' +
     'https://hhh.thinktimeless.co.uk,https://www.hhh.thinktimeless.co.uk'
   ),
   ALLOWED_HOSTS: z.string().default(
-    'holistichealthhub.cc,www.holistichealthhub.cc,' +
     'holistichealthhub.live,www.holistichealthhub.live,' +
-    'portal.holistichealthhub.cc,portal.holistichealthhub.live,' +
+    'portal.holistichealthhub.live,' +
+    'holistichealthhub.cc,www.holistichealthhub.cc,' +
+    'portal.holistichealthhub.cc,' +
     'hhh.thinktimeless.co.uk,www.hhh.thinktimeless.co.uk,' +
     'localhost,127.0.0.1'
   ),

@@ -384,9 +384,18 @@ export interface PlatformIntegration {
 
 export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | 'finance' | 'settings';
 
-export type NavigationTarget =
+/**
+ * Where to send the operator back to when they close the record they navigated into.
+ * Opening an order from a patient — or a patient from an order — is a detour, not a
+ * departure: closing the second record must land back on the first one, still open.
+ */
+export type RecordReturnTarget =
   | { kind: 'patient'; id: string }
-  | { kind: 'order'; key: string }
+  | { kind: 'order'; key: string };
+
+export type NavigationTarget =
+  | { kind: 'patient'; id: string; returnTo?: RecordReturnTarget }
+  | { kind: 'order'; key: string; returnTo?: RecordReturnTarget }
   | { kind: 'catalogue'; query: string }
   | null;
 
@@ -420,6 +429,8 @@ export interface AppState {
   catalogueLoading: boolean;
   catalogueError: string | null;
   catalogueUpdatedAt: string | null;
+  /** Bumped by staff-triggered refreshes so the catalogue effect re-runs. */
+  catalogueRefreshNonce: number;
   crm: CRMPatient[];
   submissions: EligibilitySubmission[];
   enquiries: PendingEnquiry[];
@@ -608,6 +619,8 @@ export type Action =
   | { type: 'SET_NAVIGATION_TARGET'; target: NavigationTarget }
   | { type: 'CLEAR_NAVIGATION_TARGET' }
   | { type: 'SET_CATALOGUE_LOADING' }
+  | { type: 'SET_CATALOGUE_IDLE' }
+  | { type: 'REQUEST_CATALOGUE_REFRESH' }
   | { type: 'SET_CATALOGUE'; catalogue: CatalogueItem[]; updatedAt: string }
   | { type: 'SET_CATALOGUE_ERROR'; message: string }
   | { type: 'APPLY_CURALEAF_QUOTE'; items: Array<{ productId: string; wholesalePrice: number; patientPrice: number; inStock: boolean; stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' }> }
@@ -1086,6 +1099,7 @@ const initialState: AppState = {
   catalogueLoading: initialCachedCatalogue.items.length ? false : isApiConfigured,
   catalogueError: null,
   catalogueUpdatedAt: initialCachedCatalogue.updatedAt,
+  catalogueRefreshNonce: 0,
   crm: previewTraining?.crm ?? [],
   submissions: [],
   enquiries: [],
@@ -1193,6 +1207,12 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, navigationTarget: null };
     case 'SET_CATALOGUE_LOADING':
       return { ...state, catalogueLoading: true, catalogueError: null };
+    // Loading must never outlive the request that raised it: an aborted, cancelled
+    // or never-started load has to settle back to idle or the spinner runs forever.
+    case 'SET_CATALOGUE_IDLE':
+      return state.catalogueLoading ? { ...state, catalogueLoading: false } : state;
+    case 'REQUEST_CATALOGUE_REFRESH':
+      return { ...state, catalogueRefreshNonce: state.catalogueRefreshNonce + 1 };
     case 'SET_CATALOGUE': {
       const catMap = new Map(action.catalogue.map(c => [c.id, c.name]));
       const formulaMap = new Map(action.catalogue.filter(c => c.formulaId).map(c => [c.formulaId!, c.name]));
@@ -2088,7 +2108,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       && isApiConfigured
       && Boolean(state.staffSession)
       && Boolean(currentOrganisation);
-    if (!useLocalSandbox && !useAuthenticatedPortal) return;
+    // Nothing to fetch yet (no session, no tenant, no API). Settle the spinner the
+    // initial state optimistically raised instead of leaving it running forever.
+    if (!useLocalSandbox && !useAuthenticatedPortal) {
+      dispatch({ type: 'SET_CATALOGUE_IDLE' });
+      return;
+    }
     let cancelled = false;
     dispatch({ type: 'SET_CATALOGUE_LOADING' });
     const request = useLocalSandbox
@@ -2098,9 +2123,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!cancelled) dispatch({ type: 'SET_CATALOGUE', catalogue: mapCuraleafCatalogue(catalogue), updatedAt: catalogue.fetchedAt });
     }).catch(error => {
       if (!cancelled) dispatch({ type: 'SET_CATALOGUE_ERROR', message: error instanceof Error ? error.message : 'Curaleaf catalogue unavailable.' });
+    }).finally(() => {
+      // Backstop for any settle path that did not dispatch a terminal action.
+      // A cancelled run hands ownership of the flag to the effect that replaced it.
+      if (!cancelled) dispatch({ type: 'SET_CATALOGUE_IDLE' });
     });
     return () => { cancelled = true; };
-  }, [state.currentOrganisationId, state.staffSession]);
+  }, [state.currentOrganisationId, state.staffSession, state.catalogueRefreshNonce]);
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !livePharmacyWorkspace || state.catalogueSource !== 'curaleaf') return;
