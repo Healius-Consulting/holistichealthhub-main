@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pharmacy",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--config", "vite.pharmacy.config.ts", "--port", "5183"],
+      "port": 5183
+    }
+  ]
+}
