@@ -660,16 +660,20 @@ html{
 
 .sidebar.is-collapsed{
   position: fixed;
-  z-index: 60;
+  /* Above every page-content layer (the highest is 310) and below the overlay
+     band that must cover navigation: command palette and dialogs at 1400,
+     accessibility panel at 1800, toasts at 1900. */
+  z-index: 900;
   inset-block: 0;
   left: 0;
   width: 64px;
   transition: width var(--transition-base, 180ms) ease;
 }
 
-/* Hover opens the rail; :focus-within does the same job for keyboard users, so
- * tabbing into navigation reveals the labels without needing a pointer. */
-.sidebar.is-collapsed:is(:hover, :focus-within){
+/* Hover opens the rail. :has(:focus-visible) does the same for keyboard users.
+ * Deliberately not :focus-within — a mouse click leaves DOM focus sitting on the
+ * nav button, which held the rail open until the user clicked somewhere else. */
+.sidebar.is-collapsed:is(:hover, :has(:focus-visible)){
   width: 260px;
   box-shadow: 0 18px 48px rgb(2 6 23 / 34%);
 }
@@ -680,49 +684,49 @@ html{
 
 /* Everything below is the rail's resting appearance. It is switched off the moment
  * the rail is hovered or holds focus, which is what turns it back into the full panel. */
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-header{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-header{
   padding: 20px 0;
   justify-content: center;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-brand,
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-menu-label,
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-item-content > span,
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .nav-queue-count,
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .user-profile-info,
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-footer-action span,
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-exit span{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-brand,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-menu-label,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-item-content > span,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .nav-queue-count,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .user-profile-info,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-footer-action span,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-exit span{
   display: none;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-collapse{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-collapse{
   margin: 0;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-menu{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-menu{
   padding-inline: 8px;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-item{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-item{
   justify-content: center;
   padding: 10px 0;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-item-content{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-item-content{
   justify-content: center;
   gap: 0;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .sidebar-footer{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-footer{
   padding-inline: 8px;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) .user-profile-card{
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .user-profile-card{
   justify-content: center;
   padding-inline: 0;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:focus-within) :is(.sidebar-footer-action, .sidebar-exit){
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) :is(.sidebar-footer-action, .sidebar-exit){
   justify-content: center;
   padding-inline: 0;
 }
@@ -4259,8 +4263,12 @@ html[data-theme='dark'] .accessibility-panel{
 .admin-org-row:hover{ padding-right: 2px; padding-left: 2px; transform: translateX(2px); }
 
 .app-header{
+  /* position: relative anchors the absolutely-positioned accessibility panel.
+     The old z-index: 1300 did not: the command palette is position: fixed with
+     its own 1400, and the panel raises the header to 1800 via the :has() rule
+     below. All 1300 achieved was out-stacking everything else on the page,
+     including the navigation rail. */
   position: relative;
-  z-index: 1300;
   background: color-mix(in srgb, var(--bg-surface) 90%, transparent);
   backdrop-filter: none;
 }
