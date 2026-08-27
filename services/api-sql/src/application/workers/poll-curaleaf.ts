@@ -18,6 +18,7 @@ import {
   supplierCancellationAlreadyConfirmed,
   type CuraleafEventKind,
 } from '../integrations/curaleaf-events.js';
+import { advanceFulfilmentStatus } from '../orders/curaleaf-fulfilment.js';
 import { listPharmacyRecipients, queueEmailToRecipients } from '../notifications/email-outbox.js';
 import { curaleafApiRequest } from '../integrations/curaleaf.service.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
@@ -353,15 +354,24 @@ async function pollKind(
         );
         for (const order of orders) {
           const next = applyShipmentSnapshot(order, shipment);
+          /*
+           * Ratchet the supplier's view against what the dispensary already recorded.
+           * `supplierFulfilmentStatus` has no READY_FOR_COLLECTION in its vocabulary —
+           * only the pharmacy can reach that state — so persisting its answer raw let a
+           * late shipment event knock a checked-in order back to RECEIVED, dropping it
+           * out of the collection queue after the patient had already been emailed.
+           * EXCEPTION still outranks goods-in, so supplier problems are never masked.
+           */
+          const fulfilmentStatus = advanceFulfilmentStatus(order.fulfilmentStatus, next.fulfilmentStatus);
           await deps.orderRepo.updateQuoteSnapshot({
             id: order.id,
             organisationId: order.organisationId,
             quoteSnapshot: next.snapshot,
-            fulfilmentStatus: next.fulfilmentStatus,
+            fulfilmentStatus,
           });
           if (
-            next.fulfilmentStatus !== order.fulfilmentStatus &&
-            ['PARTIALLY_DISPATCHED_TO_PHARMACY', 'DISPATCHED_TO_PHARMACY'].includes(next.fulfilmentStatus)
+            fulfilmentStatus !== order.fulfilmentStatus &&
+            ['PARTIALLY_DISPATCHED_TO_PHARMACY', 'DISPATCHED_TO_PHARMACY'].includes(fulfilmentStatus)
           ) {
             const recipients = await listPharmacyRecipients(order.organisationId, deps);
             await queueEmailToRecipients(

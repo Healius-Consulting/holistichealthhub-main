@@ -161,7 +161,9 @@ export function createPortalFulfilmentRouter(): Router {
       await orderRepo.updateQuoteSnapshot({
         id: order.id,
         organisationId: scope.organisationId,
-        quoteSnapshot: { ...snapshot, curaleaf: { ...curaleaf, lines, shipmentStates } },
+        // Stamped by the dispensary, not the supplier: the collection-email window and
+        // the "verified on" line both need the moment the packs were actually booked in.
+        quoteSnapshot: { ...snapshot, curaleaf: { ...curaleaf, lines, shipmentStates, ...(anyReceived ? { goodsInAt: new Date().toISOString() } : {}) } },
         fulfilmentStatus: remainingOpen && anyReceived
           ? 'PARTIALLY_RECEIVED'
           : anyReceived

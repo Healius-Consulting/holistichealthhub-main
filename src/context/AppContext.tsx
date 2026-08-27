@@ -932,9 +932,9 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           shipmentStates: isPaid ? (flow?.shipmentStates ?? curaleaf?.shipmentStates) : undefined,
           manualPlaceRequired: isPaid ? flow?.manualPlaceRequired : false,
           receivedItems,
-          goodsInAt: hasCheckedInPacks
-            ? (flow?.goodsInAt ?? latestShipmentAt)
-            : null,
+          // Only a real dispensary check-in time, never the supplier's dispatch time:
+          // the collection-email window is measured from when the packs landed here.
+          goodsInAt: hasCheckedInPacks ? (flow?.goodsInAt ?? null) : null,
           fulfilmentLines: flowLines.length ? flowLines.map(line => ({
             purchaseOrderItemId: line.purchaseOrderItemId,
             productId: line.productId,

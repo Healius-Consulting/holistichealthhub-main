@@ -512,8 +512,15 @@ export function toPortalOrder(order: PortalOrderSource) {
   const computedFulfilment = !hasCheckedInPacks && hasInTransitPacks
     ? (lines.some(line => line.remaining > 0) ? 'PARTIALLY_DISPATCHED_TO_PHARMACY' : 'DISPATCHED_TO_PHARMACY')
     : rawComputedFulfilment;
+  /*
+   * Supply completeness and collection are different questions. Packs verified onto the
+   * dispensary shelf are ready to hand out, not stock the supplier still owes — so an
+   * uncollected pack must not read as an open remainder. Including `collected < ordered`
+   * here meant every fully checked-in order reported `partially_received` until the
+   * patient walked in, so nothing ever reached the ready-to-collect queue.
+   */
   const remainingOpenAfterGoodsIn = hasCheckedInPacks
-    && lines.some(line => line.remaining > 0 || line.received < line.ordered || line.collected < line.ordered);
+    && lines.some(line => line.remaining > 0 || line.received < line.ordered);
   const shipmentIds = (po?.shipmentIds ?? persistedCuraleaf?.shipmentIds ?? shipments.map((s: any) => s.id)).filter(Boolean);
   const shipmentStates = {
     ...(persistedCuraleaf?.shipmentStates && typeof persistedCuraleaf.shipmentStates === 'object' ? persistedCuraleaf.shipmentStates : {}),
@@ -546,6 +553,7 @@ export function toPortalOrder(order: PortalOrderSource) {
       purchaseOrderId,
       placedAt,
       latestShipmentAt,
+      goodsInAt: hasCheckedInPacks ? (persistedCuraleaf?.goodsInAt ?? po?.goodsInAt ?? null) : null,
     };
   }
 

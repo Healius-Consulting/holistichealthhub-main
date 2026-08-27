@@ -733,6 +733,9 @@ export interface PrescriptionFlowRecord {
   purchaseOrderId?: string | null;
   placedAt?: string | null;
   latestShipmentAt?: string | null;
+  /** When the dispensary verified arrival. Distinct from `latestShipmentAt`, which is
+   *  when Curaleaf dispatched — only the pharmacy can say a pack actually landed. */
+  goodsInAt?: string | null;
   shipmentIds: string[];
   shipmentStates?: Record<string, 'partially_dispatched_to_pharmacy' | 'dispatched_to_pharmacy' | 'partially_received' | 'received' | 'ready_for_collection' | 'collected' | 'exception' | string>;
   lines: FulfilmentLineRecord[];
