@@ -268,7 +268,7 @@
 .overview-two-column { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(17rem, 0.8fr); gap: 1rem; align-items: start; }
 .overview-queue,
 .overview-recent,
-.overview-rx-starts { min-width: 0; }
+.overview-finance { min-width: 0; }
 .overview-priority-list,
 .overview-recent ul,
 .integration-health ul { margin: 0; padding: 0; list-style: none; }
@@ -278,10 +278,6 @@
 .overview-kind { display: block; margin-bottom: 0.2rem; color: var(--accent, #146c43); font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
 .overview-empty,
 .overview-state { display: grid; justify-items: center; gap: 0.5rem; padding: 3rem 1rem; color: var(--text-muted, #526157); text-align: center; }
-.overview-rx-starts__lead { margin: 0 0 0.25rem; color: var(--text-muted, #526157); font-size: 0.875rem; }
-.overview-rx-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin: 0.25rem 0 0; color: var(--text-muted, #526157); font-size: 0.8125rem; }
-.overview-rx-item--first .overview-kind { color: var(--accent, #146c43); }
-.overview-rx-item--repeat .overview-kind { color: var(--text-muted, #526157); }
 .overview-empty strong,
 .overview-state h2 { color: var(--text-primary, #17241c); }
 .overview-state h2,
@@ -406,6 +402,35 @@
 .overview-integration-chip--degraded { border-color: #e0be86; background: #fffaf2; }
 .overview-integration-chip--unavailable { border-color: #e3aaa7; background: #fff7f6; }
 
+/* The money block: four figures, whole pounds, and one way through to the
+   ledger they came from. It is a summary to act on, not a report to read. */
+.overview-finance__figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.9rem 1.25rem;
+  margin: 0.5rem 0 0.9rem;
+}
+
+.overview-finance__figures > div { display: grid; gap: 0.15rem; min-width: 0; }
+
+.overview-finance__figures dt {
+  color: var(--text-muted, #526157);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.overview-finance__figures dd {
+  margin: 0;
+  color: var(--text-primary, #17241c);
+  font-size: 1.5rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.overview-finance__figures small { color: var(--text-muted, #526157); font-size: 0.75rem; }
+
+.overview-finance__link,
 .overview-integrations__link {
   justify-self: start;
   display: inline-flex;
@@ -421,8 +446,10 @@
   font-weight: 650;
 }
 
+.overview-finance__link:hover,
 .overview-integrations__link:hover { text-decoration: underline; }
 
+.overview-finance__link:focus-visible,
 .overview-integrations__link:focus-visible {
   outline: 2px solid var(--tenant-primary);
   outline-offset: 3px;
@@ -3246,6 +3273,9 @@ html[data-enhanced-focus='true'] :is(button, a, input, select, textarea, [tabind
 .accessibility-reset{ margin-top: 15px; }
 
 .accessibility-panel__note{ display: flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--text-tertiary); font-size: 0.625rem; }
+/* Support-facing, not staff-facing: readable when asked for, invisible otherwise. */
+.accessibility-panel__build{ margin: 6px 0 0; color: var(--text-tertiary); font-size: 0.625rem; }
+.accessibility-panel__build code{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.625rem; user-select: all; }
 
 .operational-state{
   min-height: 150px;
@@ -7823,6 +7853,14 @@ html.modal-open .page-container{ overflow: hidden; }
 /* The medicine label styles itself as a block chip elsewhere; in a table cell it is
    just the row's name, so it sits inline and lets the row set the rhythm. */
 .patient-order-lines .pendulum-text{ display: inline; background: none; padding: 0; }
+.medicine-label__static{
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .patient-order-lines__unknown{
   color: var(--text-tertiary);
   font-weight: 600;
@@ -13169,12 +13207,27 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 .order-stage-rail__lane-label{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 9px;
   color: var(--text-tertiary);
   font-size: 10px;
   font-weight: 750;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* Which route the prescription took. It changes what the steps below can claim,
+   so it sits beside the lane name rather than hiding inside a step's detail. */
+.order-stage-rail__route{
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 .order-stage-rail__steps{
@@ -13523,31 +13576,28 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   border-radius: 9px;
   background: var(--bg-surface);
 }
-.order-gate-summary > header{
+/* One bar: the gate's current answer and when it was checked. The per-check
+   history lives in the order's activity log, where a history belongs. */
+.order-gate-summary--single{
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 13px;
-  border-bottom: 1px solid var(--border);
+  gap: 11px;
+  padding: 11px 13px;
   color: var(--color-success);
 }
-.order-gate-summary > header span,
-.order-gate-summary > header small,
-.order-gate-summary > header strong{ display: block; }
-.order-gate-summary > header small{ color: var(--text-tertiary); font-size: 8px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; }
-.order-gate-summary > header strong{ margin-top: 2px; color: var(--text-primary); font-size: 11px; }
-.order-gate-summary ol{ display: grid; margin: 0; padding: 0; list-style: none; }
-.order-gate-summary li{ display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; border-top: 1px solid var(--border); }
-.order-gate-summary li:first-child{ border-top: 0; }
-.order-gate-summary li > span{ display: grid; gap: 2px; }
-.order-gate-summary li > span:last-child{ text-align: right; }
-.order-gate-summary li strong,
-.order-gate-summary li b{ color: var(--text-primary); font-size: 10px; }
-.order-gate-summary li small{ color: var(--text-secondary); font-size: 9px; }
-.order-gate-summary li.is-changed b,
-.order-gate-summary li.is-out-of-stock b,
-.order-gate-summary li.is-reconciliation-required b{ color: var(--color-danger); }
+.order-gate-summary__copy{ display: grid; gap: 2px; flex: 1; min-width: 0; }
+.order-gate-summary__copy small{ color: var(--text-tertiary); font-size: 8px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; }
+.order-gate-summary__copy strong{ color: var(--text-primary); font-size: 11px; }
+.order-gate-summary__value{ display: grid; gap: 2px; text-align: right; }
+.order-gate-summary__value b{ color: var(--text-primary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.order-gate-summary__value small{ color: var(--text-secondary); font-size: 9px; }
+/* A gate that did not simply match is the one thing worth colouring. */
+.order-gate-summary--single.is-changed,
+.order-gate-summary--single.is-out-of-stock,
+.order-gate-summary--single.is-reconciliation-required{
+  color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--border));
+}
 .order-placement-wait{ display: flex; align-items: flex-start; gap: 10px; padding: 12px 13px; color: var(--tenant-primary-strong); border-color: color-mix(in srgb, var(--tenant-primary) 24%, var(--border)); background: color-mix(in srgb, var(--tenant-primary) 5%, var(--bg-surface)); }
 .order-placement-wait > span{ display: grid; gap: 3px; }
 .order-placement-wait strong{ color: var(--text-primary); font-size: 11px; }
@@ -16670,10 +16720,14 @@ html[data-theme='dark'] .auth-loading-page{
 }
 
 .rx-workbench--guided .manual-rx-picker__pack strong,
-.rx-workbench--guided .manual-rx-picker__price strong,
 .rx-workbench--guided .manual-rx-picker__wholesale strong,
 .rx-workbench--guided .manual-rx-picker__margin strong{
-  font-size: 14px;
+  font-size: 13px;
+}
+
+/* Patient price is the decision number in the guided picker too. */
+.rx-workbench--guided .manual-rx-picker__price strong{
+  font-size: 16px;
 }
 
 .rx-workbench--guided .manual-rx-picker__wholesale strong,
@@ -17183,10 +17237,17 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-size: 12px;
 }
 
-/* Qualifier on a ledger label, e.g. which side of the order the tax sits on. */
+/* Qualifier on a ledger label. */
 .rx-order-summary-rail__totals > div dt small{
   color: var(--text-tertiary);
   font-size: 11px;
+}
+
+/* Wholesale is what the pharmacy pays; everything below the rule is what the
+   patient is charged, so the two halves of the ledger are visually separated. */
+.rx-order-summary-rail__totals > div.is-ruled{
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .rx-order-summary-rail__totals > div dd{
@@ -17208,6 +17269,16 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
 .rx-order-summary-rail__totals > div.is-total dd{
   font-size: 15px;
   letter-spacing: -0.02em;
+}
+
+.rx-order-summary-rail__margin{
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.rx-order-summary-rail__margin dd{
+  font-weight: 700;
 }
 
 .rx-order-summary-rail__alert{
@@ -17333,6 +17404,11 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{ anim
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+
+.rx-step4-ledger > div.is-ruled{
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .rx-step4-ledger > div.is-total{

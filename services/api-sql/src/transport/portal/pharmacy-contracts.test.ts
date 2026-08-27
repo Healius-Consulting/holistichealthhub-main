@@ -7,7 +7,6 @@ import {
   buildPharmacyPatientDirectory,
   buildSqlPharmacyOverview,
   overviewIntegrationHealth,
-  overviewPrescriptionStarts,
   toPortalOrder,
   toPortalOrganisation,
   toPortalPatient,
@@ -1013,57 +1012,10 @@ describe('SQL pharmacy compatibility contracts', () => {
       { integration: 'curaleaf', state: 'not-configured', environment: null, checkedAt: null, detail: 'No credentials on file. HHH sets this up.' },
       { integration: 'worldpay', state: 'not-configured', environment: null, checkedAt: null, detail: 'No credentials on file. HHH sets this up.' },
     ]);
-    assert.deepEqual(overview.prescriptionStarts, { firstCount: 0, repeatCount: 0, items: [] });
-  });
-
-  it('lists referred patients with no order ahead of 30-day repeats without warning copy', () => {
-    const referred = {
-      ...patient,
-      id: '00000000-0000-4000-a000-000000000011',
-      firstName: 'Blake',
-      surname: 'Referred',
-      status: 'REFERRED' as const,
-      email: 'blake@example.test',
-      createdAt: '2026-08-10T09:00:00.000Z',
-      updatedAt: '2026-08-10T09:00:00.000Z',
-      statusChangedAt: '2026-08-10T09:00:00.000Z',
-    };
-    const repeating = {
-      ...patient,
-      id: '00000000-0000-4000-a000-000000000012',
-      firstName: 'Casey',
-      surname: 'Repeat',
-      email: 'casey@example.test',
-    };
-    const collected = {
-      ...order,
-      id: '00000000-0000-4000-a000-000000000013',
-      patientId: repeating.id,
-      orderNumber: 'ORD-2040',
-      status: 'COMPLETED',
-      paymentStatus: 'PAID',
-      fulfilmentStatus: 'COLLECTED',
-      submittedAt: '2026-07-01T10:00:00.000Z',
-      paidAt: '2026-07-01T11:00:00.000Z',
-      collectedAt: '2026-07-10T10:00:00.000Z',
-      createdAt: '2026-07-01T10:00:00.000Z',
-      updatedAt: '2026-07-10T10:00:00.000Z',
-    };
-    const starts = overviewPrescriptionStarts({
-      patients: [patient, referred, repeating],
-      orders: [order, collected],
-      now: Date.parse('2026-08-16T10:00:00.000Z'),
-    });
-    assert.equal(starts.firstCount, 1);
-    assert.equal(starts.repeatCount, 1);
-    assert.equal(starts.items[0]?.kind, 'first');
-    assert.equal(starts.items[0]?.maskedPatientLabel, 'Referred, B');
-    assert.equal(starts.items[0]?.ageDays, 6);
-    assert.equal(starts.items[1]?.kind, 'repeat');
-    assert.equal(starts.items[1]?.maskedPatientLabel, 'Repeat, C');
-    assert.equal(starts.items[1]?.lastOrderReference, '#ORD-2040');
-    assert.equal(JSON.stringify(starts).includes('Blake'), false);
-    assert.equal(JSON.stringify(starts).includes('Casey'), false);
+    // Prescription starts were removed from the Overview: the pharmacy reported
+    // they never started an order from here, and the section only competed with
+    // the queue that does get worked.
+    assert.equal('prescriptionStarts' in overview, false);
   });
 
   it('never reports connected without a successful vendor call to point at', () => {

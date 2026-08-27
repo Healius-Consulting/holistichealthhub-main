@@ -20,7 +20,6 @@ export type WorldpayCredential = {
   username: string;
   password: string;
   entityId: string;
-  customisationId?: string;
 };
 
 export type WorldpaySessionResult = {
@@ -49,7 +48,6 @@ export function worldpaySecretPayload(credential: WorldpayCredential): Record<st
     password: credential.password,
     entityId: credential.entityId,
   };
-  if (credential.customisationId) payload.customisationId = credential.customisationId;
   return payload;
 }
 
@@ -101,7 +99,6 @@ export async function readStoredWorldpayCredential(
           username: parsed.username,
           password: parsed.password,
           entityId: parsed.entityId,
-          customisationId: typeof parsed.customisationId === 'string' ? parsed.customisationId : undefined,
         };
       }
     } catch {
@@ -199,23 +196,6 @@ export async function writeWorldpayCredential(
     }
     throw new HttpError(503, 'Worldpay credentials could not be stored securely.', 'SECRET_STORE_FAILED');
   }
-}
-
-export async function updateStoredWorldpayCustomisation(
-  connection: IntegrationConnectionRecord | null,
-  organisationId: string,
-  customisationId: string | undefined,
-) {
-  const stored = await readStoredWorldpayCredential(connection, organisationId);
-  if (!stored) throw new HttpError(404, 'Worldpay is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-  const next: WorldpayCredential = {
-    username: stored.username,
-    password: stored.password,
-    entityId: stored.entityId,
-    ...(customisationId ? { customisationId } : {}),
-  };
-  const resourceName = await writeWorldpayCredential(organisationId, next, connection?.secretResourceName);
-  return { credential: next, resourceName };
 }
 
 export async function revokeWorldpayCredential(resourceName: string | null) {
@@ -332,9 +312,6 @@ export async function createWorldpayHostedSession(
         cancelURL: input.cancelUrl || `https://holistichealthhub.live/payment/cancelled?ref=${encodeURIComponent(input.transactionReference)}`,
       },
     };
-    if (credential.customisationId) {
-      requestBody.customisation_id = credential.customisationId;
-    }
 
     const response = await fetch(endpoint, {
       method: 'POST',

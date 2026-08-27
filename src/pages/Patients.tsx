@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, LayoutGrid, List, Lock, Mail, MapPin, Package, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
-import { getUnresolvedReason, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, LayoutGrid, List, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { WHOLESALE_LABEL, formatMargin, getUnresolvedReason, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry, RecordReturnTarget } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
@@ -8,6 +8,8 @@ import { formatPatientDob } from '../utils/patientDob';
 import { conditionLabel } from '@hhh/domain';
 import RecordDialog from '../components/RecordDialog';
 import ConditionList from '../components/ConditionList';
+import ConditionEditor from '../components/ConditionEditor';
+import { updatePatientConditions } from '../shared/api';
 import MedicineLabel from '../components/MedicineLabel';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { isNegativeEligibilityStatus, pharmacyDecisionReason } from '../utils/eligibilityPresentation';
@@ -561,6 +563,10 @@ export default function Patients() {
               record={selected}
               workspaceLive={state.workspaceMode === 'live' || state.workspaceMode === 'training'}
               onCreateOrder={() => handleCreateOrder(selected.patient!)}
+              onConditionsSaved={(patientId, conditions, primaryCondition) => {
+                dispatch({ type: 'SET_PATIENT_CONDITIONS', patientId, conditions, primaryCondition });
+                dispatch({ type: 'ADD_TOAST', message: 'Patient conditions updated.', toastType: 'success', dedupeKey: 'patient-conditions' });
+              }}
               onOpenOrder={order => {
                 // Carry the patient back with us: closing the order returns here with
                 // this record still open, instead of dumping the operator on the board.
@@ -674,8 +680,17 @@ function PatientDirectoryRow({ record, onSelect }: { record: CrmRecord; onSelect
   );
 }
 
+/**
+ * The intake rail, shown only while intake is still in progress.
+ *
+ * Once a patient is in active care the rail is three ticks that never change
+ * again — it takes the top of the record to restate history that the status pill
+ * already gives in one word, and pushes the orders and clinical detail staff
+ * actually opened the record for below the fold. Declined and suspended
+ * patients are off the journey entirely, so they never showed it either.
+ */
 function PatientJourneyRail({ stage }: { stage: PatientJourneyStage }) {
-  if (stage === 'declined' || stage === 'suspended') return null;
+  if (stage === 'active' || stage === 'declined' || stage === 'suspended') return null;
   const current = patientJourneyStepIndex(stage);
   return (
     <ol className="order-journey-rail order-journey-rail--premium" aria-label="Patient journey">
@@ -692,11 +707,12 @@ function PatientJourneyRail({ stage }: { stage: PatientJourneyStage }) {
   );
 }
 
-function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }: {
+function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, onConditionsSaved }: {
   record: CrmRecord;
   workspaceLive: boolean;
   onCreateOrder: () => void;
   onOpenOrder: (order: PatientOrder) => void;
+  onConditionsSaved: (patientId: string, conditions: string[], primaryCondition: string) => void;
 }) {
   const patient = record.patient!;
   const meta = crmMeta(record);
@@ -713,6 +729,28 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
   const eligibilityLabel = patient.submission ? onboardingStatusLabel(patient.submission.status) : null;
   const address = patientAddressLines(patient.crmPatient?.address, patient.crmPatient?.postcode);
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
+  const [editingConditions, setEditingConditions] = useState(false);
+  const [savingConditions, setSavingConditions] = useState(false);
+  const [conditionError, setConditionError] = useState<string | null>(null);
+  // Only a patient with a server record can have their conditions rewritten;
+  // a training-sandbox row has no submission to rewrite.
+  const canEditConditions = Boolean(patient.crmPatient?.id) && workspaceLive;
+
+  const saveConditions = async (conditionCodes: string[], primaryConditionCode: string) => {
+    const patientId = patient.crmPatient?.id;
+    if (!patientId) return;
+    setSavingConditions(true);
+    setConditionError(null);
+    try {
+      const result = await updatePatientConditions(patientId, { conditionCodes, primaryConditionCode });
+      onConditionsSaved(patientId, result.conditions.map(item => item.conditionCode), result.primaryConditionCode);
+      setEditingConditions(false);
+    } catch (error) {
+      setConditionError(error instanceof Error ? error.message : 'The conditions could not be saved.');
+    } finally {
+      setSavingConditions(false);
+    }
+  };
 
   return (
     <article className="order-crm-record">
@@ -777,11 +815,32 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
           </section>
 
           <section className="patient-chart-card" aria-labelledby="patient-clinical-title">
-            <header><h3 id="patient-clinical-title">Eligibility Form Info</h3></header>
+            <header>
+              <h3 id="patient-clinical-title">Eligibility Form Info</h3>
+              {/* The intake form is a snapshot of what the patient could answer on
+                  their own. Staff hold the clinic letter, so they can correct it. */}
+              {canEditConditions && !editingConditions ? (
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setConditionError(null); setEditingConditions(true); }}>
+                  <Pencil size={13} aria-hidden="true" /> Edit conditions
+                </button>
+              ) : null}
+            </header>
             {patient.submission && isNegativeEligibilityStatus(patient.submission.status) ? (
               <div className="patient-eligibility-reason"><span>Reason</span><strong>{pharmacyDecisionReason(patient.submission)}</strong></div>
             ) : null}
-            {conditions.length > 0 ? (
+            {editingConditions ? (
+              <div className="patient-chart-conditions patient-chart-conditions--editing">
+                <span>Conditions</span>
+                <ConditionEditor
+                  conditions={conditions}
+                  primaryCondition={primaryCondition || conditions[0] || ''}
+                  saving={savingConditions}
+                  error={conditionError}
+                  onCancel={() => { setEditingConditions(false); setConditionError(null); }}
+                  onSave={(conditionCodes, primaryConditionCode) => void saveConditions(conditionCodes, primaryConditionCode)}
+                />
+              </div>
+            ) : conditions.length > 0 ? (
               <div className="patient-chart-conditions">
                 <span>Conditions</span>
                 <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
@@ -790,7 +849,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
             {/* The pills above already carry the primary and secondary conditions.
                 These rows only appear when there are no pills to show. */}
             <dl className="patient-chart-facts">
-              {conditions.length === 0 ? <div><dt>Conditions</dt><dd>{EMPTY_FIELD}</dd></div> : null}
+              {conditions.length === 0 && !editingConditions ? <div><dt>Conditions</dt><dd>{EMPTY_FIELD}</dd></div> : null}
               <div><dt>Tried two or more treatments</dt><dd>{treatmentCheck ?? EMPTY_FIELD}</dd></div>
               <div><dt>Psychosis check</dt><dd>{psychosisCheck ?? EMPTY_FIELD}</dd></div>
               <div><dt>How they found the service</dt><dd>{foundService ?? EMPTY_FIELD}</dd></div>
@@ -971,8 +1030,8 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
                             <tr>
                               <th scope="col">Item</th>
                               <th scope="col">Qty</th>
-                              <th scope="col">Patient</th>
-                              <th scope="col">Cost</th>
+                              <th scope="col">Patient price</th>
+                              <th scope="col">{WHOLESALE_LABEL}</th>
                               <th scope="col">Margin</th>
                             </tr>
                           </thead>
@@ -985,12 +1044,14 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder }:
                               const costKnown = typeof item.cost === 'number' && item.cost > 0;
                               return (
                                 <tr key={`${item.productId}-${index}`}>
-                                  <th scope="row"><MedicineLabel name={item.name} /></th>
+                                  <th scope="row"><MedicineLabel name={item.name} static /></th>
                                   <td>{quantity}</td>
                                   <td>{money(patientTotal)}</td>
                                   <td>{costKnown ? money(item.cost! * quantity) : EMPTY_FIELD}</td>
                                   <td className="patient-order-lines__margin">
-                                    {costKnown ? money(patientTotal - item.cost! * quantity) : <span className="patient-order-lines__unknown">Awaiting quote</span>}
+                                    {costKnown
+                                      ? formatMargin(patientTotal - item.cost! * quantity, patientTotal)
+                                      : <span className="patient-order-lines__unknown">Awaiting quote</span>}
                                   </td>
                                 </tr>
                               );

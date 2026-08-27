@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { PatientOrder, Prescription } from '../src/context/AppContext.tsx';
-import { buildOrderTimelineEvents, buildPrescriptionTimelineEvents } from '../src/utils/orderTimeline.ts';
+import { buildOrderStageRail, buildOrderTimelineEvents, buildPrescriptionTimelineEvents, placementRoute } from '../src/utils/orderTimeline.ts';
 
 const tenPackPrescription: Prescription = {
   id: 101,
@@ -104,4 +104,135 @@ test('order timeline keeps payment and goods-in events on distinct timestamps', 
     new Date(payment!.date as Date).getTime(),
     new Date(checkIn!.date as string).getTime(),
   );
+});
+
+/* ---- Placement rail ---- */
+
+const unplacedPrescription: Prescription = {
+  ...tenPackPrescription,
+  id: 201,
+  placed: false,
+  placedAt: null,
+  poRef: null,
+  status: 'draft',
+  fulfilmentLines: [],
+  shipments: [],
+  shipmentIds: [],
+  shipmentStates: {},
+  latestShipmentAt: null,
+  goodsInAt: null,
+  readyAt: null,
+};
+
+function orderWith(overrides: Partial<PatientOrder>): PatientOrder {
+  return {
+    ...partialOrder,
+    prescriptions: [unplacedPrescription],
+    curaleafPlacement: undefined,
+    ...overrides,
+  } as PatientOrder;
+}
+
+test('the pharmacy placement rail leads with payment', () => {
+  const rail = buildOrderStageRail(orderWith({}));
+  assert.deepEqual(
+    rail.pharmacyPlacement.map(entry => entry.key),
+    ['payment', 'prescriber', 'prescription', 'purchase-order'],
+  );
+});
+
+test('the two lanes are named for whoever is holding the order', () => {
+  const rail = buildOrderStageRail(partialOrder);
+  assert.ok(rail.pharmacyPlacement.length);
+  assert.ok(rail.curaleafPlacement, 'a placed order has a Curaleaf lane');
+});
+
+test('a recorded clinic barcode is a QR placement', () => {
+  const order = orderWith({ curaleafPlacement: { route: 'CLINIC_BARCODE' } as never });
+  assert.equal(placementRoute(order), 'clinic_barcode');
+});
+
+test('a recorded manual placement stays manual even with clinic-entered prescriptions', () => {
+  const order = orderWith({
+    curaleafPlacement: { route: 'MANUAL_PRESCRIPTION' } as never,
+    prescriptions: [{ ...unplacedPrescription, entryMode: 'clinic' }],
+  });
+  assert.equal(placementRoute(order), 'manual');
+});
+
+test('an order with no prescriptions is not treated as a clinic scan', () => {
+  // The old rule used prescriptions.every(...), which is true for an empty list,
+  // and so reported an empty order as having a Curaleaf-verified prescriber.
+  const order = orderWith({ prescriptions: [] });
+  assert.equal(placementRoute(order), 'manual');
+  const rail = buildOrderStageRail(order);
+  const prescriber = rail.pharmacyPlacement.find(entry => entry.key === 'prescriber');
+  assert.notEqual(prescriber?.state, 'complete');
+});
+
+test('one manually typed prescription makes the whole placement manual', () => {
+  const order = orderWith({
+    prescriptions: [
+      { ...unplacedPrescription, entryMode: 'clinic' },
+      { ...unplacedPrescription, id: 202, entryMode: 'manual' },
+    ],
+  });
+  assert.equal(placementRoute(order), 'manual');
+});
+
+test('a QR order does not ask the pharmacy to re-verify what the clinic already did', () => {
+  const order = orderWith({ curaleafPlacement: { route: 'CLINIC_BARCODE' } as never });
+  const rail = buildOrderStageRail(order);
+  const prescriber = rail.pharmacyPlacement.find(entry => entry.key === 'prescriber');
+  const prescription = rail.pharmacyPlacement.find(entry => entry.key === 'prescription');
+  assert.equal(prescriber?.state, 'complete');
+  assert.equal(prescription?.state, 'complete');
+  assert.match(prescriber!.detail, /clinic scan/i);
+});
+
+test('a manual order shows the prescriber check as real outstanding work', () => {
+  const order = orderWith({ curaleafPlacement: { route: 'MANUAL_PRESCRIPTION' } as never });
+  const rail = buildOrderStageRail(order);
+  const prescriber = rail.pharmacyPlacement.find(entry => entry.key === 'prescriber');
+  assert.notEqual(prescriber?.state, 'complete');
+});
+
+test('a partially ready split order does not claim the patient was notified', () => {
+  // One consignment of 1 pack is ready; 9 packs are still with Curaleaf.
+  const rail = buildOrderStageRail(partialOrder);
+  const ready = rail.curaleafPlacement!.find(entry => entry.key === 'ready');
+  assert.ok(ready);
+  assert.notEqual(ready!.state, 'complete');
+  assert.equal(ready!.state, 'partial');
+  assert.match(ready!.detail, /1 of 10 packs ready/);
+  assert.doesNotMatch(ready!.detail, /^Patient notified$/);
+});
+
+test('a fully ready order still reads as fully ready', () => {
+  const shipmentId = '796adea9-f2d9-43b2-ad5c-ccfc4184ee62';
+  const fullyReady: PatientOrder = {
+    ...partialOrder,
+    prescriptions: [{
+      ...tenPackPrescription,
+      status: 'ready',
+      shipmentStates: { [shipmentId]: 'ready_for_collection' },
+      shipments: [{
+        id: shipmentId,
+        createdAt: '2026-08-17T08:50:45.621344Z',
+        items: [{ productId: '9f2d6958-2d76-4338-9e5f-6fd383dfff36', packCount: 10 }],
+      }],
+      fulfilmentLines: [{
+        ...tenPackPrescription.fulfilmentLines![0]!,
+        allocated: 10,
+        shipped: 10,
+        received: 10,
+        collected: 0,
+        remaining: 0,
+        backordered: false,
+      }],
+    }],
+  };
+  const ready = buildOrderStageRail(fullyReady).curaleafPlacement!.find(entry => entry.key === 'ready');
+  assert.equal(ready!.state, 'complete');
+  assert.equal(ready!.detail, 'Patient notified');
 });

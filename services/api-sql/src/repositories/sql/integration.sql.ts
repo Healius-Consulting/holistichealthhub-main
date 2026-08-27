@@ -74,6 +74,25 @@ const UPDATE_CONNECTION_GQL = `
   }
 `;
 
+/*
+ * Records that the vendor answered. `lastErrorCode` and `consecutiveFailures`
+ * are cleared in the same write: a call that succeeded now makes an older
+ * failure history misleading rather than informative.
+ */
+const RECORD_SUCCESS_GQL = `
+  mutation RecordIntegrationSuccess($id: UUID!) {
+    integrationConnection_update(
+      key: { id: $id }
+      data: {
+        lastSuccessfulAt_expr: "request.time"
+        lastErrorCode: null
+        consecutiveFailures: 0
+        updatedAt_expr: "request.time"
+      }
+    )
+  }
+`;
+
 export class SqlIntegrationRepository implements IntegrationRepositoryPort {
   async listConnections(): Promise<IntegrationConnectionRecord[]> {
     const result = await dataConnect.executeGraphql<{ integrationConnections: IntegrationConnectionRecord[] }, any>(
@@ -115,5 +134,11 @@ export class SqlIntegrationRepository implements IntegrationRepositoryPort {
     const restored = await this.findConnection(input.organisationId, input.integration);
     if (!restored) throw new Error('Integration connection could not be verified after restoration.');
     return restored;
+  }
+
+  async recordSuccessfulCall(organisationId: string, integration: IntegrationName): Promise<void> {
+    const existing = await this.findConnection(organisationId, integration);
+    if (!existing) return;
+    await dataConnect.executeGraphql(RECORD_SUCCESS_GQL, { variables: { id: existing.id } });
   }
 }

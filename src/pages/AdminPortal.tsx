@@ -43,7 +43,7 @@ import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources'
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { useAuth } from '../auth/useAuth';
-import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
+import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
 import { isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
@@ -56,6 +56,7 @@ import CompactPatientCell from '../components/CompactPatientCell';
 import { formatPatientDob } from '../utils/patientDob';
 import { compactPatientName } from '../utils/patientName';
 import ConditionList from '../components/ConditionList';
+import ConditionEditor from '../components/ConditionEditor';
 import { EMAIL_LOGO_SPEC, normalisePharmacyLogo } from '../utils/pharmacyLogo';
 import { LEGACY_PHARMACY_DECISION_REASON, PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus, pharmacyDecisionReason } from '../utils/eligibilityPresentation';
 import { appPathPrefix } from '../auth/surface-path';
@@ -958,6 +959,34 @@ export default function AdminPortal() {
   const [serverPatientRegister, setServerPatientRegister] = useState<PatientRegisterExportResult | null>(null);
   const [patientRegisterLoading, setPatientRegisterLoading] = useState(false);
   const [selectedRegisterPatient, setSelectedRegisterPatient] = useState<PatientRegisterExportRow | null>(null);
+  const [editingAdminConditions, setEditingAdminConditions] = useState(false);
+  const [savingAdminConditions, setSavingAdminConditions] = useState(false);
+  const [adminConditionError, setAdminConditionError] = useState<string | null>(null);
+
+  const saveAdminConditions = async (
+    patientId: string,
+    organisationId: string,
+    conditionCodes: string[],
+    primaryConditionCode: string,
+  ) => {
+    setSavingAdminConditions(true);
+    setAdminConditionError(null);
+    try {
+      const result = await updateAdminPatientConditions(patientId, { organisationId, conditionCodes, primaryConditionCode });
+      dispatch({
+        type: 'SET_PATIENT_CONDITIONS',
+        patientId,
+        conditions: result.conditions.map(item => item.conditionCode),
+        primaryCondition: result.primaryConditionCode,
+      });
+      dispatch({ type: 'ADD_TOAST', message: 'Patient conditions updated.', toastType: 'success', dedupeKey: 'patient-conditions' });
+      setEditingAdminConditions(false);
+    } catch (error) {
+      setAdminConditionError(error instanceof Error ? error.message : 'The conditions could not be saved.');
+    } finally {
+      setSavingAdminConditions(false);
+    }
+  };
   const [pendingRegisterKey, setPendingRegisterKey] = useState<string | null>(null);
   const [referralLink, setReferralLink] = useState('');
   const [referralLinkLoading, setReferralLinkLoading] = useState(false);
@@ -2027,6 +2056,12 @@ export default function AdminPortal() {
       ? patientOrderActivity(state.orders, selectedRegisterPatient.organisationId, orderPatientId)
       : { count: 0, dates: [], uniqueDays: [] };
     const selectedTone = selectedRegisterPatient ? stageTone(selectedRegisterPatient.stage) : 'info';
+    // Only a real patient row can be rewritten. A register entry that is still
+    // only an intake submission has no patient record to edit yet.
+    const adminConditionPatientId = selectedCrm?.id
+      ?? (selectedRegisterPatient && !selectedRegisterPatient.id.startsWith('sub-') ? selectedRegisterPatient.id : null);
+    const adminConditions = selectedCrm?.conditions ?? selectedIntake?.conditions ?? [];
+    const adminPrimaryCondition = selectedCrm?.primaryCondition ?? selectedIntake?.primaryCondition ?? adminConditions[0] ?? '';
     const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo);
 
     return (
@@ -2259,6 +2294,45 @@ export default function AdminPortal() {
                         <dd>{onboardingStatusLabel(selectedRegisterPatient.stage)}</dd>
                       </div>
                     </dl>
+                  </section>
+
+                  {/* Admin edits go through the same service as the pharmacy's own
+                      Edit conditions, so the register and the Portal cannot end up
+                      showing a patient two different condition lists. */}
+                  <section className="admin-register-crm__panel">
+                    <h3>Conditions</h3>
+                    {!adminConditionPatientId ? (
+                      <p>This record has no patient row yet, so its conditions are still owned by the intake submission.</p>
+                    ) : editingAdminConditions ? (
+                      <ConditionEditor
+                        conditions={adminConditions}
+                        primaryCondition={adminPrimaryCondition}
+                        saving={savingAdminConditions}
+                        error={adminConditionError}
+                        onCancel={() => { setEditingAdminConditions(false); setAdminConditionError(null); }}
+                        onSave={(conditionCodes, primaryConditionCode) => void saveAdminConditions(
+                          adminConditionPatientId,
+                          selectedRegisterPatient.organisationId,
+                          conditionCodes,
+                          primaryConditionCode,
+                        )}
+                      />
+                    ) : (
+                      <>
+                        {adminConditions.length ? (
+                          <ConditionList conditions={adminConditions} primaryCondition={adminPrimaryCondition || adminConditions[0]} />
+                        ) : (
+                          <p>No conditions recorded for this patient.</p>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => { setAdminConditionError(null); setEditingAdminConditions(true); }}
+                        >
+                          Edit conditions
+                        </button>
+                      </>
+                    )}
                   </section>
 
                   <section className="admin-register-crm__panel">

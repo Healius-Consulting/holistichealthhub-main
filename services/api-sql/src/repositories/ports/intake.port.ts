@@ -1,3 +1,4 @@
+import type { FormConditionRecord } from '../../domain/eligibility/form-conditions.js';
 export interface CreateSubmissionInput {
   sourceOrganisationId?: string | null;
   assignedOrganisationId?: string | null;
@@ -146,5 +147,9 @@ export interface IntakeRepositoryPort {
   updateSubmissionFollowUp(input: UpdateSubmissionFollowUpInput): Promise<void>;
   activateSubmission(input: ActivateSubmissionInput): Promise<void>;
   copySubmissionConditionsToPatient(patientId: string, submissionId: string): Promise<void>;
+  /** Replace a submission's conditions with exactly this set, removing any dropped. */
+  rewriteSubmissionConditions(submissionId: string, records: FormConditionRecord[]): Promise<void>;
+  /** Replace a patient's condition rows with exactly this set, removing any dropped. */
+  rewritePatientConditions(patientId: string, existing: FormConditionRecord[], records: FormConditionRecord[]): Promise<void>;
   declineSubmission(input: DeclineSubmissionInput): Promise<void>;
 }

@@ -20,6 +20,7 @@ import type { TenantPendingEnquiryRecord } from '../../repositories/ports/intake
 import { formConditionRecords, primaryConditionCode } from '../../domain/eligibility/form-conditions.js';
 import { sqlIntakeCaseReference } from './intake-contracts.js';
 import { pendingEnquiryDisplayStatus, portalSourceType } from './intake-source.js';
+import { overviewFinanceSnapshot } from '../../application/finance/pharmacy-ledger.js';
 
 type PortalOrder = ReturnType<typeof toPortalOrder>;
 
@@ -797,81 +798,19 @@ function isOpenOrder(order: OrderRecord) {
   return isLiveOrder(order) && order.fulfilmentStatus !== 'COLLECTED';
 }
 
-type OverviewPrescriptionStart = {
-  id: string;
-  kind: 'first' | 'repeat';
-  ageDays: number;
-  maskedPatientLabel: string;
-  lastOrderReference: string | null;
-  recordTarget: { kind: 'patient'; id: string };
-};
-
-export function overviewPrescriptionStarts(params: {
-  patients: PatientRecord[];
-  orders: OrderRecord[];
-  now?: number;
-  firstLimit?: number;
-  repeatLimit?: number;
-}) {
-  const now = params.now ?? Date.now();
-  const ordersByPatient = new Map<string, OrderRecord[]>();
-  for (const order of params.orders) {
-    const bucket = ordersByPatient.get(order.patientId) ?? [];
-    bucket.push(order);
-    ordersByPatient.set(order.patientId, bucket);
-  }
-
-  const firsts: OverviewPrescriptionStart[] = [];
-  const repeats: OverviewPrescriptionStart[] = [];
-
-  for (const patient of params.patients) {
-    if (patient.status === 'INACTIVE') continue;
-    const patientOrders = ordersByPatient.get(patient.id) ?? [];
-    const liveOrders = patientOrders.filter(isLiveOrder);
-    if (!liveOrders.length) {
-      firsts.push({
-        id: `first-${patient.id}`,
-        kind: 'first',
-        ageDays: ageDays(timestamp(patient.statusChangedAt, patient.createdAt), now),
-        maskedPatientLabel: overviewPatientLabel(patient),
-        lastOrderReference: null,
-        recordTarget: { kind: 'patient', id: patient.id },
-      });
-      continue;
-    }
-    if (patientOrders.some(isOpenOrder)) continue;
-    const latestOrder = liveOrders.reduce((latest, current) => (
-      orderActivityAt(current) > orderActivityAt(latest) ? current : latest
-    ));
-    const daysSince = ageDays(orderActivityAt(latestOrder), now);
-    if (!Number.isFinite(daysSince) || daysSince < REPEAT_GAP_DAYS) continue;
-    repeats.push({
-      id: `repeat-${patient.id}`,
-      kind: 'repeat',
-      ageDays: daysSince,
-      maskedPatientLabel: overviewPatientLabel(patient),
-      lastOrderReference: overviewOrderReference(latestOrder),
-      recordTarget: { kind: 'patient', id: patient.id },
-    });
-  }
-
-  firsts.sort((left, right) => right.ageDays - left.ageDays || left.maskedPatientLabel.localeCompare(right.maskedPatientLabel));
-  repeats.sort((left, right) => right.ageDays - left.ageDays || left.maskedPatientLabel.localeCompare(right.maskedPatientLabel));
-  const firstLimit = params.firstLimit ?? FIRST_START_LIMIT;
-  const repeatLimit = params.repeatLimit ?? REPEAT_START_LIMIT;
-  return {
-    firstCount: firsts.length,
-    repeatCount: repeats.length,
-    items: [...firsts.slice(0, firstLimit), ...repeats.slice(0, repeatLimit)],
-  };
-}
-
 export function buildSqlPharmacyOverview(params: {
   organisation: OrganisationRecord;
   patients: PatientRecord[];
   orders: OrderRecord[];
   pendingEnquiries?: Array<{ submittedAt: string }>;
   connections?: OverviewIntegrationConnection[];
+  /**
+   * Rows from the one shared pharmacy ledger. Omitted only where the caller
+   * genuinely cannot cost the orders (a repository outage), in which case the
+   * money headline is left off rather than shown as zero — a pharmacy that
+   * traded is never told it earned nothing.
+   */
+  financeRows?: Parameters<typeof overviewFinanceSnapshot>[0];
   now?: number;
 }) {
   const now = params.now ?? Date.now();
@@ -925,11 +864,6 @@ export function buildSqlPharmacyOverview(params: {
   }
 
   priorityItems.sort((left, right) => right.ageDays - left.ageDays);
-  const prescriptionStarts = overviewPrescriptionStarts({
-    patients: params.patients,
-    orders: params.orders,
-    now,
-  });
   const organisation = params.organisation;
   const activePatients = params.patients.filter(patient => patient.status === 'ACTIVE').length;
 
@@ -954,7 +888,6 @@ export function buildSqlPharmacyOverview(params: {
       readyForCollection: readyForCollection.length,
       urgentTotal: priorityItems.length,
     },
-    prescriptionStarts,
     priorityItems,
     recentSessions: [],
     handover: {
@@ -963,6 +896,7 @@ export function buildSqlPharmacyOverview(params: {
       supplierOrdersInProgress: supplierOrders.length,
       agedCollections: priorityItems.filter(item => item.kind === 'collection').length,
     },
+    finance: params.financeRows ? overviewFinanceSnapshot(params.financeRows, now) : null,
     integrations: overviewIntegrationHealth(params.connections),
   };
 }

@@ -62,7 +62,7 @@ export default function CreateOrderPage() {
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState<{ title: string; detail: string } | null>(null);
   const [quotedSignature, setQuotedSignature] = useState<string | null>(null);
-  const [quoteSummary, setQuoteSummary] = useState<{ shippingPrice: number; taxRate: number } | null>(null);
+  const [quoteSummary, setQuoteSummary] = useState<{ shippingPrice: number } | null>(null);
   const [latestQuote, setLatestQuote] = useState<import('../shared/contracts').CuraleafQuote | null>(null);
   const [quoteCheckedAt, setQuoteCheckedAt] = useState<string | null>(null);
   const [quotedUnavailableProductIds, setQuotedUnavailableProductIds] = useState<string[]>([]);
@@ -276,18 +276,10 @@ export default function CreateOrderPage() {
     : [];
   const draftBasketCount = draftBasketItems.length;
   const draftBasketTotal = activeOrder ? orderRevenue(activeOrder) : 0;
-  // Curaleaf's taxRate is a decimal fraction ('0.2' = 20%) charged on what the
-  // pharmacy buys, so it applies to wholesale plus delivery, not the patient total.
+  // Curaleaf's own tax on the pharmacy's purchase is a supplier-side figure and is
+  // deliberately not surfaced to staff, so only wholesale and delivery come through.
   const draftBasketCosts = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
-    ? (() => {
-      const wholesale = orderCost(activeOrder);
-      const delivery = quoteSummary.shippingPrice;
-      return {
-        wholesale,
-        delivery,
-        tax: Math.round((wholesale + delivery) * quoteSummary.taxRate * 100) / 100,
-      };
-    })()
+    ? { wholesale: orderCost(activeOrder), delivery: quoteSummary.shippingPrice }
     : null;
   const draftBasketIssues = draftBasketItems.map(item => basketItemIssue({
     productId: item.productId,
@@ -738,7 +730,7 @@ export default function CreateOrderPage() {
       setQuotedSignature(currentQuoteSignature);
       setLatestQuote(quote);
       setQuoteCheckedAt(new Date().toISOString());
-      setQuoteSummary({ shippingPrice: Number(quote.shippingPrice) || 0, taxRate: Number(quote.taxRate) || 0 });
+      setQuoteSummary({ shippingPrice: Number(quote.shippingPrice) || 0 });
       setQuotedUnavailableProductIds(unavailableProductIds);
       if (unavailableProductIds.length) {
         const names = lineNames(unavailableProductIds);
@@ -1044,6 +1036,7 @@ export default function CreateOrderPage() {
                   catalogue={state.catalogue}
                   catalogueLoading={state.catalogueLoading}
                   catalogueError={state.catalogueError}
+                  onRetryCatalogue={() => dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' })}
                   editingClinicFormulary={editingClinicFormularyRxId === selectedRx?.id}
                   onToggleEditFormulary={() => setEditingClinicFormularyRxId(selectedRx?.id ?? null)}
                   onSaveFormulary={() => setEditingClinicFormularyRxId(null)}

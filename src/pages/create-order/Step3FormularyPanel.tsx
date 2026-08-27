@@ -1,4 +1,4 @@
-import { CheckCircle, FileScan, FileText, Pencil, Save, ShieldCheck } from 'lucide-react';
+import { CheckCircle, FileScan, FileText, Pencil, RefreshCw, Save, ShieldCheck } from 'lucide-react';
 import ManualPrescriptionEditor from '../../components/ManualPrescriptionEditor';
 import MedicineLabel from '../../components/MedicineLabel';
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
@@ -9,6 +9,7 @@ type Step3FormularyPanelProps = {
   catalogue: CatalogueItem[];
   catalogueLoading: boolean;
   catalogueError: string | null;
+  onRetryCatalogue: () => void;
   editingClinicFormulary: boolean;
   onToggleEditFormulary: () => void;
   onSaveFormulary: () => void;
@@ -25,6 +26,7 @@ export default function Step3FormularyPanel({
   catalogue,
   catalogueLoading,
   catalogueError,
+  onRetryCatalogue,
   editingClinicFormulary,
   onToggleEditFormulary,
   onSaveFormulary,
@@ -69,7 +71,30 @@ export default function Step3FormularyPanel({
         </div>
       </header>
       {catalogueLoading ? <ProviderStatusNotice state="loading" title="Refreshing Curaleaf products" detail="The latest patient prices and pack information are being retrieved." /> : null}
-      {catalogueError ? <ProviderStatusNotice title="Curaleaf information is temporarily delayed" detail="Wait and try again later. If this continues, contact your HHH administrator; pharmacy staff do not need to change the connection." /> : null}
+      {catalogueError ? (
+        <ProviderStatusNotice
+          title="Curaleaf information is temporarily delayed"
+          detail="Try again now. If this continues, contact your HHH administrator; pharmacy staff do not need to change the connection."
+          action={(
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onRetryCatalogue}>
+              <RefreshCw size={14} aria-hidden="true" /> Try again
+            </button>
+          )}
+        />
+      ) : null}
+      {/* An empty catalogue with no error is its own dead end — medicines cannot be
+          added and nothing on screen says why — so it gets the same way out. */}
+      {!catalogueLoading && !catalogueError && catalogue.length === 0 ? (
+        <ProviderStatusNotice
+          title="Catalogue has not loaded"
+          detail="Medicines cannot be added until the Curaleaf catalogue arrives. Try again now; if it stays empty, contact your HHH administrator."
+          action={(
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onRetryCatalogue}>
+              <RefreshCw size={14} aria-hidden="true" /> Try again
+            </button>
+          )}
+        />
+      ) : null}
       {!selectedRx ? (
         <div className="rx-inline-empty"><FileText size={20} /><span><strong>Select a prescription record</strong><small>Its prescribed medicines will appear here.</small></span></div>
       ) : manualOrEditing ? (

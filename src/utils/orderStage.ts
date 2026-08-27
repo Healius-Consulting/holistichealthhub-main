@@ -119,51 +119,6 @@ export function orderIsSplitFulfilment(order: PatientOrder) {
   return snapshot.inTransit > 0 && snapshot.inTransit < snapshot.total;
 }
 
-export function fulfilmentPipelineSteps(line: {
-  orderedPacks: number;
-  allocatedPacks: number;
-  dispatchedPacks: number;
-  inTransitPacks: number;
-  receivedPacks: number;
-  awaitingDispatchPacks: number;
-  isSplit: boolean;
-}) {
-  const ordered = line.orderedPacks;
-  const allocated = line.allocatedPacks;
-  const dispatched = line.dispatchedPacks;
-  const inTransit = line.inTransitPacks;
-  const received = line.receivedPacks;
-  const consignmentDelivered = dispatched > 0 && inTransit === 0 && received >= dispatched;
-  const splitAwaitingNextShipment = line.isSplit && line.awaitingDispatchPacks > 0;
-  const transitIncomplete = splitAwaitingNextShipment
-    || (inTransit > 0 && received > 0)
-    || (dispatched > 0 && inTransit > 0 && inTransit < dispatched)
-    || (dispatched > 0 && inTransit === 0 && received > 0 && received < dispatched);
-
-  return {
-    ordered: {
-      complete: ordered > 0,
-      partial: false,
-      active: false,
-    },
-    dispensed: {
-      complete: allocated >= ordered && ordered > 0,
-      partial: allocated > 0 && allocated < ordered,
-      active: allocated === 0 && ordered > 0,
-    },
-    inTransit: {
-      complete: consignmentDelivered && !splitAwaitingNextShipment,
-      partial: transitIncomplete,
-      active: inTransit > 0 && !transitIncomplete,
-    },
-    checkedIn: {
-      complete: received >= ordered && ordered > 0,
-      partial: received > 0 && received < ordered,
-      active: false,
-    },
-  };
-}
-
 export function orderHasInTransitPacks(order: PatientOrder) {
   return order.prescriptions.some(prescription => prescriptionHasInTransitPacks(prescription));
 }

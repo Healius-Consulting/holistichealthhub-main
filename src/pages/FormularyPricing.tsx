@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ChevronLeft, ChevronRight, CircleDollarSign, Package, RefreshCw, Search, ShieldCheck, Tags } from 'lucide-react';
 import ProviderStatusNotice from '../components/ProviderStatusNotice';
 import MedicineLabel from '../components/MedicineLabel';
-import { money, TYPE_LABELS, useApp } from '../context/AppContext';
+import { WHOLESALE_LABEL, money, TYPE_LABELS, useApp } from '../context/AppContext';
 
 const TYPE_FILTERS = ['All', 'oil', 'flos', 'capsule', 'lozenge', 'vape', 'other'] as const;
 const PAGE_SIZE = 25;
@@ -63,7 +63,7 @@ export default function FormularyPricing() {
           <span>
             <small>Curaleaf-managed catalogue</small>
             <strong>Recommended patient prices are supplied by Curaleaf and are read-only.</strong>
-            <em>Wholesale cost and stock availability come from the shared Curaleaf quote bank when available, and are confirmed for exact pack quantities at checkout.</em>
+            <em>Wholesale cost (excl. VAT) and stock availability come from the shared Curaleaf quote bank when available, and are confirmed for exact pack quantities at checkout.</em>
           </span>
         </div>
         <dl className="pricing-position" aria-label="Curaleaf catalogue position">
@@ -124,7 +124,7 @@ export default function FormularyPricing() {
             <span role="columnheader">Pack</span>
             <span role="columnheader">Product state</span>
             <span role="columnheader">Recommended patient price</span>
-            <span role="columnheader">Wholesale</span>
+            <span role="columnheader">{WHOLESALE_LABEL}</span>
           </div>
           {products.length === 0 ? (
             <div className="pricing-empty">

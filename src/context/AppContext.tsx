@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
 import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, getWorldpayConnectionStatus, isApiConfigured } from '../shared/api';
 import type { CuraleafCancellationState, CuraleafCatalogue, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
@@ -6,6 +6,7 @@ import { activeRedoPriceResolution } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
 import { ORGANISATIONS, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace } from '../training/workspace';
+import { CATALOGUE_TTL_MS, catalogueIsStale } from '../utils/catalogueFreshness';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
 import { formatShippingAddress } from '../utils/shippingAddress';
@@ -467,6 +468,13 @@ export const lineMargin = (item: LineItem) => {
   const rev = lineRevenue(item);
   return rev > 0 ? Math.round((rev - lineCost(item)) / rev * 100) : 0;
 };
+/** Cash a line leaves behind: what the patient pays for it less what the pack cost. */
+export const lineContribution = (item: LineItem) => item.cost === null ? null : lineRevenue(item) - lineCost(item);
+
+/* The money vocabulary itself lives in utils/pricing so it is testable without
+   React; it is re-exported here because every screen already imports from the
+   app context for money(), lineRevenue() and friends. */
+export { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin } from '../utils/pricing';
 
 function prescriptionIsPaymentReady(prescription: Prescription) {
   const sourceVerified = prescription.entryMode === 'manual'
@@ -494,6 +502,12 @@ export const rxRevenue = (rx: Prescription) => rx.items.reduce((t, i) => t + lin
 export const rxCost = (rx: Prescription) => rx.items.reduce((t, i) => t + lineCost(i), 0);
 export const orderRevenue = (o: PatientOrder) => (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled' ? 0 : o.prescriptions.reduce((t, r) => t + rxRevenue(r), 0) + (o.dispensingFee || 0));
 export const orderCost = (o: PatientOrder) => (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled' ? 0 : o.prescriptions.reduce((t, r) => t + rxCost(r), 0));
+/**
+ * An order's gross margin is every line's contribution plus the dispensing
+ * charge, because the pharmacy keeps the dispensing fee whole. orderRevenue
+ * already carries the fee, so the subtraction covers both in one step.
+ */
+export const orderContribution = (o: PatientOrder) => orderRevenue(o) - orderCost(o);
 
 export const TYPE_LABELS: Record<string, string> = {
   flos: 'Flower (Flos)', oil: 'Oil', capsule: 'Capsule', lozenge: 'Lozenge / Pastille', vape: 'Vape', other: 'Other',
@@ -625,6 +639,7 @@ export type Action =
   | { type: 'SET_CATALOGUE_ERROR'; message: string }
   | { type: 'APPLY_CURALEAF_QUOTE'; items: Array<{ productId: string; wholesalePrice: number; patientPrice: number; inStock: boolean; stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' }> }
   | { type: 'SYNC_PATIENT_DIRECTORY'; organisationId: string; patients: CRMPatient[]; enquiries: PendingEnquiry[] }
+  | { type: 'SET_PATIENT_CONDITIONS'; patientId: string; conditions: string[]; primaryCondition: string }
   | { type: 'SYNC_PORTAL_ORDERS'; organisationId: string; orders: PatientOrder[]; preferredActiveOrderId?: number }
   | { type: 'LOG_INTERACTION'; patientId: string; interactionType: string; detail: string }
   // Referrals
@@ -1294,6 +1309,16 @@ function reducer(state: AppState, action: Action): AppState {
         enquiries: [...retainedEnquiries, ...action.enquiries],
       };
     }
+    case 'SET_PATIENT_CONDITIONS':
+      // The server has already rewritten the eligibility submission and the
+      // patient rows. This only stops the open record showing the old list
+      // until the next directory sync lands.
+      return {
+        ...state,
+        crm: state.crm.map(patient => patient.id === action.patientId
+          ? { ...patient, conditions: action.conditions, primaryCondition: action.primaryCondition }
+          : patient),
+      };
     case 'SYNC_PORTAL_ORDERS': {
       const previousActive = state.orders.find(order => order.id === state.activeOrderId && order.payment.status === 'none');
       const incomingPersisted = action.orders.filter(order => order.payment.status !== 'none');
@@ -2102,6 +2127,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     else sessionStorage.removeItem('hhh_staff_session');
   }, [state.staffSession]);
 
+  /*
+   * The catalogue is stale-while-revalidate on a fifteen-minute window.
+   *
+   * Staff move between Formulary, Create order and Settings constantly, and the
+   * catalogue runs to thousands of packs, so re-fetching on every mount made the
+   * app feel broken. Instead a cached catalogue is shown immediately and only
+   * revalidated once it is older than the window — silently, so nothing on
+   * screen is replaced by a spinner while a perfectly usable list is already
+   * there. The spinner is reserved for having nothing to show at all.
+   */
+  const catalogueRefreshNonce = state.catalogueRefreshNonce;
+  const catalogueUpdatedAt = state.catalogueUpdatedAt;
+  const catalogueCount = state.catalogue.length;
+  const lastCatalogueRefreshNonce = useRef(catalogueRefreshNonce);
+
   useEffect(() => {
     const useLocalSandbox = isLocalPortalPreview && isApiConfigured;
     const useAuthenticatedPortal = !isLocalPortalPreview
@@ -2114,22 +2154,64 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_CATALOGUE_IDLE' });
       return;
     }
+
+    // A bumped nonce is a person pressing Refresh, and that always goes to the
+    // network however fresh the cache looks.
+    const forced = catalogueRefreshNonce !== lastCatalogueRefreshNonce.current;
+    lastCatalogueRefreshNonce.current = catalogueRefreshNonce;
+
     let cancelled = false;
-    dispatch({ type: 'SET_CATALOGUE_LOADING' });
-    const request = useLocalSandbox
-      ? getDevCuraleafCatalogue()
-      : getCuraleafCatalogue(state.currentOrganisationId);
-    request.then(catalogue => {
-      if (!cancelled) dispatch({ type: 'SET_CATALOGUE', catalogue: mapCuraleafCatalogue(catalogue), updatedAt: catalogue.fetchedAt });
-    }).catch(error => {
-      if (!cancelled) dispatch({ type: 'SET_CATALOGUE_ERROR', message: error instanceof Error ? error.message : 'Curaleaf catalogue unavailable.' });
-    }).finally(() => {
-      // Backstop for any settle path that did not dispatch a terminal action.
-      // A cancelled run hands ownership of the flag to the effect that replaced it.
-      if (!cancelled) dispatch({ type: 'SET_CATALOGUE_IDLE' });
-    });
-    return () => { cancelled = true; };
-  }, [state.currentOrganisationId, state.staffSession, state.catalogueRefreshNonce]);
+    let inFlight = false;
+
+    const load = (reason: 'initial' | 'forced' | 'revalidate') => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      // Only the empty-catalogue case gets a spinner; a revalidation keeps the
+      // packs staff are already reading on screen.
+      if (reason !== 'revalidate') dispatch({ type: 'SET_CATALOGUE_LOADING' });
+      const request = useLocalSandbox
+        ? getDevCuraleafCatalogue()
+        : getCuraleafCatalogue(state.currentOrganisationId, reason === 'forced' ? catalogueRefreshNonce : undefined);
+      request.then(catalogue => {
+        if (!cancelled) dispatch({ type: 'SET_CATALOGUE', catalogue: mapCuraleafCatalogue(catalogue), updatedAt: catalogue.fetchedAt });
+      }).catch(error => {
+        if (cancelled) return;
+        // A failed background revalidation must not throw away a usable cached
+        // catalogue or paint an error over it; the stale copy stays in service.
+        if (reason === 'revalidate') {
+          console.warn('Curaleaf catalogue revalidation failed; serving the cached catalogue:', error);
+          return;
+        }
+        dispatch({ type: 'SET_CATALOGUE_ERROR', message: error instanceof Error ? error.message : 'Curaleaf catalogue unavailable.' });
+      }).finally(() => {
+        inFlight = false;
+        // Backstop for any settle path that did not dispatch a terminal action.
+        // A cancelled run hands ownership of the flag to the effect that replaced it.
+        if (!cancelled) dispatch({ type: 'SET_CATALOGUE_IDLE' });
+      });
+    };
+
+    if (forced) load('forced');
+    else if (!catalogueCount) load('initial');
+    else if (catalogueIsStale(catalogueUpdatedAt)) load('revalidate');
+    else dispatch({ type: 'SET_CATALOGUE_IDLE' });
+
+    // Coming back to the tab is the moment staff are most likely to be looking at
+    // prices they are about to charge, so it is worth an age check.
+    const revalidateIfStale = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (catalogueIsStale(catalogueUpdatedAt)) load(catalogueCount ? 'revalidate' : 'initial');
+    };
+    const timer = window.setInterval(revalidateIfStale, CATALOGUE_TTL_MS);
+    window.addEventListener('focus', revalidateIfStale);
+    document.addEventListener('visibilitychange', revalidateIfStale);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', revalidateIfStale);
+      document.removeEventListener('visibilitychange', revalidateIfStale);
+    };
+  }, [state.currentOrganisationId, state.staffSession, catalogueRefreshNonce, catalogueUpdatedAt, catalogueCount]);
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !livePharmacyWorkspace || state.catalogueSource !== 'curaleaf') return;

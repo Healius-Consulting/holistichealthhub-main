@@ -14,6 +14,7 @@ import {
   DEFAULT_ACCESSIBILITY_PREFERENCES,
   useAccessibilityPreferences,
 } from './preferences';
+import { portalBuildLabel } from '../utils/portalBuild';
 
 const THEME_OPTIONS: Array<{
   value: AccessibilityTheme;
@@ -50,6 +51,11 @@ function PreferenceToggle({ checked, description, label, onChange }: PreferenceT
     </label>
   );
 }
+
+const buildLabel = portalBuildLabel(
+  import.meta.env.VITE_PORTAL_BUILD_ID as string | undefined,
+  import.meta.env.VITE_APP_SURFACE as string | undefined,
+);
 
 export default function AccessibilityPanel() {
   const [isOpen, setIsOpen] = useState(false);
@@ -206,6 +212,12 @@ export default function AccessibilityPanel() {
             <RotateCcw size={14} aria-hidden="true" /> Reset preferences
           </button>
           <p id="accessibility-panel-note" className="accessibility-panel__note" aria-live="polite"><LinkIcon size={12} aria-hidden="true" /> {THEME_OPTIONS.find(option => option.value === preferences.theme)?.label}, {TEXT_SCALE_OPTIONS.find(option => option.value === preferences.textScale)?.label} text. Saved automatically.</p>
+          {/* The one thing support asks for when a screen misbehaves. No comparison
+              against the latest deploy: that warning fired on every release and
+              staff learned to dismiss it. */}
+          {buildLabel ? (
+            <p className="accessibility-panel__build">Portal build <code>{buildLabel}</code></p>
+          ) : null}
           </div>
         </>
       )}

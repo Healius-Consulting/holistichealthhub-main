@@ -3,7 +3,7 @@ import { normalisePrescriptionDateParts, prescriptionDateWindowStatus, prescript
 import { Check, ChevronLeft, ChevronRight, Minus, Package, Plus, Search, Trash2 } from 'lucide-react';
 import MedicineLabel from './MedicineLabel';
 import type { CatalogueItem, LineItem, Prescription } from '../context/AppContext';
-import { marginPct, money, useApp } from '../context/AppContext';
+import { WHOLESALE_LABEL, formatMargin, money, useApp } from '../context/AppContext';
 import './ManualPrescriptionEditor.css';
 import { createPrescriberDirectoryRecord, getPrescriberDirectory, isApiConfigured } from '../shared/api';
 import type { PrescriberDirectoryRecord } from '../shared/contracts';
@@ -335,8 +335,8 @@ export default function ManualPrescriptionEditor({
 
                     <dl className="manual-pack-pricing">
                       <div><dt>RRP</dt><dd>{money(item.retail)}</dd></div>
-                      <div><dt>Wholesale</dt><dd>{item.cost === null ? 'Quote required' : money(wholesaleTotal!)}</dd><small>{item.cost === null ? 'Returned on quote' : `${money(item.cost)} / pack`}</small></div>
-                      <div className={contribution !== null && contribution < 0 ? 'is-negative' : margin !== null && margin < 25 ? 'is-advisory' : ''}><dt>Gross margin</dt><dd>{contribution === null || margin === null ? 'Pending' : `${contribution >= 0 ? '+' : '−'}${money(Math.abs(contribution))} · ${margin}%`}</dd></div>
+                      <div><dt>{WHOLESALE_LABEL}</dt><dd>{item.cost === null ? 'Quote required' : money(wholesaleTotal!)}</dd><small>{item.cost === null ? 'Returned on quote' : `${money(item.cost)} / pack`}</small></div>
+                      <div className={contribution !== null && contribution < 0 ? 'is-negative' : margin !== null && margin < 25 ? 'is-advisory' : ''}><dt>Gross margin</dt><dd>{formatMargin(contribution, patientTotal)}</dd></div>
                       <div className="manual-pack-pricing__total"><dt>Patient total</dt><dd>{money(patientTotal)}</dd><small>{item.qty} × {money(item.retail)}</small></div>
                     </dl>
                   </div>
@@ -376,9 +376,9 @@ export default function ManualPrescriptionEditor({
                 <button type="button" key={product.id} disabled={selected} className={selected ? 'is-selected' : ''} onClick={() => addProduct(product)}>
                   <span className="manual-rx-picker__product"><small>{catalogueTypeLabels[product.type]} · active</small><MedicineLabel name={product.name} /></span>
                   <span className="manual-rx-picker__pack"><small>Pack size</small><strong>{product.packSize ?? '—'} {product.unit ?? 'units'}</strong></span>
-                  <span className="manual-rx-picker__price"><small>Patient</small><strong>{money(product.retail)}</strong></span>
-                  <span className="manual-rx-picker__wholesale"><small>Wholesale</small><strong>{product.cost !== null ? money(product.cost) : '—'}</strong></span>
-                  <span className="manual-rx-picker__margin"><small>Margin</small><strong>{marginPct(product.cost, product.retail) !== null ? `${marginPct(product.cost, product.retail)}%` : '—'}</strong></span>
+                  <span className="manual-rx-picker__price"><small>Patient price</small><strong>{money(product.retail)}</strong></span>
+                  <span className="manual-rx-picker__wholesale"><small>{WHOLESALE_LABEL}</small><strong>{product.cost !== null ? money(product.cost) : '—'}</strong></span>
+                  <span className="manual-rx-picker__margin"><small>Margin</small><strong>{formatMargin(product.cost === null ? null : product.retail - product.cost, product.retail)}</strong></span>
                   <span className="manual-rx-picker__add">{selected ? <Check size={14} /> : <Plus size={14} />} {selected ? 'Added' : 'Add'}</span>
                 </button>
               );

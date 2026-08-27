@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+import { resolvePortalBuildId } from './platform/portal-build-id.mjs';
 
 const pharmacyModules = /^\.\/pages\/(Dashboard|PharmacyOverview|CreateOrder|Orders|FormularyPricing|Patients|PharmacySettings|PharmacyFinance)$/;
 
@@ -11,6 +12,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: [{ find: pharmacyModules, replacement: resolve(__dirname, 'src/surfaces/UnavailableSurface.tsx') }] },
   define: {
+    // Stamped so Display settings can name the running build to support.
+    'import.meta.env.VITE_PORTAL_BUILD_ID': JSON.stringify(resolvePortalBuildId()),
     'import.meta.env.VITE_APP_SURFACE': JSON.stringify('admin'),
     'import.meta.env.VITE_AUTH_MODE': JSON.stringify('cookie'),
     'import.meta.env.VITE_APP_PATH_PREFIX': JSON.stringify('/admin'),

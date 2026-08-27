@@ -1,6 +1,15 @@
 import { AlertTriangle, CheckCircle, Minus, Plus, Trash2 } from 'lucide-react';
 import MedicineLabel from '../../components/MedicineLabel';
-import { lineCost, lineMargin, lineRevenue, money, type CRMPatient } from '../../context/AppContext';
+import {
+  PATIENT_PRICE_LABEL,
+  WHOLESALE_LABEL,
+  formatMargin,
+  lineContribution,
+  lineCost,
+  lineRevenue,
+  money,
+  type CRMPatient,
+} from '../../context/AppContext';
 import type { WizardProgress, WizardStep } from './types';
 import { WIZARD_STEP_LABELS } from './types';
 
@@ -19,8 +28,8 @@ type OrderSummaryRailProps = {
   focusedStep: number;
   draftBasketCount: number;
   draftBasketTotal: number;
-  /** Null until a current Curaleaf quote supplies wholesale cost, delivery and tax. */
-  draftBasketCosts: { wholesale: number; delivery: number; tax: number } | null;
+  /** Null until a current Curaleaf quote supplies wholesale cost and delivery. */
+  draftBasketCosts: { wholesale: number; delivery: number } | null;
   dispensingFee: number;
   draftBasketItems: BasketItem[];
   draftBasketIssues: Array<{ tone: 'blocked' | 'warning'; label: string } | null>;
@@ -59,6 +68,12 @@ export default function OrderSummaryRail({
   onRemoveItem,
 }: OrderSummaryRailProps) {
   const showContinue = focusedStep < 4;
+  // The patient pays for the medicines plus the dispensing charge; the price of
+  // the medicines on their own is what staff compare against the wholesale line.
+  const patientPrice = draftBasketTotal - dispensingFee;
+  // Gross margin keeps the dispensing charge, so it is the whole patient total
+  // less the wholesale cost rather than a products-only contribution.
+  const grossMargin = draftBasketCosts ? draftBasketTotal - draftBasketCosts.wholesale : null;
 
   return (
     <aside className="rx-order-summary-rail" aria-label="Order summary">
@@ -133,12 +148,12 @@ export default function OrderSummaryRail({
                     ) : null}
                     <dl className="rx-order-summary-rail__economics">
                       <div>
-                        <dt>Wholesale</dt>
+                        <dt>{WHOLESALE_LABEL}</dt>
                         <dd>{item.cost !== null ? money(lineCost(item)) : 'Pending'}</dd>
                       </div>
                       <div>
                         <dt>Margin</dt>
-                        <dd>{lineMargin(item) !== null ? `${lineMargin(item)}%` : '—'}</dd>
+                        <dd>{formatMargin(lineContribution(item), lineRevenue(item))}</dd>
                       </div>
                     </dl>
                     {canEditBasketItems && item.rxId === selectedRxId ? (
@@ -162,24 +177,28 @@ export default function OrderSummaryRail({
 
             <dl className="rx-order-summary-rail__totals">
               <div>
-                <dt>Wholesale</dt>
+                <dt>{WHOLESALE_LABEL}</dt>
                 <dd>{draftBasketCosts ? money(draftBasketCosts.wholesale) : 'Quote pending'}</dd>
               </div>
-              <div>
+              <div className="is-ruled">
                 <dt>Delivery</dt>
                 <dd>{draftBasketCosts ? money(draftBasketCosts.delivery) : 'Quote pending'}</dd>
-              </div>
-              <div>
-                <dt>Tax <small>on wholesale</small></dt>
-                <dd>{draftBasketCosts ? money(draftBasketCosts.tax) : 'Quote pending'}</dd>
               </div>
               <div>
                 <dt>Dispensing</dt>
                 <dd>{money(dispensingFee)}</dd>
               </div>
+              <div>
+                <dt>{PATIENT_PRICE_LABEL}</dt>
+                <dd>{money(patientPrice)}</dd>
+              </div>
               <div className="is-total">
                 <dt>Patient total</dt>
                 <dd>{money(draftBasketTotal)}</dd>
+              </div>
+              <div className="rx-order-summary-rail__margin">
+                <dt>Gross margin</dt>
+                <dd>{formatMargin(grossMargin, draftBasketTotal)}</dd>
               </div>
             </dl>
           </>

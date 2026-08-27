@@ -4,14 +4,13 @@ import { dataConnect } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { assertPlatformScope, assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
-import { quotedCostFromSnapshot } from '../../application/orders/finance-costing.js';
+import { buildPharmacyLedgerRows, isAwaitingPaymentRow } from '../../application/finance/pharmacy-ledger.js';
 import { SqlCuraleafQuoteBankRepository } from '../../repositories/sql/curaleaf-quote-bank.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
 import { isTrainingDirectoryOrganisation } from '../../domain/organisation/training-directory.js';
-import { financeRevenueBasis, pharmacyFinanceRecognition } from './finance-recognition.js';
 
 const organisationIdSchema = z.string().regex(/^(?:[a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i);
 
@@ -116,98 +115,11 @@ export function createPortalFinanceRouter(): Router {
         activeAllocationByOrder.set(allocation.orderId, (activeAllocationByOrder.get(allocation.orderId) ?? 0) + Number(allocation.amountPence));
       }
 
-      const datedRows = rawOrders.map(order => {
-        const activeAllocationPence = activeAllocationByOrder.get(order.id) ?? 0;
-        const replacementLinked = Boolean(order.redoOfId || String(order.resolutionReason || '').toUpperCase() === 'REPLACED');
-        const sourceRetainsAllocation = Boolean(order.redoOfId && (activeAllocationByOrder.get(order.redoOfId) ?? 0) > 0);
-        const flags = pharmacyFinanceRecognition({ ...order, activeAllocationPence });
-        const snapshot = (order.quoteSnapshot ?? {}) as any;
-        const quoted = quotedCostFromSnapshot(snapshot, { bankWholesalePenceByPackId });
-        const rawLines = snapshot?.lineItems || snapshot?.items || snapshot?.prescriptions?.flatMap((rx: any) => rx.items) || [];
-        const lines = Array.isArray(rawLines) ? rawLines.map((item: any) => {
-          const qty = Number(item.quantity || item.qty || 1);
-          const packId = String(item.productId || item.packId || item.id || '');
-          const unitPrice = Number(
-            item.unitPricePence ||
-            item.retailPence ||
-            item.patientPackPricePence ||
-            (item.patientPackPrice ? Math.round(Number(item.patientPackPrice) * 100) : 0) ||
-            (order.totalPence && qty > 0 ? Math.round((Number(order.totalPence) - Number(order.dispensingFeePence || 0)) / qty) : 0)
-          );
-          const wholesaleUnit = quoted.prices.get(packId) ?? null;
-          return {
-            packId,
-            name: String(item.name || item.formulaName || 'Curaleaf item'),
-            quantity: qty,
-            unitPricePence: unitPrice,
-            wholesaleUnitPence: wholesaleUnit,
-            productMarginPence: wholesaleUnit === null ? null : (unitPrice - wholesaleUnit) * qty,
-          };
-        }) : [];
-
-        const revenueBasis = financeRevenueBasis({
-          ...order,
-          activeAllocationPence,
-          replacementLinked,
-          sourceRetainsAllocation,
-        });
-        const grossProductRevenuePence = revenueBasis.productRevenuePence;
-        const grossDispensingFeePence = revenueBasis.dispensingFeePence;
-        const grossPatientRevenuePence = revenueBasis.patientRevenuePence;
-        const completedRefundPence = flags.refunded || flags.partialRefund ? flags.refundAmountPence : 0;
-        const dispensingFeePence = flags.refunded ? 0 : grossDispensingFeePence;
-        const productRevenuePence = flags.refunded ? 0 : Math.max(0, grossProductRevenuePence - completedRefundPence);
-        const patientRevenuePence = Math.max(0, grossPatientRevenuePence - completedRefundPence);
-        const wholesaleProductPence = quoted.wholesaleProductPence;
-        const shippingPence = quoted.shippingPence;
-        const wholesalePence = quoted.wholesalePence;
-        const productMarginPence = quoted.wholesaleComplete ? productRevenuePence - wholesaleProductPence! : null;
-        // A quote-bank row has no delivery cost, so its contribution is product-only and
-        // is labelled an estimate rather than passed off as the frozen paid figure.
-        const totalContributionPence = quoted.wholesaleComplete ? patientRevenuePence - wholesalePence! : null;
-
-        const paidEventAt = order.paidAt ? String(order.paidAt) : null;
-        const collectedEventAt = order.collectedAt ? String(order.collectedAt) : null;
-        const realisedAt = flags.realised
-          ? String(collectedEventAt || paidEventAt || order.updatedAt || order.createdAt)
-          : null;
-        // Realised rows period on collection; pending on payment; exclusions on payment/cancel.
-        const financialEventAt = flags.realised
-          ? realisedAt!
-          : String(paidEventAt || order.cancelledAt || order.updatedAt || order.createdAt);
-
-        return {
-          orderId: order.orderNumber || order.id,
-          patientId: order.patientId || '',
-          patientName: patientMap.get(order.patientId) || 'Patient record',
-          createdAt: String(order.createdAt),
-          updatedAt: String(order.updatedAt || order.createdAt),
-          recognisedAt: realisedAt,
-          refundedAt: flags.refunded ? String(flags.refundConfirmedAt || order.cancelledAt || order.updatedAt) : null,
-          financialEventAt,
-          paymentStatus: String(order.paymentStatus).toLowerCase(),
-          fulfilmentStatus: String(order.fulfilmentStatus).toLowerCase(),
-          recognised: flags.recognised,
-          realised: flags.realised,
-          pendingCollection: flags.pendingCollection,
-          refunded: flags.refunded,
-          partialRefund: flags.partialRefund,
-          refundAmountPence: completedRefundPence,
-          refundPending: flags.refundPending,
-          productRevenuePence,
-          dispensingFeePence,
-          patientRevenuePence,
-          wholesaleProductPence,
-          shippingPence,
-          wholesalePence,
-          productMarginPence,
-          totalContributionPence,
-          wholesaleComplete: quoted.wholesaleComplete,
-          wholesaleCostBasis: quoted.costBasis,
-          wholesaleEstimated: quoted.costBasis === 'quote_bank',
-          shippingKnown: quoted.shippingKnown,
-          lines,
-        };
+      const datedRows = buildPharmacyLedgerRows({
+        orders: rawOrders,
+        patientNameById: patientMap,
+        activeAllocationByOrder,
+        bankWholesalePenceByPackId,
       });
 
       const rangedRows = datedRows
@@ -218,7 +130,7 @@ export function createPortalFinanceRouter(): Router {
       const pendingCollectionRows = rangedRows.filter(r => r.pendingCollection);
       const refundedRows = rangedRows.filter(r => r.refunded || r.partialRefund);
       const refundPendingRows = rangedRows.filter(r => r.refundPending);
-      const pendingPaymentRows = rangedRows.filter(r => ['pending', 'awaiting_manual_payment', 'awaiting_payment'].includes(r.paymentStatus));
+      const pendingPaymentRows = rangedRows.filter(isAwaitingPaymentRow);
       const costedRows = realisedRows.filter(r => r.wholesaleComplete);
 
       const totals = {

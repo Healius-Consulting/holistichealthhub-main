@@ -31,7 +31,6 @@ import type {
   PrescriptionUploadRequest,
   PrescriptionUploadTarget,
   CuraleafClinicScan,
-  WorldpayBrandingInput,
   WorldpayConnectionInput,
   WorldpayConnectionStatus,
   AdminReferralFinanceReport,
@@ -255,6 +254,39 @@ export async function deleteAuthenticatedSession() {
   setApiCsrfToken(null);
 }
 
+/**
+ * Rewrite a patient's recorded conditions.
+ *
+ * Any pharmacy staff member may do this: it is transcription from the clinic
+ * letter, not a clinical decision reserved to a role. The server rewrites both
+ * the eligibility submission and the patient's own rows so the Portal and the
+ * Admin register show the same list.
+ */
+export function updatePatientConditions(patientId: string, input: { conditionCodes: string[]; primaryConditionCode: string }) {
+  return apiRequest<{
+    patientId: string;
+    conditions: Array<{ conditionCode: string; primary: boolean }>;
+    primaryConditionCode: string;
+    changed: boolean;
+  }>(`/v1/portal/patients/${encodeURIComponent(patientId)}/conditions`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+/** The admin twin of {@link updatePatientConditions}; the register is cross-tenant. */
+export function updateAdminPatientConditions(patientId: string, input: { organisationId: string; conditionCodes: string[]; primaryConditionCode: string }) {
+  return apiRequest<{
+    patientId: string;
+    conditions: Array<{ conditionCode: string; primary: boolean }>;
+    primaryConditionCode: string;
+    changed: boolean;
+  }>(`/v1/portal/admin/patients/${encodeURIComponent(patientId)}/conditions`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
 export function getPharmacyOverview() {
   return apiRequest<PharmacyOverview>('/v1/portal/overview');
 }
@@ -305,8 +337,17 @@ export function getDevCuraleafCatalogue() {
   return apiRequest<CuraleafDevCatalogue>('/v1/dev/curaleaf/catalog');
 }
 
-export function getCuraleafCatalogue(organisationId: string) {
-  return apiRequest<CuraleafCatalogue>(`/v1/portal/integrations/curaleaf/catalog?organisationId=${encodeURIComponent(organisationId)}`);
+/**
+ * The catalogue response is cacheable, which is what makes navigating between
+ * screens cheap — but it also means a staff-triggered refresh can be answered
+ * from the browser's disk cache and look like a button that does nothing. When
+ * someone has explicitly asked for fresh data, `refreshToken` changes the URL so
+ * every cache layer between here and Curaleaf is stepped around.
+ */
+export function getCuraleafCatalogue(organisationId: string, refreshToken?: number) {
+  const query = `organisationId=${encodeURIComponent(organisationId)}`;
+  const bust = refreshToken ? `&refreshedAt=${encodeURIComponent(String(refreshToken))}` : '';
+  return apiRequest<CuraleafCatalogue>(`/v1/portal/integrations/curaleaf/catalog?${query}${bust}`);
 }
 
 export function getDevCuraleafQuote(items: CuraleafQuoteRequestItem[]) {
@@ -628,13 +669,6 @@ export function resolvePortalQuoteReview(orderId: string, input: {
 export function connectWorldpayPharmacy(input: WorldpayConnectionInput) {
   return apiRequest<WorldpayConnectionStatus>('/v1/portal/integrations/worldpay/credentials', {
     method: 'PUT',
-    body: JSON.stringify(input),
-  });
-}
-
-export function updateWorldpayBranding(input: WorldpayBrandingInput) {
-  return apiRequest<WorldpayConnectionStatus>('/v1/portal/integrations/worldpay/credentials', {
-    method: 'PATCH',
     body: JSON.stringify(input),
   });
 }

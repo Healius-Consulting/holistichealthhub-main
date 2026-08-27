@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fulfilmentPipelineSteps, hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
+import { hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
 import type { PatientOrder } from '../src/context/AppContext.tsx';
 
 const taxonomy: Array<[OrderStage, StageFilter]> = [
@@ -332,37 +332,6 @@ test('full Curaleaf allocation without a shipment is not split dispensed', () =>
   } as PatientOrder;
   assert.equal(orderHasPartialCuraleafDispense(order), false);
   assert.equal(orderIsSplitFulfilment(order), false);
-});
-
-test('a fully allocated consignment in transit is the active purple step, not a partial yellow step', () => {
-  const steps = fulfilmentPipelineSteps({
-    orderedPacks: 2,
-    allocatedPacks: 2,
-    dispatchedPacks: 2,
-    inTransitPacks: 2,
-    receivedPacks: 0,
-    awaitingDispatchPacks: 0,
-    isSplit: false,
-  });
-  assert.equal(steps.dispensed.complete, true);
-  assert.equal(steps.inTransit.active, true);
-  assert.equal(steps.inTransit.partial, false);
-  assert.equal(steps.inTransit.complete, false);
-  assert.equal(steps.checkedIn.complete, false);
-});
-
-test('split remainder keeps in-transit as a partial step', () => {
-  const steps = fulfilmentPipelineSteps({
-    orderedPacks: 4,
-    allocatedPacks: 2,
-    dispatchedPacks: 2,
-    inTransitPacks: 2,
-    receivedPacks: 0,
-    awaitingDispatchPacks: 2,
-    isSplit: true,
-  });
-  assert.equal(steps.inTransit.partial, true);
-  assert.equal(steps.inTransit.active, false);
 });
 
 test('quote review required stays paid and is not treated as a Curaleaf rejection', () => {

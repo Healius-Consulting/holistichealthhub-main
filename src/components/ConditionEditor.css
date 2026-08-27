@@ -1,0 +1,102 @@
+.condition-editor { display: grid; gap: 10px; }
+
+.condition-editor__selected ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+
+.condition-editor__selected li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface, var(--bg-elevated));
+}
+
+/* The primary condition is the one that drives clinical routing, so it reads as
+   selected rather than merely labelled. */
+.condition-editor__selected li.is-primary {
+  border-color: var(--tenant-primary);
+  background: var(--tenant-primary-soft);
+}
+
+.condition-editor__name { flex: 1; min-width: 0; color: var(--text-primary); font-size: 12px; font-weight: 650; }
+
+.condition-editor__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.condition-editor__primary[aria-pressed='true'] {
+  border-color: transparent;
+  color: var(--tenant-primary-strong);
+  background: transparent;
+  cursor: default;
+}
+
+.condition-editor__remove {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.condition-editor__remove:hover { color: var(--red-700, #a3231d); }
+
+.condition-editor__search { display: flex; align-items: center; gap: 7px; }
+.condition-editor__search svg { flex: 0 0 auto; color: var(--text-tertiary); }
+.condition-editor__search .input { flex: 1; min-width: 0; }
+
+.condition-editor__available {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 168px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.condition-editor__available button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.condition-editor__available button:hover { border-style: solid; border-color: var(--tenant-primary); color: var(--tenant-primary-strong); }
+
+.condition-editor__empty { margin: 0; color: var(--text-tertiary); font-size: 11px; }
+
+.condition-editor__error {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--red-500, #c0392b);
+  background: var(--red-50, #fdf2f1);
+  color: var(--red-700, #a3231d);
+  font-size: 11px;
+}
+
+.condition-editor__actions { display: flex; flex-wrap: wrap; gap: 8px; }

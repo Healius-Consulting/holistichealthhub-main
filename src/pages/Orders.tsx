@@ -32,6 +32,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
+  WHOLESALE_LABEL,
+  formatMargin,
+  lineContribution,
   lineCost,
   lineMargin,
   lineRevenue,
@@ -55,7 +58,6 @@ import {
   orderAwaitingSupplierShipmentProductNames,
   orderCancellationResolution,
   orderHasInTransitPacks,
-  fulfilmentPipelineSteps,
   orderHasPartialCollection,
   orderHasPartialCuraleafDispense,
   orderHasUncollectedReceivedPacks,
@@ -2026,7 +2028,7 @@ function formatQuoteReviewValue(value: string | boolean) {
 function quoteReviewFieldLabel(field: string) {
   if (field === 'inStock') return 'Stock';
   if (field === 'patientPackPrice') return 'Patient pack price';
-  if (field === 'wholesalePackPrice') return 'Wholesale pack price';
+  if (field === 'wholesalePackPrice') return 'Wholesale pack price (excl. VAT)';
   if (field === 'shippingPrice') return 'Shipping';
   if (field === 'missingOriginalQuote') return 'Paid quote';
   return field;
@@ -2037,26 +2039,36 @@ function QuoteCheckpointSummary({ order }: { order: PatientOrder }) {
     ? [...order.quoteChecks].sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
     : order.activeQuoteCheck ? [order.activeQuoteCheck] : [];
   if (!checks.length) return null;
-  const phaseLabels: Record<(typeof checks)[number]['phase'], string> = {
-    PRE_PAYMENT: 'Before payment',
-    POST_PAYMENT: 'After payment',
-    FINAL_PLACEMENT: 'Before purchase order',
-    REPLACEMENT: 'Replacement',
-  };
+  /*
+   * One bar, not a history.
+   *
+   * The Before/After/Before-purchase-order list showed the same order re-priced
+   * three or four times, which read as four things to review when it is one
+   * gate with one current answer. What staff act on is the latest check and how
+   * long ago it ran; the individual checks remain in the order's activity log
+   * for anyone reconciling a price change after the fact.
+   */
+  const latest = checks[checks.length - 1]!;
+  const statusLabel = latest.status === 'MATCHED' ? 'Matched'
+    : latest.status === 'CHANGED' ? 'Changed'
+      : latest.status === 'OUT_OF_STOCK' ? 'Out of stock'
+        : latest.status === 'ABSORBED' ? 'Difference absorbed'
+          : latest.status === 'CANCELLED' ? 'Cancelled'
+            : 'Reconciliation required';
   return (
-    <section className="order-gate-summary" aria-labelledby="order-quote-checks-title">
-      <header>
-        <span><small>Payment gate</small><strong id="order-quote-checks-title">Curaleaf quote checks</strong></span>
-        <CheckCircle2 size={17} aria-hidden="true" />
-      </header>
-      <ol>
-        {checks.map(check => (
-          <li key={check.id} className={`is-${check.status.toLowerCase().replaceAll('_', '-')}`}>
-            <span><strong>{phaseLabels[check.phase]}</strong><small>{formatDate(check.checkedAt, true)}</small></span>
-            <span><b>{check.status === 'MATCHED' ? 'Matched' : check.status === 'CHANGED' ? 'Changed' : check.status === 'OUT_OF_STOCK' ? 'Out of stock' : check.status === 'ABSORBED' ? 'Difference absorbed' : check.status === 'CANCELLED' ? 'Cancelled' : 'Reconciliation required'}</b><small>{money(check.patientTotalPence / 100)} patient total</small></span>
-          </li>
-        ))}
-      </ol>
+    <section
+      className={`order-gate-summary order-gate-summary--single is-${latest.status.toLowerCase().replaceAll('_', '-')}`}
+      aria-labelledby="order-quote-checks-title"
+    >
+      <CheckCircle2 size={17} aria-hidden="true" />
+      <span className="order-gate-summary__copy">
+        <small>Payment gate</small>
+        <strong id="order-quote-checks-title">Curaleaf quote {statusLabel.toLowerCase()}</strong>
+      </span>
+      <span className="order-gate-summary__value">
+        <b>{money(latest.patientTotalPence / 100)}</b>
+        <small>Last checked {formatDate(latest.checkedAt, true)}</small>
+      </span>
     </section>
   );
 }
@@ -2291,15 +2303,29 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
  */
 function OrderStageRail({ order }: { order: PatientOrder }) {
   const rail = buildOrderStageRail(order);
-  const lanes: Array<{ key: string; label: string; steps: OrderStageStep[] }> = [
-    { key: 'clinic', label: 'Clinic', steps: rail.clinic },
-    ...(rail.dispensing ? [{ key: 'dispensing', label: 'Dispensing', steps: rail.dispensing }] : []),
+  // Named for who is holding the order, which is the question staff are actually
+  // asking: "Clinic" and "Dispensing" described neither party clearly.
+  const lanes: Array<{ key: string; label: string; note: string | null; steps: OrderStageStep[] }> = [
+    {
+      key: 'pharmacy-placement',
+      label: 'Pharmacy Placement',
+      // Which route this took changes what the steps below can claim, so it is
+      // stated rather than left to be inferred from the step wording.
+      note: rail.route === 'clinic_barcode' ? 'Clinic QR' : 'Manual entry',
+      steps: rail.pharmacyPlacement,
+    },
+    ...(rail.curaleafPlacement
+      ? [{ key: 'curaleaf-placement', label: 'Curaleaf Placement', note: null, steps: rail.curaleafPlacement }]
+      : []),
   ];
   return (
     <div className="order-stage-rail">
       {lanes.map(lane => (
         <section className="order-stage-rail__lane" key={lane.key} aria-label={`${lane.label} progress`}>
-          <p className="order-stage-rail__lane-label">{lane.label}</p>
+          <p className="order-stage-rail__lane-label">
+            {lane.label}
+            {lane.note ? <span className="order-stage-rail__route">{lane.note}</span> : null}
+          </p>
           <ol className="order-stage-rail__steps">
             {lane.steps.map((entry, index) => (
               <li key={entry.key} className={`is-${entry.state}`} aria-current={entry.state === 'active' ? 'step' : undefined}>
@@ -2317,14 +2343,6 @@ function OrderStageRail({ order }: { order: PatientOrder }) {
       ))}
     </div>
   );
-}
-
-function pipelineStepClass(base: string, state: { complete: boolean; partial: boolean; active: boolean }) {
-  const classes = [base];
-  if (state.complete) classes.push('pipeline-step--complete');
-  else if (state.partial) classes.push('pipeline-step--partial');
-  else if (state.active) classes.push('pipeline-step--active');
-  return classes.join(' ');
 }
 
 type FulfilmentDisplayLine = {
@@ -2386,76 +2404,6 @@ function aggregateFulfilmentProgress(lines: FulfilmentDisplayLine[]): Fulfilment
   };
 }
 
-function FulfilmentProgressRail({
-  progress,
-  lineCount,
-}: {
-  progress: FulfilmentProgressSnapshot;
-  lineCount: number;
-}) {
-  const steps = fulfilmentPipelineSteps(progress);
-
-  return (
-    <section className="order-fulfilment-progress" aria-label="Combined prescription fulfilment progress">
-      <header className="order-fulfilment-progress__header">
-        <small>Combined progress</small>
-        <strong>
-          {lineCount} line item{lineCount === 1 ? '' : 's'} · {progress.orderedPacks} pack{progress.orderedPacks === 1 ? '' : 's'} total
-        </strong>
-      </header>
-
-      <div className="order-fulfilment-pipeline" role="list" aria-label="Curaleaf fulfilment progress">
-        <div className={pipelineStepClass('pipeline-step pipeline-step--ordered', steps.ordered)} role="listitem">
-          <span className="pipeline-step__num" aria-hidden="true">1</span>
-          <div className="pipeline-step__content">
-            <span className="pipeline-step__label">Ordered</span>
-            <strong className="pipeline-step__value">{progress.orderedPacks} <small>pk</small></strong>
-          </div>
-        </div>
-
-        <div className={pipelineStepClass('pipeline-step pipeline-step--picked', steps.dispensed)} role="listitem">
-          <span className="pipeline-step__num" aria-hidden="true">2</span>
-          <div className="pipeline-step__content">
-            <span className="pipeline-step__label">Curaleaf Dispensed</span>
-            <strong className="pipeline-step__value">{progress.allocatedPacks}/{progress.orderedPacks} <small>pk</small></strong>
-          </div>
-        </div>
-
-        <div className={pipelineStepClass('pipeline-step pipeline-step--transit', steps.inTransit)} role="listitem">
-          <span className="pipeline-step__num" aria-hidden="true">3</span>
-          <div className="pipeline-step__content">
-            <span className="pipeline-step__label">In Transit</span>
-            <strong className="pipeline-step__value">
-              {progress.inTransitPacks} <small>pk</small>
-              {progress.isSplit && progress.awaitingDispatchPacks > 0 ? (
-                <span className="pipeline-step__split-tag" title={`${progress.awaitingDispatchPacks} pack(s) awaiting dispatch`}>
-                  +{progress.awaitingDispatchPacks} to ship
-                </span>
-              ) : null}
-            </strong>
-          </div>
-        </div>
-
-        <div className={pipelineStepClass('pipeline-step pipeline-step--received', steps.checkedIn)} role="listitem">
-          <span className="pipeline-step__num" aria-hidden="true">4</span>
-          <div className="pipeline-step__content">
-            <span className="pipeline-step__label">Checked In</span>
-            <strong className="pipeline-step__value">{progress.receivedPacks}/{progress.orderedPacks} <small>pk</small></strong>
-          </div>
-        </div>
-      </div>
-
-      <div className="order-fulfilment-bar">
-        <div className="order-fulfilment-bar__fill--allocated" style={{ width: `${progress.percentAllocated}%` }} />
-        {progress.inTransitPacks > 0 || (progress.isSplit && progress.awaitingDispatchPacks > 0)
-          ? <div className="order-fulfilment-bar__fill--transit" style={{ width: `${progress.percentInTransit}%` }} />
-          : null}
-        <div className="order-fulfilment-bar__fill--received" style={{ width: `${progress.percentReceived}%` }} />
-      </div>
-    </section>
-  );
-}
-
 function FulfilmentItemCard({
   line,
   index,
@@ -2467,7 +2415,7 @@ function FulfilmentItemCard({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const margin = lineMargin(line.item);
-  const contribution = line.item.cost === null ? null : lineRevenue(line.item) - lineCost(line.item);
+  const contribution = lineContribution(line.item);
   const panelId = `fulfilment-item-${line.productId}`;
 
   return (
@@ -2482,17 +2430,17 @@ function FulfilmentItemCard({
         <span className="order-fulfilment-item-card__index">{String(index + 1).padStart(2, '0')}</span>
         <span className="order-fulfilment-item-card__identity">
           <strong>{line.displayName}</strong>
+          {/* The margin lives in one place on this row — the chip on the right,
+              in the house format. A bare percentage here was the same number
+              said twice, in two different shapes. */}
           <small>
             {line.orderedPacks} pack{line.orderedPacks === 1 ? '' : 's'}
             {' · '}
             {money(lineRevenue(line.item))} line
-            {margin !== null && line.item.cost !== null ? ` · ${margin}% margin` : ''}
           </small>
         </span>
         <span className={`order-fulfilment-item-card__margin${margin !== null && margin < 25 ? ' is-low' : ''}`}>
-          {contribution === null || margin === null
-            ? 'Margin pending'
-            : `${contribution >= 0 ? '+' : '−'}${money(Math.abs(contribution))}`}
+          {contribution === null ? 'Margin pending' : formatMargin(contribution, lineRevenue(line.item))}
         </span>
         {open ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
       </button>
@@ -2506,17 +2454,13 @@ function FulfilmentItemCard({
               <em>{money(lineRevenue(line.item))} line</em>
             </div>
             <div className="order-fulfilment-item-card__metric">
-              <small>Wholesale cost</small>
+              <small>{WHOLESALE_LABEL}</small>
               <strong>{line.item.cost === null ? 'Quote required' : money(line.item.cost)}</strong>
               <em>{line.item.cost === null ? 'Order-specific' : `${money(lineCost(line.item))} line`}</em>
             </div>
             <div className={`order-fulfilment-item-card__metric order-fulfilment-item-card__metric--margin${margin !== null && margin < 25 ? ' is-low' : ''}`}>
               <small>Gross margin</small>
-              <strong>
-                {contribution === null || margin === null
-                  ? 'Pending'
-                  : `${contribution >= 0 ? '+' : '−'}${money(Math.abs(contribution))} · ${margin}%`}
-              </strong>
+              <strong>{formatMargin(contribution, lineRevenue(line.item))}</strong>
             </div>
           </div>
 
@@ -2825,9 +2769,12 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
                       </small>
                     </span>
                   </div>
-                ) : (
-                  <FulfilmentProgressRail progress={combinedProgress} lineCount={displayLines.length} />
-                )}
+                ) : null}
+                {/* The combined progress rail is gone. It restated, as one set of
+                    aggregate pack counts, what the per-line cards above already
+                    show line by line — and the aggregate was the less actionable
+                    of the two, because work is done per line item. The cancelled
+                    banner stays: that is a state the line cards cannot express. */}
               </div>
             </div>
 

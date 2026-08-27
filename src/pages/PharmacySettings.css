@@ -212,6 +212,57 @@
 
 .pharmacy-settings-form__grid label.is-wide{ grid-column: 1 / -1; }
 
+/* The edit form is grouped exactly like the read-only view it replaces, so the
+   fields do not appear to move when someone switches between them. */
+.pharmacy-settings-form__group{
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pharmacy-settings-form__group > legend{
+  padding: 0 0 2px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ---- Profile, read-only ---- */
+
+.pharmacy-settings-profile{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.pharmacy-settings-profile__group h4{
+  margin: 0 0 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pharmacy-settings-profile__group dl{
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.pharmacy-settings-profile__group dt{
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.pharmacy-settings-profile__group dd{
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 /* ---- Payment route ---- */
 
 .pharmacy-settings-route{

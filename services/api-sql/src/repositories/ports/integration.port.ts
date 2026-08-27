@@ -33,4 +33,13 @@ export interface IntegrationRepositoryPort {
   listConnections(): Promise<IntegrationConnectionRecord[]>;
   findConnection(organisationId: string, integration: IntegrationName): Promise<IntegrationConnectionRecord | null>;
   restoreConnection(input: RestoreIntegrationConnectionInput): Promise<IntegrationConnectionRecord>;
+  /**
+   * Stamp `lastSuccessfulAt` because the vendor just answered a real call.
+   *
+   * This is the only thing the Overview's integration chips accept as evidence
+   * that an integration works — stored credentials are not evidence — so every
+   * successful call to Curaleaf or Worldpay has to come through here or the
+   * pharmacy is told the supply chain is unverified while it is plainly working.
+   */
+  recordSuccessfulCall(organisationId: string, integration: IntegrationName): Promise<void>;
 }

@@ -113,6 +113,17 @@ export function createPortalPaymentRouter(): Router {
   const orderRepo = new SqlOrderRepository();
   const orderLineRepo = new SqlOrderLineRepository();
   const integrationRepo = new SqlIntegrationRepository();
+
+  /**
+   * A hosted payment session that came back is the strongest evidence Worldpay
+   * is working, so it feeds the Overview's integration chip. Fire-and-forget:
+   * health bookkeeping must never fail a payment the patient is waiting on.
+   */
+  function noteVendorSuccess(organisationId: string, integration: 'CURALEAF' | 'WORLDPAY') {
+    void integrationRepo.recordSuccessfulCall(organisationId, integration).catch(error => {
+      console.warn(`Could not record ${integration} success for ${organisationId}:`, error);
+    });
+  }
   const identityRepo = new SqlIdentityRepository();
   const notificationRepo = new SqlNotificationRepository();
   const organisationRepo = new SqlOrganisationRepository();
@@ -455,6 +466,7 @@ export function createPortalPaymentRouter(): Router {
         successUrl,
         cancelUrl,
       });
+      noteVendorSuccess(scope.organisationId, 'WORLDPAY');
 
       const paymentResult = await paymentRepo.createPayment({
         organisationId: scope.organisationId,
@@ -534,6 +546,7 @@ export function createPortalPaymentRouter(): Router {
         successUrl,
         cancelUrl,
       });
+      noteVendorSuccess(scope.organisationId, 'WORLDPAY');
 
       const paymentResult = await paymentRepo.createPayment({
         organisationId: scope.organisationId,

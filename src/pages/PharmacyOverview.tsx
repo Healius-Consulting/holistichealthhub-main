@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, ArrowRight, CheckCircle2, ListChecks, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Coins, ListChecks, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getPharmacyOverview } from '../shared/api';
 import type { PharmacyOverview as PharmacyOverviewContract } from '../shared/contracts';
@@ -22,19 +22,15 @@ function ageLabel(kind: PharmacyOverviewContract['priorityItems'][number]['kind'
   return `${ageDays} day${ageDays === 1 ? '' : 's'} in queue`;
 }
 
+/** Whole pounds on the Overview: the pence belong on the Finance page. */
+function pounds(pence: number) {
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency', currency: 'GBP', minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(Math.round(pence) / 100);
+}
+
 function formatAsOf(value: string) {
   return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
-}
-
-function startKindLabel(kind: PharmacyOverviewContract['prescriptionStarts']['items'][number]['kind']) {
-  return kind === 'first' ? 'First order' : 'Repeat';
-}
-
-function startAgeLabel(kind: PharmacyOverviewContract['prescriptionStarts']['items'][number]['kind'], ageDays: number) {
-  if (kind === 'first') {
-    return ageDays === 0 ? 'Referred today' : `Referred ${ageDays} day${ageDays === 1 ? '' : 's'} ago`;
-  }
-  return `Last order ${ageDays} day${ageDays === 1 ? '' : 's'} ago`;
 }
 
 const INTEGRATION_STATE_LABELS: Record<PharmacyOverviewContract['integrations'][number]['state'], string> = {
@@ -85,7 +81,7 @@ export default function PharmacyOverview() {
 
   useEffect(() => { void load(); }, [load]);
 
-  const openScreen = (screen: 'orders' | 'patients') => {
+  const openScreen = (screen: 'orders' | 'patients' | 'finance') => {
     dispatch({ type: 'SET_NAVIGATION_TARGET', target: null });
     dispatch({ type: 'SET_SCREEN', screen });
   };
@@ -98,20 +94,6 @@ export default function PharmacyOverview() {
     }
     dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient', id: target.id } });
     dispatch({ type: 'SET_SCREEN', screen: 'patients' });
-  };
-
-  const startPrescription = (patientId: string) => {
-    const existingDraft = state.orders.find(order => (
-      order.organisationId === state.currentOrganisationId
-      && order.patientId === patientId
-      && order.payment.status === 'none'
-    ));
-    if (existingDraft) {
-      dispatch({ type: 'SET_ACTIVE_ORDER', orderId: existingDraft.id });
-    } else {
-      dispatch({ type: 'NEW_ORDER', patientId });
-    }
-    dispatch({ type: 'SET_SCREEN', screen: 'create' });
   };
 
   if (!overview && refreshing) {
@@ -145,7 +127,6 @@ export default function PharmacyOverview() {
   const ordersQueueTotal = overview.summary.awaitingPayment
     + overview.summary.supplierFulfilment
     + overview.summary.readyForCollection;
-  const prescriptionStarts = overview.prescriptionStarts ?? { firstCount: 0, repeatCount: 0, items: [] };
 
   return (
     <div className="page-body secure-overview">
@@ -241,51 +222,60 @@ export default function PharmacyOverview() {
           )}
         </section>
 
-        {/* Secondary row: what to start next, and where the rest of the work is sitting.
+        {/* Secondary row: the money, and where the rest of the work is sitting.
             Both navigate; neither is a headline metric competing with Needs you. */}
         <div className="overview-secondary">
-        <section className="card overview-rx-starts" aria-label="Start a prescription">
-          <div className="section-heading">
-            <div>
-              <p className="section-label">Prescriptions</p>
-              <h2>Start a prescription</h2>
+        {overview.finance ? (
+          <section className="card overview-finance" aria-labelledby="overview-finance-title">
+            <div className="section-heading">
+              <div>
+                <p className="section-label">Finance</p>
+                <h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2>
+              </div>
+              <span>{overview.finance.realisedCount} realised</span>
             </div>
-            {prescriptionStarts.items.length > 0 ? (
-              <span>{prescriptionStarts.firstCount} first · {prescriptionStarts.repeatCount} repeat</span>
-            ) : null}
-          </div>
-          <p className="overview-rx-starts__lead">Clinic paperwork can take time. Start when the prescription is ready.</p>
-          {prescriptionStarts.items.length === 0 ? (
-            <p className="overview-muted">No first orders or 30-day repeats just now.</p>
-          ) : (
-            <ul className="overview-priority-list">
-              {prescriptionStarts.items.map(item => (
-                <li key={item.id} className={`overview-rx-item overview-rx-item--${item.kind}`}>
-                  <div>
-                    <span className="overview-kind">{startKindLabel(item.kind)}</span>
-                    <strong>{item.maskedPatientLabel}</strong>
-                    <p className="overview-rx-meta">
-                      <span>{startAgeLabel(item.kind, item.ageDays)}</span>
-                      {item.lastOrderReference ? <span>{item.lastOrderReference}</span> : null}
-                    </p>
-                  </div>
-                  {state.workspaceMode === 'live' ? (
-                    <button
-                      type="button"
-                      className="priority-action"
-                      aria-label={`Start prescription for ${item.maskedPatientLabel}`}
-                      onClick={() => startPrescription(item.recordTarget.id)}
-                    >
-                      Start prescription <ArrowRight size={14} aria-hidden="true" />
-                    </button>
-                  ) : (
-                    <span className="overview-muted">Orders unlock after HHH goes live</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <dl className="overview-finance__figures">
+              <div>
+                <dt>Patient revenue</dt>
+                <dd>{pounds(overview.finance.realisedPatientRevenuePence)}</dd>
+                <small>Collected orders, refunds deducted</small>
+              </div>
+              <div>
+                <dt>Contribution</dt>
+                <dd>{pounds(overview.finance.contributionPence)}</dd>
+                {/* Said out loud, because a contribution figure that silently skips
+                    uncosted orders reads as smaller trade rather than partial data. */}
+                <small>{overview.finance.contributionComplete ? 'All realised orders costed' : 'Some orders not yet costed'}</small>
+              </div>
+              <div>
+                <dt>Paid, awaiting collection</dt>
+                <dd>{pounds(overview.finance.pendingPatientRevenuePence)}</dd>
+                <small>{overview.finance.pendingCollectionCount} order{overview.finance.pendingCollectionCount === 1 ? '' : 's'}</small>
+              </div>
+              <div>
+                <dt>Awaiting payment</dt>
+                <dd>{pounds(overview.finance.awaitingPaymentValuePence)}</dd>
+                <small>{overview.finance.awaitingPaymentCount} order{overview.finance.awaitingPaymentCount === 1 ? '' : 's'}</small>
+              </div>
+            </dl>
+            <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>
+              View finance <ArrowRight size={13} aria-hidden="true" />
+            </button>
+          </section>
+        ) : (
+          <section className="card overview-finance" aria-labelledby="overview-finance-title">
+            <div className="section-heading">
+              <div>
+                <p className="section-label">Finance</p>
+                <h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2>
+              </div>
+            </div>
+            <p className="overview-muted">Figures could not be worked out just now. Refresh, or open Finance for the full ledger.</p>
+            <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>
+              View finance <ArrowRight size={13} aria-hidden="true" />
+            </button>
+          </section>
+        )}
 
         <section className="card overview-pipeline" aria-labelledby="overview-pipeline-title">
           <div className="section-heading">

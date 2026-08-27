@@ -110,6 +110,10 @@
 .manual-rx-picker__product .medicine-label__strength { overflow: hidden; font-size: 10px; }
 .manual-rx-picker__pack strong, .manual-rx-picker__price strong { font-size: 12px; font-variant-numeric: tabular-nums; }
 .manual-rx-picker__price { text-align: right; }
+/* What the patient pays is the number staff pick on, so it leads the row; the
+   supplier cost and the margin sit behind it as supporting detail. */
+.manual-rx-picker__price strong { color: var(--text-primary); font-size: 14px; font-weight: 800; }
+.manual-rx-picker__wholesale strong, .manual-rx-picker__margin strong { color: var(--text-secondary); font-weight: 600; font-variant-numeric: tabular-nums; }
 .manual-rx-picker__add { display: flex; align-self: center; align-items: center; justify-content: center; gap: 4px; width: 88px; min-width: 88px; height: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--tenant-primary) 34%, var(--border)); border-radius: 6px; color: var(--tenant-primary-strong); background: var(--tenant-primary-soft); font-size: 9px; font-weight: 700; box-sizing: border-box; }
 .manual-rx-picker__results button.is-selected .manual-rx-picker__add { border-color: transparent; color: var(--text-secondary); background: transparent; }
 .manual-rx-picker__empty { display: block; padding: 18px; color: var(--text-tertiary); font-size: 10px; text-align: center; }

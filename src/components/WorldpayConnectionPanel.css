@@ -8,20 +8,9 @@
 .worldpay-connect-panel__masked { display: flex; align-items: center; gap: 7px; padding: 9px 11px; border-radius: 8px; background: var(--green-50); color: var(--green-100); font-size: 11px; font-weight: 700; }
 .worldpay-connect-panel__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
 .worldpay-connect-panel__fields label { display: grid; gap: 5px; }
-.worldpay-connect-panel__fields label > span,
-.worldpay-connect-panel__branding label > span { color: var(--text-secondary); font-size: 10px; font-weight: 700; }
+.worldpay-connect-panel__fields label > span { color: var(--text-secondary); font-size: 10px; font-weight: 700; }
 .worldpay-connect-panel__fields .btn-primary { justify-self: end; align-self: end; }
 .worldpay-connect-panel__reveal { justify-self: start; align-self: end; }
-.worldpay-connect-panel__wide { grid-column: 1 / -1; }
-.worldpay-connect-panel__hint { margin: 0; color: var(--text-secondary); font-size: 10px; line-height: 1.45; }
-.worldpay-connect-panel__branding { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface, var(--bg-elevated)); }
-.worldpay-connect-panel__branding p { margin: 0; }
-.worldpay-connect-panel__branding strong,
-.worldpay-connect-panel__branding small { display: block; }
-.worldpay-connect-panel__branding strong { font-size: 12px; color: var(--text-primary); }
-.worldpay-connect-panel__branding small { margin-top: 3px; color: var(--text-secondary); font-size: 10px; line-height: 1.45; }
-.worldpay-connect-panel__branding label { display: grid; gap: 5px; }
-.worldpay-connect-panel__branding .btn { justify-self: start; }
 .worldpay-connect-panel__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .worldpay-connect-panel__actions .btn { min-height: 44px; }
 .worldpay-connect-panel__error { margin: 0; padding: 9px 11px; border-left: 3px solid var(--red-500); background: var(--red-50); color: var(--red-700); font-size: 11px; }

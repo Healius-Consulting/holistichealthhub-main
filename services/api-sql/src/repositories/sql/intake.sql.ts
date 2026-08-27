@@ -1,7 +1,7 @@
 import { dataConnect } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { asUuid } from '../../domain/common/uuid.js';
-import { formConditionRecords } from '../../domain/eligibility/form-conditions.js';
+import { formConditionRecords, type FormConditionRecord } from '../../domain/eligibility/form-conditions.js';
 import type {
   ActivateSubmissionInput,
   CreateSubmissionInput,
@@ -246,6 +246,18 @@ const UPSERT_SUBMISSION_CONDITION_GQL = `
       conditionCode: $conditionCode
       primary: $primary
     })
+  }
+`;
+
+const DELETE_SUBMISSION_CONDITION_GQL = `
+  mutation DeleteSubmissionCondition($submissionId: UUID!, $conditionCode: String!) {
+    eligibilityCondition_delete(key: { submissionId: $submissionId, conditionCode: $conditionCode })
+  }
+`;
+
+const DELETE_PATIENT_CONDITION_GQL = `
+  mutation DeletePatientCondition($patientId: UUID!, $conditionCode: String!) {
+    patientCondition_delete(key: { patientId: $patientId, conditionCode: $conditionCode })
   }
 `;
 
@@ -588,6 +600,64 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
         },
       }),
     ));
+  }
+
+  /**
+   * Replace a submission's conditions with exactly this set.
+   *
+   * `saveSubmissionConditions` only ever adds, because intake only ever adds.
+   * A staff edit can remove one, so the join rows for dropped codes are deleted
+   * here. The authoritative write is the single `conditionCodes` update inside
+   * `saveSubmissionConditions` — every read path prefers that array over the
+   * join rows — so if a delete below fails the record already reads correctly
+   * and only a shadowed row is left behind.
+   */
+  async rewriteSubmissionConditions(submissionId: string, records: FormConditionRecord[]): Promise<void> {
+    const existing = await this.listSubmissionConditions(submissionId);
+    const keep = new Set(records.map(record => record.conditionCode));
+    const primary = records.find(record => record.primary)?.conditionCode ?? records[0]?.conditionCode;
+    if (!primary) throw new Error('A submission condition rewrite needs at least one condition.');
+
+    await this.saveSubmissionConditions(submissionId, records.map(record => record.conditionCode), primary);
+
+    for (const condition of existing) {
+      if (keep.has(condition.conditionCode)) continue;
+      try {
+        await dataConnect.executeGraphql(DELETE_SUBMISSION_CONDITION_GQL, {
+          variables: { submissionId: asUuid(submissionId), conditionCode: condition.conditionCode },
+        });
+      } catch (error) {
+        console.warn('[Eligibility] Stale submission condition link not removed:', {
+          submissionId,
+          conditionCode: condition.conditionCode,
+          error,
+        });
+      }
+    }
+  }
+
+  /**
+   * Replace a patient's condition rows with exactly this set. These rows are
+   * what the record falls back to for a patient with no source submission, so
+   * for those patients this write is the authoritative one.
+   */
+  async rewritePatientConditions(patientId: string, existing: FormConditionRecord[], records: FormConditionRecord[]): Promise<void> {
+    for (const condition of records) {
+      await dataConnect.executeGraphql(UPSERT_PATIENT_CONDITION_GQL, {
+        variables: {
+          patientId: asUuid(patientId),
+          conditionCode: condition.conditionCode,
+          primary: condition.primary,
+        },
+      });
+    }
+    const keep = new Set(records.map(record => record.conditionCode));
+    for (const condition of existing) {
+      if (keep.has(condition.conditionCode)) continue;
+      await dataConnect.executeGraphql(DELETE_PATIENT_CONDITION_GQL, {
+        variables: { patientId: asUuid(patientId), conditionCode: condition.conditionCode },
+      });
+    }
   }
 
   async declineSubmission(input: DeclineSubmissionInput): Promise<void> {

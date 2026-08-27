@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { organisationAddressFields } from '../utils/organisationAddress';
 import {
   AlertTriangle,
@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileArchive,
   Link2,
+  Pencil,
   QrCode,
   RefreshCw,
   Save,
@@ -25,6 +26,14 @@ import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from 
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import './PharmacySettings.css';
 
+/** A verification is only reassuring if staff can see how recent it is. */
+function formatLastVerified(value: Date | string | null): string {
+  if (!value) return 'Not yet checked';
+  const when = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(when.getTime())) return 'Not yet checked';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(when);
+}
+
 export default function PharmacySettings() {
   const { state, dispatch } = useApp();
   const organisation = useMemo(() => state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0], [state]);
@@ -38,6 +47,10 @@ export default function PharmacySettings() {
   const [curaleafStatus, setCuraleafStatus] = useState<CuraleafConnectionStatus | null>(null);
   const [curaleafRefreshing, setCuraleafRefreshing] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  // Read-only is the resting state: these details are correct far more often than
+  // they are wrong, and a page of live inputs invites accidental edits to a
+  // pharmacy's registered name or GPhC number.
+  const [editingProfile, setEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
     tradingName: '',
     name: '',
@@ -53,9 +66,9 @@ export default function PharmacySettings() {
     mainContactEmail: '',
   });
 
-  useEffect(() => {
+  const profileFromOrganisation = useCallback(() => {
     const address = organisationAddressFields(organisation);
-    setProfileForm({
+    return {
       tradingName: organisation.tradingName,
       name: organisation.name,
       gphcNumber: organisation.gphcNumber,
@@ -68,8 +81,12 @@ export default function PharmacySettings() {
       mainContactName: organisation.mainContactName ?? '',
       mainContactPhone: organisation.mainContactPhone ?? '',
       mainContactEmail: organisation.mainContactEmail ?? '',
-    });
+    };
   }, [organisation]);
+
+  useEffect(() => {
+    setProfileForm(profileFromOrganisation());
+  }, [profileFromOrganisation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +133,9 @@ export default function PharmacySettings() {
 
   const refreshCuraleaf = async () => {
     setCuraleafRefreshing(true);
+    // A refresh that fell back to the read-only status did not actually re-test
+    // anything, so it must not be reported back as a successful re-test.
+    let readOnlyFallback = false;
     try {
       // Preview has no write endpoint, so re-read the status instead of forcing a refresh.
       const status = isLocalPortalPreview
@@ -124,6 +144,7 @@ export default function PharmacySettings() {
           // A role wall on the probe is not an outage. Fall back to the read-only
           // status endpoint so staff still see the truth about the connection.
           if (error instanceof ApiRequestError && error.status === 403) {
+            readOnlyFallback = true;
             const readOnly = await getCuraleafConnectionStatus(organisation.id);
             dispatch({
               type: 'ADD_TOAST',
@@ -137,9 +158,23 @@ export default function PharmacySettings() {
       setCuraleafStatus(status);
       // The catalogue is the thing staff actually came here to unstick.
       dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' });
+      // Pressing a button and watching nothing change reads as a broken button,
+      // so a refresh that worked says so — and one that came back disconnected
+      // says that instead of claiming success.
+      if (!readOnlyFallback) {
+        dispatch({
+          type: 'ADD_TOAST',
+          dedupeKey: 'curaleaf-refresh',
+          message: status?.connected === false
+            ? 'Curaleaf answered but the connection is not usable. Contact your HHH administrator.'
+            : 'Curaleaf connection re-tested and the product catalogue is reloading.',
+          toastType: status?.connected === false ? 'warning' : 'success',
+        });
+      }
     } catch (error) {
       dispatch({
         type: 'ADD_TOAST',
+        dedupeKey: 'curaleaf-refresh',
         message: error instanceof ApiRequestError && error.status >= 500
           ? 'Curaleaf did not respond. The connection is unchanged — try again shortly.'
           : error instanceof Error ? error.message : 'The Curaleaf connection could not be refreshed.',
@@ -181,8 +216,10 @@ export default function PharmacySettings() {
           mainContactEmail: profileForm.mainContactEmail || undefined,
         },
       });
+      setEditingProfile(false);
       notify('Pharmacy details saved.');
     } catch (error) {
+      // Editing stays open on failure so the typed values are not thrown away.
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'Pharmacy details could not be saved.', toastType: 'error' });
     } finally {
       setProfileSaving(false);
@@ -250,27 +287,91 @@ export default function PharmacySettings() {
           </section>
 
           <section className="pharmacy-settings-section">
-            <header><h3><Building2 size={16} aria-hidden="true" /> Pharmacy details</h3></header>
-            <p className="pharmacy-settings-section__lead">Update trading name, GPhC registration, address and contact details if anything is incorrect. Branding and go-live status remain managed by HHH.</p>
-            <form className="pharmacy-settings-form" onSubmit={event => void saveProfile(event)}>
-              <div className="pharmacy-settings-form__grid">
-                <label>Trading name<input className="input" value={profileForm.tradingName} onChange={event => setProfileForm(current => ({ ...current, tradingName: event.target.value }))} required /></label>
-                <label>Registered company name<input className="input" value={profileForm.name} onChange={event => setProfileForm(current => ({ ...current, name: event.target.value }))} required /></label>
-                <label>GPhC number<input className="input" value={profileForm.gphcNumber} onChange={event => setProfileForm(current => ({ ...current, gphcNumber: event.target.value }))} required /></label>
-                <label>Superintendent pharmacist<input className="input" value={profileForm.superintendent} onChange={event => setProfileForm(current => ({ ...current, superintendent: event.target.value }))} required /></label>
-                <label>Address line 1<input className="input" value={profileForm.addressLine1} onChange={event => setProfileForm(current => ({ ...current, addressLine1: event.target.value }))} autoComplete="address-line1" required /></label>
-                <label>Address line 2<input className="input" value={profileForm.addressLine2} onChange={event => setProfileForm(current => ({ ...current, addressLine2: event.target.value }))} autoComplete="address-line2" /></label>
-                <label>Town or city<input className="input" value={profileForm.locality} onChange={event => setProfileForm(current => ({ ...current, locality: event.target.value }))} autoComplete="address-level2" required /></label>
-                <label>County<input className="input" value={profileForm.county} onChange={event => setProfileForm(current => ({ ...current, county: event.target.value }))} autoComplete="address-level1" /></label>
-                <label>Postcode<input className="input" value={profileForm.postcode} onChange={event => setProfileForm(current => ({ ...current, postcode: event.target.value.toUpperCase() }))} autoComplete="postal-code" required /></label>
-                <label>Main contact name<input className="input" value={profileForm.mainContactName} onChange={event => setProfileForm(current => ({ ...current, mainContactName: event.target.value }))} /></label>
-                <label>Main contact phone<input className="input" type="tel" value={profileForm.mainContactPhone} onChange={event => setProfileForm(current => ({ ...current, mainContactPhone: event.target.value }))} /></label>
-                <label className="is-wide">Main contact email<input className="input" type="email" value={profileForm.mainContactEmail} onChange={event => setProfileForm(current => ({ ...current, mainContactEmail: event.target.value }))} /></label>
+            <header>
+              <h3><Building2 size={16} aria-hidden="true" /> Pharmacy details</h3>
+              {!editingProfile ? (
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingProfile(true)}>
+                  <Pencil size={14} aria-hidden="true" /> Edit
+                </button>
+              ) : null}
+            </header>
+            <p className="pharmacy-settings-section__lead">Trading name, GPhC registration, address and contact details. Branding and go-live status remain managed by HHH.</p>
+            {/* Three groups, in the order someone reads a pharmacy record: who the
+                business is, where it is, and who to call about it. */}
+            {!editingProfile ? (
+              <div className="pharmacy-settings-profile">
+                <div className="pharmacy-settings-profile__group">
+                  <h4>Pharmacy details</h4>
+                  <dl>
+                    <div><dt>Trading name</dt><dd>{organisation.tradingName || '—'}</dd></div>
+                    <div><dt>Registered company name</dt><dd>{organisation.name || '—'}</dd></div>
+                    <div><dt>GPhC number</dt><dd>{organisation.gphcNumber || '—'}</dd></div>
+                    <div><dt>Superintendent pharmacist</dt><dd>{organisation.superintendent || '—'}</dd></div>
+                  </dl>
+                </div>
+                <div className="pharmacy-settings-profile__group">
+                  <h4>Address</h4>
+                  <dl>
+                    <div><dt>Address line 1</dt><dd>{profileForm.addressLine1 || '—'}</dd></div>
+                    <div><dt>Address line 2</dt><dd>{profileForm.addressLine2 || '—'}</dd></div>
+                    <div><dt>Town or city</dt><dd>{profileForm.locality || '—'}</dd></div>
+                    <div><dt>County</dt><dd>{profileForm.county || '—'}</dd></div>
+                    <div><dt>Postcode</dt><dd>{profileForm.postcode || '—'}</dd></div>
+                  </dl>
+                </div>
+                <div className="pharmacy-settings-profile__group">
+                  <h4>Main contact</h4>
+                  <dl>
+                    <div><dt>Name</dt><dd>{organisation.mainContactName || '—'}</dd></div>
+                    <div><dt>Phone</dt><dd>{organisation.mainContactPhone || '—'}</dd></div>
+                    <div><dt>Email</dt><dd>{organisation.mainContactEmail || '—'}</dd></div>
+                  </dl>
+                </div>
               </div>
-              <div className="pharmacy-settings-actions">
-                <button type="submit" className="btn btn-primary" disabled={profileSaving}><Save size={14} /> {profileSaving ? 'Saving…' : 'Save pharmacy details'}</button>
-              </div>
-            </form>
+            ) : (
+              <form className="pharmacy-settings-form" onSubmit={event => void saveProfile(event)}>
+                <fieldset className="pharmacy-settings-form__group">
+                  <legend>Pharmacy details</legend>
+                  <div className="pharmacy-settings-form__grid">
+                    <label>Trading name<input className="input" value={profileForm.tradingName} onChange={event => setProfileForm(current => ({ ...current, tradingName: event.target.value }))} required /></label>
+                    <label>Registered company name<input className="input" value={profileForm.name} onChange={event => setProfileForm(current => ({ ...current, name: event.target.value }))} required /></label>
+                    <label>GPhC number<input className="input" value={profileForm.gphcNumber} onChange={event => setProfileForm(current => ({ ...current, gphcNumber: event.target.value }))} required /></label>
+                    <label>Superintendent pharmacist<input className="input" value={profileForm.superintendent} onChange={event => setProfileForm(current => ({ ...current, superintendent: event.target.value }))} required /></label>
+                  </div>
+                </fieldset>
+                <fieldset className="pharmacy-settings-form__group">
+                  <legend>Address</legend>
+                  <div className="pharmacy-settings-form__grid">
+                    <label>Address line 1<input className="input" value={profileForm.addressLine1} onChange={event => setProfileForm(current => ({ ...current, addressLine1: event.target.value }))} autoComplete="address-line1" required /></label>
+                    <label>Address line 2<input className="input" value={profileForm.addressLine2} onChange={event => setProfileForm(current => ({ ...current, addressLine2: event.target.value }))} autoComplete="address-line2" /></label>
+                    <label>Town or city<input className="input" value={profileForm.locality} onChange={event => setProfileForm(current => ({ ...current, locality: event.target.value }))} autoComplete="address-level2" required /></label>
+                    <label>County<input className="input" value={profileForm.county} onChange={event => setProfileForm(current => ({ ...current, county: event.target.value }))} autoComplete="address-level1" /></label>
+                    <label>Postcode<input className="input" value={profileForm.postcode} onChange={event => setProfileForm(current => ({ ...current, postcode: event.target.value.toUpperCase() }))} autoComplete="postal-code" required /></label>
+                  </div>
+                </fieldset>
+                <fieldset className="pharmacy-settings-form__group">
+                  <legend>Main contact</legend>
+                  <div className="pharmacy-settings-form__grid">
+                    <label>Main contact name<input className="input" value={profileForm.mainContactName} onChange={event => setProfileForm(current => ({ ...current, mainContactName: event.target.value }))} /></label>
+                    <label>Main contact phone<input className="input" type="tel" value={profileForm.mainContactPhone} onChange={event => setProfileForm(current => ({ ...current, mainContactPhone: event.target.value }))} /></label>
+                    <label className="is-wide">Main contact email<input className="input" type="email" value={profileForm.mainContactEmail} onChange={event => setProfileForm(current => ({ ...current, mainContactEmail: event.target.value }))} /></label>
+                  </div>
+                </fieldset>
+                <div className="pharmacy-settings-actions">
+                  <button type="submit" className="btn btn-primary" disabled={profileSaving}><Save size={14} /> {profileSaving ? 'Saving…' : 'Save pharmacy details'}</button>
+                  {/* Cancel restores what is on record rather than leaving half-typed
+                      values behind for the next person who opens Edit. */}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={profileSaving}
+                    onClick={() => { setProfileForm(profileFromOrganisation()); setEditingProfile(false); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </section>
 
           <section className="pharmacy-settings-section">
@@ -293,17 +394,23 @@ export default function PharmacySettings() {
               </button>
             </div>
 
+            {/* The merchant entity and the chosen route are each stated exactly once —
+                the entity by the connection panel below, the route by the pill and the
+                radio group above — so this strip carries only what neither of them says. */}
             {organisation.worldpay.status === 'connected' && (
               <div className="pharmacy-settings-connection">
                 <div><span>Environment</span><strong>{organisation.worldpay.environment === 'live' ? 'Live' : 'Try'}</strong></div>
-                <div><span>Merchant entity</span><strong>{organisation.worldpay.merchantId ?? 'Stored'}</strong></div>
-                <div><span>Patient route</span><strong>{organisation.defaultPaymentRoute === 'worldpay' ? 'Worldpay' : 'Managed by pharmacy'}</strong></div>
+                <div><span>Last verified</span><strong>{formatLastVerified(organisation.worldpay.lastSyncedAt)}</strong></div>
               </div>
             )}
 
-            <p className="pharmacy-settings-note"><ShieldCheck size={15} aria-hidden="true" /><span>Worldpay is optional. Connect the merchant here when you are ready.</span></p>
+            {/* Only worth saying while it is still a decision to make. */}
+            {organisation.worldpay.status !== 'connected' ? (
+              <p className="pharmacy-settings-note"><ShieldCheck size={15} aria-hidden="true" /><span>Worldpay is optional. Connect the merchant here when you are ready.</span></p>
+            ) : null}
             <WorldpayConnectionPanel
               organisationId={organisation.id}
+              onNotify={(message, tone) => dispatch({ type: 'ADD_TOAST', message, toastType: tone, dedupeKey: 'worldpay-refresh' })}
               onConnected={connection => {
                 dispatch({
                   type: 'UPDATE_WORLDPAY',

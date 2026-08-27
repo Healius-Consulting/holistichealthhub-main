@@ -990,12 +990,6 @@ export interface WorldpayConnectionInput {
   username: string;
   password: string;
   entityId: string;
-  customisationId?: string;
-}
-
-export interface WorldpayBrandingInput {
-  organisationId: string;
-  customisationId?: string;
 }
 
 export interface WorldpayConnectionStatus {
@@ -1004,7 +998,6 @@ export interface WorldpayConnectionStatus {
   status?: 'verification_required' | 'connected' | 'attention';
   environment?: 'try' | 'live';
   maskedIdentifier?: string;
-  brandingConfigured?: boolean;
   updatedAt?: string;
 }
 
@@ -1143,18 +1136,26 @@ export interface PharmacyOverview {
     readyForCollection: number;
     urgentTotal: number;
   };
-  prescriptionStarts: {
-    firstCount: number;
-    repeatCount: number;
-    items: Array<{
-      id: string;
-      kind: 'first' | 'repeat';
-      ageDays: number;
-      maskedPatientLabel: string;
-      lastOrderReference: string | null;
-      recordTarget: { kind: 'patient'; id: string };
-    }>;
-  };
+  /**
+   * Last thirty days of money, from the same ledger the Finance page renders so
+   * the two can never disagree. Null when the costing inputs could not be read:
+   * the block is then omitted rather than published with revenue counted and
+   * cost missing, which would overstate what the pharmacy made.
+   */
+  finance: {
+    period: '30d';
+    periodDays: number;
+    since: string;
+    realisedPatientRevenuePence: number;
+    realisedCount: number;
+    pendingCollectionCount: number;
+    pendingPatientRevenuePence: number;
+    contributionPence: number;
+    /** False when some realised orders in the window have no wholesale cost yet. */
+    contributionComplete: boolean;
+    awaitingPaymentCount: number;
+    awaitingPaymentValuePence: number;
+  } | null;
   priorityItems: Array<{
     id: string;
     kind: 'payment' | 'supplier' | 'collection' | 'repeat' | 'cancellation';

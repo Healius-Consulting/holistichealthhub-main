@@ -1,6 +1,16 @@
 import { AlertTriangle, Banknote, CheckCircle, CreditCard, RefreshCw, Send, ShieldCheck, X } from 'lucide-react';
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
-import { money, orderCost, orderReference, orderRevenue, type PatientOrder } from '../../context/AppContext';
+import {
+  PATIENT_PRICE_LABEL,
+  WHOLESALE_LABEL,
+  formatMargin,
+  money,
+  orderContribution,
+  orderCost,
+  orderReference,
+  orderRevenue,
+  type PatientOrder,
+} from '../../context/AppContext';
 
 type Step4CheckoutPanelProps = {
   activeOrder: PatientOrder;
@@ -17,7 +27,7 @@ type Step4CheckoutPanelProps = {
   quoteCurrent: boolean;
   quoteError: { title: string; detail: string } | null;
   quoteCheckedAt: string | null;
-  quoteSummary: { shippingPrice: number; taxRate: number } | null;
+  quoteSummary: { shippingPrice: number } | null;
   currentQuoteItemsCount: number;
   draftBasketBlockedCount: number;
   draftBasketWarningCount: number;
@@ -42,7 +52,7 @@ function quoteStatusLine(input: {
   quoteCurrent: boolean;
   quoteError: { title: string; detail: string } | null;
   quoteCheckedAt: string | null;
-  quoteSummary: { shippingPrice: number; taxRate: number } | null;
+  quoteSummary: { shippingPrice: number } | null;
   currentQuoteItemsCount: number;
 }) {
   const {
@@ -106,10 +116,6 @@ export default function Step4CheckoutPanel({
 }: Step4CheckoutPanelProps) {
   const productSubtotal = orderRevenue(activeOrder) - activeOrder.dispensingFee;
   const patientTotal = orderRevenue(activeOrder);
-  // Curaleaf's taxRate is a decimal fraction ('0.2' = 20%) on the pharmacy's purchase.
-  const taxOnWholesale = quoteSummary
-    ? Math.round((orderCost(activeOrder) + quoteSummary.shippingPrice) * quoteSummary.taxRate * 100) / 100
-    : 0;
   const quoteStatus = quoteStatusLine({
     workspaceMode,
     quoteAvailable,
@@ -172,20 +178,20 @@ export default function Step4CheckoutPanel({
 
         <dl className="rx-step4-ledger" aria-label="Order commercial summary">
           <div>
-            <dt>Wholesale</dt>
+            <dt>{WHOLESALE_LABEL}</dt>
             <dd>{wholesaleKnown ? money(orderCost(activeOrder)) : workspaceMode === 'training' ? 'Not supplied' : 'Quote required'}</dd>
           </div>
-          <div>
+          <div className="is-ruled">
             <dt>Delivery</dt>
             <dd>{quoteSummary ? money(quoteSummary.shippingPrice) : 'Quote required'}</dd>
           </div>
           <div>
-            <dt>Tax <small>on wholesale</small></dt>
-            <dd>{wholesaleKnown && quoteSummary ? money(taxOnWholesale) : 'Quote required'}</dd>
-          </div>
-          <div>
             <dt>Dispensing</dt>
             <dd>{money(activeOrder.dispensingFee)}</dd>
+          </div>
+          <div>
+            <dt>{PATIENT_PRICE_LABEL}</dt>
+            <dd>{money(productSubtotal)}</dd>
           </div>
           <div className="is-total">
             <dt>Patient total</dt>
@@ -194,7 +200,8 @@ export default function Step4CheckoutPanel({
           <div className="rx-step4-ledger__margin">
             <dt>Gross margin</dt>
             <dd className={orderMargin === null ? '' : orderMargin >= 25 ? 'is-good' : 'is-warn'}>
-              {orderMargin === null ? 'Pending' : `${money(patientTotal - orderCost(activeOrder))} · ${orderMargin}%`}
+              {/* Every line's contribution plus the dispensing charge the pharmacy keeps. */}
+              {wholesaleKnown ? formatMargin(orderContribution(activeOrder), patientTotal) : 'Pending'}
             </dd>
           </div>
         </dl>

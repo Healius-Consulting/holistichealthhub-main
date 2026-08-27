@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { maskWorldpayIdentifier, worldpayBaseUrl, worldpaySecretPayload, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
 
 describe('Worldpay credential helpers', () => {
-  it('omits customisationId unless a value is present', () => {
+  // Hosted-page customisation was removed: the stored secret is now exactly the
+  // three merchant fields, and nothing else may ride along into Secret Manager.
+  it('stores only the merchant credentials', () => {
     assert.deepEqual(worldpaySecretPayload({
       username: 'merchant',
       password: 'secret-pass',
@@ -15,17 +17,17 @@ describe('Worldpay credential helpers', () => {
     });
   });
 
-  it('stores customisationId beside merchant credentials', () => {
-    assert.deepEqual(worldpaySecretPayload({
+  it('drops any customisation field left over from an older stored secret', () => {
+    const legacy = {
       username: 'merchant',
       password: 'secret-pass',
       entityId: 'PO1234567890',
       customisationId: 'hpp-channel-123',
-    }), {
+    } as unknown as Parameters<typeof worldpaySecretPayload>[0];
+    assert.deepEqual(worldpaySecretPayload(legacy), {
       username: 'merchant',
       password: 'secret-pass',
       entityId: 'PO1234567890',
-      customisationId: 'hpp-channel-123',
     });
   });
 

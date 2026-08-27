@@ -28,6 +28,39 @@ function prescriptionPackTotals(prescription: Prescription) {
   return { ...fromLines, ordered };
 }
 
+/**
+ * How many packs are actually ready for the patient to collect.
+ *
+ * Readiness is recorded per consignment, so it is summed from the consignments
+ * that reached `ready_for_collection` (or were collected from) rather than
+ * inferred from any one of them. A prescription whose own status is ready but
+ * which has no per-consignment record falls back to its full ordered count,
+ * which is the pre-split behaviour and correct for a single-consignment order.
+ */
+function readyPackCount(order: { prescriptions: Prescription[] }): number {
+  return order.prescriptions.reduce((sum, prescription) => {
+    const states = prescription.shipmentStates ?? {};
+    const shipments = prescription.shipments ?? [];
+    const readyIds = Object.entries(states)
+      .filter(([, state]) => state === 'ready_for_collection' || state === 'collected')
+      .map(([id]) => id);
+
+    if (readyIds.length && shipments.length) {
+      const counted = shipments
+        .filter(shipment => readyIds.includes(shipment.id))
+        .reduce((packs, shipment) => packs + (shipment.items ?? []).reduce((n, item) => n + (item.packCount ?? 0), 0), 0);
+      if (counted > 0) return sum + counted;
+    }
+
+    const totals = prescriptionPackTotals(prescription);
+    // No consignment detail to go on: a ready prescription is ready in full.
+    if (readyIds.length || prescription.status === 'ready' || prescription.status === 'collected') {
+      return sum + Math.max(totals.ordered, totals.collected);
+    }
+    return sum + totals.collected;
+  }, 0);
+}
+
 function shipmentIdsFor(prescription: Prescription) {
   return prescription.shipmentIds?.length
     ? prescription.shipmentIds
@@ -219,34 +252,70 @@ export interface OrderStageStep {
 }
 
 export interface OrderStageRail {
-  clinic: OrderStageStep[];
-  /** Null until a purchase order exists — dispensing has not begun. */
-  dispensing: OrderStageStep[] | null;
+  /** What the pharmacy does to get the order accepted by Curaleaf. */
+  pharmacyPlacement: OrderStageStep[];
+  /** What Curaleaf does once it holds the order. Null until a purchase order exists. */
+  curaleafPlacement: OrderStageStep[] | null;
+  /** Which route the prescription took, so the rail can be labelled honestly. */
+  route: PlacementRoute;
 }
 
 function step(key: string, label: string, detail: string, state: OrderStageState): OrderStageStep {
   return { key, label, detail, state };
 }
 
-function clinicSteps(order: PatientOrder, purchaseOrderExists: boolean): OrderStageStep[] {
+/**
+ * How the prescription reached Curaleaf, which decides what the rail can claim.
+ *
+ * A QR order was scanned at the clinic, so Curaleaf already holds the
+ * prescription and has already verified the prescriber — those steps are done
+ * before the pharmacy touches the order. A manual order was typed here, so both
+ * are genuine outstanding checks with Curaleaf.
+ *
+ * The two used to be conflated by a single `clinicRoute` flag that also read
+ * `prescriptions.every(...)`, which returns true for an order with no
+ * prescriptions at all — an empty order was therefore reported as having a
+ * verified prescriber. The recorded placement route is authoritative when there
+ * is one, and the entry modes are only a fallback for orders placed before the
+ * route was recorded.
+ */
+export type PlacementRoute = 'clinic_barcode' | 'manual';
+
+export function placementRoute(order: PatientOrder): PlacementRoute {
+  const recorded = order.curaleafPlacement?.route;
+  if (recorded === 'CLINIC_BARCODE') return 'clinic_barcode';
+  if (recorded) return 'manual';
+  const modes = new Set(order.prescriptions.map(prescription => prescription.entryMode));
+  // No prescription yet is not a clinic scan; and one manually typed
+  // prescription makes the whole placement a manual one.
+  if (modes.size === 1 && modes.has('clinic')) return 'clinic_barcode';
+  return 'manual';
+}
+
+function pharmacyPlacementSteps(order: PatientOrder, purchaseOrderExists: boolean): OrderStageStep[] {
   const placement = order.curaleafPlacement;
-  const clinicRoute = placement?.route === 'CLINIC_BARCODE'
-    || order.prescriptions.every(prescription => prescription.entryMode === 'clinic');
-  const prescriberComplete = purchaseOrderExists || clinicRoute || placement?.prescriberState === 'VERIFIED'
+  const route = placementRoute(order);
+  const scanned = route === 'clinic_barcode';
+  const prescriberComplete = purchaseOrderExists || scanned || placement?.prescriberState === 'VERIFIED'
     || ['CREATING_PRESCRIPTION', 'UPLOADING_PRESCRIPTION_IMAGE', 'AWAITING_PRESCRIPTION_ACTIVATION', 'CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
-  const prescriptionComplete = purchaseOrderExists || placement?.prescriptionState === 'ACTIVE'
+  const prescriptionComplete = purchaseOrderExists || scanned || placement?.prescriptionState === 'ACTIVE'
     || ['CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
   const paid = order.payment.status === 'paid';
   const paymentRequested = paid || order.payment.status === 'sent';
 
   return [
-    step('prescriber', 'Prescriber', clinicRoute ? 'Clinic scan' : prescriberComplete ? 'Verified' : placement?.prescriberState === 'UNVERIFIED' ? 'Awaiting Curaleaf' : 'Checking',
-      prescriberComplete ? 'complete' : 'active'),
-    step('prescription', 'Prescription', prescriptionComplete ? 'Active' : placement?.prescriptionState === 'PENDING' ? 'Awaiting Curaleaf' : 'Pending',
-      prescriptionComplete ? 'complete' : prescriberComplete ? 'active' : 'pending'),
-    // Status only. The amount belongs to the order summary, not the rail.
+    // Payment leads the rail because nothing else can move until it clears: a
+    // purchase order is never sent to Curaleaf on an unpaid order, so showing
+    // prescriber checks first put the outstanding work in the wrong place.
+    // Status only — the amount belongs to the order summary, not the rail.
     step('payment', 'Payment', paid ? 'Paid' : order.payment.status === 'sent' ? 'Awaiting patient' : 'Not requested',
       paid ? 'complete' : paymentRequested ? 'active' : 'pending'),
+    step('prescriber', 'Prescriber',
+      scanned ? 'Verified at clinic scan' : prescriberComplete ? 'Verified' : placement?.prescriberState === 'UNVERIFIED' ? 'Awaiting Curaleaf' : 'Checking',
+      prescriberComplete ? 'complete' : paid ? 'active' : 'pending'),
+    step('prescription', 'Prescription',
+      scanned ? 'Held by Curaleaf from the clinic QR' : prescriptionComplete ? 'Active' : placement?.prescriptionState === 'PENDING' ? 'Awaiting Curaleaf' : 'Pending',
+      prescriptionComplete ? 'complete' : prescriberComplete ? 'active' : 'pending'),
     step('purchase-order', 'PO sent', purchaseOrderExists ? 'Sent to Curaleaf' : 'Pending',
       purchaseOrderExists ? 'complete' : prescriptionComplete && paid ? 'active' : 'pending'),
   ];
@@ -274,9 +343,19 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
   const shippedComplete = totals.ordered > 0 && totals.shipped >= totals.ordered;
   const receivedComplete = totals.ordered > 0 && totals.received >= totals.ordered;
   const collectedComplete = totals.ordered > 0 && totals.collected >= totals.ordered;
-  const readyComplete = order.prescriptions.some(prescription => prescription.status === 'ready' || prescription.status === 'collected')
-    || Object.values(Object.assign({}, ...order.prescriptions.map(prescription => prescription.shipmentStates ?? {})))
-      .some(state => state === 'ready_for_collection' || state === 'collected');
+  /*
+   * Ready is counted in packs, not in "any consignment is ready".
+   *
+   * A split order arrives in several consignments. The old rule marked the whole
+   * Ready step complete — with "Patient notified" underneath — as soon as one of
+   * them was ready, so an order with two packs on the shelf and eight still at
+   * Curaleaf told staff the patient had been told their order was ready. They
+   * had been told about one consignment. Packs already collected count as ready
+   * because they plainly reached the patient.
+   */
+  const readyPacks = readyPackCount(order);
+  const readyComplete = totals.ordered > 0 && readyPacks >= totals.ordered;
+  const readySome = readyPacks > 0;
 
   const state = (complete: boolean, some: boolean, active: boolean): OrderStageState =>
     complete ? 'complete' : some ? 'partial' : active ? 'active' : 'pending';
@@ -290,8 +369,15 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
     // Goods-in is the dispensary's record; Curaleaf cannot report arrival.
     step('checked-in', 'Checked in', receivedComplete ? 'Verified at dispensary' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
       state(receivedComplete, totals.received > 0, totals.shipped > 0)),
-    step('ready', 'Ready', readyComplete ? 'Patient notified' : 'Pending pharmacy checks',
-      readyComplete ? 'complete' : receivedComplete ? 'active' : 'pending'),
+    step('ready', 'Ready',
+      readyComplete
+        ? 'Patient notified'
+        : readySome
+          // Named as partial, because "Patient notified" on a partial order is a
+          // claim about a conversation that only covered part of it.
+          ? `${partOf(readyPacks)} ready · patient notified for those`
+          : 'Pending pharmacy checks',
+      readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending'),
     step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
       state(collectedComplete, totals.collected > 0, readyComplete)),
   ];
@@ -300,7 +386,8 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
 export function buildOrderStageRail(order: PatientOrder): OrderStageRail {
   const purchaseOrderExists = order.prescriptions.some(prescription => Boolean(prescription.poRef || prescription.placed));
   return {
-    clinic: clinicSteps(order, purchaseOrderExists),
-    dispensing: purchaseOrderExists ? dispensingSteps(order) : null,
+    pharmacyPlacement: pharmacyPlacementSteps(order, purchaseOrderExists),
+    curaleafPlacement: purchaseOrderExists ? dispensingSteps(order) : null,
+    route: placementRoute(order),
   };
 }

@@ -47,8 +47,24 @@ function PendulumText({ children, className, title }: { children: ReactNode; cla
   );
 }
 
-export default function MedicineLabel({ name }: { name: string }) {
+/**
+ * `static` drops the pendulum. Dense record tables — the patient CRM order lines
+ * especially — put a dozen of these on screen at once, and a dozen names sliding
+ * back and forth reads as broken rather than helpful. There the name truncates
+ * and the full text lives in the tooltip instead.
+ */
+export default function MedicineLabel({ name, static: isStatic = false }: { name: string; static?: boolean }) {
   const { title, strength } = splitMedicineLabel(name);
+  if (isStatic) {
+    return (
+      <>
+        <strong className="medicine-label__static" title={title}>{title}</strong>
+        {strength ? (
+          <span className="medicine-label__strength medicine-label__static" title={strength}>{strength}</span>
+        ) : null}
+      </>
+    );
+  }
   return (
     <>
       <strong>

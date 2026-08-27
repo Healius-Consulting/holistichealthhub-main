@@ -345,12 +345,12 @@ export default function PharmacyFinance() {
               <div>
                 <dt>Quoted cost</dt>
                 <dd>{pounds(totals.wholesalePence)}</dd>
-                <small>Products {pounds(totals.wholesaleProductPence)} + shipping {pounds(totals.shippingPence)}</small>
+                <small>Excl. VAT · products {pounds(totals.wholesaleProductPence)} + shipping {pounds(totals.shippingPence)}</small>
               </div>
               <div>
                 <dt>Product margin</dt>
                 <dd>{pounds(totals.productMarginPence)}</dd>
-                <small>Patient product price less quoted product cost</small>
+                <small>Patient product price less quoted product cost (excl. VAT)</small>
               </div>
             </dl>
           </section>

@@ -8,9 +8,7 @@ import {
 } from '../../application/integrations/curaleaf-quote-bank.service.js';
 import {
   maskWorldpayIdentifier,
-  readStoredWorldpayCredential,
   revokeWorldpayCredential,
-  updateStoredWorldpayCustomisation,
   validateWorldpayCredentials,
   writeWorldpayCredential,
   type WorldpayCredential,
@@ -48,13 +46,11 @@ export async function authorisedOrganisationId(
   return organisationId;
 }
 
-const customisationIdSchema = z.string().trim().max(64).regex(/^[A-Za-z0-9_-]*$/);
 const worldpayCredentialSchema = z.object({
   organisationId: z.string().optional(),
   username: z.string().trim().min(1).max(500),
   password: z.string().min(8).max(1_000),
   entityId: z.string().trim().min(1).max(200),
-  customisationId: customisationIdSchema.optional(),
 });
 const curaleafCredentialSchema = z.object({
   organisationId: z.string().optional(),
@@ -72,11 +68,6 @@ const curaleafScanSchema = z.object({
   organisationId: z.string().optional(),
   fileId: organisationIdSchema,
 }).strict();
-const worldpayBrandingSchema = z.object({
-  organisationId: z.string().optional(),
-  customisationId: customisationIdSchema.optional(),
-});
-
 function worldpayEnvironmentFromValidation(environment: 'try' | 'live'): 'TEST' | 'PRODUCTION' {
   return environment === 'live' ? 'PRODUCTION' : 'TEST';
 }
@@ -114,14 +105,12 @@ async function worldpayConnectionStatus(
   const disconnected = !connection || connection.status === 'DISCONNECTED';
   const configured = !disconnected && Boolean(connection?.secretResourceName);
   const connected = connection?.status === 'ACTIVE';
-  const stored = configured ? await readStoredWorldpayCredential(connection, organisationId) : null;
   return {
     configured,
     connected,
     status: disconnected || !configured ? 'verification_required' as const : connected ? 'connected' as const : 'attention' as const,
     environment: connection?.environment === 'PRODUCTION' ? 'live' as const : 'try' as const,
     maskedIdentifier: connection?.maskedCredential ?? undefined,
-    brandingConfigured: Boolean(stored?.customisationId),
     updatedAt: connection?.updatedAt,
   };
 }
@@ -129,6 +118,19 @@ async function worldpayConnectionStatus(
 export function createPortalIntegrationRouter(): Router {
   const router = Router();
   const integrationRepo = new SqlIntegrationRepository();
+
+  /**
+   * The vendor answered, so the Overview may now say so.
+   *
+   * Deliberately fire-and-forget: this is health bookkeeping, and a failure to
+   * write it must never turn a successful catalogue fetch or quote into an error
+   * for the pharmacy. A missed stamp costs one stale chip until the next call.
+   */
+  function noteVendorSuccess(organisationId: string, integration: IntegrationName) {
+    void integrationRepo.recordSuccessfulCall(organisationId, integration).catch(error => {
+      console.warn(`Could not record ${integration} success for ${organisationId}:`, error);
+    });
+  }
   const quoteBankRepo = new SqlCuraleafQuoteBankRepository();
   const organisationRepo = new SqlOrganisationRepository();
 
@@ -169,6 +171,9 @@ export function createPortalIntegrationRouter(): Router {
         externalCustomerId: credential.customerId,
         maskedCredential: maskCuraleafIdentifier(credential.customerId),
       });
+      // Validation is a real call to Curaleaf that came back, which is exactly
+      // the evidence the Overview chip is asking for.
+      noteVendorSuccess(organisationId, 'CURALEAF');
       res.status(200).json(curaleafStatusPayload(restored, {
         message: validation.message,
         checkedAt: validation.checkedAt,
@@ -191,6 +196,7 @@ export function createPortalIntegrationRouter(): Router {
         return;
       }
       const probe = await probeCuraleafConnection(connection);
+      noteVendorSuccess(organisationId, 'CURALEAF');
       const restored = await integrationRepo.restoreConnection({
         organisationId,
         integration: 'CURALEAF',
@@ -215,14 +221,10 @@ export function createPortalIntegrationRouter(): Router {
         username: input.username,
         password: input.password,
         entityId: input.entityId,
-        ...(input.customisationId ? { customisationId: input.customisationId } : {}),
       };
       const existing = await integrationRepo.findConnection(organisationId, 'WORLDPAY');
-      if (!credential.customisationId) {
-        const stored = await readStoredWorldpayCredential(existing, organisationId);
-        if (stored?.customisationId) credential.customisationId = stored.customisationId;
-      }
       const validation = await validateWorldpayCredentials(credential);
+      noteVendorSuccess(organisationId, 'WORLDPAY');
       const secretResourceName = await writeWorldpayCredential(organisationId, credential, existing?.secretResourceName);
       const restored = await integrationRepo.restoreConnection({
         organisationId,
@@ -232,29 +234,6 @@ export function createPortalIntegrationRouter(): Router {
         secretResourceName,
         externalCustomerId: credential.entityId,
         maskedCredential: maskWorldpayIdentifier(credential.entityId),
-      });
-      res.status(200).json(await worldpayConnectionStatus(restored, organisationId));
-    } catch (error) { next(error); }
-  });
-
-  router.patch('/portal/integrations/worldpay/credentials', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const input = worldpayBrandingSchema.parse(req.body);
-      const organisationId = await authorisedOrganisationId(req.context, input.organisationId, organisationRepo);
-      const existing = await integrationRepo.findConnection(organisationId, 'WORLDPAY');
-      if (!existing || existing.status === 'DISCONNECTED') {
-        throw new HttpError(404, 'Worldpay is not connected for this pharmacy.', 'INTEGRATION_NOT_CONNECTED');
-      }
-      const customisationId = input.customisationId?.trim() || undefined;
-      const updated = await updateStoredWorldpayCustomisation(existing, organisationId, customisationId);
-      const restored = await integrationRepo.restoreConnection({
-        organisationId,
-        integration: 'WORLDPAY',
-        environment: existing.environment,
-        status: 'ACTIVE',
-        secretResourceName: updated.resourceName,
-        externalCustomerId: existing.externalCustomerId,
-        maskedCredential: existing.maskedCredential,
       });
       res.status(200).json(await worldpayConnectionStatus(restored, organisationId));
     } catch (error) { next(error); }
@@ -293,9 +272,14 @@ export function createPortalIntegrationRouter(): Router {
 
   router.get('/portal/integrations/curaleaf/catalog', requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { connection } = await requireCuraleafConnection(req.context, req.query.organisationId);
+      const { organisationId, connection } = await requireCuraleafConnection(req.context, req.query.organisationId);
       const catalogue = await fetchCuraleafCatalogue(connection);
+      noteVendorSuccess(organisationId, 'CURALEAF');
       const quoteBank = await quoteBankRepo.listEntries(connection.environment);
+      // Deliberately shorter than the portal's fifteen-minute catalogue window:
+      // the client decides when a catalogue is stale, and this header must always
+      // have expired by then so that decision actually reaches Curaleaf. A staff
+      // refresh steps around it entirely with a cache-busting query parameter.
       res.setHeader('Cache-Control', 'private, max-age=300');
       res.status(200).json(mergeQuoteBankIntoCatalogue(
         catalogue as { products: Array<Record<string, unknown>>; fetchedAt: string; [key: string]: unknown },
@@ -314,8 +298,9 @@ export function createPortalIntegrationRouter(): Router {
         })).min(1),
       }).parse(req.body);
 
-      const { connection } = await requireCuraleafConnection(req.context, input.organisationId);
+      const { organisationId, connection } = await requireCuraleafConnection(req.context, input.organisationId);
       const quote = await fetchCuraleafQuote(connection, input.items);
+      noteVendorSuccess(organisationId, 'CURALEAF');
       try {
         await upsertCuraleafQuoteBankFromQuote(connection, quote, 'LIVE_QUOTE', quoteBankRepo);
       } catch (error) {
@@ -330,6 +315,7 @@ export function createPortalIntegrationRouter(): Router {
       const input = curaleafScanSchema.parse(req.body);
       const { organisationId, connection } = await requireCuraleafConnection(req.context, input.organisationId);
       const result = await scanClinicPrescriptionFromStoredFile(connection, organisationId, input.fileId);
+      noteVendorSuccess(organisationId, 'CURALEAF');
       res.setHeader('Cache-Control', 'no-store');
       res.status(result.status === 'processing' ? 202 : 200).json(result);
     } catch (error) { next(error); }
