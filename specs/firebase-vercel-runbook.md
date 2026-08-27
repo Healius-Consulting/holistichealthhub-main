@@ -66,11 +66,11 @@ PORTAL_APP_ORIGIN=https://<exact-portal-host>
 PUBLIC_APP_ORIGIN=https://<exact-public-host>
 ALLOWED_ORIGINS=https://<exact-public-host>,https://<exact-portal-host>
 IP_HASH_SECRET=<at-least-32-random-bytes>
-EMAIL_FROM_ADDRESS=noreply@holistichealthhub.cc
+EMAIL_FROM_ADDRESS=noreply@holistichealthhub.live
 RESEND_API_KEY_SECRET_RESOURCE_NAME=projects/<firebase-project>/secrets/hhh-resend-api-key-europe-west2
 ```
 
-Register both exact custom hostnames in Firebase Authentication and register the portal hostname in App Check. Keep Firestore and Storage browser rules at deny-all. Curaleaf, Worldpay, Resend, message-provider, and service-account secrets remain server-side and must never use a `VITE_*` name. For Worldpay hosted-payment-page branding, the Worldpay secret JSON can also include an optional `customisationId` alongside `username`, `password`, and `entityId`.
+Register both exact custom hostnames in Firebase Authentication and register the portal hostname in App Check. Keep Firestore and Storage browser rules at deny-all. Curaleaf, Worldpay, Resend, message-provider, and service-account secrets remain server-side and must never use a `VITE_*` name. The Worldpay secret JSON is exactly `username`, `password`, and `entityId`; hosted-payment-page customisation was removed, and any `customisationId` left in an older stored secret is ignored.
 
 Apply the exact-origin CORS policy required by the signed prescription and pharmacy-logo upload URLs (replace the bucket name when using another Firebase project):
 

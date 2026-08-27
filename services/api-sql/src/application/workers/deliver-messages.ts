@@ -38,12 +38,20 @@ async function readResendApiKey() {
 
 async function providerConfig(): Promise<ProviderConfig | null> {
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
-  // The sending domain deliberately lags the brand domain. Public links and portal
-  // CTAs are on holistichealthhub.live, but the Resend DKIM key and SES feedback MX
-  // are published on holistichealthhub.cc only. Moving the From address before those
-  // records exist on .live would silently break outbound mail, so this stays on .cc
-  // until DNS is cut over (then set EMAIL_FROM_ADDRESS; no code change needed).
-  const resendFrom = process.env.EMAIL_FROM_ADDRESS?.trim() || 'noreply@holistichealthhub.cc';
+  // The sending domain used to lag the brand domain: links and portal CTAs were on
+  // holistichealthhub.live while the Resend DKIM key and SES feedback MX existed only
+  // on holistichealthhub.cc, so the From address stayed on .cc to avoid silently
+  // breaking outbound mail. Those records are now published on .live —
+  //
+  //   send.holistichealthhub.live      TXT  v=spf1 include:amazonses.com ~all
+  //   send.holistichealthhub.live      MX   10 feedback-smtp.eu-west-1.amazonses.com
+  //   resend._domainkey.holistichealthhub.live  TXT  p=MIGfMA0GCSqGSIb3DQEB...
+  //
+  // — so the default is .live, which also puts the From address on the same domain as
+  // the links in the body rather than leaving a cross-domain mismatch for spam
+  // filters to score. EMAIL_FROM_ADDRESS still overrides, so .cc remains one env var
+  // away if a rollback is ever needed.
+  const resendFrom = process.env.EMAIL_FROM_ADDRESS?.trim() || 'noreply@holistichealthhub.live';
   const resolvedResendApiKey = resendApiKey || await readResendApiKey();
   if (resolvedResendApiKey && resendFrom) {
     return { kind: 'resend' as const, apiKey: resolvedResendApiKey, from: resendFrom };
