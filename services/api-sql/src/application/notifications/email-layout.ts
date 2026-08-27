@@ -6,6 +6,27 @@ export const EMAIL_CID = {
   curaleaf: 'email-curaleaf-logo',
 } as const;
 
+/*
+ * Footer lockup sizing, matched on visible ink rather than on canvas.
+ *
+ * curaleaf-clinic-white.png is 504x167 with 17px of transparent padding top and
+ * bottom, so its ink box is 504x133 — 79% of the canvas height. hhh-logo.png is
+ * 300x56 with an ink box of 297x54, or 96%. Sizing the two canvases to the same
+ * height therefore renders the Curaleaf mark about 37% larger than the HHH one,
+ * which reads as the pair being misaligned and invites nudging the placement by
+ * eye. They are vertically centred correctly; they were simply different sizes.
+ *
+ * 124x41 scales the Curaleaf ink to ~32.8px tall, the same visible height as the
+ * HHH mark at 180x34. Both keep their source aspect ratio (~3.02 and ~5.3).
+ *
+ * If either PNG is replaced, measure the new file's ink box and recompute these
+ * rather than adjusting them by eye — that is what produced the mismatch.
+ */
+const FOOTER_LOGOS = {
+  hhh: { width: 180, height: 34 },
+  curaleaf: { width: 124, height: 41 },
+} as const;
+
 const PHARMACY_HEADER_LOGOS = [
   {
     ids: ['6d0176bb-89a0-4e32-9bce-c934c9557c42'],
@@ -176,11 +197,11 @@ export function brandedEmail(input: {
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center">
                 <tr>
                   <td valign="middle" align="center" style="height:56px;">
-                    <img src="cid:${EMAIL_CID.hhh}" width="180" height="34" alt="Holistic Health Hub" style="width:180px; height:34px; max-width:100%; object-fit:contain; object-position:center; border:0; display:block;">
+                    <img src="cid:${EMAIL_CID.hhh}" width="${FOOTER_LOGOS.hhh.width}" height="${FOOTER_LOGOS.hhh.height}" alt="Holistic Health Hub" style="width:${FOOTER_LOGOS.hhh.width}px; height:${FOOTER_LOGOS.hhh.height}px; max-width:100%; object-fit:contain; object-position:center; border:0; display:block;">
                   </td>
                   <td valign="middle" align="center" style="padding:0 16px; color:#ffffff; font-size:24px; font-weight:300; height:56px;">&times;</td>
                   <td valign="middle" align="center" style="height:56px;">
-                    <img src="cid:${EMAIL_CID.curaleaf}" width="168" height="56" alt="Curaleaf Clinic" style="width:168px; height:56px; max-width:100%; object-fit:contain; object-position:center; border:0; display:block;">
+                    <img src="cid:${EMAIL_CID.curaleaf}" width="${FOOTER_LOGOS.curaleaf.width}" height="${FOOTER_LOGOS.curaleaf.height}" alt="Curaleaf Clinic" style="width:${FOOTER_LOGOS.curaleaf.width}px; height:${FOOTER_LOGOS.curaleaf.height}px; max-width:100%; object-fit:contain; object-position:center; border:0; display:block;">
                   </td>
                 </tr>
               </table>
