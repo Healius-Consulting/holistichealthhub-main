@@ -1,0 +1,395 @@
+/*
+ * Settings & assets. Owns its own surface rather than borrowing the dashboard's
+ * filter cards and meta-grids: this is a form page, so it reads as one column
+ * of sections with no nested tile grids competing for attention.
+ */
+
+.pharmacy-settings{
+  max-width: 860px;
+  gap: 16px;
+}
+
+/* ---- Compact header ---- */
+
+.pharmacy-settings__header{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.pharmacy-settings__header .tenant-mark{
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  font-size: 13px;
+}
+
+.pharmacy-settings__identity{
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.pharmacy-settings__identity h2{
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.pharmacy-settings__identity p{
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* ---- Segmented nav ---- */
+
+.pharmacy-settings__nav{
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+}
+
+.pharmacy-settings__nav button{
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-tertiary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pharmacy-settings__nav button:hover{ color: var(--text-primary); }
+
+.pharmacy-settings__nav button:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+
+.pharmacy-settings__nav button[aria-selected='true']{
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 7%);
+}
+
+/* ---- Single-column sections ---- */
+
+.pharmacy-settings__flow{
+  display: grid;
+  gap: 14px;
+}
+
+.pharmacy-settings-section{
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+
+.pharmacy-settings-section > header{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.pharmacy-settings-section h3{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.pharmacy-settings-section h3 svg{ color: var(--text-tertiary); }
+
+.pharmacy-settings-section__lead{
+  margin: 0 0 14px;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.pharmacy-settings-section__lead:last-child{ margin-bottom: 0; }
+
+.pharmacy-settings-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+/* ---- Curaleaf ---- */
+
+.pharmacy-settings-curaleaf{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.pharmacy-settings-curaleaf__id{
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pharmacy-settings-curaleaf__id span{
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pharmacy-settings-curaleaf__id strong{
+  color: var(--text-primary);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.pharmacy-settings-link{
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pharmacy-settings-link:hover{ color: var(--text-primary); }
+
+/* ---- Profile form ---- */
+
+.pharmacy-settings-form{
+  display: grid;
+  gap: 14px;
+}
+
+.pharmacy-settings-form__grid{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.pharmacy-settings-form__grid label{
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.pharmacy-settings-form__grid label.is-wide{ grid-column: 1 / -1; }
+
+/* ---- Payment route ---- */
+
+.pharmacy-settings-route{
+  display: grid;
+  gap: 8px;
+}
+
+.pharmacy-settings-route button{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.pharmacy-settings-route button:hover:not(:disabled){
+  border-color: var(--border-strong, var(--border));
+}
+
+.pharmacy-settings-route button:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+
+.pharmacy-settings-route button:disabled{
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.pharmacy-settings-route button[aria-checked='true']{
+  border-color: color-mix(in srgb, var(--tenant-primary) 45%, var(--border));
+  background: var(--tenant-primary-soft);
+}
+
+.pharmacy-settings-route strong{
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pharmacy-settings-route small{
+  display: block;
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.pharmacy-settings-route svg{ color: var(--tenant-primary-strong); }
+
+/* ---- Connection summary ---- */
+
+.pharmacy-settings-connection{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.pharmacy-settings-connection > div{ display: grid; gap: 2px; min-width: 0; }
+
+.pharmacy-settings-connection span{
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.pharmacy-settings-connection strong{
+  color: var(--text-primary);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.pharmacy-settings-note{
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 12px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  color: var(--tenant-secondary);
+  background: var(--tenant-secondary-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pharmacy-settings-note svg{ flex: 0 0 auto; margin-top: 1px; }
+
+/* ---- Assets: one linear flow, link then QR then pack ---- */
+
+.pharmacy-settings-step{
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 4px 12px;
+}
+
+.pharmacy-settings-step__number{
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--tenant-primary-strong);
+  background: var(--tenant-primary-soft);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.pharmacy-settings-step__body{ min-width: 0; }
+
+.pharmacy-settings-qr{
+  display: block;
+  width: 180px;
+  height: 180px;
+  margin: 12px 0 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.pharmacy-settings-qr-placeholder{
+  display: grid;
+  width: 180px;
+  height: 180px;
+  margin: 12px 0 0;
+  place-items: center;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  font-size: 12px;
+  text-align: center;
+}
+
+.pharmacy-settings-url{
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px dashed var(--tenant-primary-muted);
+  border-radius: 9px;
+  color: var(--tenant-primary-strong);
+  background: var(--tenant-primary-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* Attribution is a standing fact, not an alert. */
+.pharmacy-settings-attribution{
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pharmacy-settings-attribution svg{ flex: 0 0 auto; margin-top: 2px; }
+
+@media (max-width: 680px){
+  .pharmacy-settings__nav{ display: flex; width: 100%; }
+  .pharmacy-settings__nav button{ flex: 1 1 0; justify-content: center; }
+  .pharmacy-settings-form__grid{ grid-template-columns: 1fr; }
+  .pharmacy-settings-connection{ grid-template-columns: 1fr; }
+  .pharmacy-settings-curaleaf{ align-items: stretch; }
+  .pharmacy-settings-curaleaf .btn{ width: 100%; justify-content: center; }
+  .pharmacy-settings-step{ grid-template-columns: 1fr; }
+  .pharmacy-settings-step__number{ display: none; }
+}

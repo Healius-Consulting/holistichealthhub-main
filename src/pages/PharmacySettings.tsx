@@ -23,6 +23,7 @@ import type { CuraleafConnectionStatus } from '../shared/contracts';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import './PharmacySettings.css';
 
 export default function PharmacySettings() {
   const { state, dispatch } = useApp();
@@ -189,41 +190,33 @@ export default function PharmacySettings() {
   };
 
   return (
-    <div className="page-body settings-page">
-      <section className="settings-identity card">
+    <div className="page-body pharmacy-settings">
+      <header className="pharmacy-settings__header">
         <div className="tenant-mark" style={brandSwatchStyle(organisation.brand.primary)}>{organisation.logoText}</div>
-        <div>
-          <p className="section-label">Organisation profile</p>
+        <div className="pharmacy-settings__identity">
           <h2>{organisation.brand.portalName}</h2>
           <p>{organisation.name} · GPhC {organisation.gphcNumber}</p>
         </div>
         <span className={`pill ${organisation.status === 'paused' ? 'pill-red' : state.workspaceMode === 'live' ? 'pill-green' : 'pill-amber'}`}>
           {organisation.status === 'paused' ? 'Paused' : state.workspaceMode === 'live' ? 'Live' : 'Training'}
         </span>
-      </section>
+      </header>
 
-      <div className="filter-grid settings-tabs" role="group" aria-label="Settings views">
-        <button type="button" aria-pressed={activeTab === 'settings'} className={`filter-card ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-          <div className="filter-card__head"><span>Organisation</span><Building2 size={14} className={activeTab === 'settings' ? 'text-primary' : 'text-muted'} /></div>
-          <span className="filter-card__value filter-card__value--text">Profile & payments</span>
+      <div className="pharmacy-settings__nav" role="tablist" aria-label="Settings views">
+        <button type="button" role="tab" id="settings-tab-organisation" aria-selected={activeTab === 'settings'} aria-controls="settings-panel-organisation" onClick={() => setActiveTab('settings')}>
+          <Building2 size={14} aria-hidden="true" /> Organisation
         </button>
-        <button type="button" aria-pressed={activeTab === 'assets'} className={`filter-card ${activeTab === 'assets' ? 'active' : ''}`} onClick={() => setActiveTab('assets')}>
-          <div className="filter-card__head"><span>Assets</span><QrCode size={14} className={activeTab === 'assets' ? 'text-primary' : 'text-muted'} /></div>
-          <span className="filter-card__value filter-card__value--text">Intake link, QR & content pack</span>
+        <button type="button" role="tab" id="settings-tab-assets" aria-selected={activeTab === 'assets'} aria-controls="settings-panel-assets" onClick={() => setActiveTab('assets')}>
+          <QrCode size={14} aria-hidden="true" /> Assets
         </button>
       </div>
 
       {activeTab === 'settings' ? (
-        <div className="settings-stack">
-          <section className="card settings-panel settings-panel--curaleaf">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Supplier</p>
-                <h3><Tags size={17} /> Curaleaf</h3>
-              </div>
-            </div>
-            <div className="settings-curaleaf">
-              <div className="settings-curaleaf__id">
+        <div className="pharmacy-settings__flow" id="settings-panel-organisation" role="tabpanel" aria-labelledby="settings-tab-organisation">
+          <section className="pharmacy-settings-section">
+            <header><h3><Tags size={16} aria-hidden="true" /> Curaleaf</h3></header>
+            <div className="pharmacy-settings-curaleaf">
+              <div className="pharmacy-settings-curaleaf__id">
                 <span>Customer ID</span>
                 <strong>{curaleafStatus?.customerId ?? 'Not assigned'}</strong>
               </div>
@@ -231,20 +224,15 @@ export default function PharmacySettings() {
                 <RefreshCw size={14} aria-hidden="true" /> {curaleafRefreshing ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
-            <p className="settings-copy">Curaleaf supplies patient price and wholesale cost. Your team can only add an optional dispensing charge while building an order.</p>
-            <button type="button" className="settings-curaleaf__catalogue" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
+            <p className="pharmacy-settings-section__lead">Curaleaf supplies patient price and wholesale cost. Your team can only add an optional dispensing charge while building an order.</p>
+            <button type="button" className="pharmacy-settings-link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
           </section>
 
-          <section className="card settings-panel settings-panel--profile">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Pharmacy details</p>
-                <h3><Building2 size={17} /> Public profile & contact</h3>
-              </div>
-            </div>
-            <p className="settings-copy">Update trading name, GPhC registration, address and contact details if anything is incorrect. Branding and go-live status remain managed by HHH.</p>
-            <form className="settings-profile-form" onSubmit={event => void saveProfile(event)}>
-              <div className="settings-profile-grid">
+          <section className="pharmacy-settings-section">
+            <header><h3><Building2 size={16} aria-hidden="true" /> Pharmacy details</h3></header>
+            <p className="pharmacy-settings-section__lead">Update trading name, GPhC registration, address and contact details if anything is incorrect. Branding and go-live status remain managed by HHH.</p>
+            <form className="pharmacy-settings-form" onSubmit={event => void saveProfile(event)}>
+              <div className="pharmacy-settings-form__grid">
                 <label>Trading name<input className="input" value={profileForm.tradingName} onChange={event => setProfileForm(current => ({ ...current, tradingName: event.target.value }))} required /></label>
                 <label>Registered company name<input className="input" value={profileForm.name} onChange={event => setProfileForm(current => ({ ...current, name: event.target.value }))} required /></label>
                 <label>GPhC number<input className="input" value={profileForm.gphcNumber} onChange={event => setProfileForm(current => ({ ...current, gphcNumber: event.target.value }))} required /></label>
@@ -256,45 +244,43 @@ export default function PharmacySettings() {
                 <label>Postcode<input className="input" value={profileForm.postcode} onChange={event => setProfileForm(current => ({ ...current, postcode: event.target.value.toUpperCase() }))} autoComplete="postal-code" required /></label>
                 <label>Main contact name<input className="input" value={profileForm.mainContactName} onChange={event => setProfileForm(current => ({ ...current, mainContactName: event.target.value }))} /></label>
                 <label>Main contact phone<input className="input" type="tel" value={profileForm.mainContactPhone} onChange={event => setProfileForm(current => ({ ...current, mainContactPhone: event.target.value }))} /></label>
-                <label className="settings-profile-grid__wide">Main contact email<input className="input" type="email" value={profileForm.mainContactEmail} onChange={event => setProfileForm(current => ({ ...current, mainContactEmail: event.target.value }))} /></label>
+                <label className="is-wide">Main contact email<input className="input" type="email" value={profileForm.mainContactEmail} onChange={event => setProfileForm(current => ({ ...current, mainContactEmail: event.target.value }))} /></label>
               </div>
-              <div className="settings-actions">
+              <div className="pharmacy-settings-actions">
                 <button type="submit" className="btn btn-primary" disabled={profileSaving}><Save size={14} /> {profileSaving ? 'Saving…' : 'Save pharmacy details'}</button>
               </div>
             </form>
           </section>
 
-          <section className="card settings-panel">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Default payment route</p>
-                <h3><CreditCard size={17} /> How new orders take payment</h3>
-              </div>
+          <section className="pharmacy-settings-section">
+            <header>
+              <h3><CreditCard size={16} aria-hidden="true" /> Payment route</h3>
               <span className={`pill ${organisation.defaultPaymentRoute === 'worldpay' ? 'pill-green' : 'pill-neutral'}`}>
                 {organisation.defaultPaymentRoute === 'worldpay' ? 'Worldpay' : 'Pharmacy payment'}
               </span>
-            </div>
+            </header>
+            <p className="pharmacy-settings-section__lead">How new orders take payment. Each order permanently records the route selected when it was created.</p>
 
-            <div className="payment-route-settings" role="radiogroup" aria-label="Default payment route">
+            <div className="pharmacy-settings-route" role="radiogroup" aria-label="Default payment route">
               <button type="button" role="radio" aria-checked={organisation.defaultPaymentRoute === 'manual'} disabled={savingRoute} onClick={() => void setPaymentRoute('manual')}>
                 <span><strong>Pharmacy payment</strong><small>EPOS, cash, bank transfer or another pharmacy-controlled route.</small></span>
-                {organisation.defaultPaymentRoute === 'manual' ? <CheckCircle2 size={16} /> : null}
+                {organisation.defaultPaymentRoute === 'manual' ? <CheckCircle2 size={16} /> : <span />}
               </button>
               <button type="button" role="radio" aria-checked={organisation.defaultPaymentRoute === 'worldpay'} disabled={savingRoute || organisation.worldpay.status !== 'connected'} onClick={() => void setPaymentRoute('worldpay')}>
                 <span><strong>Worldpay hosted checkout</strong><small>{organisation.worldpay.status === 'connected' ? 'Verified merchant connection; settlement goes directly to this pharmacy.' : 'Connect and verify the pharmacy merchant account below first.'}</small></span>
-                {organisation.defaultPaymentRoute === 'worldpay' ? <CheckCircle2 size={16} /> : null}
+                {organisation.defaultPaymentRoute === 'worldpay' ? <CheckCircle2 size={16} /> : <span />}
               </button>
             </div>
 
             {organisation.worldpay.status === 'connected' && (
-              <div className="connection-summary">
+              <div className="pharmacy-settings-connection">
                 <div><span>Environment</span><strong>{organisation.worldpay.environment === 'live' ? 'Live' : 'Try'}</strong></div>
                 <div><span>Merchant entity</span><strong>{organisation.worldpay.merchantId ?? 'Stored'}</strong></div>
-                <div><span>Patient payment route</span><strong>{organisation.defaultPaymentRoute === 'worldpay' ? 'Worldpay' : 'Managed by pharmacy'}</strong></div>
+                <div><span>Patient route</span><strong>{organisation.defaultPaymentRoute === 'worldpay' ? 'Worldpay' : 'Managed by pharmacy'}</strong></div>
               </div>
             )}
 
-            <div className="settings-note"><ShieldCheck size={16} /><span>Worldpay is optional. Connect the merchant here when you are ready. Each order permanently records the route selected when that order is created.</span></div>
+            <p className="pharmacy-settings-note"><ShieldCheck size={15} aria-hidden="true" /><span>Worldpay is optional. Connect the merchant here when you are ready.</span></p>
             <WorldpayConnectionPanel
               organisationId={organisation.id}
               onConnected={connection => {
@@ -319,76 +305,75 @@ export default function PharmacySettings() {
               }}
             />
           </section>
-
         </div>
       ) : (
-        <div className="settings-stack">
+        <div className="pharmacy-settings__flow" id="settings-panel-assets" role="tabpanel" aria-labelledby="settings-tab-assets">
           {linkError ? <div className="banner banner-red" role="alert"><AlertTriangle size={16} /><span>{linkError}</span><button className="btn btn-sm" type="button" onClick={() => setLinkRefresh(value => value + 1)}><RefreshCw size={14} /> Retry</button></div> : null}
-          <div className="alert-success settings-assets-banner">
-            <Link2 size={18} />
-            <div>
-              <strong>Submissions from this link are attributed to {organisation.name}</strong>
-              <span>Keep the token pharmacy-specific. Do not share another pharmacy’s URL.</span>
-            </div>
-          </div>
 
-          <div className="settings-split settings-split--assets">
-            <section className="card settings-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="section-label">Patient intake link</p>
-                  <h3><Link2 size={17} /> Share the eligibility form</h3>
+          <section className="pharmacy-settings-section">
+            <div className="pharmacy-settings-step">
+              <span className="pharmacy-settings-step__number" aria-hidden="true">1</span>
+              <div className="pharmacy-settings-step__body">
+                <header><h3><Link2 size={16} aria-hidden="true" /> Share the eligibility form</h3></header>
+                <p className="pharmacy-settings-section__lead">The form stays hosted by HHH. Use this URL on the pharmacy website, email, or counter materials.</p>
+                <p className="pharmacy-settings-url" aria-live="polite">{linkLoading ? 'Loading the protected pharmacy link…' : formUrl || 'Link unavailable'}</p>
+                <div className="pharmacy-settings-actions">
+                  <button className="btn btn-primary" type="button" disabled={!formUrl} onClick={copyLink}><Copy size={14} /> Copy link</button>
+                  {formUrl ? <a className="btn btn-secondary" href={formUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Preview form</a> : <button className="btn btn-secondary" type="button" disabled><ExternalLink size={14} /> Preview form</button>}
                 </div>
               </div>
-              <p className="settings-copy">The form stays hosted by HHH. Use this URL on the pharmacy website, email, or counter materials.</p>
-              <div className="resource-url" aria-live="polite">{linkLoading ? 'Loading the protected pharmacy link…' : formUrl || 'Link unavailable'}</div>
-              <div className="settings-actions">
-                <button className="btn btn-primary" type="button" disabled={!formUrl} onClick={copyLink}><Copy size={14} /> Copy link</button>
-                {formUrl ? <a className="btn btn-secondary" href={formUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Preview form</a> : <button className="btn btn-secondary" type="button" disabled><ExternalLink size={14} /> Preview form</button>}
-              </div>
-            </section>
-
-            <section className="card settings-panel settings-panel--center">
-              <div className="section-heading">
-                <div>
-                  <p className="section-label">Print-ready QR</p>
-                  <h3><QrCode size={17} /> Leaflets & counter cards</h3>
-                </div>
-              </div>
-              {qr ? (
-                <img className="resource-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
-              ) : (
-                <div className="resource-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>
-              )}
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={!qr}
-                onClick={() => { downloadDataUrl(qr, `${organisation.slug}-eligibility-qr.png`); notify('High-resolution QR code saved.'); }}
-              >
-                <Download size={14} /> Save QR code
-              </button>
-            </section>
-          </div>
-
-          <section className="card settings-panel settings-pack">
-            <div className="settings-pack__copy">
-              <div className="resource-icon"><FileArchive size={20} /></div>
-              <div>
-                <p className="section-label">Developer hand-off</p>
-                <h3>Pharmacy website content pack</h3>
-                <p className="settings-copy">Suggested page copy, hosted-form link, QR usage notes and high-resolution QR image.</p>
-              </div>
             </div>
-            <button
-              className="btn btn-primary"
-              type="button"
-              disabled={!formUrl}
-              onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}
-            >
-              <FileArchive size={15} /> Download content pack (.zip)
-            </button>
           </section>
+
+          <section className="pharmacy-settings-section">
+            <div className="pharmacy-settings-step">
+              <span className="pharmacy-settings-step__number" aria-hidden="true">2</span>
+              <div className="pharmacy-settings-step__body">
+                <header><h3><QrCode size={16} aria-hidden="true" /> Print-ready QR</h3></header>
+                <p className="pharmacy-settings-section__lead">For leaflets and counter cards.</p>
+                {qr ? (
+                  <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
+                ) : (
+                  <div className="pharmacy-settings-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>
+                )}
+                <div className="pharmacy-settings-actions">
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    disabled={!qr}
+                    onClick={() => { downloadDataUrl(qr, `${organisation.slug}-eligibility-qr.png`); notify('High-resolution QR code saved.'); }}
+                  >
+                    <Download size={14} /> Save QR code
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="pharmacy-settings-section">
+            <div className="pharmacy-settings-step">
+              <span className="pharmacy-settings-step__number" aria-hidden="true">3</span>
+              <div className="pharmacy-settings-step__body">
+                <header><h3><FileArchive size={16} aria-hidden="true" /> Website content pack</h3></header>
+                <p className="pharmacy-settings-section__lead">Suggested page copy, hosted-form link, QR usage notes and high-resolution QR image, for your developer.</p>
+                <div className="pharmacy-settings-actions">
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    disabled={!formUrl}
+                    onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}
+                  >
+                    <FileArchive size={15} /> Download content pack (.zip)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <p className="pharmacy-settings-attribution">
+            <Link2 size={14} aria-hidden="true" />
+            <span>Submissions from this link are attributed to {organisation.name}. Keep the token pharmacy-specific — do not share another pharmacy&rsquo;s URL.</span>
+          </p>
         </div>
       )}
     </div>

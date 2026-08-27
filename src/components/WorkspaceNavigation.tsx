@@ -1,4 +1,4 @@
-import { MoreHorizontal, X } from 'lucide-react';
+import { MoreHorizontal, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useModalFocus } from '../accessibility/useModalFocus';
 
@@ -13,6 +13,17 @@ export interface WorkspaceNavItem<Key extends string = string> {
 export interface WorkspaceNavGroup<Key extends string = string> {
   label: string;
   items: WorkspaceNavItem<Key>[];
+}
+
+const COLLAPSE_STORAGE_KEY = 'hhh_workspace_sidebar_collapsed';
+
+/** Reading storage can throw in private modes, so a failure just means expanded. */
+function readCollapsedPreference() {
+  try {
+    return window.localStorage.getItem(COLLAPSE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
 }
 
 interface WorkspaceNavigationProps<Key extends string> {
@@ -41,6 +52,7 @@ export default function WorkspaceNavigation<Key extends string>({
   moreTitle = 'More workspace tools',
 }: WorkspaceNavigationProps<Key>) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readCollapsedPreference);
   const mobileMenuRef = useModalFocus<HTMLElement>(mobileMenuOpen, () => setMobileMenuOpen(false));
   const items = groups.flatMap(group => group.items);
   const mobilePrimary = mobilePrimaryKeys.map(key => items.find(item => item.key === key)).filter((item): item is WorkspaceNavItem<Key> => Boolean(item));
@@ -56,6 +68,16 @@ export default function WorkspaceNavigation<Key extends string>({
     return () => media.removeEventListener('change', closeDesktopSheet);
   }, []);
 
+  useEffect(() => {
+    document.body.classList.toggle('has-collapsed-sidebar', collapsed);
+    try {
+      window.localStorage.setItem(COLLAPSE_STORAGE_KEY, String(collapsed));
+    } catch {
+      // A viewer preference is not worth failing the render over.
+    }
+    return () => document.body.classList.remove('has-collapsed-sidebar');
+  }, [collapsed]);
+
   const navigate = (key: Key) => {
     onNavigate(key);
     setMobileMenuOpen(false);
@@ -68,6 +90,7 @@ export default function WorkspaceNavigation<Key extends string>({
       className={`sidebar-item ${activeKey === item.key ? 'active' : ''}`}
       onClick={() => navigate(item.key)}
       aria-current={activeKey === item.key ? 'page' : undefined}
+      aria-label={collapsed ? item.label : undefined}
       title={item.label}
     >
       <span className="sidebar-item-content">{item.icon}<span>{item.label}</span></span>
@@ -77,7 +100,7 @@ export default function WorkspaceNavigation<Key extends string>({
 
   return (
     <>
-      <aside className="sidebar workspace-sidebar" aria-label={ariaLabel}>
+      <aside className={`sidebar workspace-sidebar${collapsed ? ' is-collapsed' : ''}`} aria-label={ariaLabel}>
         <div className="sidebar-header">
           <div className="sidebar-brand" title={brand.title}>
             {brand.logo
@@ -92,6 +115,16 @@ export default function WorkspaceNavigation<Key extends string>({
                 : <small>{brand.subtitle}</small>}
             </span>
           </div>
+          <button
+            type="button"
+            className="sidebar-collapse"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            title={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+            onClick={() => setCollapsed(value => !value)}
+          >
+            {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
+          </button>
         </div>
         <nav className="sidebar-menu" aria-label={`${ariaLabel} navigation`}>
           {groups.map((group, index) => (
