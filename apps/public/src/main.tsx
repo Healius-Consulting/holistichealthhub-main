@@ -1,7 +1,5 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Analytics } from '@vercel/analytics/react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 import '../../../src/index.css';
 import EligibilityApp from '../../eligibility/src/EligibilityApp';
 import PaymentReturn from '../../../src/pages/PaymentReturn';
@@ -17,18 +15,6 @@ setApiSecurityTokenProvider(async () => {
   const token = await readPublicAppCheckToken();
   return token ? { 'X-Firebase-AppCheck': token } : {};
 });
-
-/** Drop query/hash so eligibility tokens and payment params never reach Vercel. */
-function stripPublicTrackingUrl<T extends { url: string }>(event: T): T | null {
-  try {
-    const url = new URL(event.url);
-    url.search = '';
-    url.hash = '';
-    return { ...event, url: url.toString() };
-  } catch {
-    return null;
-  }
-}
 
 export function PublicApp() {
   const location = usePublicLocation();
@@ -48,8 +34,6 @@ if (canonicalRedirect) {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <PublicApp />
-      <Analytics beforeSend={stripPublicTrackingUrl} />
-      <SpeedInsights beforeSend={stripPublicTrackingUrl} />
     </StrictMode>,
   );
 }
