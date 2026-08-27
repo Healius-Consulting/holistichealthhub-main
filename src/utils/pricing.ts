@@ -15,8 +15,41 @@
 /** Supplier cost. Always qualified, because the quoted figure excludes VAT. */
 export const WHOLESALE_LABEL = 'Wholesale (excl. VAT)';
 
+/**
+ * Compact label for narrow columns (picker rows, rail line economics). Pair with
+ * `title={WHOLESALE_LABEL}` / sr-only so the excl.-VAT meaning is not lost.
+ */
+export const WHOLESALE_LABEL_SHORT = 'Wholesale';
+
 /** The patient's medicines subtotal, before the dispensing charge. */
 export const PATIENT_PRICE_LABEL = 'Patient price';
+
+/** Quiet section heading above wholesale + delivery (Curaleaf cost to the pharmacy). */
+export const PHARMACY_COST_LABEL = 'Pharmacy cost';
+
+/**
+ * Gross margin is healthy from this percentage upward (inclusive). Below it,
+ * surfaces use the warn tone so staff notice thin or negative margins.
+ */
+export const MARGIN_HEALTHY_PCT = 20;
+
+/**
+ * Tone class for a margin percentage. `null` when the margin is unknown
+ * (no wholesale yet) — callers leave the value unstyled.
+ */
+export function marginToneClass(marginPct: number | null): 'is-good' | 'is-warn' | '' {
+  if (marginPct === null || !Number.isFinite(marginPct)) return '';
+  return marginPct >= MARGIN_HEALTHY_PCT ? 'is-good' : 'is-warn';
+}
+
+/**
+ * Percentage of `basis` that `contribution` represents. Null when either side
+ * is unknown so tone helpers do not treat an unquoted basket as 0%.
+ */
+export function marginPercent(contribution: number | null, basis: number): number | null {
+  if (contribution === null || !Number.isFinite(contribution) || !(basis > 0)) return null;
+  return Math.round((contribution / basis) * 100);
+}
 
 /**
  * The one house format for a margin: signed cash first, then the percentage of
@@ -28,6 +61,6 @@ export const PATIENT_PRICE_LABEL = 'Patient price';
  */
 export function formatMargin(contribution: number | null, basis: number): string {
   if (contribution === null || !Number.isFinite(contribution)) return 'Pending';
-  const pct = basis > 0 ? Math.round((contribution / basis) * 100) : 0;
+  const pct = marginPercent(contribution, basis) ?? 0;
   return `${contribution < 0 ? '−' : '+'}£${Math.abs(contribution).toFixed(2)} (${pct}%)`;
 }

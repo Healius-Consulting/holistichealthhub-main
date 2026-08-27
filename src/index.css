@@ -252,12 +252,6 @@
 .secure-overview__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .overview-handover-toggle[aria-pressed='true'] { box-shadow: inset 0 0 0 1px rgb(20 38 27 / 8%); }
 .overview-today .summary-tiles { margin: 0; }
-.overview-priority-meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin: 0.25rem 0 0; color: var(--text-muted, #526157); font-size: 0.8125rem; }
-.overview-priority-meta span:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
-.overview-priority-item--payment .overview-kind { color: #b45309; }
-.overview-priority-item--repeat .overview-kind { color: #0369a1; }
-.overview-priority-item--collection .overview-kind { color: #b91c1c; }
-.overview-priority-item--cancellation .overview-kind { color: #b91c1c; }
 .overview-summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.75rem; }
 .overview-summary-tile { display: grid; gap: 0.25rem; min-height: 7.25rem; padding: 1rem; border: 1px solid var(--border-subtle, #d9e0da); border-radius: 0.75rem; background: var(--surface-elevated, #fff); }
 .overview-summary-tile > span { color: var(--text-muted, #526157); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -272,13 +266,153 @@
 .overview-priority-list,
 .overview-recent ul,
 .integration-health ul { margin: 0; padding: 0; list-style: none; }
-.overview-priority-list li { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 0; border-top: 1px solid var(--border-subtle, #d9e0da); }
-.overview-priority-list li:first-child { border-top: 0; }
-.overview-priority-list p { margin: 0.25rem 0; color: var(--text-muted, #526157); }
-.overview-kind { display: block; margin-bottom: 0.2rem; color: var(--accent, #146c43); font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
-.overview-empty,
+
+/* ── Needs you ──────────────────────────────────────────────────────────────
+   The queue is a worklist, not a brochure. The kind is stated once per group;
+   each row is a single dense hit target that opens the record. */
+.overview-queue__groups{
+  display: grid;
+  gap: 14px;
+}
+
+.overview-priority-group__head{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+}
+
+/* Quiet by default: a small tinted dot carries the kind, the words stay grey. */
+.overview-priority-group__label{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.overview-priority-group__label::before{
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--overview-kind-tone, var(--text-tertiary));
+}
+
+.overview-priority-group__count{
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-elevated);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.overview-priority-group--cancellation,
+.overview-priority-group--collection{ --overview-kind-tone: var(--color-danger); }
+.overview-priority-group--supplier,
+.overview-priority-group--payment{ --overview-kind-tone: var(--color-warning); }
+.overview-priority-group--repeat{ --overview-kind-tone: var(--text-tertiary); }
+
+.overview-priority-list li + li{
+  border-top: 1px solid var(--border-subtle, var(--border));
+}
+
+.overview-priority-row{
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.overview-priority-row:hover{
+  background: var(--bg-elevated);
+}
+
+.overview-priority-row:focus-visible{
+  outline: 2px solid var(--tenant-primary, var(--color-success));
+  outline-offset: -2px;
+}
+
+.overview-priority-row__identity{
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.overview-priority-row__identity strong{
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-priority-row__ref{
+  color: var(--text-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.overview-priority-row__summary{
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-priority-row__age{
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.overview-priority-row__go{
+  color: var(--text-tertiary);
+  flex: 0 0 auto;
+}
+
+.overview-priority-row:hover .overview-priority-row__go{
+  color: var(--text-secondary);
+}
+
+/* Nothing waiting is good news, not an empty shelf: one calm line, no 3rem well. */
+.overview-queue__clear{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.overview-queue__clear svg{
+  flex: 0 0 auto;
+  color: var(--color-success);
+}
 .overview-state { display: grid; justify-items: center; gap: 0.5rem; padding: 3rem 1rem; color: var(--text-muted, #526157); text-align: center; }
-.overview-empty strong,
 .overview-state h2 { color: var(--text-primary, #17241c); }
 .overview-state h2,
 .overview-state p { margin: 0; }
@@ -473,8 +607,16 @@
   .overview-summary-grid,
   .pipeline-grid,
   .handover-grid { grid-template-columns: 1fr; }
-  .overview-priority-list li { align-items: flex-start; flex-direction: column; }
-  .overview-priority-list button { min-height: 2.75rem; }
+  /* Narrow: identity and age share the top line, the summary wraps under them,
+     and the whole row keeps a 44px target. */
+  .overview-priority-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    min-height: 44px;
+  }
+  .overview-priority-row__summary {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
   .integration-health li { grid-template-columns: 1fr auto; }
   .integration-health li small { grid-column: 1 / -1; text-align: left; }
   .overview-enquiry-notice { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
@@ -7627,7 +7769,11 @@ html.modal-open .page-container{ overflow: hidden; }
   }
 }
 
-/* ---- Patient CRM dialog ---- */
+/* Parked keep-alive CRM board: mounted so the other board's record can be opened
+   in a portaled dialog, but never laid out or reachable while it is hidden. */
+.crm-screen-parked{
+  display: none !important;
+}
 
 .crm-dialog__scrim{
   position: fixed;
@@ -7850,6 +7996,9 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 .patient-order-lines tbody tr:last-child :is(th, td){ border-bottom: 0; }
 .patient-order-lines__margin{ color: var(--text-primary); font-weight: 700; }
+/* Shared margin tone vocabulary — healthy from MARGIN_HEALTHY_PCT up, warn below. */
+.patient-order-lines__margin.is-good{ color: var(--color-success); }
+.patient-order-lines__margin.is-warn{ color: var(--color-warning); }
 /* The medicine label styles itself as a block chip elsewhere; in a table cell it is
    just the row's name, so it sits inline and lets the row set the rhythm. */
 .patient-order-lines .pendulum-text{ display: inline; background: none; padding: 0; }
@@ -14773,7 +14922,10 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.order-fulfilment-item-card__margin.is-low{
+.order-fulfilment-item-card__margin.is-good{
+  color: var(--color-success);
+}
+.order-fulfilment-item-card__margin.is-warn{
   color: var(--color-warning);
 }
 .order-fulfilment-item-card__body{
@@ -14822,7 +14974,10 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-fulfilment-item-card__metric--margin{
   color: var(--color-success);
 }
-.order-fulfilment-item-card__metric--margin.is-low{
+.order-fulfilment-item-card__metric--margin.is-good{
+  color: var(--color-success);
+}
+.order-fulfilment-item-card__metric--margin.is-warn{
   color: var(--color-warning);
 }
 .order-fulfilment-item-card__metric--margin strong{
@@ -16685,7 +16840,7 @@ html[data-theme='dark'] .auth-loading-page{
 }
 
 .rx-workbench--guided .manual-rx-picker__results button{
-  grid-template-columns: minmax(0, 1.6fr) 108px 92px 92px 76px 88px;
+  grid-template-columns: minmax(0, 1.6fr) 100px 100px 88px 124px 88px;
   align-items: center;
   gap: 10px 12px;
   min-height: 64px;
@@ -16757,7 +16912,7 @@ html[data-theme='dark'] .auth-loading-page{
 
 @media (max-width: 1080px){
   .rx-workbench--guided .manual-rx-picker__results button{
-    grid-template-columns: minmax(0, 1.4fr) 88px 84px 84px 88px;
+    grid-template-columns: minmax(0, 1.4fr) 88px 84px 120px 88px;
   }
 
   .rx-workbench--guided .manual-rx-picker__pack{ display: none; }
@@ -16964,10 +17119,36 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
 /*
  * Glow only — never opacity. A dimming pulse on a button reads as "disabled",
  * which is exactly the wrong signal for a step that has just become available.
+ * The continue CTA needs a louder ring than the step-2 rail marker so staff
+ * notice the next action without hunting.
  */
 @keyframes rxGuidedActivePulse{
-  0%, 100%{ box-shadow: 0 0 0 0 color-mix(in srgb, var(--tenant-primary) 0%, transparent); }
-  50%{ box-shadow: 0 0 8px 1px color-mix(in srgb, var(--tenant-primary) 45%, transparent); }
+  0%, 100%{
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--tenant-primary) 55%, transparent),
+      0 0 0 0 color-mix(in srgb, var(--tenant-primary) 0%, transparent);
+  }
+  50%{
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--tenant-primary) 80%, white 10%),
+      0 0 16px 4px color-mix(in srgb, var(--tenant-primary) 55%, transparent);
+  }
+}
+
+@keyframes rxContinueReadyPulse{
+  0%, 100%{
+    transform: translateY(0);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--tenant-primary) 45%, white 20%),
+      0 4px 12px color-mix(in srgb, var(--tenant-primary) 28%, transparent);
+  }
+  50%{
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--tenant-primary) 75%, white 15%),
+      0 0 22px 6px color-mix(in srgb, var(--tenant-primary) 50%, transparent),
+      0 8px 18px color-mix(in srgb, var(--tenant-primary) 22%, transparent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -17167,6 +17348,9 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
 }
 
 .rx-order-summary-rail__headline strong{
+  /* The patient line price is the headline's right-hand anchor whether or not the
+     pack count is sharing the row with it. */
+  margin-left: auto;
   color: var(--text-primary);
   font-size: 16px;
   font-weight: 700;
@@ -17205,6 +17389,7 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .rx-order-summary-rail__economics dd{
@@ -17213,12 +17398,37 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-size: 12px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
+/* − + then the pack count they change, with remove pushed to the far right so a
+   destructive tap is nowhere near the quantity controls. */
 .rx-order-summary-rail__edit{
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-top: 2px;
+}
+
+.rx-order-summary-rail__edit-qty{
+  margin-left: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rx-order-summary-rail__edit-remove{
+  margin-left: auto;
+}
+
+/* Touch gets the full 44px target; the rail is too narrow to spend it on a mouse. */
+@media (pointer: coarse){
+  .rx-order-summary-rail__edit .icon-button{
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 .rx-order-summary-rail__totals{
@@ -17243,11 +17453,34 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-size: 11px;
 }
 
-/* Wholesale is what the pharmacy pays; everything below the rule is what the
-   patient is charged, so the two halves of the ledger are visually separated. */
+/* Wholesale + delivery sit above the rule (Curaleaf cost to the pharmacy);
+   dispensing and patient figures sit below. */
 .rx-order-summary-rail__totals > div.is-ruled{
   padding-top: 8px;
   border-top: 1px solid var(--border);
+}
+
+/* Quiet heading over wholesale + delivery. Named for the ledger it sits in, not
+   for the rail's structural sections — sharing that class stripped their padding. */
+.rx-order-summary-rail__totals-heading{
+  margin: 0 0 2px;
+  padding: 0;
+  border: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rx-order-summary-rail__totals-heading dt{
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.rx-order-summary-rail__totals-heading dd{
+  display: none;
 }
 
 .rx-order-summary-rail__totals > div dd{
@@ -17281,6 +17514,14 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-weight: 700;
 }
 
+.rx-order-summary-rail__margin dd.is-good{
+  color: var(--tenant-primary-strong);
+}
+
+.rx-order-summary-rail__margin dd.is-warn{
+  color: #a56208;
+}
+
 .rx-order-summary-rail__alert{
   display: flex;
   align-items: flex-start;
@@ -17295,16 +17536,29 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   margin: 0 16px 16px;
 }
 
-/* Decorative nudge once the step is satisfied; the enabled state carries the meaning. */
+/* Louder than the default primary fill: ring + lift so "ready to continue" reads
+   as an invitation, not just another teal button. */
 .rx-order-summary-rail__continue.is-ready{
-  animation: rxGuidedActivePulse 2.4s ease-in-out infinite;
+  animation: rxContinueReadyPulse 1.8s ease-in-out infinite;
+  outline: 2px solid color-mix(in srgb, var(--tenant-primary) 65%, white 20%);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce){
-  .rx-order-summary-rail__continue.is-ready{ animation: none; }
+  .rx-order-summary-rail__continue.is-ready{
+    animation: none;
+    outline: 3px solid color-mix(in srgb, var(--tenant-primary) 70%, white 15%);
+    outline-offset: 3px;
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--tenant-primary) 35%, transparent);
+  }
 }
 
-html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{ animation: none; }
+html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
+  animation: none;
+  outline: 3px solid color-mix(in srgb, var(--tenant-primary) 70%, white 15%);
+  outline-offset: 3px;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--tenant-primary) 35%, transparent);
+}
 
 .rx-step4-panel__body{
   display: flex;
@@ -17409,6 +17663,27 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{ anim
 .rx-step4-ledger > div.is-ruled{
   padding-top: 8px;
   border-top: 1px solid var(--border);
+}
+
+.rx-step4-ledger__section{
+  margin: 0 0 4px;
+  padding: 0;
+  border: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rx-step4-ledger__section dt{
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.rx-step4-ledger__section dd{
+  display: none;
 }
 
 .rx-step4-ledger > div.is-total{

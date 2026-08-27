@@ -2,11 +2,15 @@ import { AlertTriangle, CheckCircle, Minus, Plus, Trash2 } from 'lucide-react';
 import MedicineLabel from '../../components/MedicineLabel';
 import {
   PATIENT_PRICE_LABEL,
+  PHARMACY_COST_LABEL,
   WHOLESALE_LABEL,
+  WHOLESALE_LABEL_SHORT,
   formatMargin,
   lineContribution,
   lineCost,
   lineRevenue,
+  marginPercent,
+  marginToneClass,
   money,
   type CRMPatient,
 } from '../../context/AppContext';
@@ -130,6 +134,10 @@ export default function OrderSummaryRail({
             <ul className="rx-order-summary-rail__items">
               {draftBasketItems.map((item, index) => {
                 const issue = draftBasketIssues[index];
+                const packLabel = `${item.qty} pack${item.qty === 1 ? '' : 's'}`;
+                // When the quantity is editable the pack count belongs next to the
+                // −/+ that change it, not stranded opposite the price.
+                const editable = canEditBasketItems && item.rxId === selectedRxId;
                 return (
                   <li key={`${item.rxId}-${item.productId}`} className={issue ? `is-${issue.tone}` : undefined}>
                     {/* The name gets the full rail width so its marquee frame has room to read. */}
@@ -137,7 +145,7 @@ export default function OrderSummaryRail({
                       <MedicineLabel name={item.name} />
                     </div>
                     <div className="rx-order-summary-rail__headline">
-                      <span>{item.qty} pack{item.qty === 1 ? '' : 's'}</span>
+                      {editable ? null : <span>{packLabel}</span>}
                       <strong>{money(lineRevenue(item))}</strong>
                     </div>
                     {issue ? (
@@ -148,7 +156,7 @@ export default function OrderSummaryRail({
                     ) : null}
                     <dl className="rx-order-summary-rail__economics">
                       <div>
-                        <dt>{WHOLESALE_LABEL}</dt>
+                        <dt title={WHOLESALE_LABEL}>{WHOLESALE_LABEL_SHORT}</dt>
                         <dd>{item.cost !== null ? money(lineCost(item)) : 'Pending'}</dd>
                       </div>
                       <div>
@@ -156,11 +164,13 @@ export default function OrderSummaryRail({
                         <dd>{formatMargin(lineContribution(item), lineRevenue(item))}</dd>
                       </div>
                     </dl>
-                    {canEditBasketItems && item.rxId === selectedRxId ? (
+                    {editable ? (
                       <div className="rx-order-summary-rail__edit">
                         <button type="button" className="icon-button" aria-label={`Reduce packs of ${item.name}`} disabled={item.qty <= 1} onClick={() => onEditQuantity(item.rxId, item.productId, item.qty - 1)}><Minus size={14} /></button>
                         <button type="button" className="icon-button" aria-label={`Add pack of ${item.name}`} disabled={item.qty >= 100} onClick={() => onEditQuantity(item.rxId, item.productId, item.qty + 1)}><Plus size={14} /></button>
-                        <button type="button" className="icon-button danger" aria-label={`Remove ${item.name}`} onClick={() => onRemoveItem(item.rxId, item.productId)}><Trash2 size={14} /></button>
+                        {/* Reads out the new count after −/+ without a second live region. */}
+                        <span className="rx-order-summary-rail__edit-qty" aria-live="polite">{packLabel}</span>
+                        <button type="button" className="icon-button danger rx-order-summary-rail__edit-remove" aria-label={`Remove ${item.name}`} onClick={() => onRemoveItem(item.rxId, item.productId)}><Trash2 size={14} /></button>
                       </div>
                     ) : null}
                   </li>
@@ -176,15 +186,19 @@ export default function OrderSummaryRail({
             ) : null}
 
             <dl className="rx-order-summary-rail__totals">
+              <div className="rx-order-summary-rail__totals-heading" role="presentation">
+                <dt>{PHARMACY_COST_LABEL}</dt>
+                <dd aria-hidden="true" />
+              </div>
               <div>
                 <dt>{WHOLESALE_LABEL}</dt>
                 <dd>{draftBasketCosts ? money(draftBasketCosts.wholesale) : 'Quote pending'}</dd>
               </div>
-              <div className="is-ruled">
+              <div>
                 <dt>Delivery</dt>
                 <dd>{draftBasketCosts ? money(draftBasketCosts.delivery) : 'Quote pending'}</dd>
               </div>
-              <div>
+              <div className="is-ruled">
                 <dt>Dispensing</dt>
                 <dd>{money(dispensingFee)}</dd>
               </div>
@@ -198,7 +212,9 @@ export default function OrderSummaryRail({
               </div>
               <div className="rx-order-summary-rail__margin">
                 <dt>Gross margin</dt>
-                <dd>{formatMargin(grossMargin, draftBasketTotal)}</dd>
+                <dd className={marginToneClass(marginPercent(grossMargin, draftBasketTotal))}>
+                  {formatMargin(grossMargin, draftBasketTotal)}
+                </dd>
               </div>
             </dl>
           </>

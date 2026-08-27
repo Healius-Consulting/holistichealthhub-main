@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import { money, useApp } from '../context/AppContext';
+import { PATIENT_PRICE_LABEL, PHARMACY_COST_LABEL, WHOLESALE_LABEL, money, useApp } from '../context/AppContext';
 import { getPharmacyPrescriptionFinance } from '../shared/api';
 import type { PharmacyPrescriptionFinanceReport } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
@@ -330,7 +330,7 @@ export default function PharmacyFinance() {
               <span className="pharmacy-finance__hero-note">
                 {totals.wholesalePendingForCount
                   ? `${totals.wholesaleKnownForCount} of ${totals.paidPrescriptionCount} realised orders costed`
-                  : 'Patient total − quoted products and shipping'}
+                  : `Patient total − ${PHARMACY_COST_LABEL.toLowerCase()}`}
                 {totals.wholesaleEstimatedForCount
                   ? ` · ${totals.wholesaleEstimatedForCount} estimated from the quote bank`
                   : ''}
@@ -343,14 +343,14 @@ export default function PharmacyFinance() {
                 <small>incl. {pounds(totals.dispensingFeesPence)} dispensing</small>
               </div>
               <div>
-                <dt>Quoted cost</dt>
+                <dt>{PHARMACY_COST_LABEL}</dt>
                 <dd>{pounds(totals.wholesalePence)}</dd>
-                <small>Excl. VAT · products {pounds(totals.wholesaleProductPence)} + shipping {pounds(totals.shippingPence)}</small>
+                <small>{WHOLESALE_LABEL} {pounds(totals.wholesaleProductPence)} + delivery {pounds(totals.shippingPence)}</small>
               </div>
               <div>
                 <dt>Product margin</dt>
                 <dd>{pounds(totals.productMarginPence)}</dd>
-                <small>Patient product price less quoted product cost (excl. VAT)</small>
+                <small>{PATIENT_PRICE_LABEL} less {WHOLESALE_LABEL}</small>
               </div>
             </dl>
           </section>
@@ -401,7 +401,7 @@ export default function PharmacyFinance() {
                       <th>Order</th>
                       <th>Status</th>
                       <th>Patient total</th>
-                      <th>Quoted cost</th>
+                      <th>{PHARMACY_COST_LABEL}</th>
                       <th>Margin</th>
                       <th>Contribution</th>
                     </tr>
@@ -421,7 +421,7 @@ export default function PharmacyFinance() {
                             </span>
                           </td>
                           <td data-label="Patient total"><FinancialValue value={record.patientRevenuePence} /></td>
-                          <td data-label="Quoted cost"><FinancialValue value={record.wholesalePence} estimated={record.wholesaleEstimated} /></td>
+                          <td data-label={PHARMACY_COST_LABEL}><FinancialValue value={record.wholesalePence} estimated={record.wholesaleEstimated} /></td>
                           <td data-label="Margin"><FinancialValue value={record.productMarginPence} estimated={record.wholesaleEstimated} /></td>
                           <td data-label="Contribution" className="pharmacy-finance__contribution">
                             {pending

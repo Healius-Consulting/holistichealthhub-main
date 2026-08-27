@@ -38,20 +38,15 @@ async function readResendApiKey() {
 
 async function providerConfig(): Promise<ProviderConfig | null> {
   const resendApiKey = process.env.RESEND_API_KEY?.trim();
-  // The sending domain used to lag the brand domain: links and portal CTAs were on
-  // holistichealthhub.live while the Resend DKIM key and SES feedback MX existed only
-  // on holistichealthhub.cc, so the From address stayed on .cc to avoid silently
-  // breaking outbound mail. Those records are now published on .live —
-  //
-  //   send.holistichealthhub.live      TXT  v=spf1 include:amazonses.com ~all
-  //   send.holistichealthhub.live      MX   10 feedback-smtp.eu-west-1.amazonses.com
-  //   resend._domainkey.holistichealthhub.live  TXT  p=MIGfMA0GCSqGSIb3DQEB...
-  //
-  // — so the default is .live, which also puts the From address on the same domain as
-  // the links in the body rather than leaving a cross-domain mismatch for spam
-  // filters to score. EMAIL_FROM_ADDRESS still overrides, so .cc remains one env var
-  // away if a rollback is ever needed.
-  const resendFrom = process.env.EMAIL_FROM_ADDRESS?.trim() || 'noreply@holistichealthhub.live';
+  // Default From is the verified Resend domain on .live (SPF/DKIM/MX on
+  // send.holistichealthhub.live). An older Cloud Run override kept
+  // noreply@holistichealthhub.cc after that domain was dropped from Resend,
+  // which made every outbox send fail with 403. Map the retired .cc address
+  // onto .live so a stale env var cannot break delivery again.
+  const configuredFrom = process.env.EMAIL_FROM_ADDRESS?.trim() || 'noreply@holistichealthhub.live';
+  const resendFrom = /@holistichealthhub\.cc$/i.test(configuredFrom)
+    ? configuredFrom.replace(/@holistichealthhub\.cc$/i, '@holistichealthhub.live')
+    : configuredFrom;
   const resolvedResendApiKey = resendApiKey || await readResendApiKey();
   if (resolvedResendApiKey && resendFrom) {
     return { kind: 'resend' as const, apiKey: resolvedResendApiKey, from: resendFrom };

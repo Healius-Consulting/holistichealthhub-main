@@ -386,17 +386,14 @@ export interface PlatformIntegration {
 export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | 'finance' | 'settings';
 
 /**
- * Where to send the operator back to when they close the record they navigated into.
- * Opening an order from a patient — or a patient from an order — is a detour, not a
- * departure: closing the second record must land back on the first one, still open.
+ * Which record a board should open. Opening an order from a patient — or a patient
+ * from an order — is not a departure at all: both CRM boards stay mounted, so the
+ * target board raises its own portaled dialog over the tab the operator is already
+ * on. There is nothing to bounce back to, so no return target is carried.
  */
-export type RecordReturnTarget =
-  | { kind: 'patient'; id: string }
-  | { kind: 'order'; key: string };
-
 export type NavigationTarget =
-  | { kind: 'patient'; id: string; returnTo?: RecordReturnTarget }
-  | { kind: 'order'; key: string; returnTo?: RecordReturnTarget }
+  | { kind: 'patient'; id: string }
+  | { kind: 'order'; key: string }
   | { kind: 'catalogue'; query: string }
   | null;
 
@@ -474,7 +471,7 @@ export const lineContribution = (item: LineItem) => item.cost === null ? null : 
 /* The money vocabulary itself lives in utils/pricing so it is testable without
    React; it is re-exported here because every screen already imports from the
    app context for money(), lineRevenue() and friends. */
-export { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin } from '../utils/pricing';
+export { PATIENT_PRICE_LABEL, PHARMACY_COST_LABEL, WHOLESALE_LABEL, WHOLESALE_LABEL_SHORT, MARGIN_HEALTHY_PCT, formatMargin, marginPercent, marginToneClass } from '../utils/pricing';
 
 function prescriptionIsPaymentReady(prescription: Prescription) {
   const sourceVerified = prescription.entryMode === 'manual'

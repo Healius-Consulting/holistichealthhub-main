@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, LayoutGrid, List, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
-import { WHOLESALE_LABEL, formatMargin, getUnresolvedReason, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
-import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry, RecordReturnTarget } from '../context/AppContext';
+import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, getUnresolvedReason, marginPercent, marginToneClass, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
+import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
@@ -291,7 +291,6 @@ export default function Patients() {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<PatientDirectoryFilter>('all');
   const [selectedKey, setSelectedKey] = useState<string | null>(() => selectedCrmKeyFromSearch(window.location.search));
-  const [returnTarget, setReturnTarget] = useState<RecordReturnTarget | null>(null);
   const [showClosed, setShowClosed] = useState(false);
   // Board is the triage view; List is the same records with the contact detail the
   // narrow lane cards have no room for. Both read the same search and declined filters.
@@ -429,18 +428,12 @@ export default function Patients() {
       setActiveFilter('all');
       setSearch('');
       setSelectedKey(record.key);
-      // Opening a patient from an order is a detour. Closing returns to that order.
-      setReturnTarget(target.returnTo ?? null);
     }
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, records, state.navigationTarget]);
 
   const closeRecord = () => {
     setSelectedKey(null);
-    if (!returnTarget) return;
-    dispatch({ type: 'SET_NAVIGATION_TARGET', target: returnTarget });
-    dispatch({ type: 'SET_SCREEN', screen: 'orders' });
-    setReturnTarget(null);
   };
 
   const handleCreateOrder = (patient: UnifiedPatient) => {
@@ -568,17 +561,11 @@ export default function Patients() {
                 dispatch({ type: 'ADD_TOAST', message: 'Patient conditions updated.', toastType: 'success', dedupeKey: 'patient-conditions' });
               }}
               onOpenOrder={order => {
-                // Carry the patient back with us: closing the order returns here with
-                // this record still open, instead of dumping the operator on the board.
+                // Stay on Patients: Orders is keep-alive mounted and opens a portaled dialog.
                 dispatch({
                   type: 'SET_NAVIGATION_TARGET',
-                  target: {
-                    kind: 'order',
-                    key: String(order.id),
-                    ...(selected.patient?.crmPatient?.id ? { returnTo: { kind: 'patient' as const, id: selected.patient.crmPatient.id } } : {}),
-                  },
+                  target: { kind: 'order', key: String(order.id) },
                 });
-                dispatch({ type: 'SET_SCREEN', screen: 'orders' });
               }}
             />
           ) : (
@@ -1030,7 +1017,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, o
                             <tr>
                               <th scope="col">Item</th>
                               <th scope="col">Qty</th>
-                              <th scope="col">Patient price</th>
+                              <th scope="col">{PATIENT_PRICE_LABEL}</th>
                               <th scope="col">{WHOLESALE_LABEL}</th>
                               <th scope="col">Margin</th>
                             </tr>
@@ -1048,7 +1035,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, o
                                   <td>{quantity}</td>
                                   <td>{money(patientTotal)}</td>
                                   <td>{costKnown ? money(item.cost! * quantity) : EMPTY_FIELD}</td>
-                                  <td className="patient-order-lines__margin">
+                                  <td className={`patient-order-lines__margin ${costKnown ? marginToneClass(marginPercent(patientTotal - item.cost! * quantity, patientTotal)) : ''}`.trimEnd()}>
                                     {costKnown
                                       ? formatMargin(patientTotal - item.cost! * quantity, patientTotal)
                                       : <span className="patient-order-lines__unknown">Awaiting quote</span>}

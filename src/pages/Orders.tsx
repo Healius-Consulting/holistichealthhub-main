@@ -32,12 +32,14 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
+  PATIENT_PRICE_LABEL,
   WHOLESALE_LABEL,
   formatMargin,
   lineContribution,
   lineCost,
   lineMargin,
   lineRevenue,
+  marginToneClass,
   money,
   orderReference,
   rxRevenue,
@@ -48,7 +50,6 @@ import {
   type PatientOrder,
   type PaymentStatus,
   type Prescription,
-  type RecordReturnTarget,
 } from '../context/AppContext';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
@@ -400,7 +401,6 @@ export default function Orders() {
   const [query, setQuery] = useState('');
   const [searchScope, setSearchScope] = useState<OrderSearchScope>('all');
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
-  const [returnTarget, setReturnTarget] = useState<RecordReturnTarget | null>(null);
   const [manualForms, setManualForms] = useState<Record<number, ManualPaymentForm>>({});
   const [submittingOrderId, setSubmittingOrderId] = useState<number | null>(null);
   const [receiptDrafts, setReceiptDrafts] = useState<Record<number, GoodsReceiptDraft>>({});
@@ -498,18 +498,12 @@ export default function Orders() {
       setActiveFilter(['resolved', 'refunded'].includes(orderCancellationResolution(targetRecord.order)) ? 'cancelled' : 'current');
       setQuery('');
       setSelectedOrderId(orderId);
-      // Opening an order from a patient is a detour. Closing returns to that patient.
-      setReturnTarget(target.returnTo ?? null);
     }
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, records, state.navigationTarget]);
 
   const closeOrderRecord = () => {
     setSelectedOrderId(null);
-    if (!returnTarget) return;
-    dispatch({ type: 'SET_NAVIGATION_TARGET', target: returnTarget });
-    dispatch({ type: 'SET_SCREEN', screen: 'patients' });
-    setReturnTarget(null);
   };
 
   const selected = selectedOrderId === null ? null : filtered.find(record => record.order.id === selectedOrderId) ?? null;
@@ -1477,12 +1471,11 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
 
   const openPatientRecord = () => {
     if (!order.patientId) return;
-    // Carry the order back with us so closing the patient returns to this record.
+    // Stay on Orders: Patients is keep-alive mounted and opens a portaled dialog.
     dispatch({
       type: 'SET_NAVIGATION_TARGET',
-      target: { kind: 'patient', id: order.patientId, returnTo: { kind: 'order', key: String(order.id) } },
+      target: { kind: 'patient', id: order.patientId },
     });
-    dispatch({ type: 'SET_SCREEN', screen: 'patients' });
   };
 
   const handleCopy = (key: string, text: string) => {
@@ -1643,7 +1636,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
                 <label><span>Payment method</span><select className="input select" value={manualForm.tender} onChange={event => onManualFormChange({ tender: event.target.value as ManualTender })}><option value="epos-card">EPOS card</option><option value="cash">Cash</option><option value="bank-transfer">Bank transfer</option><option value="other">Other</option></select></label>
                 <label><span>Receipt reference</span><input className="input" value={manualForm.reference} onChange={event => onManualFormChange({ reference: event.target.value })} placeholder="TILL-1048" /></label>
               </div>
-              <label><span>Reconciliation note</span><textarea className="input" value={manualForm.notes} onChange={event => onManualFormChange({ notes: event.target.value })} /></label>
+              <label><span>Note (Optional)</span><textarea className="input" value={manualForm.notes} onChange={event => onManualFormChange({ notes: event.target.value })} /></label>
               <label className="payment-confirmation"><input type="checkbox" checked={manualForm.confirmed} onChange={event => onManualFormChange({ confirmed: event.target.checked })} /><span><strong>I confirm {money(order.payment.amount)} has been received</strong><small>This creates the pharmacy payment record.</small></span></label>
               <button type="button" className="btn btn-primary" disabled={!manualForm.confirmed || busy} onClick={onRecordManual}><CheckCircle2 size={14} /> {busy ? 'Recording…' : 'Record payment'}</button>
             </section>
@@ -2439,7 +2432,7 @@ function FulfilmentItemCard({
             {money(lineRevenue(line.item))} line
           </small>
         </span>
-        <span className={`order-fulfilment-item-card__margin${margin !== null && margin < 25 ? ' is-low' : ''}`}>
+        <span className={`order-fulfilment-item-card__margin ${marginToneClass(margin)}`.trimEnd()}>
           {contribution === null ? 'Margin pending' : formatMargin(contribution, lineRevenue(line.item))}
         </span>
         {open ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
@@ -2449,7 +2442,7 @@ function FulfilmentItemCard({
         <div id={panelId} className="order-fulfilment-item-card__body">
           <div className="order-fulfilment-item-card__pricing">
             <div className="order-fulfilment-item-card__metric">
-              <small>Patient price</small>
+              <small>{PATIENT_PRICE_LABEL}</small>
               <strong>{money(line.item.retail)}</strong>
               <em>{money(lineRevenue(line.item))} line</em>
             </div>
@@ -2458,7 +2451,7 @@ function FulfilmentItemCard({
               <strong>{line.item.cost === null ? 'Quote required' : money(line.item.cost)}</strong>
               <em>{line.item.cost === null ? 'Order-specific' : `${money(lineCost(line.item))} line`}</em>
             </div>
-            <div className={`order-fulfilment-item-card__metric order-fulfilment-item-card__metric--margin${margin !== null && margin < 25 ? ' is-low' : ''}`}>
+            <div className={`order-fulfilment-item-card__metric order-fulfilment-item-card__metric--margin ${marginToneClass(margin)}`.trimEnd()}>
               <small>Gross margin</small>
               <strong>{formatMargin(contribution, lineRevenue(line.item))}</strong>
             </div>

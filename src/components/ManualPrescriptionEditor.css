@@ -81,8 +81,11 @@
 .manual-pack-pricing dd { overflow: hidden; margin: 5px 0 0; color: var(--text-primary); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
 .manual-pack-pricing__total dd { color: var(--tenant-primary-strong); font-size: 17px; }
 .manual-pack-pricing > div.is-negative dd { color: var(--color-danger); }
-.manual-pack-pricing > div.is-advisory dd,
-.manual-pack-pricing > div.is-advisory small { color: var(--color-warning); }
+/* Same is-good / is-warn tone vocabulary as the rail, the Step 4 ledger and the
+   fulfilment cards, so a thin margin looks the same wherever staff meet it. */
+.manual-pack-pricing > div.is-warn dd,
+.manual-pack-pricing > div.is-warn small { color: var(--color-warning); }
+.manual-pack-pricing > div.is-good dd { color: var(--color-success); }
 .manual-pack-pricing small { overflow: hidden; margin-top: 3px; color: var(--text-tertiary); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .manual-rx-picker { display: grid; }
 .manual-rx-picker__heading > small { flex: 0 0 auto; color: var(--text-secondary); font-size: 9px; font-weight: 700; text-align: right; }
@@ -96,7 +99,7 @@
 .manual-rx-picker__filters button[aria-pressed="true"] { border-color: var(--tenant-primary); color: var(--tenant-primary-strong); background: var(--tenant-primary-soft); }
 .manual-rx-picker__filters button[aria-pressed="true"] small { color: var(--tenant-primary-strong); background: var(--bg-surface); }
 .manual-rx-picker__results { max-height: 420px; overflow: auto; border-top: 1px solid var(--border); background: var(--bg-surface); }
-.manual-rx-picker__results button { display: grid; grid-template-columns: minmax(230px, 1fr) 100px 110px 88px; align-items: center; gap: 14px; width: 100%; min-height: 58px; padding: 8px 13px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; color: var(--text-primary); }
+.manual-rx-picker__results button { display: grid; grid-template-columns: minmax(200px, 1fr) 88px 100px 88px 118px 88px; align-items: center; gap: 12px; width: 100%; min-height: 58px; padding: 8px 13px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; color: var(--text-primary); }
 .manual-rx-picker__results button:last-child { border-bottom: 0; }
 .manual-rx-picker__results button:hover, .manual-rx-picker__results button:focus-visible { background: var(--tenant-primary-soft); }
 .manual-rx-picker__results button:disabled { opacity: 1; cursor: default; }
@@ -113,6 +116,15 @@
 /* What the patient pays is the number staff pick on, so it leads the row; the
    supplier cost and the margin sit behind it as supporting detail. */
 .manual-rx-picker__price strong { color: var(--text-primary); font-size: 14px; font-weight: 800; }
+.manual-rx-picker__wholesale,
+.manual-rx-picker__margin { min-width: 0; }
+.manual-rx-picker__wholesale small,
+.manual-rx-picker__wholesale strong,
+.manual-rx-picker__margin strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .manual-rx-picker__wholesale strong, .manual-rx-picker__margin strong { color: var(--text-secondary); font-weight: 600; font-variant-numeric: tabular-nums; }
 .manual-rx-picker__add { display: flex; align-self: center; align-items: center; justify-content: center; gap: 4px; width: 88px; min-width: 88px; height: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--tenant-primary) 34%, var(--border)); border-radius: 6px; color: var(--tenant-primary-strong); background: var(--tenant-primary-soft); font-size: 9px; font-weight: 700; box-sizing: border-box; }
 .manual-rx-picker__results button.is-selected .manual-rx-picker__add { border-color: transparent; color: var(--text-secondary); background: transparent; }
@@ -142,7 +154,9 @@
   .manual-rx-picker__product { grid-column: 1 / -1; }
   .manual-rx-picker__pack { grid-column: 1; }
   .manual-rx-picker__price { grid-column: 1; text-align: left; }
-  .manual-rx-picker__add { grid-column: 2; grid-row: 2 / span 2; }
+  .manual-rx-picker__wholesale,
+  .manual-rx-picker__margin { grid-column: 1; }
+  .manual-rx-picker__add { grid-column: 2; grid-row: 2 / span 4; }
 }
 @media (max-width: 460px) {
   .manual-pack-card__body { grid-template-columns: 1fr; }

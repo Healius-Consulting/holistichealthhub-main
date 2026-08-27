@@ -4,7 +4,10 @@ import { useApp } from '../context/AppContext';
 import { getPharmacyOverview } from '../shared/api';
 import type { PharmacyOverview as PharmacyOverviewContract } from '../shared/contracts';
 
-const kindLabels: Record<PharmacyOverviewContract['priorityItems'][number]['kind'], string> = {
+type PriorityItem = PharmacyOverviewContract['priorityItems'][number];
+type PriorityKind = PriorityItem['kind'];
+
+const kindLabels: Record<PriorityKind, string> = {
   payment: 'Awaiting payment',
   collection: 'Collection follow-up',
   cancellation: 'Cancellation',
@@ -12,7 +15,24 @@ const kindLabels: Record<PharmacyOverviewContract['priorityItems'][number]['kind
   supplier: 'Supplier',
 };
 
-function ageLabel(kind: PharmacyOverviewContract['priorityItems'][number]['kind'], ageDays: number) {
+/**
+ * Worst first. The queue groups by kind, so this is the order staff work down:
+ * a supplier cancellation costs the patient their medicine, an aged collection is
+ * stock sitting on a shelf, and a repeat is a nudge that can wait until lunchtime.
+ */
+const KIND_ORDER: PriorityKind[] = ['cancellation', 'collection', 'supplier', 'payment', 'repeat'];
+
+/**
+ * One list per kind, in KIND_ORDER, keeping the server's ordering inside a group.
+ * Groups the API sent nothing for do not appear at all.
+ */
+function groupByKind(items: PriorityItem[]): Array<{ kind: PriorityKind; items: PriorityItem[] }> {
+  return KIND_ORDER
+    .map(kind => ({ kind, items: items.filter(item => item.kind === kind) }))
+    .filter(group => group.items.length > 0);
+}
+
+function ageLabel(kind: PriorityKind, ageDays: number) {
   if (kind === 'payment') {
     return ageDays === 0 ? 'Sent today' : `${ageDays} day${ageDays === 1 ? '' : 's'} awaiting payment`;
   }
@@ -86,7 +106,7 @@ export default function PharmacyOverview() {
     dispatch({ type: 'SET_SCREEN', screen });
   };
 
-  const openRecord = (target: PharmacyOverviewContract['priorityItems'][number]['recordTarget']) => {
+  const openRecord = (target: PriorityItem['recordTarget']) => {
     if (target.kind === 'order') {
       dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'order', key: target.id } });
       dispatch({ type: 'SET_SCREEN', screen: 'orders' });
@@ -195,30 +215,50 @@ export default function PharmacyOverview() {
             </div>
           </div>
           {overview.priorityItems.length === 0 ? (
-            <div className="overview-empty">
-              <CheckCircle2 aria-hidden="true" />
-              <strong>No priority exceptions</strong>
-              <span>There are no awaiting payments or aged collections in this summary.</span>
-            </div>
+            <p className="overview-queue__clear">
+              <CheckCircle2 size={16} aria-hidden="true" />
+              <span>Nothing waiting — no awaiting payments or aged collections in this summary.</span>
+            </p>
           ) : (
-            <ul className="overview-priority-list">
-              {overview.priorityItems.map(item => (
-                <li key={item.id} className={`overview-priority-item overview-priority-item--${item.kind}`}>
-                  <div>
-                    <span className="overview-kind">{kindLabels[item.kind]}</span>
-                    <strong>{item.maskedPatientLabel}</strong>
-                    <p className="overview-priority-meta">
-                      {item.orderReference && <span>{item.orderReference}</span>}
-                      <span>{ageLabel(item.kind, item.ageDays)}</span>
-                    </p>
-                    <p>{item.summary}</p>
-                  </div>
-                  <button className="priority-action" onClick={() => openRecord(item.recordTarget)}>
-                    {item.actionLabel} <ArrowRight size={14} aria-hidden="true" />
-                  </button>
-                </li>
+            /* Grouped by kind so the kind is said once, in the group heading, instead
+               of shouted on every row. Each row is one hit target: the whole row is
+               the button, and the action label is its accessible name. */
+            <div className="overview-queue__groups">
+              {groupByKind(overview.priorityItems).map(group => (
+                <section
+                  key={group.kind}
+                  className={`overview-priority-group overview-priority-group--${group.kind}`}
+                  aria-label={`${kindLabels[group.kind]} (${group.items.length})`}
+                >
+                  <p className="overview-priority-group__head">
+                    <span className="overview-priority-group__label">{kindLabels[group.kind]}</span>
+                    <span className="overview-priority-group__count">{group.items.length}</span>
+                  </p>
+                  <ul className="overview-priority-list">
+                    {group.items.map(item => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          className="overview-priority-row"
+                          onClick={() => openRecord(item.recordTarget)}
+                          aria-label={`${item.actionLabel}: ${item.maskedPatientLabel}${item.orderReference ? `, ${item.orderReference}` : ''}. ${item.summary}`}
+                        >
+                          <span className="overview-priority-row__identity">
+                            <strong>{item.maskedPatientLabel}</strong>
+                            {item.orderReference ? (
+                              <span className="overview-priority-row__ref">{item.orderReference}</span>
+                            ) : null}
+                          </span>
+                          <span className="overview-priority-row__summary">{item.summary}</span>
+                          <span className="overview-priority-row__age">{ageLabel(item.kind, item.ageDays)}</span>
+                          <ArrowRight size={14} className="overview-priority-row__go" aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ))}
-            </ul>
+            </div>
           )}
         </section>
 

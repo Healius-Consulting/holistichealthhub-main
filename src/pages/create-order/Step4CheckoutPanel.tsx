@@ -2,8 +2,10 @@ import { AlertTriangle, Banknote, CheckCircle, CreditCard, RefreshCw, Send, Shie
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
 import {
   PATIENT_PRICE_LABEL,
+  PHARMACY_COST_LABEL,
   WHOLESALE_LABEL,
   formatMargin,
+  marginToneClass,
   money,
   orderContribution,
   orderCost,
@@ -177,15 +179,19 @@ export default function Step4CheckoutPanel({
         </div>
 
         <dl className="rx-step4-ledger" aria-label="Order commercial summary">
+          <div className="rx-step4-ledger__section" role="presentation">
+            <dt>{PHARMACY_COST_LABEL}</dt>
+            <dd aria-hidden="true" />
+          </div>
           <div>
             <dt>{WHOLESALE_LABEL}</dt>
             <dd>{wholesaleKnown ? money(orderCost(activeOrder)) : workspaceMode === 'training' ? 'Not supplied' : 'Quote required'}</dd>
           </div>
-          <div className="is-ruled">
+          <div>
             <dt>Delivery</dt>
             <dd>{quoteSummary ? money(quoteSummary.shippingPrice) : 'Quote required'}</dd>
           </div>
-          <div>
+          <div className="is-ruled">
             <dt>Dispensing</dt>
             <dd>{money(activeOrder.dispensingFee)}</dd>
           </div>
@@ -199,7 +205,7 @@ export default function Step4CheckoutPanel({
           </div>
           <div className="rx-step4-ledger__margin">
             <dt>Gross margin</dt>
-            <dd className={orderMargin === null ? '' : orderMargin >= 25 ? 'is-good' : 'is-warn'}>
+            <dd className={marginToneClass(orderMargin)}>
               {/* Every line's contribution plus the dispensing charge the pharmacy keeps. */}
               {wholesaleKnown ? formatMargin(orderContribution(activeOrder), patientTotal) : 'Pending'}
             </dd>

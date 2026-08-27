@@ -258,8 +258,28 @@ function StaffWorkspace() {
       case 'home': return state.workspaceMode === 'training' ? <Dashboard /> : serverSessionAuth ? <PharmacyOverview /> : <Dashboard />;
       case 'formulary': return <FormularyPricing />;
       case 'create': return <CreateOrder />;
-      case 'orders': return <Orders />;
-      case 'patients': return <Patients />;
+      case 'orders':
+      case 'patients':
+        // Keep both CRM boards mounted so "Open patient" / "Open order" can open the
+        // other record via a portaled dialog without switching tabs or bouncing back.
+        return (
+          <>
+            <div
+              className={state.screen === 'orders' ? undefined : 'crm-screen-parked'}
+              hidden={state.screen !== 'orders'}
+              aria-hidden={state.screen !== 'orders'}
+            >
+              <Orders />
+            </div>
+            <div
+              className={state.screen === 'patients' ? undefined : 'crm-screen-parked'}
+              hidden={state.screen !== 'patients'}
+              aria-hidden={state.screen !== 'patients'}
+            >
+              <Patients />
+            </div>
+          </>
+        );
       case 'finance': return <PharmacyFinance />;
       case 'settings': return <PharmacySettings />;
       default: return state.workspaceMode === 'training' ? <Dashboard /> : serverSessionAuth ? <PharmacyOverview /> : <Dashboard />;

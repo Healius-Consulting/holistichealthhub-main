@@ -107,7 +107,7 @@ const MARK_FAILED_GQL = `
     notificationOutbox_update(
       key: { id: $id }
       data: {
-        status: PENDING
+        status: FAILED
         failureCode: $failureCode
         failedAt_expr: "request.time"
       }
