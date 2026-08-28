@@ -21,6 +21,7 @@ import { formConditionRecords, primaryConditionCode } from '../../domain/eligibi
 import { sqlIntakeCaseReference } from './intake-contracts.js';
 import { pendingEnquiryDisplayStatus, portalSourceType } from './intake-source.js';
 import { overviewFinanceSnapshot } from '../../application/finance/pharmacy-ledger.js';
+import { serialReuseUntilDate } from '../../application/prescriptions/serial-reuse.js';
 
 type PortalOrder = ReturnType<typeof toPortalOrder>;
 
@@ -707,6 +708,10 @@ export function toPortalOrder(order: PortalOrderSource) {
     } : snapshot.resolution ?? null,
     redoOfOrderId: order.redoOfId ?? null,
     redoContext: snapshot.redoContext ?? undefined,
+    serialReuse: Array.isArray(rawPrescriptions) && rawPrescriptions[0] ? {
+      until: serialReuseUntilDate(String((rawPrescriptions[0] as { issueDate?: string }).issueDate || '')) ?? null,
+      filePresent: Boolean((rawPrescriptions[0] as { fileId?: string | null }).fileId),
+    } : null,
     pharmacyContributionPence: Number(snapshot?.pharmacyContributionPence || quoteReview?.pharmacyContributionPence || 0) || undefined,
     cancellation: supplierStillLive ? undefined : cancellation,
     curaleafCancellation: supplierStillLive ? undefined : curaleafCancellation,

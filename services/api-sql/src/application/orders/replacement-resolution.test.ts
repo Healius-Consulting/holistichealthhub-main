@@ -54,30 +54,31 @@ test('fails closed on ambiguous duplicate-product remainder pricing', () => {
   }), /one priced order line/);
 });
 
-test('requires a new prescription after any purchase order', () => {
+test('allows a copied serial after a purchase order when the scan is still on file', () => {
   assert.deepEqual(replacementPrescriptionPolicy({
-    hasPurchaseOrder: true,
-    sourcePrescriptionId: 'rx-1',
-    sourcePrescriptionState: 'ACTIVE',
-    sourceExpiryDate: '2026-09-01',
+    sourceSerial: 'rx-1',
+    sourceIssueDate: '2026-08-01',
+    sourceOrderId: 'source-1',
+    liveOrderId: 'source-1',
+    replacementSerial: 'rx-1',
+    replacementIssueDate: '2026-08-01',
+    replacementHasUsableFile: true,
     sourceLines: [{ packId: 'pack-a', quantity: 1 }],
-    replacementPrescriptionIds: ['rx-1'],
-    replacementHasFiles: true,
     replacementLines: [{ packId: 'pack-a', quantity: 1 }],
-    asOf: new Date('2026-08-26T00:00:00.000Z'),
-  }), { allowed: false, reusesSource: true, reason: 'new_prescription_required_after_purchase_order' });
+    asOf: new Date('2026-08-12T00:00:00.000Z'),
+  }), { allowed: true, reusesSourceSerial: true, reason: undefined, occupyingOrderId: undefined });
 });
 
-test('allows exact unexpired pending prescription reuse only before a purchase order', () => {
-  assert.deepEqual(replacementPrescriptionPolicy({
-    hasPurchaseOrder: false,
-    sourcePrescriptionId: 'rx-1',
-    sourcePrescriptionState: 'PENDING',
-    sourceExpiryDate: '2026-09-01',
+test('rejects a copied serial once the 24-day reuse window has closed', () => {
+  assert.equal(replacementPrescriptionPolicy({
+    sourceSerial: 'rx-1',
+    sourceIssueDate: '2026-07-18',
+    sourceOrderId: 'source-1',
+    liveOrderId: 'source-1',
+    replacementSerial: 'rx-1',
+    replacementHasUsableFile: true,
     sourceLines: [{ packId: 'pack-a', quantity: 1 }],
-    replacementPrescriptionIds: ['rx-1'],
-    replacementHasFiles: true,
     replacementLines: [{ packId: 'pack-a', quantity: 1 }],
-    asOf: new Date('2026-08-26T00:00:00.000Z'),
-  }), { allowed: true, reusesSource: true });
+    asOf: new Date('2026-08-12T00:00:00.000Z'),
+  }).reason, 'SERIAL_REUSE_EXPIRED');
 });

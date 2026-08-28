@@ -29,6 +29,7 @@ type Step2PrescriptionPanelProps = {
   onCancelRemoveFile: () => void;
   onPrescriberChange: (value: string) => void;
   onMetadataChange: (field: string, value: string) => void;
+  onUnlockInheritedSerial?: () => void;
   onAddItem: (item: LineItem) => void;
   onRemoveItem: (productId: string) => void;
   onUpdateQuantity: (productId: string, qty: number) => void;
@@ -59,6 +60,7 @@ export default function Step2PrescriptionPanel({
   onCancelRemoveFile,
   onPrescriberChange,
   onMetadataChange,
+  onUnlockInheritedSerial,
   onAddItem,
   onRemoveItem,
   onUpdateQuantity,
@@ -163,6 +165,7 @@ export default function Step2PrescriptionPanel({
                 catalogue={catalogue}
                 onPrescriberChange={onPrescriberChange}
                 onMetadataChange={onMetadataChange}
+                onUnlockInheritedSerial={onUnlockInheritedSerial}
                 onAddItem={onAddItem}
                 onRemoveItem={onRemoveItem}
                 onUpdateQuantity={onUpdateQuantity}

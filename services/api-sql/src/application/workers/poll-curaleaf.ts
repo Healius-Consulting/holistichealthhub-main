@@ -33,6 +33,7 @@ import type { OrderRepositoryPort } from '../../repositories/ports/order.port.js
 import type { PrescriptionRepositoryPort } from '../../repositories/ports/prescription.port.js';
 import { resolveOrdersForCuraleafEntity } from './poll-curaleaf-match.js';
 import { SqlWorkerEventRepository } from '../../repositories/sql/worker-event.sql.js';
+import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
 
 export type CuraleafPollDeps = {
   orderRepo: OrderRepositoryPort;
@@ -126,6 +127,7 @@ async function persistSupplierCancellation(
     quoteSnapshot: nextSnapshot,
     fulfilmentStatus: 'EXCEPTION',
   });
+  await new SqlPrescriptionSerialRepository().endLiveForOrder(order.organisationId, order.id, 'curaleaf_cancelled').catch(() => undefined);
   const recipients = await listPharmacyRecipients(order.organisationId, deps);
   await queueEmailToRecipients(
     deps.notificationRepo,

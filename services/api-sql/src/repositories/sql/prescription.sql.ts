@@ -195,7 +195,8 @@ const FIND_PRESCRIPTION_BY_SERIAL_GQL = `
   query FindPrescriptionBySerial($organisationId: UUID!, $serialNumber: String!) {
     prescriptions(
       where: { organisationId: { eq: $organisationId }, serialNumber: { eq: $serialNumber } }
-      limit: 1
+      orderBy: [{ createdAt: DESC }]
+      limit: 5
     ) {
       ${PRESCRIPTION_FIELDS}
     }
@@ -624,8 +625,10 @@ export class SqlPrescriptionRepository implements PrescriptionRepositoryPort {
   }
 
   async recordSupplierPrescription(input: UpsertOrderPrescriptionInput): Promise<PrescriptionRecord> {
-    const existing = await this.findPrescriptionBySupplierId(input.organisationId, input.supplierPrescriptionId)
-      ?? await this.findPrescriptionBySerial(input.organisationId, input.serialNumber);
+    const existingBySupplier = input.supplierPrescriptionId
+      ? await this.findPrescriptionBySupplierId(input.organisationId, input.supplierPrescriptionId)
+      : null;
+    const existing = existingBySupplier;
 
     if (existing) {
       await dataConnect.executeGraphql(UPDATE_PRESCRIPTION_SUPPLIER_GQL, {
@@ -655,8 +658,7 @@ export class SqlPrescriptionRepository implements PrescriptionRepositoryPort {
       });
     }
 
-    const saved = await this.findPrescriptionBySupplierId(input.organisationId, input.supplierPrescriptionId)
-      ?? await this.findPrescriptionBySerial(input.organisationId, input.serialNumber);
+    const saved = await this.findPrescriptionBySupplierId(input.organisationId, input.supplierPrescriptionId);
     if (!saved) throw new Error('Prescription could not be saved with the Curaleaf prescription ID.');
 
     await this.upsertOrderPrescriptionLink({

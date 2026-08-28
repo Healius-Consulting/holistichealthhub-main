@@ -1,3 +1,5 @@
+import { replacementSerialPolicy } from '../prescriptions/serial-reuse.js';
+
 type SourceLine = {
   packId: string;
   quantity: number;
@@ -73,41 +75,26 @@ export function replacementAllocationAmount(input: {
   return remainderPence;
 }
 
-function normalisedBasket(lines: Array<{ packId: string; quantity: number }>) {
-  return lines
-    .map(line => ({ packId: String(line.packId || '').trim(), quantity: Math.trunc(Number(line.quantity)) }))
-    .filter(line => line.packId && line.quantity > 0)
-    .sort((left, right) => left.packId.localeCompare(right.packId));
-}
-
 export function replacementPrescriptionPolicy(input: {
-  hasPurchaseOrder: boolean;
-  sourcePrescriptionId?: string | null;
-  sourcePrescriptionState?: string | null;
-  sourceExpiryDate?: string | null;
-  sourceLines: Array<{ packId: string; quantity: number }>;
-  replacementPrescriptionIds: string[];
-  replacementHasFiles: boolean;
-  replacementLines: Array<{ packId: string; quantity: number }>;
-  asOf?: Date;
+  sourceSerial?: string | null;
+  sourceIssueDate?: string | null;
+  sourceOrderId?: string | null;
+  sourcePatientId?: string | null;
+  liveOrderId?: string | null;
+  livePatientId?: string | null;
+  currentPatientId?: string | null;
+  replacementSerial?: string | null;
+  replacementIssueDate?: string | null;
+  replacementHasUsableFile: boolean;
+  sourceLines: Array<{ packId?: string | null; formulaId?: string | null; quantity?: number | null; unitsNeededCount?: number | null }>;
+  replacementLines: Array<{ packId?: string | null; formulaId?: string | null; quantity?: number | null; unitsNeededCount?: number | null }>;
+  asOf?: Date | string;
 }) {
-  const sourceId = String(input.sourcePrescriptionId || '').trim();
-  const replacementIds = input.replacementPrescriptionIds.map(id => String(id || '').trim()).filter(Boolean);
-  const reusesSource = Boolean(sourceId && replacementIds.includes(sourceId));
-  if (input.hasPurchaseOrder && reusesSource) {
-    return { allowed: false as const, reusesSource, reason: 'new_prescription_required_after_purchase_order' };
-  }
-  if (!reusesSource) {
-    return input.replacementHasFiles
-      ? { allowed: true as const, reusesSource: false }
-      : { allowed: false as const, reusesSource: false, reason: 'replacement_prescription_file_required' };
-  }
-  const state = String(input.sourcePrescriptionState || '').toUpperCase();
-  const expiry = Date.parse(String(input.sourceExpiryDate || ''));
-  const asOf = input.asOf ?? new Date();
-  const exactBasket = JSON.stringify(normalisedBasket(input.sourceLines)) === JSON.stringify(normalisedBasket(input.replacementLines));
-  if (!['PENDING', 'ACTIVE'].includes(state) || !Number.isFinite(expiry) || expiry < asOf.getTime() || !exactBasket) {
-    return { allowed: false as const, reusesSource: true, reason: 'source_prescription_not_reusable' };
-  }
-  return { allowed: true as const, reusesSource: true };
+  const decision = replacementSerialPolicy(input);
+  return {
+    allowed: decision.allowed,
+    reusesSourceSerial: decision.reusesSourceSerial,
+    reason: 'reason' in decision ? decision.reason : undefined,
+    occupyingOrderId: 'occupyingOrderId' in decision ? decision.occupyingOrderId : undefined,
+  };
 }

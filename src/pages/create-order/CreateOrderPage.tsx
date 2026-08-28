@@ -914,6 +914,12 @@ export default function CreateOrderPage() {
   const rxDispatch = activeOrder && selectedRx ? {
     onPrescriberChange: (value: string) => dispatch({ type: 'SET_RX_PRESCRIBER', orderId: activeOrder.id, rxId: selectedRx.id, prescriber: value }),
     onMetadataChange: (field: string, value: string) => dispatch({ type: 'SET_RX_METADATA', orderId: activeOrder.id, rxId: selectedRx.id, updates: { [field]: value } }),
+    onUnlockInheritedSerial: () => dispatch({
+      type: 'SET_RX_METADATA',
+      orderId: activeOrder.id,
+      rxId: selectedRx.id,
+      updates: { serialInherited: false, serialNumber: undefined, issueDate: undefined, expiryDate: undefined },
+    }),
     onAddItem: (item: import('../../context/AppContext').LineItem) => dispatch({ type: 'ADD_ITEM_TO_RX', orderId: activeOrder.id, rxId: selectedRx.id, item }),
     onRemoveItem: (productId: string) => dispatch({ type: 'REMOVE_ITEM_FROM_RX', orderId: activeOrder.id, rxId: selectedRx.id, productId }),
     onUpdateQuantity: (productId: string, qty: number) => dispatch({ type: 'UPDATE_ITEM_QTY', orderId: activeOrder.id, rxId: selectedRx.id, productId, qty }),

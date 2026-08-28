@@ -168,3 +168,8 @@
 .manual-prescriber-results button{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 8px;border:0;border-radius:6px;background:transparent;color:var(--text-primary);text-align:left;cursor:pointer}
 .manual-prescriber-results button:hover,.manual-prescriber-results button:focus-visible{background:var(--tenant-primary-soft)}
 .manual-prescriber-results small{color:var(--text-tertiary)}
+.manual-rx-inherited{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px 14px;border-top:1px solid var(--border)}
+.manual-rx-inherited small{color:var(--text-secondary);font-size:9px;font-weight:550;line-height:1.4;max-width:42rem}
+.manual-rx-inherited .btn{min-height:44px}
+.manual-rx-date-field[aria-disabled='true'] input{opacity:.72;cursor:not-allowed;background:var(--bg-elevated)}
+.manual-rx-fields__wide input[readonly]{opacity:.72;cursor:not-allowed;background:var(--bg-elevated)}

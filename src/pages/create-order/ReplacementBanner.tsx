@@ -1,5 +1,6 @@
 import { ShieldCheck } from 'lucide-react';
 import { orderReference, type PatientOrder } from '../../context/AppContext';
+import { replacementBannerState } from '../../utils/replacementPrescriptionCopy';
 
 type ReplacementBannerProps = {
   activeOrder: PatientOrder;
@@ -14,6 +15,7 @@ export default function ReplacementBanner({
   redoSourceOrder,
   medicineCount,
 }: ReplacementBannerProps) {
+  const banner = replacementBannerState(activeOrder.prescriptions[0]);
   return (
     <section className="rx-replacement-context card" aria-label={`Replacement order ${activeOrderRef}`}>
       <span className="rx-replacement-context__mark">{activeOrderRef.replace(/^#\d+/, '')}</span>
@@ -27,11 +29,14 @@ export default function ReplacementBanner({
       </span>
       <span className="rx-replacement-context__carry">
         <strong>{medicineCount} medicine{medicineCount === 1 ? '' : 's'} carried forward</strong>
-        <small>The old document was cleared automatically.</small>
+        <small>{banner.serialDetail}</small>
       </span>
       <span className="rx-replacement-context__next">
         <ShieldCheck size={15} />
-        <span><strong>New prescription required</strong><small>Authenticate the replacement below.</small></span>
+        <span>
+          <strong>{banner.serialCarried ? banner.scanTitle : banner.serialTitle}</strong>
+          <small>{banner.serialCarried ? banner.scanDetail : banner.serialDetail}</small>
+        </span>
       </span>
     </section>
   );

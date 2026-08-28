@@ -652,10 +652,10 @@ type Prescription @table {
   patientId: UUID! @index
   prescriber: Prescriber @ref(fields: "prescriberId")
   prescriberId: UUID @index
-  file: PrescriptionFile @unique @ref(fields: "fileId")
-  fileId: UUID
+  file: PrescriptionFile @ref(fields: "fileId")
+  fileId: UUID @index
   supplierPrescriptionId: String @unique
-  serialNumber: String! @unique
+  serialNumber: String! @index
   issueDate: Date!
   expiryDate: Date!
   status: PrescriptionStatus! @default(value: DRAFT)
@@ -666,6 +666,27 @@ type Prescription @table {
   updatedAt: Timestamp! @default(expr: "request.time")
   verifiedAt: Timestamp
   cancelledAt: Timestamp
+}
+
+type PrescriptionSerialUse @table @index(fields: ["organisationId", "serialNumber"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  organisation: Organisation! @ref(fields: "organisationId")
+  organisationId: UUID! @index
+  serialNumber: String!
+  issueDate: Date!
+  patient: Patient! @ref(fields: "patientId")
+  patientId: UUID! @index
+  order: Order @ref(fields: "orderId")
+  orderId: UUID @index
+  prescription: Prescription @ref(fields: "prescriptionId")
+  prescriptionId: UUID
+  curaleafPrescriptionId: String
+  live: Boolean! @default(value: true) @index
+  startedAt: Timestamp! @default(expr: "request.time")
+  endedAt: Timestamp
+  endReason: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
 }
 
 type PrescriptionLine @table @unique(fields: ["prescriptionId", "formulaId", "packId"]) {

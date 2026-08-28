@@ -11,6 +11,7 @@ import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
 import { formatShippingAddress } from '../utils/shippingAddress';
 import { nextDraftIdAfterDeletion, preferredDraftIndex, preferredDraftPaymentRoute } from '../utils/createOrderDraft';
+import { replacementPrescriptionCopy } from '../utils/replacementPrescriptionCopy';
 import { orderRequiresCuraleafCancel, orderSupplyIncomplete } from '../utils/orderStage';
 import { PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
 import { businessOrderReference } from '../utils/orderReference';
@@ -122,6 +123,7 @@ export interface Prescription {
   serialNumber?: string;
   issueDate?: string;
   expiryDate?: string;
+  serialInherited?: boolean;
   copyFileName: string | null;
   fileId?: string | null;
   items: LineItem[];
@@ -654,7 +656,7 @@ export type Action =
   | { type: 'SET_RX_ENTRY_MODE'; orderId: number; rxId: number; mode: 'clinic' | 'manual' }
   | { type: 'SET_RX_PRESCRIBER'; orderId: number; rxId: number; prescriber: string }
   | { type: 'SET_RX_PATIENT_IDENTITY'; orderId: number; rxId: number; name: string; dob: string }
-  | { type: 'SET_RX_METADATA'; orderId: number; rxId: number; updates: Partial<Pick<Prescription, 'prescriberPin' | 'prescriberGmcNumber' | 'prescriberGphcNumber' | 'serialNumber' | 'issueDate'>> }
+  | { type: 'SET_RX_METADATA'; orderId: number; rxId: number; updates: Partial<Pick<Prescription, 'prescriberPin' | 'prescriberGmcNumber' | 'prescriberGphcNumber' | 'serialNumber' | 'issueDate' | 'expiryDate' | 'serialInherited'>> }
   | { type: 'SET_RX_COPY'; orderId: number; rxId: number; fileName: string }
   | { type: 'SET_RX_FILE'; orderId: number; rxId: number; fileName: string; fileId: string | null }
   | { type: 'CLEAR_RX_FILE'; orderId: number; rxId: number }
@@ -1171,6 +1173,7 @@ function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: U
     prescriptions: draft.prescriptions.map(rx => {
       if (rx.id !== targetRxId) return rx;
       const sourceRx = source.prescriptions[0];
+      const copied = replacementPrescriptionCopy(sourceRx);
       return {
         ...rx,
         items,
@@ -1179,13 +1182,15 @@ function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: U
         prescriberPin: sourceRx?.prescriberPin ?? rx.prescriberPin,
         prescriberGmcNumber: sourceRx?.prescriberGmcNumber ?? rx.prescriberGmcNumber,
         prescriberGphcNumber: sourceRx?.prescriberGphcNumber ?? rx.prescriberGphcNumber,
-        copyFileName: null,
-        fileId: undefined,
+        copyFileName: copied.copyFileName,
+        fileId: copied.fileId,
         clinicScanId: undefined,
         curaleafPrescriptionId: undefined,
-        serialNumber: undefined,
-        issueDate: undefined,
-        expiryDate: undefined,
+        serialNumber: copied.serialNumber,
+        issueDate: copied.issueDate,
+        expiryDate: copied.expiryDate,
+        serialInherited: copied.serialInherited,
+        entryMode: copied.serialEligible ? 'manual' : rx.entryMode,
         curaleafPatientName: undefined,
         curaleafPatientDob: undefined,
         placed: false,

@@ -220,6 +220,7 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.curaleafPlacement?.slaDueAt, '2026-08-18T12:00:00.000Z');
     assert.equal(mapped.curaleafPlacement?.slaPolicy, 'three_hours');
     assert.equal(mapped.prescriptionFlow['rx-pending']?.state, 'PENDING_PLACEMENT');
+    assert.deepEqual(mapped.serialReuse, { until: '2026-09-11', filePresent: true });
   });
 
   it('projects quote-gate history, payment allocation, redo resolution, and Curaleaf placement SLA', () => {

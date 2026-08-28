@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { normalisePrescriptionDateParts, prescriptionDateWindowStatus, prescriptionExpiryDisplay } from '@hhh/domain/prescription-date';
+import { normalisePrescriptionDateParts, prescriptionDateWindowStatus, prescriptionExpiryDisplay, serialReuseDisplay } from '@hhh/domain/prescription-date';
 import { Check, ChevronLeft, ChevronRight, Minus, Package, Plus, Search, Trash2 } from 'lucide-react';
 import MedicineLabel from './MedicineLabel';
 import type { CatalogueItem, LineItem, Prescription } from '../context/AppContext';
@@ -31,7 +31,7 @@ const dateParts = (value?: string) => {
   return match ? { day: match[3], month: match[2], year: match[1] } : { day: '', month: '', year: '' };
 };
 
-function ManualDateField({ label, value, onChange }: { label: string; value?: string; onChange: (value: string) => void }) {
+function ManualDateField({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (value: string) => void; readOnly?: boolean }) {
   const initial = dateParts(value);
   const [day, setDay] = useState(initial.day);
   const [month, setMonth] = useState(initial.month);
@@ -103,12 +103,12 @@ function ManualDateField({ label, value, onChange }: { label: string; value?: st
   return (
     <label className="manual-rx-date-label">
       <span>{label}</span>
-      <span className="manual-rx-date-field" role="group" aria-label={label} aria-invalid={Boolean(validationError) || undefined} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commit(day, month, year, true); }}>
-        <input aria-label={`${label} day`} inputMode="numeric" placeholder="DD" value={day} onChange={event => updatePart('day', event.target.value)} />
+      <span className="manual-rx-date-field" role="group" aria-label={label} aria-disabled={readOnly || undefined} aria-invalid={Boolean(validationError) || undefined} onBlur={event => { if (readOnly) return; if (!event.currentTarget.contains(event.relatedTarget as Node | null)) commit(day, month, year, true); }}>
+        <input aria-label={`${label} day`} inputMode="numeric" placeholder="DD" value={day} readOnly={readOnly} disabled={readOnly} onChange={event => updatePart('day', event.target.value)} />
         <i>/</i>
-        <input aria-label={`${label} month`} inputMode="numeric" placeholder="MM" value={month} onChange={event => updatePart('month', event.target.value)} />
+        <input aria-label={`${label} month`} inputMode="numeric" placeholder="MM" value={month} readOnly={readOnly} disabled={readOnly} onChange={event => updatePart('month', event.target.value)} />
         <i>/</i>
-        <input aria-label={`${label} year`} inputMode="numeric" placeholder="YYYY" value={year} onChange={event => updatePart('year', event.target.value)} />
+        <input aria-label={`${label} year`} inputMode="numeric" placeholder="YYYY" value={year} readOnly={readOnly} disabled={readOnly} onChange={event => updatePart('year', event.target.value)} />
       </span>
       <small className={validationError ? 'manual-rx-field-error' : 'manual-rx-field-help'}>
         {validationError ?? 'Schedule 2 CD Rx valid 28 days from issue'}
@@ -125,6 +125,7 @@ export default function ManualPrescriptionEditor({
   hideSelectedList = false,
   onPrescriberChange,
   onMetadataChange,
+  onUnlockInheritedSerial,
   onAddItem,
   onRemoveItem,
   onUpdateQuantity,
@@ -136,6 +137,7 @@ export default function ManualPrescriptionEditor({
   hideSelectedList?: boolean;
   onPrescriberChange: (value: string) => void;
   onMetadataChange: (field: MetadataField, value: string) => void;
+  onUnlockInheritedSerial?: () => void;
   onAddItem: (item: LineItem) => void;
   onRemoveItem: (productId: string) => void;
   onUpdateQuantity: (productId: string, quantity: number) => void;
@@ -254,11 +256,31 @@ export default function ManualPrescriptionEditor({
                   value={prescription.serialNumber ?? ''}
                   maxLength={200}
                   placeholder="Enter exactly as printed on the prescription"
+                  readOnly={Boolean(prescription.serialInherited)}
+                  aria-readonly={prescription.serialInherited || undefined}
                   onChange={event => onMetadataChange('serialNumber', event.target.value)}
                 />
               </label>
-              <ManualDateField label="Issue date" value={prescription.issueDate} onChange={issueDate => onMetadataChange('issueDate', issueDate)} />
+              <ManualDateField
+                label="Issue date"
+                value={prescription.issueDate}
+                readOnly={Boolean(prescription.serialInherited)}
+                onChange={issueDate => onMetadataChange('issueDate', issueDate)}
+              />
             </div>
+            {prescription.serialInherited ? (
+              <div className="manual-rx-inherited">
+                <small>
+                  {serialReuseDisplay(prescription.issueDate)?.text
+                    ?? 'This serial was copied from the previous prescription and stays locked while it is reused.'}
+                </small>
+                {onUnlockInheritedSerial ? (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={onUnlockInheritedSerial}>
+                    Use a different serial
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
 

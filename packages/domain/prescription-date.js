@@ -1,5 +1,6 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PRESCRIPTION_WINDOW_DAYS = 28;
+const SERIAL_REUSE_WINDOW_DAYS = 24;
 const LONDON_DATE = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Europe/London',
   year: 'numeric',
@@ -89,4 +90,42 @@ export function prescriptionDateWindowStatus(issueDate, suppliedExpiryDate, now 
 
 export function prescriptionDateIsCurrent(issueDate, suppliedExpiryDate, now = new Date()) {
   return prescriptionDateWindowStatus(issueDate, suppliedExpiryDate, now) === 'current';
+}
+
+export function serialReuseUntilDate(issueDate) {
+  const issued = dateOrdinal(issueDate);
+  return issued === null ? null : ordinalDate(issued + SERIAL_REUSE_WINDOW_DAYS);
+}
+
+export function serialReuseWindowStatus(issueDate, now = new Date()) {
+  const issued = dateOrdinal(issueDate);
+  const today = londonTodayOrdinal(now);
+  if (issued === null || today === null) return 'invalid';
+  if (issued > today) return 'future';
+  if (today > issued + SERIAL_REUSE_WINDOW_DAYS) return 'expired';
+  return 'current';
+}
+
+export function serialReuseIsCurrent(issueDate, now = new Date()) {
+  return serialReuseWindowStatus(issueDate, now) === 'current';
+}
+
+export function serialReuseDisplay(issueDate, now = new Date()) {
+  const until = serialReuseUntilDate(issueDate);
+  const issued = dateOrdinal(issueDate);
+  const today = londonTodayOrdinal(now);
+  if (!until || issued === null || today === null) return null;
+  const daysRemaining = issued + SERIAL_REUSE_WINDOW_DAYS - today;
+  const [, month, day] = until.split('-').map(Number);
+  const formattedUntil = `${String(day).padStart(2, '0')} ${MONTH_LABELS[month - 1]} ${until.slice(0, 4)}`;
+  return {
+    untilDate: until,
+    daysRemaining,
+    tone: daysRemaining < 0 ? 'red' : daysRemaining < 7 ? 'amber' : 'green',
+    text: daysRemaining < 0
+      ? `Serial expired on ${formattedUntil} · cannot be reused.`
+      : daysRemaining === 0
+        ? `Serial reusable until ${formattedUntil} · last day.`
+        : `Serial reusable until ${formattedUntil} · ${daysRemaining}d left.`,
+  };
 }

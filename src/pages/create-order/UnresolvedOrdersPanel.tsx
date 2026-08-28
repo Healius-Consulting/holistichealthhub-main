@@ -27,12 +27,12 @@ export default function UnresolvedOrdersPanel({
         <span>
           <p className="section-label">Unresolved for this patient</p>
           <strong>{entries.length} archived / rejected order{entries.length === 1 ? '' : 's'}</strong>
-          <small>Open to repair a previous order using a newly authenticated prescription.</small>
+          <small>Open to repair a previous order. A serial still inside 24 days is carried forward.</small>
         </span>
         <span className="pill pill-neutral">Review</span>
       </summary>
       <div className="rx-unresolved-drawer__body">
-        <p>Select one to load its medicines into this draft. The old document is never reused; a new prescription must pass authentication.</p>
+        <p>Select one to load its medicines into this draft. The serial and issue date are copied when they are still inside 24 days of issue. A new scan is needed only if the stored copy is gone.</p>
         <div className="rx-unresolved-list" role="listbox" aria-label="Unresolved orders">
           {entries.map(entry => {
             const selected = selectedOrderId === entry.order.id;
@@ -76,9 +76,9 @@ export default function UnresolvedOrdersPanel({
             Use this draft as replacement
           </button>
           <span>
-            Clears the old PDF and pre-fills medicines. New Curaleaf prescription authentication is required
+            Carries the serial when it is still inside 24 days, and the stored scan when it is still on file. Curaleaf receives a new prescription record
             {selectedEntry?.order.payment.status === 'paid'
-              ? '; the existing verified payment is carried over after authentication, so no second payment request is created.'
+              ? '. The existing verified payment is carried over, so no second payment request is created.'
               : '.'}
           </span>
         </footer>

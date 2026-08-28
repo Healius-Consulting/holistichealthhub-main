@@ -15,6 +15,7 @@ type Step3FormularyPanelProps = {
   onSaveFormulary: () => void;
   onPrescriberChange: (value: string) => void;
   onMetadataChange: (field: string, value: string) => void;
+  onUnlockInheritedSerial?: () => void;
   onAddItem: (item: LineItem) => void;
   onRemoveItem: (productId: string) => void;
   onUpdateQuantity: (productId: string, qty: number) => void;
@@ -32,6 +33,7 @@ export default function Step3FormularyPanel({
   onSaveFormulary,
   onPrescriberChange,
   onMetadataChange,
+  onUnlockInheritedSerial,
   onAddItem,
   onRemoveItem,
   onUpdateQuantity,
@@ -105,6 +107,7 @@ export default function Step3FormularyPanel({
           catalogue={catalogue}
           onPrescriberChange={onPrescriberChange}
           onMetadataChange={onMetadataChange}
+          onUnlockInheritedSerial={onUnlockInheritedSerial}
           onAddItem={onAddItem}
           onRemoveItem={onRemoveItem}
           onUpdateQuantity={onUpdateQuantity}

@@ -23,6 +23,12 @@ import {
 } from '../prescriptions/prescription-file-purge.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import {
+  curaleafSerialAllowsCreate,
+  evaluateSerialOccupancy,
+  serialReuseIsCurrent,
+} from '../prescriptions/serial-reuse.js';
+import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
+import {
   isCuraleafPrescriberRejected,
   isCuraleafCorrectionRequired,
   isCuraleafTerminalRejection,
@@ -1027,13 +1033,84 @@ export async function executeCuraleafOrderPlacement(
   let curaleafPrescriptionId: string | null = priorCuraleaf?.prescriptionId ?? clinicPrescriptionId;
   let prescriptionCreateError: unknown = null;
   if (!curaleafPrescriptionId && !clinicRoute) {
+    const serialNumber = typeof rxData.serialNumber === 'string'
+      ? rxData.serialNumber.trim()
+      : `RX-${order.orderNumber || (order.id || 'ORDER').slice(0, 8)}`;
+    const issueDate = typeof rxData.issueDate === 'string'
+      ? rxData.issueDate
+      : new Date().toISOString().split('T')[0];
+    if (!serialReuseIsCurrent(issueDate)) {
+      return persistPlacementAttention({
+        organisationId: connection.organisationId,
+        order: { ...order, quoteSnapshot: snapshot },
+        source: 'prescription',
+        code: 'SERIAL_REUSE_EXPIRED',
+        reason: 'This prescription serial is more than 24 days from its issue date and cannot be placed.',
+        prescriberId,
+      });
+    }
+    const liveSerial = await new SqlPrescriptionSerialRepository().findLive(connection.organisationId, serialNumber).catch(() => null);
+    const redoContext = snapshot.redoContext && typeof snapshot.redoContext === 'object'
+      ? snapshot.redoContext as { originalOrderId?: string }
+      : null;
+    const occupancy = evaluateSerialOccupancy({
+      liveOrderId: liveSerial?.orderId,
+      livePatientId: liveSerial?.patientId,
+      sourceOrderId: redoContext?.originalOrderId,
+      currentOrderId: order.id,
+      currentPatientId: order.patientId,
+    });
+    if (!occupancy.allowed) {
+      return persistPlacementAttention({
+        organisationId: connection.organisationId,
+        order: { ...order, quoteSnapshot: snapshot },
+        source: 'prescription',
+        code: 'SERIAL_IN_USE',
+        reason: 'This prescription serial is already on another live order.',
+        prescriberId,
+      });
+    }
     try {
-      const serialNumber = typeof rxData.serialNumber === 'string'
-        ? rxData.serialNumber
-        : `RX-${order.orderNumber || (order.id || 'ORDER').slice(0, 8)}`;
-      const issueDate = typeof rxData.issueDate === 'string'
-        ? rxData.issueDate
-        : new Date().toISOString().split('T')[0];
+      const existingRx = await curaleafApiRequest<{ id?: string; state?: string; prescription?: { id?: string; state?: string } }>(
+        connection,
+        `/v1/prescriptions/${encodeURIComponent(serialNumber)}/`,
+      );
+      const existing = existingRx.prescription ?? existingRx;
+      const guard = curaleafSerialAllowsCreate({ state: existing.state });
+      if (!guard.allowed) {
+        return persistPlacementAttention({
+          organisationId: connection.organisationId,
+          order: { ...order, quoteSnapshot: snapshot },
+          source: 'prescription',
+          code: 'CURALEAF_SERIAL_STILL_LIVE',
+          reason: 'Curaleaf still has a live prescription with this serial. Call Curaleaf to cancel it before placing the replacement.',
+          prescriptionId: existing.id ?? null,
+          prescriberId,
+        });
+      }
+    } catch (err) {
+      const curaleafStatus = err instanceof HttpError
+        ? Number((err.details as { curaleafStatus?: unknown } | undefined)?.curaleafStatus)
+        : 0;
+      if (curaleafStatus && curaleafStatus !== 404) {
+        const guard = curaleafSerialAllowsCreate({ httpStatus: curaleafStatus });
+        if (!guard.allowed) {
+          return persistPlacementAttention({
+            organisationId: connection.organisationId,
+            order: { ...order, quoteSnapshot: snapshot },
+            source: 'prescription',
+            code: curaleafStatus === 400 || curaleafStatus === 409 || curaleafStatus === 422
+              ? 'CURALEAF_SERIAL_STILL_LIVE'
+              : 'PRESCRIPTION_CORRECTION_REQUIRED',
+            reason: curaleafStatus === 400 || curaleafStatus === 409 || curaleafStatus === 422
+              ? 'Curaleaf still has a live prescription with this serial. Call Curaleaf to cancel it before placing the replacement.'
+              : 'Curaleaf could not look up this prescription serial.',
+            prescriberId,
+          });
+        }
+      }
+    }
+    try {
       const rxRes = await curaleafApiRequest<{ id: string; state?: string }>(connection, '/v1/prescriptions/', {
         method: 'POST',
         body: JSON.stringify({
@@ -1057,7 +1134,7 @@ export async function executeCuraleafOrderPlacement(
       }
       if (rxRes?.id) {
         curaleafPrescriptionId = rxRes.id;
-        console.log(`[Curaleaf] Prescription submitted: ${curaleafPrescriptionId} (serial: ${serialNumber})`);
+        console.log(`[Curaleaf] Prescription submitted: ${curaleafPrescriptionId}`);
       }
     } catch (err) {
       prescriptionCreateError = err;

@@ -680,6 +680,10 @@ export interface PortalOrderRecord {
     replacementSequence?: number;
     priceResolution?: RedoPriceResolution;
   };
+  serialReuse?: {
+    until: string | null;
+    filePresent: boolean;
+  } | null;
   expiryCheck?: ExpiryCheckState;
   pricingQuote?: CuraleafPricingSnapshot;
   quoteReview?: {

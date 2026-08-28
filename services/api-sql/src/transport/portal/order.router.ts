@@ -58,6 +58,37 @@ import {
   stampUnpaidManualCancellation,
   withPendingPaidRefund,
 } from '../../application/orders/paid-refund.js';
+import {
+  evaluateSerialOccupancy,
+  normalizeSerialNumber,
+  prescriptionFileIsUsable,
+} from '../../application/prescriptions/serial-reuse.js';
+import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
+import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
+
+function serialPolicyConflict(policy: {
+  allowed: boolean;
+  reusesSourceSerial: boolean;
+  reason?: string;
+  occupyingOrderId?: string;
+}) {
+  if (policy.allowed) return null;
+  if (policy.reason === 'SERIAL_IN_USE') {
+    return new HttpError(409, 'This prescription serial is already on another live order.', 'SERIAL_IN_USE', {
+      occupyingOrderId: policy.occupyingOrderId,
+    });
+  }
+  if (policy.reason === 'SERIAL_REUSE_EXPIRED') {
+    return new HttpError(409, 'This prescription serial is more than 24 days from its issue date and cannot be reused.', 'SERIAL_REUSE_EXPIRED');
+  }
+  if (policy.reason === 'SERIAL_BASKET_MISMATCH') {
+    return new HttpError(409, 'A copied serial can only be used for the same prescribed medicines.', 'SERIAL_BASKET_MISMATCH');
+  }
+  if (policy.reason === 'SERIAL_REQUIRED') {
+    return new HttpError(409, 'Enter the prescription serial exactly as printed.', 'SERIAL_REQUIRED');
+  }
+  return new HttpError(409, 'This replacement requires a new valid prescription copy.', 'REPLACEMENT_PRESCRIPTION_REQUIRED', { reason: policy.reason });
+}
 
 const uuidLikeSchema = z.string().regex(/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
 
@@ -187,6 +218,8 @@ export function createPortalOrderRouter(): Router {
   const organisationRepo = new SqlOrganisationRepository();
   const patientRepo = new SqlPatientRepository();
   const patientFinanceRepo = new SqlPatientFinanceRepository();
+  const prescriptionRepo = new SqlPrescriptionRepository();
+  const serialRepo = new SqlPrescriptionSerialRepository();
   const patientFinanceDeps = { patientRepo, patientFinanceRepo };
 
   // GET /v1/portal/order-drafts - List active tenant drafts
@@ -338,7 +371,7 @@ export function createPortalOrderRouter(): Router {
         transferPence: number;
         rawQuote: unknown;
         pharmacyAdjustmentPence: number;
-        reusesSourcePrescription: boolean;
+        reusesSourceSerial: boolean;
       } = null;
 
       if (redoContext?.isPaidRedo) {
@@ -372,20 +405,46 @@ export function createPortalOrderRouter(): Router {
         const sourcePrescription = sourcePrescriptions[0] && typeof sourcePrescriptions[0] === 'object'
           ? sourcePrescriptions[0] as Record<string, any>
           : {};
-        const hasPurchaseOrder = Boolean(sourceCuraleaf.purchaseOrderId || sourceCuraleaf.purchaseOrderState || sourceCuraleaf.shipments?.length);
+        const sourceRxItems = Array.isArray(sourcePrescription.items) ? sourcePrescription.items as Array<Record<string, unknown>> : [];
+        const replacementRx = (input.prescriptions[0] ?? {}) as {
+          serialNumber?: string;
+          fileId?: string;
+          issueDate?: string;
+          items?: Array<{ packId?: string; formulaId?: string; quantity?: number; unitsNeededCount?: number }>;
+        };
+        const replacementSerial = normalizeSerialNumber(replacementRx.serialNumber);
+        const liveSerial = replacementSerial ? await serialRepo.findLive(scope.organisationId, replacementSerial) : null;
+        const replacementFile = replacementRx.fileId
+          ? await prescriptionRepo.findFileById(String(replacementRx.fileId), scope.organisationId)
+          : null;
         const prescriptionPolicy = replacementPrescriptionPolicy({
-          hasPurchaseOrder,
-          sourcePrescriptionId: String(sourceCuraleaf.prescriptionId || sourcePrescription.curaleafPrescriptionId || ''),
-          sourcePrescriptionState: String(sourceCuraleaf.prescriptionState || ''),
-          sourceExpiryDate: String(sourcePrescription.expiryDate || ''),
-          sourceLines: sourceLines.map(line => ({ packId: line.packId, quantity: Number(line.quantity) })),
-          replacementPrescriptionIds: input.prescriptions.map(rx => String(rx.curaleafPrescriptionId || '')),
-          replacementHasFiles: input.prescriptions.length > 0 && input.prescriptions.every(rx => Boolean(rx.fileId)),
-          replacementLines: input.lineItems.map(line => ({ packId: line.packId, quantity: line.quantity })),
+          sourceSerial: String(sourcePrescription.serialNumber || ''),
+          sourceIssueDate: String(sourcePrescription.issueDate || ''),
+          sourceOrderId: source.id,
+          sourcePatientId: source.patientId,
+          liveOrderId: liveSerial?.orderId,
+          livePatientId: liveSerial?.patientId,
+          currentPatientId: input.patientId,
+          replacementSerial,
+          replacementIssueDate: replacementRx.issueDate,
+          replacementHasUsableFile: prescriptionFileIsUsable(replacementFile),
+          sourceLines: (sourceRxItems.length ? sourceRxItems : sourceLines).map(line => ({
+            packId: String((line as { packId?: string }).packId || ''),
+            formulaId: String((line as { formulaId?: string }).formulaId || ''),
+            quantity: Number((line as { quantity?: number }).quantity || 0),
+            unitsNeededCount: Number((line as { unitsNeededCount?: number }).unitsNeededCount || 0),
+          })),
+          replacementLines: (replacementRx.items?.length ? replacementRx.items : input.lineItems).map(line => ({
+            packId: String((line as { packId?: string }).packId || ''),
+            formulaId: String((line as { formulaId?: string }).formulaId || ''),
+            quantity: Number((line as { quantity?: number }).quantity || 0),
+            unitsNeededCount: Number((line as { unitsNeededCount?: number }).unitsNeededCount || 0),
+          })),
         });
         if (!prescriptionPolicy.allowed) {
-          throw new HttpError(409, 'This replacement requires a new valid prescription copy.', 'REPLACEMENT_PRESCRIPTION_REQUIRED', { reason: prescriptionPolicy.reason });
+          throw serialPolicyConflict(prescriptionPolicy);
         }
+        const hasPurchaseOrder = Boolean(sourceCuraleaf.purchaseOrderId || sourceCuraleaf.purchaseOrderState || sourceCuraleaf.shipments?.length);
         const fulfilmentLines = Array.isArray(sourceCuraleaf.lines) ? sourceCuraleaf.lines : [];
         const supplierResolution = replacementSupplierResolution({
           hasPurchaseOrder,
@@ -438,7 +497,7 @@ export function createPortalOrderRouter(): Router {
           transferPence,
           rawQuote,
           pharmacyAdjustmentPence,
-          reusesSourcePrescription: prescriptionPolicy.reusesSource,
+          reusesSourceSerial: prescriptionPolicy.reusesSourceSerial,
         };
       }
 
@@ -485,9 +544,25 @@ export function createPortalOrderRouter(): Router {
             isPaidRedo: true,
             requireCuraleafAuth: true,
             priceResolution: replacement.pharmacyAdjustmentPence === 0 ? 'matched' : 'absorb',
-            reusesSourcePrescription: replacement.reusesSourcePrescription,
+            reusesSourceSerial: replacement.reusesSourceSerial,
           },
         };
+      }
+
+      const submittedSerial = normalizeSerialNumber(input.prescriptions[0]?.serialNumber);
+      if (submittedSerial && !redoContext?.isPaidRedo) {
+        const liveSerial = await serialRepo.findLive(scope.organisationId, submittedSerial);
+        const occupancy = evaluateSerialOccupancy({
+          liveOrderId: liveSerial?.orderId,
+          livePatientId: liveSerial?.patientId,
+          sourceOrderId: redoContext?.originalOrderId,
+          currentPatientId: input.patientId,
+        });
+        if (!occupancy.allowed) {
+          throw new HttpError(409, 'This prescription serial is already on another live order.', 'SERIAL_IN_USE', {
+            occupyingOrderId: occupancy.occupyingOrderId,
+          });
+        }
       }
 
       const result = await orderRepo.createOrder({
@@ -523,6 +598,28 @@ export function createPortalOrderRouter(): Router {
             lineMedicineRevenuePence: item.unitPricePence * item.quantity,
           };
         }));
+
+        const createdSerial = normalizeSerialNumber(input.prescriptions[0]?.serialNumber);
+        const createdIssueDate = String(input.prescriptions[0]?.issueDate || '').slice(0, 10);
+        if (createdSerial && createdIssueDate) {
+          try {
+            await serialRepo.claim({
+              organisationId: scope.organisationId,
+              serialNumber: createdSerial,
+              issueDate: createdIssueDate,
+              patientId: input.patientId,
+              orderId: result.id,
+              sourceOrderId: replacement?.source.id ?? redoContext?.originalOrderId ?? null,
+            });
+          } catch (error) {
+            if (error instanceof Error && error.message === 'SERIAL_IN_USE') {
+              throw new HttpError(409, 'This prescription serial is already on another live order.', 'SERIAL_IN_USE', {
+                occupyingOrderId: (error as { occupyingOrderId?: string }).occupyingOrderId,
+              });
+            }
+            throw error;
+          }
+        }
 
         if (replacement) {
           const basket = input.lineItems.map(line => ({ packId: line.packId, quantity: line.quantity }));
@@ -824,6 +921,7 @@ export function createPortalOrderRouter(): Router {
           status: 'CANCELLED',
           cancelledAt: requestedAt,
         });
+        await serialRepo.endLiveForOrder(scope.organisationId, orderId, 'hh_cancelled').catch(() => undefined);
       }
       const mapped = toPortalOrder({
         ...order,
@@ -1322,6 +1420,7 @@ export function createPortalOrderRouter(): Router {
         organisationId: scope.organisationId,
         fullyRefunded: Number(sqlRefund.amountPence) >= Number(payment.amountPence),
       });
+      await serialRepo.endLiveForOrder(scope.organisationId, orderId, 'refunded').catch(() => undefined);
 
       await purgeOrderPrescriptionFiles(scope.organisationId, order.quoteSnapshot).catch(error =>
         console.warn('[Prescription file] Purge after cancellation note:', error),

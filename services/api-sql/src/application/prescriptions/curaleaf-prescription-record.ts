@@ -1,6 +1,7 @@
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlOrderLineRepository } from '../../repositories/sql/order-line.sql.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
+import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
 import { prescriptionFileIdsFromSnapshot } from './prescription-file-purge.js';
 
 const UUID_LIKE = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
@@ -216,6 +217,17 @@ export async function persistCuraleafPrescriptionIdentity(input: {
     supplierPurchaseOrderId: purchaseOrderId,
     placementState: placed ? 'PLACED' : 'PENDING_PLACEMENT',
   });
+
+  if (serialNumber && issueDate) {
+    await new SqlPrescriptionSerialRepository().claim({
+      organisationId: input.organisationId,
+      serialNumber,
+      issueDate,
+      patientId,
+      orderId: input.orderId,
+      curaleafPrescriptionId: input.prescriptionId,
+    }).catch(() => undefined);
+  }
 
   return snapshot;
 }

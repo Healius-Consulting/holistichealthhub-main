@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { calculatePrescriptionExpiryDate, prescriptionDateIsCurrent, prescriptionDateWindowStatus, prescriptionIssueDateBounds } from './prescription-date.js';
-import { normalisePrescriptionDateParts, prescriptionExpiryDisplay } from '../../../packages/domain/prescription-date.js';
+import { normalisePrescriptionDateParts, prescriptionExpiryDisplay, serialReuseDisplay, serialReuseIsCurrent, serialReuseUntilDate, serialReuseWindowStatus } from '../../../packages/domain/prescription-date.js';
 
 const NOW = new Date('2026-08-12T12:00:00.000Z');
 
@@ -33,6 +33,24 @@ test('segmented prescription dates accept short parts and normalise to DD/MM/YYY
   assert.deepEqual(normalisePrescriptionDateParts('2', '2', '26'), { status: 'valid', value: '2026-02-02', display: '02/02/2026' });
   assert.equal(normalisePrescriptionDateParts('31', '2', '2026').status, 'invalid');
   assert.equal(normalisePrescriptionDateParts('2', '', '2026').status, 'incomplete');
+});
+
+test('serial reuse is counted from the printed issue date for 0-24 London days inclusive', () => {
+  assert.equal(serialReuseUntilDate('2026-07-19'), '2026-08-12');
+  assert.equal(serialReuseWindowStatus('2026-08-12', NOW), 'current');
+  assert.equal(serialReuseIsCurrent('2026-07-19', NOW), true);
+  assert.equal(serialReuseWindowStatus('2026-07-18', NOW), 'expired');
+  assert.equal(serialReuseIsCurrent('2026-07-18', NOW), false);
+});
+
+test('days 25-28 stay inside the 28-day CD window but the serial cannot be reused', () => {
+  assert.equal(prescriptionDateIsCurrent('2026-07-15', undefined, NOW), true);
+  assert.equal(serialReuseWindowStatus('2026-07-15', NOW), 'expired');
+  assert.equal(serialReuseDisplay('2026-07-15', NOW)?.tone, 'red');
+});
+
+test('a future issue date is not a reusable serial', () => {
+  assert.equal(serialReuseWindowStatus('2026-08-13', NOW), 'future');
 });
 
 test('expiry display uses the London calendar and green, amber, and red boundaries', () => {

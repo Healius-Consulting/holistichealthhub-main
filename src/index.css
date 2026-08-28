@@ -15942,8 +15942,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .rx-replacement-context__carry strong{ color: var(--text-primary); font-size: 10px; }
 .rx-replacement-context__next{ display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; color: var(--tenant-primary-strong); background: var(--tenant-primary-soft); }
 .rx-replacement-context__next > span{ display: grid; gap: 1px; }
-.rx-replacement-context__next strong{ font-size: 9px; white-space: nowrap; }
-.rx-replacement-context__next small{ color: var(--text-secondary); font-size: 8px; white-space: nowrap; }
+.rx-replacement-context__next strong{ font-size: 9px; }
+.rx-replacement-context__next small{ color: var(--text-secondary); font-size: 8px; line-height: 1.35; }
 
 .rx-workbench-layout{ grid-template-columns: minmax(0, 1fr) minmax(320px, 355px) !important; }
 
