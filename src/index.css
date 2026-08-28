@@ -5553,6 +5553,45 @@ html[data-reduced-motion='true'] .mobile-more-sheet { animation: none; }
 
 .workspace-page-header{ flex: 0 0 auto; }
 
+.workspace-page-header__toolbar{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workspace-page-header__identity{
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.header-curaleaf-id{
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.header-curaleaf-id strong{
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  text-transform: none;
+}
+
 .unified-admin-shell{
   --tenant-primary: #173f33;
   --tenant-primary-hover: #1f5244;
@@ -10259,6 +10298,19 @@ td{
     line-height: 1.18;
     text-overflow: clip;
     white-space: normal;
+  }
+
+  .workspace-page-header__toolbar{
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .workspace-page-header__identity{
+    justify-content: flex-start;
+  }
+
+  .header-curaleaf-id{
+    flex-wrap: wrap;
   }
 
   .workspace-page-header .app-header__actions{

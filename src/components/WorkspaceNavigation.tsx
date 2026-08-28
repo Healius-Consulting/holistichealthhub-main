@@ -36,7 +36,7 @@ interface WorkspaceNavigationProps<Key extends string> {
   groups: WorkspaceNavGroup<Key>[];
   mobilePrimaryKeys: Key[];
   onNavigate: (key: Key) => void;
-  brand: { title: string; subtitle: string; partner?: string; code?: string; logoText?: string; logoSrc?: string; logo?: ReactNode };
+  brand: { title: string; subtitle: string; partner?: string; logoText?: string; logoSrc?: string; logo?: ReactNode };
   version?: string;
   user: { initials: string; name: string; role: string };
   exitAction: { label: string; icon: ReactNode; onClick: () => void };
@@ -120,7 +120,7 @@ export default function WorkspaceNavigation<Key extends string>({
             <span className={brand.partner ? 'sidebar-brand-copy sidebar-brand-copy--cobrand' : 'sidebar-brand-copy'}>
               <strong>{brand.title}</strong>
               {brand.partner
-                ? <><i className="sidebar-brand-joiner" aria-hidden="true">×</i><small>{brand.partner}</small>{brand.code ? <em>Curaleaf ID: {brand.code}</em> : null}</>
+                ? <><i className="sidebar-brand-joiner" aria-hidden="true">×</i><small>{brand.partner}</small></>
                 : <small>{brand.subtitle}</small>}
             </span>
           </div>

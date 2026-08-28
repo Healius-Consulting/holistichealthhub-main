@@ -31,6 +31,13 @@ export default function Header() {
           {organisation?.status === 'paused' ? <span className="tenant-status tenant-status--paused">Paused</span> : null}
         </div>
       }
+      identity={
+        <div className="header-curaleaf-id">
+          <span>Curaleaf customer ID</span>
+          {' '}
+          <strong title={organisation.curaleafPharmacyCode || undefined}>{organisation.curaleafPharmacyCode ?? 'Not connected'}</strong>
+        </div>
+      }
     />
   );
 }

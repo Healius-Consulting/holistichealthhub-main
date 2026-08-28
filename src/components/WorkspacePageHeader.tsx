@@ -9,12 +9,22 @@ interface WorkspacePageHeaderProps {
   title: string;
   contextControl?: ReactNode;
   actions?: ReactNode;
+  identity?: ReactNode;
   commandLabel?: string;
   onSectionClick?: () => void;
   backAction?: { label: string; onClick: () => void };
 }
 
-export default function WorkspacePageHeader({ section, context, title, contextControl, actions, commandLabel = 'Quick find', onSectionClick, backAction }: WorkspacePageHeaderProps) {
+export default function WorkspacePageHeader({ section, context, title, contextControl, actions, identity, commandLabel = 'Quick find', onSectionClick, backAction }: WorkspacePageHeaderProps) {
+  const toolbar = (
+    <div className="app-header__actions">
+      {actions}
+      <button className="header-command-launcher" onClick={openCommandPalette} aria-label="Open command menu"><Search size={14} /><span>{commandLabel}</span><kbd>⌘K</kbd></button>
+      {contextControl}
+      <AccessibilityPanel />
+    </div>
+  );
+
   return (
     <header className="app-header workspace-page-header">
       <div className="brand-text">
@@ -26,12 +36,12 @@ export default function WorkspacePageHeader({ section, context, title, contextCo
         </div>
         <h1>{title}</h1>
       </div>
-      <div className="app-header__actions">
-        {actions}
-        <button className="header-command-launcher" onClick={openCommandPalette} aria-label="Open command menu"><Search size={14} /><span>{commandLabel}</span><kbd>⌘K</kbd></button>
-        {contextControl}
-        <AccessibilityPanel />
-      </div>
+      {identity ? (
+        <div className="workspace-page-header__toolbar">
+          {toolbar}
+          <div className="workspace-page-header__identity">{identity}</div>
+        </div>
+      ) : toolbar}
     </header>
   );
 }
