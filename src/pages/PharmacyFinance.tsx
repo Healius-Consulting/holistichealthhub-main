@@ -36,6 +36,7 @@ function emptyTotals(): PharmacyPrescriptionFinanceReport['totals'] {
     patientRevenuePence: 0,
     productRevenuePence: 0,
     dispensingFeesPence: 0,
+    pharmacyDeliveryFeesPence: 0,
     wholesaleKnownForCount: 0,
     wholesalePendingForCount: 0,
     wholesaleProductPence: 0,
@@ -77,6 +78,7 @@ function localPreviewFinanceReport(period: Period): PharmacyPrescriptionFinanceR
     refundPending: false,
     productRevenuePence: 10_000,
     dispensingFeePence: 500,
+    pharmacyDeliveryPence: 0,
     patientRevenuePence: 10_500,
     wholesaleProductPence: 8_000,
     shippingPence: 500,
@@ -105,6 +107,7 @@ function localPreviewFinanceReport(period: Period): PharmacyPrescriptionFinanceR
     pendingCollection: true,
     productRevenuePence: 7_500,
     dispensingFeePence: 500,
+    pharmacyDeliveryPence: 0,
     patientRevenuePence: 8_000,
     wholesaleProductPence: 6_000,
     shippingPence: 400,
@@ -126,6 +129,7 @@ function localPreviewFinanceReport(period: Period): PharmacyPrescriptionFinanceR
       patientRevenuePence: 10_500,
       productRevenuePence: 10_000,
       dispensingFeesPence: 500,
+      pharmacyDeliveryFeesPence: 0,
       wholesaleKnownForCount: 1,
       wholesaleProductPence: 8_000,
       shippingPence: 500,
@@ -187,6 +191,7 @@ function summariseRealisedRows(rows: FinanceRow[]) {
     patientRevenuePence: rows.reduce((sum, row) => sum + row.patientRevenuePence, 0),
     productRevenuePence: rows.reduce((sum, row) => sum + row.productRevenuePence, 0),
     dispensingFeesPence: rows.reduce((sum, row) => sum + row.dispensingFeePence, 0),
+    pharmacyDeliveryFeesPence: rows.reduce((sum, row) => sum + row.pharmacyDeliveryPence, 0),
     wholesaleKnownForCount: costed.length,
     wholesalePendingForCount: rows.length - costed.length,
     wholesaleProductPence: costed.reduce((sum, row) => sum + (row.wholesaleProductPence ?? 0), 0),
@@ -340,7 +345,10 @@ export default function PharmacyFinance() {
               <div>
                 <dt>Patient revenue</dt>
                 <dd>{pounds(totals.patientRevenuePence)}</dd>
-                <small>incl. {pounds(totals.dispensingFeesPence)} dispensing</small>
+                <small>
+                  incl. {pounds(totals.dispensingFeesPence)} dispensing
+                  {totals.pharmacyDeliveryFeesPence ? ` + ${pounds(totals.pharmacyDeliveryFeesPence)} Pharmacy Delivery` : ''}
+                </small>
               </div>
               <div>
                 <dt>{PHARMACY_COST_LABEL}</dt>

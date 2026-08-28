@@ -34,6 +34,7 @@ const current: OrganisationRecord = {
   resourcesEnabled: true,
   worldpayEnabled: false,
   defaultPaymentRoute: 'MANUAL',
+  pharmacyDeliveryEnabled: false,
   autoPlacementEnabled: false,
   gdprComplianceFlag: true,
   pausedReason: null,

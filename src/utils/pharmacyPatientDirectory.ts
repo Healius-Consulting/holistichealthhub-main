@@ -22,8 +22,6 @@ export interface PharmacyDirectoryPatient {
 }
 
 export interface PharmacyTrainingSubmission {
-  id: string;
-  organisationId: string;
   status: string;
   conditions: string[];
   primaryCondition: string;
@@ -31,8 +29,6 @@ export interface PharmacyTrainingSubmission {
   marketing: boolean;
   tried2: boolean;
   psychExclusion: boolean;
-  dob: string;
-  email: string;
 }
 
 export type PatientJourneyStage = 'enquiry' | 'referred' | 'active' | 'declined' | 'suspended';

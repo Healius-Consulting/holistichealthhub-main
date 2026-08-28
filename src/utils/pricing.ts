@@ -26,6 +26,52 @@ export const PATIENT_PRICE_LABEL = 'Patient price';
 
 /** Quiet section heading above wholesale + delivery (Curaleaf cost to the pharmacy). */
 export const PHARMACY_COST_LABEL = 'Pharmacy cost';
+export const PHARMACY_TOTAL_LABEL = 'Pharmacy Total';
+export const PATIENT_TOTAL_LABEL = 'Patient Total';
+export const WHOLESALE_COST_LABEL = 'Wholesale Cost';
+export const CURALEAF_DELIVERY_LABEL = 'Curaleaf Delivery';
+export const PHARMACY_DELIVERY_LABEL = 'Pharmacy Delivery';
+export const DISPENSING_COST_LABEL = 'Dispensing Cost';
+
+export type OrderPricingPence = {
+  medicinePence: number;
+  dispensingPence?: number;
+  pharmacyDeliveryPence?: number;
+  wholesalePence?: number | null;
+  curaleafDeliveryPence?: number | null;
+};
+
+const safePence = (value: number | null | undefined) => Number.isFinite(value) ? Math.max(0, Math.round(value!)) : 0;
+
+/** One exact ledger shared by checkout, payment and finance surfaces. */
+export function orderPricingTotals(input: OrderPricingPence) {
+  const medicinePence = safePence(input.medicinePence);
+  const dispensingPence = safePence(input.dispensingPence);
+  const pharmacyDeliveryPence = safePence(input.pharmacyDeliveryPence);
+  const wholesaleKnown = input.wholesalePence != null && Number.isFinite(input.wholesalePence);
+  const wholesalePence = safePence(input.wholesalePence);
+  const curaleafDeliveryPence = safePence(input.curaleafDeliveryPence);
+  const patientTotalPence = medicinePence + dispensingPence + pharmacyDeliveryPence;
+  const pharmacyTotalPence = wholesaleKnown ? wholesalePence + curaleafDeliveryPence : null;
+  return {
+    medicinePence,
+    dispensingPence,
+    pharmacyDeliveryPence,
+    wholesalePence,
+    curaleafDeliveryPence,
+    patientTotalPence,
+    pharmacyTotalPence,
+    grossMarginPence: pharmacyTotalPence == null ? null : patientTotalPence - pharmacyTotalPence,
+  };
+}
+
+export function optionalChargeVisible(pence: number | null | undefined) {
+  return safePence(pence) > 0;
+}
+
+export function validOptionalChargePence(value: number) {
+  return Number.isInteger(value) && value >= 0 && value <= 1_500;
+}
 
 /**
  * Gross margin is healthy from this percentage upward (inclusive). Below it,

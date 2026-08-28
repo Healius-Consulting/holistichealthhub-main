@@ -30,6 +30,7 @@ export async function processPendingPaymentLifecycle(deps: PaymentLifecycleDeps,
         payment,
         quoteSnapshot: order.quoteSnapshot,
         dispensingFeePence: order.dispensingFeePence,
+        pharmacyDeliveryPence: order.pharmacyDeliveryPence,
         now,
       });
       if (decision.action === 'none') continue;
@@ -71,6 +72,9 @@ export async function processPendingPaymentLifecycle(deps: PaymentLifecycleDeps,
           {
             firstName: patient.firstName || 'Patient',
             amountPence: payment.amountPence,
+            medicineTotalPence: order.medicineTotalPence,
+            dispensingFeePence: order.dispensingFeePence,
+            pharmacyDeliveryPence: order.pharmacyDeliveryPence,
             currency: payment.currency,
             orderNumber: order.orderNumber,
             paymentUrl: payment.hostedPaymentUrl,

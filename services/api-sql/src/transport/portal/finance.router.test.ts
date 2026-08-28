@@ -133,7 +133,7 @@ describe('pharmacy finance recognition', () => {
       totalPence: 35_000,
       activeAllocationPence: 18_000,
       replacementLinked: true,
-    }), { patientRevenuePence: 18_000, productRevenuePence: 17_000, dispensingFeePence: 1_000 });
+    }), { patientRevenuePence: 18_000, productRevenuePence: 17_000, pharmacyDeliveryPence: 0, dispensingFeePence: 1_000 });
   });
 
   it('recognises the transferred allocation, not an absorbed replacement quote', () => {
@@ -144,6 +144,6 @@ describe('pharmacy finance recognition', () => {
       activeAllocationPence: 17_000,
       replacementLinked: true,
       sourceRetainsAllocation: true,
-    }), { patientRevenuePence: 17_000, productRevenuePence: 17_000, dispensingFeePence: 0 });
+    }), { patientRevenuePence: 17_000, productRevenuePence: 17_000, pharmacyDeliveryPence: 0, dispensingFeePence: 0 });
   });
 });

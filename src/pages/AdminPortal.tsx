@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   AlertCircle,
-  AlertTriangle,
   Building2,
   CheckCircle2,
   ChevronDown,
@@ -289,7 +288,7 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
       const created = await createOrganisation({ name, tradingName, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, address, websiteDomains, primaryColour: primary, logoText, status: 'onboarding' });
       const organisation: PharmacyTenant = {
         id: created.id, slug, referralToken: created.referralToken, name, tradingName, logoText, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, address, websiteDomains,
-        status: 'onboarding', staffCount: 0, defaultPaymentRoute: 'manual',
+        status: 'onboarding', staffCount: 0, defaultPaymentRoute: 'manual', pharmacyDeliveryEnabled: false,
         brand: { primary, portalName: name },
         worldpay: { enabled: false, status: 'not-connected', environment: 'sandbox', merchantId: null, merchantName: null, lastSyncedAt: null },
       };
@@ -2371,8 +2370,8 @@ export default function AdminPortal() {
                           </div>
                         </dl>
                         <p className="admin-register-crm__order-dates">
-                          {orderActivity.uniqueDays.slice(0, 8).join(' · ')}
-                          {orderActivity.uniqueDays.length > 8 ? ` · ${orderActivity.uniqueDays.length - 8} earlier` : ''}
+                          {(orderActivity.uniqueDays ?? []).slice(0, 8).join(' · ')}
+                          {(orderActivity.uniqueDays ?? []).length > 8 ? ` · ${(orderActivity.uniqueDays ?? []).length - 8} earlier` : ''}
                         </p>
                       </>
                     )}

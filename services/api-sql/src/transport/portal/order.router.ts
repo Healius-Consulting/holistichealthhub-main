@@ -46,8 +46,9 @@ import {
   mapPortalOrderFromSql,
 } from './order-sql-overlay.js';
 import { stampPackFieldsOnSnapshot } from '../../application/orders/prescription-units.js';
-import { authoritativeQuoteLineItems, authoritativeQuotePricing, evaluateQuoteGate, quoteCheckInput } from '../../application/orders/quote-gate.js';
+import { CURRENT_PRICING_POLICY_VERSION, authoritativeQuoteLineItems, authoritativeQuotePricing, evaluateQuoteGate, quoteCheckInput } from '../../application/orders/quote-gate.js';
 import { replacementAllocationAmount, replacementPrescriptionPolicy, replacementSupplierResolution } from '../../application/orders/replacement-resolution.js';
+import { generateOrderNumber, pharmacyDeliveryChargeAllowed, pharmacyDeliveryPermitted } from '../../application/orders/order-policy.js';
 import {
   completedManualRefund,
   orderMoneyWasTaken,
@@ -95,17 +96,29 @@ async function paymentForManualRefund(
   };
 }
 
+const pharmacyDeliveryPenceSchema = z.number().int().min(0).max(1500);
+const draftPayloadSchema = z.record(z.string(), z.unknown()).superRefine((payload, context) => {
+  if (payload.pharmacyDeliveryPence === undefined) return;
+  const parsed = pharmacyDeliveryPenceSchema.safeParse(payload.pharmacyDeliveryPence);
+  if (!parsed.success) {
+    context.addIssue({
+      code: 'custom',
+      path: ['pharmacyDeliveryPence'],
+      message: 'Pharmacy Delivery must be integer pence from £0 to £15.',
+    });
+  }
+});
+
 const draftInputSchema = z.object({
   organisationId: z.string().optional(),
   patientId: z.union([uuidLikeSchema, z.literal(''), z.null()]).optional(),
-  payload: z.record(z.string(), z.unknown()).default({}),
+  payload: draftPayloadSchema.default({}),
 });
 
 const createOrderInputSchema = z.object({
   organisationId: z.string().optional(),
   patientId: uuidLikeSchema,
   draftId: z.union([uuidLikeSchema, z.literal(''), z.null()]).optional(),
-  orderNumber: z.string().optional(),
   lineItems: z.array(z.object({
     productId: z.string().optional(),
     packId: z.string(),
@@ -144,6 +157,7 @@ const createOrderInputSchema = z.object({
     })).default([]),
   })).default([]),
   dispensingFeePence: z.number().int().nonnegative().default(0),
+  pharmacyDeliveryPence: pharmacyDeliveryPenceSchema.default(0),
   medicineTotalPence: z.number().int().nonnegative().optional(),
   deliveryPence: z.number().int().nonnegative().optional(),
   taxPence: z.number().int().nonnegative().optional(),
@@ -189,6 +203,12 @@ export function createPortalOrderRouter(): Router {
     try {
       const scope = assertTenantScope(req.context!);
       const input = draftInputSchema.parse(req.body);
+      const organisation = await organisationRepo.findOrganisationById(scope.organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const pharmacyDeliveryPence = Number(input.payload.pharmacyDeliveryPence ?? 0);
+      if (!pharmacyDeliveryChargeAllowed(pharmacyDeliveryPence, organisation.pharmacyDeliveryEnabled)) {
+        throw new HttpError(409, 'Pharmacy Delivery is not enabled for new drafts.', 'PHARMACY_DELIVERY_NOT_ALLOWED');
+      }
 
       if (input.patientId) {
         const patient = await patientRepo.findPatientById(scope.organisationId, input.patientId);
@@ -199,6 +219,7 @@ export function createPortalOrderRouter(): Router {
         organisationId: scope.organisationId,
         patientId: input.patientId || null,
         payload: input.payload,
+        pharmacyDeliveryEnabledAtCreation: organisation.pharmacyDeliveryEnabled,
         createdByUid: scope.uid,
       });
 
@@ -231,6 +252,12 @@ export function createPortalOrderRouter(): Router {
       const scope = assertTenantScope(req.context!);
       const draftId = String(req.params.id || '');
       const input = draftInputSchema.parse(req.body);
+      const draft = await orderRepo.findDraftById(draftId, scope.organisationId);
+      if (!draft) throw new HttpError(404, 'Order draft not found.', 'NOT_FOUND');
+      const pharmacyDeliveryPence = Number(input.payload.pharmacyDeliveryPence ?? 0);
+      if (!pharmacyDeliveryChargeAllowed(pharmacyDeliveryPence, draft.pharmacyDeliveryEnabledAtCreation)) {
+        throw new HttpError(409, 'Pharmacy Delivery was not enabled when this draft was created.', 'PHARMACY_DELIVERY_NOT_ALLOWED');
+      }
 
       const updated = await orderRepo.updateDraft({
         id: draftId,
@@ -271,6 +298,20 @@ export function createPortalOrderRouter(): Router {
     try {
       const scope = assertTenantScope(req.context!);
       const input = createOrderInputSchema.parse(req.body);
+      const organisation = await organisationRepo.findOrganisationById(scope.organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const sourceDraft = input.draftId
+        ? await orderRepo.findDraftById(input.draftId, scope.organisationId)
+        : null;
+      if (input.draftId && !sourceDraft) throw new HttpError(404, 'Order draft not found.', 'NOT_FOUND');
+      const pharmacyDeliveryAllowed = pharmacyDeliveryPermitted({
+        draftEnabledAtCreation: sourceDraft?.pharmacyDeliveryEnabledAtCreation,
+        organisationEnabled: organisation.pharmacyDeliveryEnabled,
+      });
+      const pharmacyDeliveryPence = input.pharmacyDeliveryPence ?? 0;
+      if (!pharmacyDeliveryChargeAllowed(pharmacyDeliveryPence, pharmacyDeliveryAllowed)) {
+        throw new HttpError(409, 'Pharmacy Delivery was not enabled when this order was started.', 'PHARMACY_DELIVERY_NOT_ALLOWED');
+      }
 
       const patient = await patientRepo.findPatientById(scope.organisationId, input.patientId);
       assertPatientEligibleForOrder(patient);
@@ -376,7 +417,7 @@ export function createPortalOrderRouter(): Router {
         if (!connection?.secretResourceName) throw new HttpError(409, 'A live Curaleaf quote is required for this replacement.', 'QUOTE_UNAVAILABLE');
         const basket = input.lineItems.map(line => ({ packId: line.packId, quantity: line.quantity }));
         const rawQuote = await fetchCuraleafQuote(connection, basket);
-        const evaluated = evaluateQuoteGate({ rawQuote, basket, dispensingFeePence });
+        const evaluated = evaluateQuoteGate({ rawQuote, basket, dispensingFeePence, pharmacyDeliveryPence });
         if (evaluated.status === 'OUT_OF_STOCK') throw new HttpError(409, 'The replacement contains an out-of-stock item. Recheck later or refund the unresolved value.', 'QUOTE_OUT_OF_STOCK');
         if (evaluated.status !== 'MATCHED') throw new HttpError(409, 'The replacement quote requires reconciliation.', 'QUOTE_RECONCILIATION_REQUIRED');
         authoritativeRawQuote = rawQuote;
@@ -404,7 +445,7 @@ export function createPortalOrderRouter(): Router {
         if (!connection?.secretResourceName) throw new HttpError(409, 'A live Curaleaf quote is required before creating this order.', 'QUOTE_UNAVAILABLE');
         const basket = input.lineItems.map(line => ({ packId: line.packId, quantity: line.quantity }));
         authoritativeRawQuote = await fetchCuraleafQuote(connection, basket);
-        liveQuoteEvaluation = evaluateQuoteGate({ rawQuote: authoritativeRawQuote, basket, dispensingFeePence });
+        liveQuoteEvaluation = evaluateQuoteGate({ rawQuote: authoritativeRawQuote, basket, dispensingFeePence, pharmacyDeliveryPence });
         if (liveQuoteEvaluation.status === 'OUT_OF_STOCK') {
           throw new HttpError(409, 'The order contains an out-of-stock item. Recheck the quote before payment.', 'QUOTE_OUT_OF_STOCK');
         }
@@ -413,7 +454,7 @@ export function createPortalOrderRouter(): Router {
         }
         ({ medicineTotalPence, deliveryPence, taxPence, totalPence } = authoritativeQuotePricing(liveQuoteEvaluation));
       }
-      const orderNumber = input.orderNumber || `ORD-${Date.now().toString(36).toUpperCase()}`;
+      const orderNumber = generateOrderNumber();
 
       const authoritativeLineItems = authoritativeQuoteLineItems(input.lineItems, liveQuoteEvaluation);
 
@@ -425,9 +466,11 @@ export function createPortalOrderRouter(): Router {
         quote: authoritativeRawQuote,
         medicineTotalPence,
         dispensingFeePence,
+        pharmacyDeliveryPence,
         deliveryPence,
         taxPence,
         totalPence,
+        pricingPolicyVersion: CURRENT_PRICING_POLICY_VERSION,
       }, authoritativeLineItems);
       if (replacement) {
         quoteSnapshot = {
@@ -457,6 +500,7 @@ export function createPortalOrderRouter(): Router {
         currency: input.currency,
         medicineTotalPence,
         dispensingFeePence,
+        pharmacyDeliveryPence,
         deliveryPence,
         taxPence,
         totalPence: totalPence > 0 ? totalPence : 1,
@@ -490,6 +534,7 @@ export function createPortalOrderRouter(): Router {
                 basket,
                 rawQuote: replacement.rawQuote,
                 dispensingFeePence,
+                pharmacyDeliveryPence,
               }),
               status: replacement.pharmacyAdjustmentPence === 0 ? 'MATCHED' : 'ABSORBED',
               comparison: {

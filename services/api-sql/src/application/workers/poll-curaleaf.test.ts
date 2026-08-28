@@ -16,6 +16,7 @@ function order(partial: Partial<OrderRecord> & { id: string }): OrderRecord {
     currency: 'GBP',
     medicineTotalPence: 1000,
     dispensingFeePence: 0,
+    pharmacyDeliveryPence: 0,
     deliveryPence: 0,
     taxPence: 0,
     totalPence: 1000,

@@ -47,6 +47,7 @@ const GET_ORGANISATION_BY_ID_GQL = `
       resourcesEnabled
       worldpayEnabled
       defaultPaymentRoute
+      pharmacyDeliveryEnabled
       autoPlacementEnabled
       gdprComplianceFlag
       pausedReason
@@ -96,6 +97,7 @@ const LIST_ORGANISATIONS_GQL = `
       resourcesEnabled
       worldpayEnabled
       defaultPaymentRoute
+      pharmacyDeliveryEnabled
       autoPlacementEnabled
       gdprComplianceFlag
       pausedReason
@@ -208,6 +210,7 @@ const CREATE_ORGANISATION_GQL = `
       resourcesEnabled: true
       worldpayEnabled: false
       defaultPaymentRoute: MANUAL
+      pharmacyDeliveryEnabled: false
     })
   }
 `;
@@ -387,6 +390,15 @@ const UPDATE_ORGANISATION_PAYMENT_ROUTE_GQL = `
   }
 `;
 
+const UPDATE_ORGANISATION_PHARMACY_DELIVERY_GQL = `
+  mutation UpdateOrganisationPharmacyDelivery($id: UUID!, $enabled: Boolean!) {
+    organisation_update(
+      key: { id: $id }
+      data: { pharmacyDeliveryEnabled: $enabled }
+    )
+  }
+`;
+
 const UPDATE_ORGANISATION_INTAKE_ENABLED_GQL = `
   mutation UpdateOrganisationIntakeEnabled(
     $id: UUID!
@@ -501,6 +513,12 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
     });
   }
 
+  async updateOrganisationPharmacyDelivery(id: string, enabled: boolean): Promise<void> {
+    await dataConnect.executeGraphql<any, any>(UPDATE_ORGANISATION_PHARMACY_DELIVERY_GQL, {
+      variables: { id: asUuid(id), enabled },
+    });
+  }
+
   async updateOrganisationIntakeEnabled(id: string, intakeEnabled: boolean): Promise<void> {
     await dataConnect.executeGraphql<any, any>(UPDATE_ORGANISATION_INTAKE_ENABLED_GQL, {
       variables: { id: asUuid(id), intakeEnabled },
@@ -555,6 +573,7 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
       resourcesEnabled: true,
       worldpayEnabled: false,
       defaultPaymentRoute: 'MANUAL',
+      pharmacyDeliveryEnabled: false,
       autoPlacementEnabled: false,
       gdprComplianceFlag: true,
       pausedReason: null,

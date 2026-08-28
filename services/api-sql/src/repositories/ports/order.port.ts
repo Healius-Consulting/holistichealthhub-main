@@ -4,6 +4,7 @@ export interface OrderDraftRecord {
   patientId: string | null;
   status: string;
   paymentStatus: string;
+  pharmacyDeliveryEnabledAtCreation: boolean;
   payload: unknown;
   version: number;
   createdAt: string;
@@ -24,6 +25,7 @@ export interface OrderRecord {
   currency: string;
   medicineTotalPence: number;
   dispensingFeePence: number;
+  pharmacyDeliveryPence: number;
   deliveryPence: number;
   taxPence: number;
   totalPence: number;
@@ -53,6 +55,7 @@ export interface CreateOrderInput {
   currency: string;
   medicineTotalPence: number;
   dispensingFeePence: number;
+  pharmacyDeliveryPence: number;
   deliveryPence: number;
   taxPence: number;
   totalPence: number;
@@ -64,7 +67,7 @@ export interface OrderRepositoryPort {
   findDraftById(id: string, organisationId: string): Promise<OrderDraftRecord | null>;
   listTenantDrafts(organisationId: string, limit?: number): Promise<OrderDraftRecord[]>;
   listOpenDrafts(limit?: number): Promise<OrderDraftRecord[]>;
-  createDraft(data: { organisationId: string; patientId?: string | null; payload: unknown; createdByUid: string }): Promise<{ id?: string }>;
+  createDraft(data: { organisationId: string; patientId?: string | null; payload: unknown; pharmacyDeliveryEnabledAtCreation: boolean; createdByUid: string }): Promise<{ id?: string }>;
   updateDraft(data: { id: string; organisationId: string; patientId?: string | null; payload: unknown }): Promise<{ id: string } | null>;
   deleteDraft(id: string, organisationId: string): Promise<boolean>;
   markDraftAbandoned(id: string, scrubbedPayload: unknown): Promise<void>;

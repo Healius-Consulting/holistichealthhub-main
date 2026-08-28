@@ -57,23 +57,37 @@ export function pharmacyFinanceRecognition(order: {
 export function financeRevenueBasis(input: {
   medicineTotalPence?: number | null;
   dispensingFeePence?: number | null;
+  pharmacyDeliveryPence?: number | null;
   totalPence?: number | null;
   activeAllocationPence?: number | null;
   replacementLinked: boolean;
   sourceRetainsAllocation?: boolean;
 }) {
   const grossFee = Math.max(0, Number(input.dispensingFeePence || 0));
+  const grossDelivery = Math.max(0, Number(input.pharmacyDeliveryPence || 0));
   const grossMedicine = Math.max(0, Number(input.medicineTotalPence
-    || (Number(input.totalPence || 0) - grossFee)));
-  const grossTotal = Math.max(0, Number(input.totalPence || (grossMedicine + grossFee)));
+    || (Number(input.totalPence || 0) - grossFee - grossDelivery)));
+  const grossTotal = Math.max(0, Number(input.totalPence || (grossMedicine + grossDelivery + grossFee)));
   if (!input.replacementLinked) {
-    return { patientRevenuePence: grossTotal, productRevenuePence: grossMedicine, dispensingFeePence: grossFee };
+    return {
+      patientRevenuePence: grossTotal,
+      productRevenuePence: grossMedicine,
+      pharmacyDeliveryPence: grossDelivery,
+      dispensingFeePence: grossFee,
+    };
   }
   const patientRevenuePence = Math.max(0, Number(input.activeAllocationPence || 0));
-  const dispensingFeePence = input.sourceRetainsAllocation ? 0 : Math.min(grossFee, patientRevenuePence);
+  const dispensingFeePence = input.sourceRetainsAllocation
+    ? 0
+    : Math.min(grossFee, patientRevenuePence);
+  const pharmacyDeliveryPence = input.sourceRetainsAllocation
+    ? 0
+    : Math.min(grossDelivery, Math.max(0, patientRevenuePence - dispensingFeePence));
+  const productRevenuePence = Math.max(0, patientRevenuePence - dispensingFeePence - pharmacyDeliveryPence);
   return {
     patientRevenuePence,
-    productRevenuePence: Math.max(0, patientRevenuePence - dispensingFeePence),
+    productRevenuePence,
+    pharmacyDeliveryPence,
     dispensingFeePence,
   };
 }

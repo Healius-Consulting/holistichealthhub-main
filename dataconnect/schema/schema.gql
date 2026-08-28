@@ -352,6 +352,7 @@ type Organisation @table {
   resourcesEnabled: Boolean! @default(value: false)
   worldpayEnabled: Boolean! @default(value: false)
   defaultPaymentRoute: PaymentRoute! @default(value: MANUAL)
+  pharmacyDeliveryEnabled: Boolean! @default(value: false)
   autoPlacementEnabled: Boolean! @default(value: false)
   gdprComplianceFlag: Boolean! @default(value: true)
   pausedReason: String
@@ -688,6 +689,7 @@ type OrderDraft @table {
   patientId: UUID @index
   status: DraftStatus! @default(value: DRAFT)
   paymentStatus: PaymentStatus! @default(value: NONE)
+  pharmacyDeliveryEnabledAtCreation: Boolean! @default(value: false)
   payload: Any!
   createdBy: StaffUser! @ref(fields: "createdByUid", references: "uid")
   createdByUid: String! @index
@@ -715,6 +717,7 @@ type Order @table {
   currency: String! @default(value: "GBP")
   medicineTotalPence: Int64! @default(value: 0)
   dispensingFeePence: Int64! @default(value: 0)
+  pharmacyDeliveryPence: Int64! @default(value: 0)
   deliveryPence: Int64! @default(value: 0)
   taxPence: Int64! @default(value: 0)
   totalPence: Int64! @default(value: 0)

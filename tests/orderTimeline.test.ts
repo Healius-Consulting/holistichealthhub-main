@@ -106,6 +106,21 @@ test('order timeline keeps payment and goods-in events on distinct timestamps', 
   );
 });
 
+test('order timeline includes only the latest successful payment-gate check', () => {
+  const events = buildOrderTimelineEvents({
+    ...partialOrder,
+    quoteChecks: [
+      { id: 'matched-old', phase: 'PRE_PAYMENT', status: 'MATCHED', checkedAt: '2026-08-13T08:00:00.000Z', basketFingerprint: 'a', patientTotalPence: 10_000, wholesaleTotalPence: 5_000, shippingPence: 0, stockAvailable: true },
+      { id: 'changed', phase: 'PRE_PLACEMENT', status: 'CHANGED', checkedAt: '2026-08-13T09:10:00.000Z', basketFingerprint: 'b', patientTotalPence: 11_000, wholesaleTotalPence: 5_500, shippingPence: 0, stockAvailable: true },
+      { id: 'matched-new', phase: 'PRE_PLACEMENT', status: 'MATCHED', checkedAt: '2026-08-13T09:20:00.000Z', basketFingerprint: 'c', patientTotalPence: 11_000, wholesaleTotalPence: 5_500, shippingPence: 0, stockAvailable: true },
+    ],
+  });
+  const matches = events.filter(event => event.label === 'Payment gate matched');
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.date, '2026-08-13T09:20:00.000Z');
+  assert.match(matches[0]?.detail ?? '', /£110\.00 · pre placement/);
+});
+
 /* ---- Placement rail ---- */
 
 const unplacedPrescription: Prescription = {

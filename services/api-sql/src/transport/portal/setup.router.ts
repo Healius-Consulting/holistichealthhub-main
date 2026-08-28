@@ -394,21 +394,34 @@ export function createPortalSetupRouter(): Router {
         organisationId: organisationIdSchema.optional(),
         defaultPaymentRoute: z.enum(['manual', 'worldpay']).optional(),
         worldpayEnabled: z.boolean().optional(),
-      }).refine(value => value.defaultPaymentRoute !== undefined || value.worldpayEnabled !== undefined, {
-        message: 'Choose a default payment route.',
+        pharmacyDeliveryEnabled: z.boolean().optional(),
+      }).refine(value => value.defaultPaymentRoute !== undefined || value.worldpayEnabled !== undefined || value.pharmacyDeliveryEnabled !== undefined, {
+        message: 'Choose a payment or delivery setting.',
       }).parse(req.body);
       if (input.organisationId && input.organisationId.replaceAll('-', '').toLowerCase() !== scope.organisationId.replaceAll('-', '').toLowerCase()) {
         throw new HttpError(403, 'A pharmacy may only update its own payment settings.', 'TENANT_SCOPE_VIOLATION');
       }
-      const defaultPaymentRoute = input.defaultPaymentRoute ?? (input.worldpayEnabled ? 'worldpay' : 'manual');
-      if (defaultPaymentRoute === 'worldpay') {
+      const organisation = await organisationRepo.findOrganisationById(scope.organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const currentPaymentRoute = organisation.defaultPaymentRoute === 'WORLDPAY' ? 'worldpay' : 'manual';
+      const defaultPaymentRoute = input.defaultPaymentRoute
+        ?? (input.worldpayEnabled === undefined ? currentPaymentRoute : input.worldpayEnabled ? 'worldpay' : 'manual');
+      const paymentRouteChanged = defaultPaymentRoute !== currentPaymentRoute;
+      const pharmacyDeliveryEnabled = input.pharmacyDeliveryEnabled ?? organisation.pharmacyDeliveryEnabled;
+      const pharmacyDeliveryChanged = pharmacyDeliveryEnabled !== organisation.pharmacyDeliveryEnabled;
+      if ((input.defaultPaymentRoute !== undefined || input.worldpayEnabled !== undefined) && defaultPaymentRoute === 'worldpay') {
         const worldpay = await integrationRepo.findConnection(scope.organisationId, 'WORLDPAY');
         if (!worldpay || worldpay.status !== 'ACTIVE' || !worldpay.secretResourceName) {
           throw new HttpError(409, 'Verify this pharmacy’s Worldpay connection before making it the default payment route.', 'WORLDPAY_VERIFICATION_REQUIRED');
         }
       }
-      const route = defaultPaymentRoute === 'worldpay' ? 'WORLDPAY' as const : 'MANUAL' as const;
-      await organisationRepo.updateOrganisationPaymentRoute(scope.organisationId, route, defaultPaymentRoute === 'worldpay');
+      if (input.defaultPaymentRoute !== undefined || input.worldpayEnabled !== undefined) {
+        const route = defaultPaymentRoute === 'worldpay' ? 'WORLDPAY' as const : 'MANUAL' as const;
+        await organisationRepo.updateOrganisationPaymentRoute(scope.organisationId, route, defaultPaymentRoute === 'worldpay');
+      }
+      if (input.pharmacyDeliveryEnabled !== undefined) {
+        await organisationRepo.updateOrganisationPharmacyDelivery(scope.organisationId, pharmacyDeliveryEnabled);
+      }
       await identityRepo.appendAudit({
         organisationId: scope.organisationId,
         actorUid: scope.uid,
@@ -419,12 +432,16 @@ export function createPortalSetupRouter(): Router {
         requestId: scope.requestId,
         sessionHashPrefix: scope.sessionHash.slice(0, 12),
         surface: scope.surface,
-        details: { defaultPaymentRoute },
+        details: {
+          ...(paymentRouteChanged ? { defaultPaymentRoute: { from: currentPaymentRoute, to: defaultPaymentRoute } } : {}),
+          ...(pharmacyDeliveryChanged ? { pharmacyDeliveryEnabled: { from: organisation.pharmacyDeliveryEnabled, to: pharmacyDeliveryEnabled } } : {}),
+        },
       });
       res.status(200).json({
         organisationId: scope.organisationId,
         defaultPaymentRoute,
         worldpayEnabled: defaultPaymentRoute === 'worldpay',
+        pharmacyDeliveryEnabled,
         updatedAt: new Date().toISOString(),
       });
     } catch (error) {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { OVERVIEW_FINANCE_PERIOD_DAYS, overviewFinanceSnapshot } from './pharmacy-ledger.js';
+import { allocatePatientRevenueAfterRefund, OVERVIEW_FINANCE_PERIOD_DAYS, overviewFinanceSnapshot } from './pharmacy-ledger.js';
 
 const NOW = Date.parse('2026-08-27T12:00:00.000Z');
 const daysAgo = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
@@ -98,5 +98,32 @@ describe('the Overview thirty-day money snapshot', () => {
       row({ realised: true, patientRevenuePence: 6_000, financialEventAt: '' }),
     ], NOW);
     assert.equal(snapshot.realisedCount, 0);
+  });
+});
+
+describe('patient revenue refund allocation', () => {
+  it('uses product revenue first, then Pharmacy Delivery, then dispensing', () => {
+    assert.deepEqual(allocatePatientRevenueAfterRefund({
+      productRevenuePence: 10_000,
+      pharmacyDeliveryPence: 1_000,
+      dispensingFeePence: 500,
+      refundPence: 10_750,
+    }), { productRevenuePence: 0, pharmacyDeliveryPence: 250, dispensingFeePence: 500, patientRevenuePence: 750 });
+    assert.deepEqual(allocatePatientRevenueAfterRefund({
+      productRevenuePence: 10_000,
+      pharmacyDeliveryPence: 1_000,
+      dispensingFeePence: 500,
+      refundPence: 11_250,
+    }), { productRevenuePence: 0, pharmacyDeliveryPence: 0, dispensingFeePence: 250, patientRevenuePence: 250 });
+  });
+
+  it('zeroes every component for a full refund', () => {
+    assert.deepEqual(allocatePatientRevenueAfterRefund({
+      productRevenuePence: 10_000,
+      pharmacyDeliveryPence: 1_000,
+      dispensingFeePence: 500,
+      refundPence: 11_500,
+      fullyRefunded: true,
+    }), { productRevenuePence: 0, pharmacyDeliveryPence: 0, dispensingFeePence: 0, patientRevenuePence: 0 });
   });
 });

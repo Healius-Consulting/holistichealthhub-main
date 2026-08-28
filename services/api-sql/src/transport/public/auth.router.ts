@@ -13,6 +13,7 @@ import { assertTenantScope } from '../../security/request-context.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
+import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { toPortalOrganisation } from '../portal/pharmacy-contracts.js';
 
 const sessionInputSchema = z.object({
@@ -34,6 +35,7 @@ export function createAuthRouter(): Router {
   const sessionService = new SessionService();
   const identityRepo = new SqlIdentityRepository();
   const organisationRepo = new SqlOrganisationRepository();
+  const integrationRepo = new SqlIntegrationRepository();
   const notificationRepo = new SqlNotificationRepository();
 
   // GET /v1/auth/csrf - Issue or refresh CSRF token
@@ -97,10 +99,11 @@ export function createAuthRouter(): Router {
   router.get('/portal/session', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
-      const [payload, staff, organisation] = await Promise.all([
+      const [payload, staff, organisation, curaleaf] = await Promise.all([
         sessionService.getSessionPayload(scope),
         identityRepo.findStaffUser(scope.uid),
         organisationRepo.findOrganisationById(scope.organisationId),
+        integrationRepo.findConnection(scope.organisationId, 'CURALEAF'),
       ]);
       if (!staff || !organisation) {
         throw new HttpError(403, 'The pharmacy account is not fully provisioned.', 'TENANT_REQUIRED');
@@ -119,7 +122,7 @@ export function createAuthRouter(): Router {
           status: staff.status.toLowerCase(),
           disabled: staff.disabled,
         },
-        organisation: toPortalOrganisation(organisation),
+        organisation: toPortalOrganisation(organisation, { curaleafPharmacyCode: curaleaf?.externalCustomerId }),
       });
     } catch (error) {
       next(error);

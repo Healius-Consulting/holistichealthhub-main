@@ -11,7 +11,7 @@ const eligibleOrganisation: OrganisationRecord = {
   primaryColour: '#12372d', logoText: 'EP', status: 'LIVE', classification: 'STANDARD',
   portalName: 'Eligible Pharmacy', intakeEnabled: true, prescriptionEnabled: true, paymentsEnabled: true,
   supplierOrdersEnabled: true, patientsEnabled: true, resourcesEnabled: true, worldpayEnabled: false,
-  defaultPaymentRoute: 'MANUAL', autoPlacementEnabled: false, gdprComplianceFlag: true,
+  defaultPaymentRoute: 'MANUAL', pharmacyDeliveryEnabled: false, autoPlacementEnabled: false, gdprComplianceFlag: true,
   pausedReason: null, pausedAt: null, version: 1, archivedAt: null,
 };
 

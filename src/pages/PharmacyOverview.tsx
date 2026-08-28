@@ -198,6 +198,28 @@ export default function PharmacyOverview() {
         </section>
       )}
 
+      {overview.finance ? (
+        <section className="card overview-finance" aria-labelledby="overview-finance-title">
+          <div className="section-heading">
+            <div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2></div>
+            <span>{overview.finance.realisedCount} realised</span>
+          </div>
+          <dl className="overview-finance__figures">
+            <div><dt>Patient revenue</dt><dd>{pounds(overview.finance.realisedPatientRevenuePence)}</dd><small>Collected orders, refunds deducted</small></div>
+            <div><dt>Contribution</dt><dd>{pounds(overview.finance.contributionPence)}</dd><small>{overview.finance.contributionComplete ? 'All realised orders costed' : 'Some orders not yet costed'}</small></div>
+            <div><dt>Paid, awaiting collection</dt><dd>{pounds(overview.finance.pendingPatientRevenuePence)}</dd><small>{overview.finance.pendingCollectionCount} order{overview.finance.pendingCollectionCount === 1 ? '' : 's'}</small></div>
+            <div><dt>Awaiting payment</dt><dd>{pounds(overview.finance.awaitingPaymentValuePence)}</dd><small>{overview.finance.awaitingPaymentCount} order{overview.finance.awaitingPaymentCount === 1 ? '' : 's'}</small></div>
+          </dl>
+          <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>View finance <ArrowRight size={13} aria-hidden="true" /></button>
+        </section>
+      ) : (
+        <section className="card overview-finance" aria-labelledby="overview-finance-title">
+          <div className="section-heading"><div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2></div></div>
+          <p className="overview-muted">Figures could not be worked out just now. Refresh, or open Finance for the full ledger.</p>
+          <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>View finance <ArrowRight size={13} aria-hidden="true" /></button>
+        </section>
+      )}
+
       <section className="overview-panel overview-today" aria-label="Today">
         {/* Needs you comes first and owns the attention count. The separate
             "N items need attention today" strip said the same thing one line above
@@ -262,60 +284,22 @@ export default function PharmacyOverview() {
           )}
         </section>
 
-        {/* Secondary row: the money, and where the rest of the work is sitting.
-            Both navigate; neither is a headline metric competing with Needs you. */}
+        {/* Integration health and pipeline share the final row, in mobile source order. */}
         <div className="overview-secondary">
-        {overview.finance ? (
-          <section className="card overview-finance" aria-labelledby="overview-finance-title">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Finance</p>
-                <h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2>
-              </div>
-              <span>{overview.finance.realisedCount} realised</span>
-            </div>
-            <dl className="overview-finance__figures">
-              <div>
-                <dt>Patient revenue</dt>
-                <dd>{pounds(overview.finance.realisedPatientRevenuePence)}</dd>
-                <small>Collected orders, refunds deducted</small>
-              </div>
-              <div>
-                <dt>Contribution</dt>
-                <dd>{pounds(overview.finance.contributionPence)}</dd>
-                {/* Said out loud, because a contribution figure that silently skips
-                    uncosted orders reads as smaller trade rather than partial data. */}
-                <small>{overview.finance.contributionComplete ? 'All realised orders costed' : 'Some orders not yet costed'}</small>
-              </div>
-              <div>
-                <dt>Paid, awaiting collection</dt>
-                <dd>{pounds(overview.finance.pendingPatientRevenuePence)}</dd>
-                <small>{overview.finance.pendingCollectionCount} order{overview.finance.pendingCollectionCount === 1 ? '' : 's'}</small>
-              </div>
-              <div>
-                <dt>Awaiting payment</dt>
-                <dd>{pounds(overview.finance.awaitingPaymentValuePence)}</dd>
-                <small>{overview.finance.awaitingPaymentCount} order{overview.finance.awaitingPaymentCount === 1 ? '' : 's'}</small>
-              </div>
-            </dl>
-            <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>
-              View finance <ArrowRight size={13} aria-hidden="true" />
-            </button>
+          <section className="card overview-integrations" aria-label="Integration health">
+            <p className="section-label">Integrations</p>
+            <ul className="overview-integrations__chips">
+              {overview.integrations.map(item => (
+                <li key={item.integration} className={`overview-integration-chip overview-integration-chip--${item.state}`}>
+                  <span className="overview-integration-chip__name">{INTEGRATION_NAMES[item.integration] ?? item.integration}</span>
+                  <strong className={`integration-state integration-state--${item.state}`}>{stateLabel(item)}</strong>
+                  <small>{item.detail ?? integrationCheckLabel(item)}</small>
+                  <small className="overview-integration-chip__checked">{integrationCheckLabel(item)}</small>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="overview-integrations__link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'settings' })}>Open Settings <ArrowRight size={13} aria-hidden="true" /></button>
           </section>
-        ) : (
-          <section className="card overview-finance" aria-labelledby="overview-finance-title">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Finance</p>
-                <h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2>
-              </div>
-            </div>
-            <p className="overview-muted">Figures could not be worked out just now. Refresh, or open Finance for the full ledger.</p>
-            <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>
-              View finance <ArrowRight size={13} aria-hidden="true" />
-            </button>
-          </section>
-        )}
 
         <section className="card overview-pipeline" aria-labelledby="overview-pipeline-title">
           <div className="section-heading">
@@ -348,24 +332,6 @@ export default function PharmacyOverview() {
         </section>
         </div>
 
-        {/* Integrations are a standing fact, not a job. Quiet chips, and the only
-            action is to go and look at Settings — no credential editing here. */}
-        <section className="overview-integrations" aria-label="Integration health">
-          <p className="section-label">Integrations</p>
-          <ul className="overview-integrations__chips">
-            {overview.integrations.map(item => (
-              <li key={item.integration} className={`overview-integration-chip overview-integration-chip--${item.state}`}>
-                <span className="overview-integration-chip__name">{INTEGRATION_NAMES[item.integration] ?? item.integration}</span>
-                <strong className={`integration-state integration-state--${item.state}`}>{stateLabel(item)}</strong>
-                <small>{item.detail ?? integrationCheckLabel(item)}</small>
-                <small className="overview-integration-chip__checked">{integrationCheckLabel(item)}</small>
-              </li>
-            ))}
-          </ul>
-          <button type="button" className="overview-integrations__link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'settings' })}>
-            Open Settings <ArrowRight size={13} aria-hidden="true" />
-          </button>
-        </section>
       </section>
     </div>
   );

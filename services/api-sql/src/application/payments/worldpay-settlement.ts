@@ -1,6 +1,6 @@
 import { executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../integrations/curaleaf.service.js';
 import { curaleafCancellationBlocksPlacement } from '../orders/quote-review.js';
-import { quoteCheckInput } from '../orders/quote-gate.js';
+import { quoteCheckInput, quotePricingPolicy } from '../orders/quote-gate.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import { promotePatientAfterCuraleafPlacement } from '../patient-finance/patient-finance.js';
 import type { PatientFinanceDeps } from '../patient-finance/patient-finance.js';
@@ -80,6 +80,9 @@ async function queueSettlementEmails(payment: PaymentRecord, deps: WorldpaySettl
       {
         firstName: patient.firstName || 'Patient',
         amountPence: payment.amountPence,
+        medicineTotalPence: order.medicineTotalPence,
+        dispensingFeePence: order.dispensingFeePence,
+        pharmacyDeliveryPence: order.pharmacyDeliveryPence,
         currency: payment.currency,
         orderNumber: order.orderNumber,
         receiptHash: payment.receiptHash,
@@ -148,6 +151,8 @@ export async function placeOrderAfterWorldpaySettlement(
     rawQuote,
     baseline,
     dispensingFeePence: Number(order.dispensingFeePence || 0),
+    pharmacyDeliveryPence: Number(order.pharmacyDeliveryPence || 0),
+    ...quotePricingPolicy(order.quoteSnapshot),
   }));
   if (postCheck.status !== 'MATCHED') {
     const comparison = postCheck.comparison && typeof postCheck.comparison === 'object'

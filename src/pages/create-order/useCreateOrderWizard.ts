@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { computeWizardProgress, isRouteChosen, prescriptionUploaded } from './computeWizardProgress';
-import type { ComputeWizardProgressInput, WizardProgress, WizardStep } from './types';
+import type { ComputeWizardProgressInput, WizardStep } from './types';
 
-type UseCreateOrderWizardOptions = ComputeWizardProgressInput & {
+type UseCreateOrderWizardOptions = Omit<ComputeWizardProgressInput, 'routeExplicitlyChosen'> & {
   activeOrderId: number | null;
   selectedRxId: number | null;
   onPatientLinked?: () => void;

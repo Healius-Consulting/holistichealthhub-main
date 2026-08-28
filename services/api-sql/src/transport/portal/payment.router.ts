@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
 import { executeCuraleafOrderPlacement } from '../../application/integrations/curaleaf.service.js';
 import { fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
-import { quoteCheckInput, quoteGateAllowsPayment } from '../../application/orders/quote-gate.js';
+import { quoteCheckInput, quoteGateAllowsPayment, quotePricingPolicy } from '../../application/orders/quote-gate.js';
 import { stampPaidQuoteOnSnapshot } from '../../application/orders/finance-costing.js';
 import { persistCuraleafPrescriptionIdentity } from '../../application/prescriptions/curaleaf-prescription-record.js';
 import { promotePatientAfterCuraleafPlacement } from '../../application/patient-finance/patient-finance.js';
@@ -72,7 +72,7 @@ function settledPayment<T extends { status: string }>(payments: T[]) {
 async function queuePatientPaymentRequestEmail(input: {
   organisationId: string;
   orderId: string;
-  order: { patientId: string; orderNumber: string | null; totalPence: number; currency: string | null };
+  order: { patientId: string; orderNumber: string | null; totalPence: number; medicineTotalPence: number; dispensingFeePence: number; pharmacyDeliveryPence: number; currency: string | null };
   paymentId: string;
   paymentUrl: string | undefined;
   notificationRepo: SqlNotificationRepository;
@@ -91,6 +91,9 @@ async function queuePatientPaymentRequestEmail(input: {
     {
       firstName: patient.firstName || 'Patient',
       amountPence: input.order.totalPence,
+      medicineTotalPence: input.order.medicineTotalPence,
+      dispensingFeePence: input.order.dispensingFeePence,
+      pharmacyDeliveryPence: input.order.pharmacyDeliveryPence,
       currency: input.order.currency || 'GBP',
       orderNumber: input.order.orderNumber,
       paymentUrl: input.paymentUrl,
@@ -146,6 +149,8 @@ export function createPortalPaymentRouter(): Router {
       basket,
       rawQuote,
       dispensingFeePence: Number(order.dispensingFeePence || 0),
+      pharmacyDeliveryPence: Number(order.pharmacyDeliveryPence || 0),
+      ...quotePricingPolicy(order.quoteSnapshot),
     }));
     await orderRepo.updateQuoteSnapshot({
       id: order.id,
@@ -272,6 +277,8 @@ export function createPortalPaymentRouter(): Router {
             rawQuote,
             baseline,
             dispensingFeePence: Number(order.dispensingFeePence || 0),
+            pharmacyDeliveryPence: Number(order.pharmacyDeliveryPence || 0),
+            ...quotePricingPolicy(order.quoteSnapshot),
           }));
           if (postCheck.status === 'MATCHED') {
             curaleafResult = await executeCuraleafOrderPlacement(connection, {
@@ -378,6 +385,9 @@ export function createPortalPaymentRouter(): Router {
           {
             firstName: patient.firstName || 'Patient',
             amountPence: gatedAmountPence,
+            medicineTotalPence: order.medicineTotalPence,
+            dispensingFeePence: order.dispensingFeePence,
+            pharmacyDeliveryPence: order.pharmacyDeliveryPence,
             currency: 'GBP',
             orderNumber: order.orderNumber,
             receiptHash,

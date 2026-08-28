@@ -75,7 +75,10 @@ export function collectOrderConsignments(order: PatientOrder): OrderConsignment[
         id: shipmentId,
         prescriptionIndex,
         poRef: prescription.poRef,
-        createdAt: shipment?.createdAt ?? prescription.latestShipmentAt ?? prescription.placedAt ?? null,
+        createdAt: (() => {
+          const value = shipment?.createdAt ?? prescription.latestShipmentAt ?? prescription.placedAt ?? null;
+          return value instanceof Date ? value.toISOString() : value;
+        })(),
         packCount: shipment ? shipmentPackCount(shipment) : (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + (line.shipped ?? 0), 0),
         shipmentCharge: shipment?.shipmentCharge ?? null,
         shippingAddress: formatShippingAddress(shipment?.shippingAddress) ?? prescription.deliveryAddress ?? null,

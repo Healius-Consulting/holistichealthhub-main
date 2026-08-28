@@ -24,14 +24,16 @@ export function prescriptionIsCurrent(prescription: Record<string, unknown>, now
   return !Number.isFinite(expiry) || now.getTime() <= expiry;
 }
 
-export function orderPayableTotal(order: { dispensingFeePence?: number; quoteSnapshot?: unknown }, current: Array<Record<string, unknown>>) {
+export function orderPayableTotal(order: { dispensingFeePence?: number; pharmacyDeliveryPence?: number; quoteSnapshot?: unknown }, current: Array<Record<string, unknown>>) {
   const snapshot = asRecord(order.quoteSnapshot);
   const lines = Array.isArray(snapshot.lineItems) ? snapshot.lineItems as Array<Record<string, unknown>> : [];
   const priceByPack = new Map(lines.map(line => [String(line.packId ?? line.productId ?? ''), Number(line.unitPricePence ?? 0)]));
   const productTotal = current
     .flatMap(prescription => Array.isArray(prescription.items) ? prescription.items as Array<Record<string, unknown>> : [])
     .reduce((total, item) => total + (priceByPack.get(String(item.packId ?? item.productId ?? '')) ?? 0) * count(item.quantity), 0);
-  return productTotal > 0 ? productTotal + Number(order.dispensingFeePence ?? 0) : 0;
+  return productTotal > 0
+    ? productTotal + Number(order.dispensingFeePence ?? 0) + Number(order.pharmacyDeliveryPence ?? 0)
+    : 0;
 }
 
 export type PaymentLifecycleAction =
@@ -44,6 +46,7 @@ export function evaluatePendingPaymentLifecycle(input: {
   payment: Pick<PaymentRecord, 'status' | 'route' | 'createdAt' | 'providerPayload'>;
   quoteSnapshot: unknown;
   dispensingFeePence?: number;
+  pharmacyDeliveryPence?: number;
   now?: Date;
 }): PaymentLifecycleAction {
   if (input.payment.status !== 'PENDING' || input.payment.route !== 'WORLDPAY') return { action: 'none' };
@@ -52,7 +55,11 @@ export function evaluatePendingPaymentLifecycle(input: {
   const payable = prescriptions.filter(prescription => prescription.payable !== false && prescription.cancelled !== true);
   const current = payable.filter(prescription => prescriptionIsCurrent(prescription, now));
   if (current.length !== payable.length) {
-    const amountPence = orderPayableTotal({ dispensingFeePence: input.dispensingFeePence, quoteSnapshot: input.quoteSnapshot }, current);
+    const amountPence = orderPayableTotal({
+      dispensingFeePence: input.dispensingFeePence,
+      pharmacyDeliveryPence: input.pharmacyDeliveryPence,
+      quoteSnapshot: input.quoteSnapshot,
+    }, current);
     return amountPence > 0
       ? { action: 'reduce_expired', amountPence, current }
       : { action: 'void_expired' };

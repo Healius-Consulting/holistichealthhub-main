@@ -1,8 +1,6 @@
 import { AlertTriangle, CheckCircle, Minus, Plus, Trash2 } from 'lucide-react';
 import MedicineLabel from '../../components/MedicineLabel';
 import {
-  PATIENT_PRICE_LABEL,
-  PHARMACY_COST_LABEL,
   WHOLESALE_LABEL,
   WHOLESALE_LABEL_SHORT,
   formatMargin,
@@ -14,6 +12,7 @@ import {
   money,
   type CRMPatient,
 } from '../../context/AppContext';
+import { CURALEAF_DELIVERY_LABEL, DISPENSING_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
 import type { WizardProgress, WizardStep } from './types';
 import { WIZARD_STEP_LABELS } from './types';
 
@@ -35,6 +34,7 @@ type OrderSummaryRailProps = {
   /** Null until a current Curaleaf quote supplies wholesale cost and delivery. */
   draftBasketCosts: { wholesale: number; delivery: number } | null;
   dispensingFee: number;
+  pharmacyDelivery: number;
   draftBasketItems: BasketItem[];
   draftBasketIssues: Array<{ tone: 'blocked' | 'warning'; label: string } | null>;
   draftBasketBlockedCount: number;
@@ -61,6 +61,7 @@ export default function OrderSummaryRail({
   draftBasketTotal,
   draftBasketCosts,
   dispensingFee,
+  pharmacyDelivery,
   draftBasketItems,
   draftBasketIssues,
   draftBasketBlockedCount,
@@ -72,12 +73,13 @@ export default function OrderSummaryRail({
   onRemoveItem,
 }: OrderSummaryRailProps) {
   const showContinue = focusedStep < 4;
-  // The patient pays for the medicines plus the dispensing charge; the price of
-  // the medicines on their own is what staff compare against the wholesale line.
-  const patientPrice = draftBasketTotal - dispensingFee;
-  // Gross margin keeps the dispensing charge, so it is the whole patient total
-  // less the wholesale cost rather than a products-only contribution.
-  const grossMargin = draftBasketCosts ? draftBasketTotal - draftBasketCosts.wholesale : null;
+  // The patient pays for medicines plus optional dispensing and pharmacy delivery;
+  // medicine price alone is what staff compare with the wholesale product line.
+  const patientPrice = draftBasketTotal - dispensingFee - pharmacyDelivery;
+  // Gross margin keeps both optional pharmacy charges, so it is the whole patient
+  // total less supplier product and Curaleaf delivery costs.
+  const pharmacyTotal = draftBasketCosts ? draftBasketCosts.wholesale + draftBasketCosts.delivery : null;
+  const grossMargin = pharmacyTotal == null ? null : draftBasketTotal - pharmacyTotal;
 
   return (
     <aside className="rx-order-summary-rail" aria-label="Order summary">
@@ -186,30 +188,25 @@ export default function OrderSummaryRail({
             ) : null}
 
             <dl className="rx-order-summary-rail__totals">
-              <div className="rx-order-summary-rail__totals-heading" role="presentation">
-                <dt>{PHARMACY_COST_LABEL}</dt>
-                <dd aria-hidden="true" />
+              <div className="rx-order-summary-rail__totals-heading is-total">
+                <dt>{PHARMACY_TOTAL_LABEL}</dt>
+                <dd>{pharmacyTotal == null ? 'Quote pending' : money(pharmacyTotal)}</dd>
               </div>
               <div>
-                <dt>{WHOLESALE_LABEL}</dt>
+                <dt>{WHOLESALE_COST_LABEL}</dt>
                 <dd>{draftBasketCosts ? money(draftBasketCosts.wholesale) : 'Quote pending'}</dd>
               </div>
-              <div>
-                <dt>Delivery</dt>
-                <dd>{draftBasketCosts ? money(draftBasketCosts.delivery) : 'Quote pending'}</dd>
-              </div>
-              <div className="is-ruled">
-                <dt>Dispensing</dt>
-                <dd>{money(dispensingFee)}</dd>
-              </div>
-              <div>
-                <dt>{PATIENT_PRICE_LABEL}</dt>
-                <dd>{money(patientPrice)}</dd>
-              </div>
-              <div className="is-total">
-                <dt>Patient total</dt>
+              {draftBasketCosts?.delivery ? <div><dt>{CURALEAF_DELIVERY_LABEL}</dt><dd>{money(draftBasketCosts.delivery)}</dd></div> : null}
+              <div className="rx-order-summary-rail__totals-heading is-total is-ruled">
+                <dt>{PATIENT_TOTAL_LABEL}</dt>
                 <dd>{money(draftBasketTotal)}</dd>
               </div>
+              <div>
+                <dt>Pharmacy Cost</dt>
+                <dd>{money(patientPrice)}</dd>
+              </div>
+              {dispensingFee > 0 ? <div><dt>{DISPENSING_COST_LABEL}</dt><dd>{money(dispensingFee)}</dd></div> : null}
+              {pharmacyDelivery > 0 ? <div><dt>{PHARMACY_DELIVERY_LABEL}</dt><dd>{money(pharmacyDelivery)}</dd></div> : null}
               <div className="rx-order-summary-rail__margin">
                 <dt>Gross margin</dt>
                 <dd className={marginToneClass(marginPercent(grossMargin, draftBasketTotal))}>

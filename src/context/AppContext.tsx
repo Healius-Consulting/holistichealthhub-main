@@ -12,7 +12,8 @@ import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
 import { formatShippingAddress } from '../utils/shippingAddress';
 import { nextDraftIdAfterDeletion, preferredDraftIndex, preferredDraftPaymentRoute } from '../utils/createOrderDraft';
 import { orderRequiresCuraleafCancel, orderSupplyIncomplete } from '../utils/orderStage';
-import { LEGACY_PHARMACY_DECISION_REASON, PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
+import { PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
+import { businessOrderReference } from '../utils/orderReference';
 
 export { ORGANISATIONS };
 
@@ -32,6 +33,7 @@ export interface CatalogueItem {
   packSize?: number;
   source?: 'curaleaf' | 'training';
   supplierState?: string;
+  rrpPence?: number;
 }
 
 export interface CRMPatient {
@@ -152,7 +154,7 @@ export interface Prescription {
   }>;
 }
 
-export type PaymentStatus = 'none' | 'sent' | 'paid' | 'cancelled';
+export type PaymentStatus = 'none' | 'sent' | 'paid' | 'cancelled' | 'refund_required' | 'refunded';
 export type PaymentRoute = 'worldpay' | 'pharmacy' | null;
 export type ManualTender = 'epos-card' | 'cash' | 'bank-transfer' | 'other';
 
@@ -163,37 +165,29 @@ export interface OrderRedoContext {
   originalBackendId?: string;
   rootOrderId?: number;
   rootBackendId?: string;
+  originalOrderNumber?: string;
+  rootOrderNumber?: string;
   replacementSequence?: number;
   priceResolution?: RedoPriceResolution;
   isPaidRedo: boolean;
   reason: UnresolvedOrderReason;
 }
 
-function replacementSuffix(sequence: number) {
-  let value = Math.max(1, Math.floor(sequence));
-  let suffix = '';
-  while (value > 0) {
-    value -= 1;
-    suffix = String.fromCharCode(65 + (value % 26)) + suffix;
-    value = Math.floor(value / 26);
-  }
-  return suffix;
-}
-
 export function orderReference(order: PatientOrder) {
-  if (!order.redoContext) return `#${order.id}`;
-  const root = order.redoContext.rootOrderId ?? order.redoContext.originalOrderId;
-  return `#${root}${replacementSuffix(order.redoContext.replacementSequence ?? 1)}`;
+  return businessOrderReference(order);
 }
 
 export interface PatientOrder {
   id: number;
   backendId?: string;
+  orderNumber?: string;
   draftId?: string;
   organisationId: string;
   patientId: string | null;
   date: Date;
   dispensingFee: number;
+  pharmacyDelivery: number;
+  pharmacyDeliveryAllowed: boolean;
   paymentRoute?: 'manual' | 'worldpay';
   autoPlacementEnabled?: boolean;
   payment: {
@@ -235,7 +229,7 @@ export function getUnresolvedReason(order: PatientOrder, now = new Date()): Unre
   if (order.payment.status === 'none') return null;
   if (order.prescriptions.length > 0 && order.prescriptions.every(prescription => prescription.status === 'collected')) return null;
   if (order.redoneByOrderId) return null;
-  if (order.unresolvedReason === 'cancelled' || order.cancellation?.status === 'refund_required' || order.cancellation?.status === 'confirmed' || order.curaleafCancellation?.status === 'confirmed' || order.prescriptions.some(rx => rx.status === 'cancelled' || rx.purchaseOrderState === 'CANCELLED')) return 'cancelled';
+  if (order.unresolvedReason === 'cancelled' || order.cancellation?.status === 'refund_required' || order.curaleafCancellation?.status === 'confirmed' || order.prescriptions.some(rx => rx.status === 'cancelled' || rx.purchaseOrderState === 'CANCELLED')) return 'cancelled';
   if (order.unresolvedReason === 'expired' || order.unresolvedReason === 'rejected') return order.unresolvedReason;
   if (order.redoEligible === false) return null;
   if (order.quoteReview?.status === 'recreate_required') return 'rejected';
@@ -336,6 +330,7 @@ export interface PharmacyTenant {
   intakeEnabled?: boolean;
   staffCount: number;
   defaultPaymentRoute: 'manual' | 'worldpay';
+  pharmacyDeliveryEnabled: boolean;
   brand: {
     primary: string;
     portalName: string;
@@ -497,7 +492,7 @@ function prescriptionIsPaymentReady(prescription: Prescription) {
 
 export const rxRevenue = (rx: Prescription) => rx.items.reduce((t, i) => t + lineRevenue(i), 0);
 export const rxCost = (rx: Prescription) => rx.items.reduce((t, i) => t + lineCost(i), 0);
-export const orderRevenue = (o: PatientOrder) => (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled' ? 0 : o.prescriptions.reduce((t, r) => t + rxRevenue(r), 0) + (o.dispensingFee || 0));
+export const orderRevenue = (o: PatientOrder) => (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled' ? 0 : o.prescriptions.reduce((t, r) => t + rxRevenue(r), 0) + (o.dispensingFee || 0) + (o.pharmacyDelivery || 0));
 export const orderCost = (o: PatientOrder) => (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled' ? 0 : o.prescriptions.reduce((t, r) => t + rxCost(r), 0));
 /**
  * An order's gross margin is every line's contribution plus the dispensing
@@ -653,6 +648,7 @@ export type Action =
   | { type: 'SET_ACTIVE_ORDER'; orderId: number }
   | { type: 'SET_ORDER_PATIENT'; orderId: number; patientId: string }
   | { type: 'SET_ORDER_DISPENSING_FEE'; orderId: number; amount: number }
+  | { type: 'SET_ORDER_PHARMACY_DELIVERY'; orderId: number; amount: number }
   | { type: 'SET_ORDER_PAYMENT_ROUTE'; orderId: number; paymentRoute: 'manual' | 'worldpay' }
   | { type: 'ADD_RX'; orderId: number }
   | { type: 'SET_RX_ENTRY_MODE'; orderId: number; rxId: number; mode: 'clinic' | 'manual' }
@@ -680,7 +676,7 @@ export type Action =
         items: LineItem[];
       };
     }
-  | { type: 'SET_ORDER_BACKEND_ID'; orderId: number; backendId: string }
+  | { type: 'SET_ORDER_BACKEND_ID'; orderId: number; backendId: string; orderNumber?: string }
   | { type: 'SET_ORDER_DRAFT_ID'; orderId: number; draftId: string }
   | { type: 'SYNC_ORDER_PATIENT_PRICES'; orderId: number; items: Array<{ productId: string; patientPrice: number }> }
   | { type: 'CONFIRM_CURALEAF_SUBMISSION'; orderId: number; rxId: number; customerReference: string }
@@ -729,7 +725,7 @@ function blankRx(id: number): Prescription {
 
 function blankOrder(id: number, patientId: string | null, organisationId: string, paymentRoute: 'manual' | 'worldpay' = 'manual'): PatientOrder {
   return {
-    id, organisationId, patientId, date: new Date(), dispensingFee: 0, paymentRoute,
+    id, organisationId, patientId, date: new Date(), dispensingFee: 0, pharmacyDelivery: 0, pharmacyDeliveryAllowed: false, paymentRoute,
     payment: { status: 'none', route: null, amount: 0, ref: null, sentAt: null, paidAt: null, manualTender: null, manualReference: null, manualNotes: null, manualRecordedBy: null },
     prescriptions: [blankRx(1)],
   };
@@ -816,7 +812,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
       ?? (persisted?.productId ? quoteItems.get(persisted.productId) : undefined);
     let unitRetail = 0;
     const itemQty = item.quantity || 1;
-    const basketItemsTotal = Math.max(0, (record.totalPence - (record.dispensingFeePence || 0)) / 100);
+    const basketItemsTotal = Math.max(0, (record.totalPence - (record.dispensingFeePence || 0) - (record.pharmacyDeliveryPence || 0)) / 100);
 
     if (persisted && persisted.unitPricePence > 0) {
       const candidatePrice = persisted.unitPricePence / 100;
@@ -1001,14 +997,19 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
   const rootBackendId = record.redoContext?.rootOrderId ? String(record.redoContext.rootOrderId) : redoSource?.id ?? redoSourceBackendId ?? undefined;
   const rootIndex = rootBackendId ? records.findIndex(candidate => candidate.id === rootBackendId) : -1;
   const sourceIndex = redoSourceBackendId ? records.findIndex(candidate => candidate.id === redoSourceBackendId) : -1;
+  const sourceRecord = sourceIndex >= 0 ? records[sourceIndex] : undefined;
+  const rootRecord = rootIndex >= 0 ? records[rootIndex] : sourceRecord;
   return {
     id: orderId,
     backendId: record.id,
+    orderNumber: record.orderNumber ?? record.paymentTransactionReference,
     organisationId: record.organisationId,
     patientId: record.patientId,
     paymentRoute: record.paymentRoute === 'worldpay' ? 'worldpay' : 'manual',
     date: new Date(record.createdAt),
     dispensingFee: record.dispensingFeePence / 100,
+    pharmacyDelivery: record.pharmacyDeliveryPence / 100,
+    pharmacyDeliveryAllowed: record.pharmacyDeliveryPence > 0,
     autoPlacementEnabled: record.autoPlacementEnabled !== false,
     payment: {
       status: paid ? 'paid' : cancelled ? 'cancelled' : 'sent',
@@ -1046,6 +1047,8 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
       originalBackendId: String(record.redoOfOrderId ?? record.redoContext.originalOrderId),
       rootOrderId: rootIndex >= 0 ? rootIndex + 1 : sourceIndex >= 0 ? sourceIndex + 1 : orderId,
       rootBackendId,
+      originalOrderNumber: sourceRecord?.orderNumber ?? sourceRecord?.paymentTransactionReference,
+      rootOrderNumber: rootRecord?.orderNumber ?? rootRecord?.paymentTransactionReference,
       replacementSequence: record.redoContext.replacementSequence ?? Math.max(1, redoSequence),
       priceResolution: activeRedoPriceResolution(record.redoContext.priceResolution),
       isPaidRedo: Boolean(record.redoContext.isPaidRedo),
@@ -1067,6 +1070,8 @@ function mapPortalDraft(record: OrderDraftRecord, index: number, defaultPaymentR
     patientId: record.patientId,
     date: new Date(record.createdAt),
     dispensingFee: Number((record.payload.dispensingFeePence ?? 0)) / 100,
+    pharmacyDelivery: Number((record.payload.pharmacyDeliveryPence ?? 0)) / 100,
+    pharmacyDeliveryAllowed: record.pharmacyDeliveryEnabledAtCreation,
     paymentRoute: record.payload.paymentRoute === 'worldpay' ? 'worldpay' : record.payload.paymentRoute === 'manual' ? 'manual' : defaultPaymentRoute,
     payment: { status: 'none', route: null, amount: 0, ref: null, sentAt: null, paidAt: null, manualTender: null, manualReference: null, manualNotes: null, manualRecordedBy: null },
     prescriptions,
@@ -1094,7 +1099,6 @@ const previewStaffSession: StaffSession | null = isLocalPortalPreview && localPr
     }
   : null;
 const initialPortalMode: PortalMode = localPortalPreview === 'admin' ? 'admin' : localPortalPreview === 'pharmacy' ? 'clinician' : storedStaffSession?.role === 'admin' ? 'admin' : storedStaffSession?.role === 'pharmacy' ? 'clinician' : 'gateway';
-const initialToken = urlParams?.get('token');
 const initialCachedCatalogue = loadCachedCatalogue(storedStaffSession?.organisationId);
 
 const previewOrganisationId = previewStaffSession?.organisationId ?? (isLocalPortalPreview ? ORGANISATIONS[0]?.id ?? '' : '');
@@ -1551,6 +1555,7 @@ function reducer(state: AppState, action: Action): AppState {
       const organisation = state.organisations.find(item => item.id === state.currentOrganisationId);
       const defaultRoute = preferredDraftPaymentRoute(Boolean(organisation?.worldpay.enabled), organisation?.worldpay.status ?? 'not-connected');
       const newOrder = blankOrder(id, action.patientId || null, state.currentOrganisationId, defaultRoute);
+      newOrder.pharmacyDeliveryAllowed = Boolean(organisation?.pharmacyDeliveryEnabled);
       newOrder.prescriptions = [blankRx(rxId)];
       return {
         ...state,
@@ -1625,6 +1630,8 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'SET_ORDER_DISPENSING_FEE':
       return mapOrder(state, action.orderId, order => ({ ...order, dispensingFee: Math.max(0, action.amount) }));
+    case 'SET_ORDER_PHARMACY_DELIVERY':
+      return mapOrder(state, action.orderId, order => ({ ...order, pharmacyDelivery: order.pharmacyDeliveryAllowed ? Math.max(0, action.amount) : 0 }));
     case 'SET_ORDER_PAYMENT_ROUTE':
       return mapOrder(state, action.orderId, order => order.payment.status === 'none' ? { ...order, paymentRoute: action.paymentRoute } : order);
     case 'ADD_RX': {
@@ -1722,7 +1729,7 @@ function reducer(state: AppState, action: Action): AppState {
         items: action.scan.items,
       })));
     case 'SET_ORDER_BACKEND_ID':
-      return mapOrder(state, action.orderId, o => ({ ...o, backendId: action.backendId }));
+      return mapOrder(state, action.orderId, o => ({ ...o, backendId: action.backendId, orderNumber: action.orderNumber ?? o.orderNumber }));
     case 'SET_ORDER_DRAFT_ID':
       return mapOrder(state, action.orderId, o => ({ ...o, draftId: action.draftId }));
     case 'SYNC_ORDER_PATIENT_PRICES': {

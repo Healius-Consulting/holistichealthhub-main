@@ -876,6 +876,7 @@ html{
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .nav-queue-count,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .user-profile-info,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-footer-action span,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-version,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-exit span{
   display: none;
 }
@@ -3416,8 +3417,6 @@ html[data-enhanced-focus='true'] :is(button, a, input, select, textarea, [tabind
 
 .accessibility-panel__note{ display: flex; align-items: center; gap: 5px; margin-top: 10px; color: var(--text-tertiary); font-size: 0.625rem; }
 /* Support-facing, not staff-facing: readable when asked for, invisible otherwise. */
-.accessibility-panel__build{ margin: 6px 0 0; color: var(--text-tertiary); font-size: 0.625rem; }
-.accessibility-panel__build code{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.625rem; user-select: all; }
 
 .operational-state{
   min-height: 150px;
@@ -4071,6 +4070,18 @@ body{ background: var(--bg-app); }
 .sidebar-brand-copy--cobrand strong{ font-size: 12px; }
 
 .sidebar-brand-copy--cobrand small{ max-width: 155px; margin-top: 0; overflow: hidden; color: #b3c1bc; font-size: 9px; letter-spacing: .035em; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
+.sidebar-brand-copy--cobrand em{ max-width: 155px; overflow: hidden; color: #80958d; font-size: 8px; font-style: normal; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
+
+.sidebar-version{
+  display: block;
+  padding: 8px 18px 7px;
+  color: #80958d;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px){ .sidebar-version{ display: none; } }
 
 .sidebar-menu-label{
   display: block;
@@ -14990,7 +15001,6 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-fulfilment-remainder > span{ display: grid; gap: 2px; }
 .order-fulfilment-remainder strong{ color: var(--text-primary); font-size: 10px; }
 .order-fulfilment-remainder small{ color: var(--text-secondary); font-size: 9px; line-height: 1.4; }
-.order-fulfilment-remainder--waiting{ color: var(--color-warning); border-color: color-mix(in srgb, var(--color-warning) 28%, var(--border)); background: color-mix(in srgb, var(--color-warning) 5%, var(--bg-surface)); }
 
 @media (max-width: 640px){
   .order-gate-summary li{ align-items: flex-start; }

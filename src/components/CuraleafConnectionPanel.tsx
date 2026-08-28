@@ -101,7 +101,7 @@ export default function CuraleafConnectionPanel({
     }
   };
 
-  const showKeyForm = Boolean(status) && (!status.connected || rotating || status.status === 'not_configured' || status.status === 'credential_update_required');
+  const showKeyForm = status !== null && (!status.connected || rotating || status.status === 'not_configured' || status.status === 'credential_update_required');
   const canSave = form.customerId.trim().length > 0 && form.apiKey.trim().length >= 16;
 
   return (

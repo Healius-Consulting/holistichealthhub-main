@@ -99,14 +99,14 @@ export function buildPrescriptionTimelineEvents(
         events.push({
           label: totals.shipped < totals.ordered ? `${rxLabel} partial consignment dispatched` : `${rxLabel} consignment dispatched`,
           detail: `Consignment ${shortConsignmentId(shipmentId)} · ${packs || totals.shipped} pack${(packs || totals.shipped) === 1 ? '' : 's'}`,
-          date: shipment?.createdAt ?? prescription.latestShipmentAt ?? prescription.placedAt ?? null,
+          date: shipment?.createdAt ?? prescription.latestShipmentAt ?? null,
         });
       }
     } else {
       events.push({
         label: totals.shipped < totals.ordered ? `${rxLabel} partial consignment dispatched` : `${rxLabel} consignment dispatched`,
         detail: `${totals.shipped} of ${totals.ordered} pack${totals.ordered === 1 ? '' : 's'} in transit`,
-        date: prescription.latestShipmentAt ?? prescription.placedAt ?? null,
+        date: prescription.latestShipmentAt ?? null,
       });
     }
   }
@@ -123,7 +123,7 @@ export function buildPrescriptionTimelineEvents(
         : prescription.goodsInBy
           ? `Checked in by ${prescription.goodsInBy}`
           : 'Checked in at dispensary',
-      date: prescription.goodsInAt ?? prescription.latestShipmentAt ?? null,
+      date: prescription.goodsInAt ?? null,
     });
   }
 
@@ -135,7 +135,7 @@ export function buildPrescriptionTimelineEvents(
     events.push({
       label: `${rxLabel} ready to collect`,
       detail: `Consignment ${shortConsignmentId(shipmentId)} · ${packs} pack${packs === 1 ? '' : 's'} · collection email queued`,
-      date: prescription.readyAt ?? prescription.goodsInAt ?? shipment?.createdAt ?? null,
+      date: prescription.readyAt ?? null,
     });
   }
 
@@ -225,9 +225,27 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
     });
   }
 
-  return events.sort(
-    (left, right) => new Date(right.date ?? 0).getTime() - new Date(left.date ?? 0).getTime(),
-  );
+  const latestMatched = [...(order.quoteChecks ?? [])]
+    .filter(check => check.status === 'MATCHED' && Number.isFinite(new Date(check.checkedAt).getTime()))
+    .sort((left, right) => new Date(right.checkedAt).getTime() - new Date(left.checkedAt).getTime())[0];
+  if (latestMatched) {
+    events.push({
+      label: 'Payment gate matched',
+      detail: `Patient total £${(latestMatched.patientTotalPence / 100).toFixed(2)} · ${latestMatched.phase.replaceAll('_', ' ').toLowerCase()}`,
+      date: latestMatched.checkedAt,
+    });
+  }
+
+  const seen = new Set<string>();
+  return events
+    .filter(event => event.date && Number.isFinite(new Date(event.date).getTime()))
+    .filter(event => {
+      const key = `${event.label}|${new Date(event.date!).toISOString()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => new Date(right.date!).getTime() - new Date(left.date!).getTime());
 }
 
 /* ---- Fixed stage rail ----

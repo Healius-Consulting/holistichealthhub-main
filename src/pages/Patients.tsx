@@ -111,7 +111,6 @@ function supplierOrderCancelled(order: PatientOrder) {
   return order.prescriptions.some(prescription => prescription.purchaseOrderState === 'CANCELLED' || prescription.status === 'cancelled')
     || order.curaleafCancellation?.status === 'confirmed'
     || order.cancellation?.status === 'refund_required'
-    || order.cancellation?.status === 'confirmed'
     || order.unresolvedReason === 'cancelled';
 }
 
@@ -561,6 +560,12 @@ export default function Patients() {
                 dispatch({ type: 'ADD_TOAST', message: 'Patient conditions updated.', toastType: 'success', dedupeKey: 'patient-conditions' });
               }}
               onOpenOrder={order => {
+                if (order.payment.status === 'none') {
+                  closeRecord();
+                  dispatch({ type: 'SET_ACTIVE_ORDER', orderId: order.id });
+                  dispatch({ type: 'SET_SCREEN', screen: 'create' });
+                  return;
+                }
                 // Stay on Patients: Orders is keep-alive mounted and opens a portaled dialog.
                 dispatch({
                   type: 'SET_NAVIGATION_TARGET',
@@ -1050,7 +1055,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, o
                       )}
                       <div className="patient-chart-order__panel-actions">
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => onOpenOrder(order)}>
-                          Open order <ChevronRight size={14} aria-hidden="true" />
+                          {order.payment.status === 'none' ? 'Open Draft' : 'Open order'} <ChevronRight size={14} aria-hidden="true" />
                         </button>
                       </div>
                     </div>

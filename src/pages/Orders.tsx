@@ -92,6 +92,7 @@ import {
   type OrderBoardLane,
 } from '../utils/orderBoardLanes';
 import { buildOrderStageRail, buildOrderTimelineEvents, type OrderStageStep } from '../utils/orderTimeline';
+import { visiblePaymentGateCheck } from '../utils/quoteGate';
 import RecordDialog from '../components/RecordDialog';
 import {
   collectOrderConsignments,
@@ -653,7 +654,7 @@ export default function Orders() {
     }
     setQuoteReviewBusyOrderId(order.id);
     try {
-      const result = await resolvePortalQuoteReview(order.backendId, {
+      const result = await resolvePortalQuoteReview(order.backendId!, {
         organisationId: state.currentOrganisationId,
         action,
       });
@@ -1305,7 +1306,7 @@ function SummaryMetric({ label, value, icon: Icon, tone }: { label: string; valu
   return <article className={`order-crm-metric order-crm-metric--${tone}`}><span className="order-crm-metric__icon"><Icon size={15} aria-hidden="true" /></span><span><small>{label}</small><strong>{value}</strong></span></article>;
 }
 
-function OrderListRow({ record, selected, now, laneLabel, sectionKey, onSelect }: { record: OrderRecord; selected: boolean; now: Date; laneLabel?: string; sectionKey?: string; onSelect: () => void }) {
+function OrderListRow({ record, selected, laneLabel, sectionKey, onSelect }: { record: OrderRecord; selected: boolean; now: Date; laneLabel?: string; sectionKey?: string; onSelect: () => void }) {
   const meta = recordStageMeta(record);
   const Icon = meta.icon;
   const patientName = record.patient?.name ?? 'Unknown patient';
@@ -1404,7 +1405,7 @@ function ReplacementLineage({ order, allOrders }: { order: PatientOrder; allOrde
   );
 }
 
-function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onCallCuraleaf, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, cancellationEditorOpen, cancellationNote, cancellationReference, cancellationContactNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onCancellationReferenceChange, onCancellationContactNoteChange, onRequestCancellation, onRecordCuraleafContact, onConfirmCuraleafCancellation, onChaseDelivery }: {
+function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, cancellationEditorOpen, cancellationNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onRequestCancellation, onChaseDelivery }: {
   record: OrderRecord;
   now: Date;
   placementConfirmation: string | null;
@@ -1445,7 +1446,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   onRecordCuraleafContact: () => void;
   onConfirmCuraleafCancellation: () => void;
   onChaseDelivery?: (prescription?: Prescription, shipmentId?: string) => void;
-  onOpenHandout: (partial: boolean, shipmentId?: string) => void;
 }) {
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [copiedDetailKey, setCopiedDetailKey] = useState<string | null>(null);
@@ -1459,9 +1459,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const cancellationClosed = ['resolved', 'refunded'].includes(cancellationResolution) || typedResolutionClosed;
   const hideJourneyRail = stage === 'cancelled' || stage === 'collected' || cancellationResolution !== 'none';
   const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => prescription.placed);
-  const canRedo = Boolean(record.unresolvedReason) && (stage === 'rejected' || stage === 'archived' || stage === 'cancelled');
   const paymentFormVisible = stage === 'awaiting-payment' && order.payment.route === 'pharmacy';
-  const curaleafCancellationLocked = Boolean(order.curaleafCancellation && order.curaleafCancellation.status !== 'confirmed');
   const mayCancel = !order.cancellation && !['collected', 'cancelled'].includes(stage) && (quoteReviewIsOpen(order) || !orderRequiresCuraleafCancel(order));
   const hasCuraleafOrder = orderRequiresCuraleafCancel(order);
   const supplyIncomplete = orderSupplyIncomplete(order);
@@ -1484,7 +1482,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
     window.setTimeout(() => setCopiedDetailKey(null), 2000);
   };
 
-  const resolveProductName = (item: { name?: string; productId: string; formulaId?: string }) => {
+  const resolveProductName = (item: { name?: string; productId: string; formulaId?: string }): string => {
     const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Prescribed product'].includes(item.name);
     if (!isGeneric) return item.name ?? 'Curaleaf medication';
     const cat = state.catalogue.find(c => c.id === item.productId || (item.formulaId && c.formulaId === item.formulaId));
@@ -1536,11 +1534,19 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
         </div>
       </header>
 
+      <QuoteCheckpointSummary order={order} />
+
+      {placementConfirmation ? <div className="order-placement-confirmation"><CheckCircle2 size={17} /><span><strong>Order placed with Curaleaf</strong><small>{placementConfirmation}</small></span></div> : null}
+      {stage === 'awaiting-payment' || (stage === 'paid' && !allPlaced) ? (
+        <PrePlacementDeliveryGuidance now={now} />
+      ) : !['collected', 'cancelled', 'rejected', 'archived'].includes(stage) ? (
+        <FulfilmentDeliveryStatus order={order} now={now} />
+      ) : null}
+
       {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : hideJourneyRail ? null : <OrderStageRail order={order} />}
 
       <ExpiryCountdown order={order} now={now} />
       <ReplacementLineage order={order} allOrders={state.orders} />
-      <QuoteCheckpointSummary order={order} />
       <PlacementStatusPanel order={order} />
 
       {!cancellationClosed && cancellationEditorOpen && !order.cancellation ? (
@@ -1553,13 +1559,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
           onNoteChange={onCancellationNoteChange}
           onRequest={onRequestCancellation}
         />
-      ) : null}
-
-      {placementConfirmation ? <div className="order-placement-confirmation"><CheckCircle2 size={17} /><span><strong>Order placed with Curaleaf</strong><small>{placementConfirmation}</small></span></div> : null}
-      {stage === 'awaiting-payment' || (stage === 'paid' && !allPlaced) ? (
-        <PrePlacementDeliveryGuidance now={now} />
-      ) : !['collected', 'cancelled', 'rejected', 'archived'].includes(stage) ? (
-        <FulfilmentDeliveryStatus order={order} now={now} />
       ) : null}
 
       {(stage === 'rejected' || stage === 'archived') ? (
@@ -1998,17 +1997,6 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
   );
 }
 
-function collapsedActionCopy(stage: OrderStage) {
-  if (stage === 'awaiting-payment') return 'Payment is the next required step.';
-  if (stage === 'paid') return 'Awaiting placement with Curaleaf.';
-  if (stage === 'delivered') return 'Complete pharmacy checks and mark the order ready.';
-  if (stage === 'ready') return 'Handout to the patient is the only remaining step.';
-  if (stage === 'rejected') return 'Review the Curaleaf exception and resolution.';
-  if (stage === 'cancelled') return 'Cancellation is retained for audit.';
-  if (stage === 'collected') return 'The medication handout is complete.';
-  return 'Open the full view for prescription, supplier and activity details.';
-}
-
 function formatQuoteReviewValue(value: string | boolean) {
   if (typeof value === 'boolean') return value ? 'In stock' : 'Out of stock';
   if (value === 'missing') return 'Not stored';
@@ -2028,10 +2016,8 @@ function quoteReviewFieldLabel(field: string) {
 }
 
 function QuoteCheckpointSummary({ order }: { order: PatientOrder }) {
-  const checks = order.quoteChecks?.length
-    ? [...order.quoteChecks].sort((a, b) => new Date(a.checkedAt).getTime() - new Date(b.checkedAt).getTime())
-    : order.activeQuoteCheck ? [order.activeQuoteCheck] : [];
-  if (!checks.length) return null;
+  const latest = visiblePaymentGateCheck(order.quoteChecks, order.activeQuoteCheck);
+  if (!latest) return null;
   /*
    * One bar, not a history.
    *
@@ -2041,9 +2027,7 @@ function QuoteCheckpointSummary({ order }: { order: PatientOrder }) {
    * long ago it ran; the individual checks remain in the order's activity log
    * for anyone reconciling a price change after the fact.
    */
-  const latest = checks[checks.length - 1]!;
-  const statusLabel = latest.status === 'MATCHED' ? 'Matched'
-    : latest.status === 'CHANGED' ? 'Changed'
+  const statusLabel = latest.status === 'CHANGED' ? 'Changed'
       : latest.status === 'OUT_OF_STOCK' ? 'Out of stock'
         : latest.status === 'ABSORBED' ? 'Difference absorbed'
           : latest.status === 'CANCELLED' ? 'Cancelled'
@@ -2467,8 +2451,6 @@ function FulfilmentItemCard({
               <XCircle size={14} aria-hidden="true" />
               <span><strong>{line.cancelledRemainderPacks} pack{line.cancelledRemainderPacks === 1 ? '' : 's'} cancelled by Curaleaf</strong><small>{line.receivedPacks + line.inTransitPacks} supplied or in transit · choose replacement or refund for the cancelled remainder.</small></span>
             </div>
-          ) : line.remainingExpectedPacks > 0 ? (
-            <p className="order-fulfilment-remainder order-fulfilment-remainder--waiting"><Clock3 size={14} aria-hidden="true" /><span><strong>{line.remainingExpectedPacks} pack{line.remainingExpectedPacks === 1 ? '' : 's'} still expected</strong><small>Curaleaf has not cancelled this remainder.</small></span></p>
           ) : null}
         </div>
       ) : null}
@@ -2476,7 +2458,7 @@ function FulfilmentItemCard({
   );
 }
 
-function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onManualPlace, onChaseCuraleaf, onOpenHandout }: {
+function PrescriptionCard({ prescription, index, busy, onReceiptDraftChange, onConfirmDelivery, onManualPlace, onChaseCuraleaf, onOpenHandout }: {
   prescription: Prescription;
   index: number;
   receiptDraft: GoodsReceiptDraft;
@@ -2532,10 +2514,10 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
   const totalConsignmentPacks = prescription.items.reduce((sum, item) => sum + consignmentPacksFor(item.productId), 0);
   const consignmentHasShippedPacks = totalConsignmentPacks > 0;
 
-  const isDispatchedPhase = (consignmentHasShippedPacks || totalShippedPacks > 0 || prescription.dispatchStatus === 'partial' || prescription.dispatchStatus === 'dispatched') && (
+  const isDispatchedPhase = (consignmentHasShippedPacks || totalShippedPacks > 0 || prescription.dispatchStatus === 'partial' || prescription.dispatchStatus === 'complete') && (
     prescription.status === 'dispatched'
     || prescription.status === 'partially-received'
-    || prescription.dispatchStatus === 'dispatched'
+    || prescription.dispatchStatus === 'complete'
     || prescription.dispatchStatus === 'partial'
     || Boolean(selectedShipmentId)
     || Boolean(prescription.shipmentIds?.length)
@@ -2564,8 +2546,9 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
     && !supplyIncomplete
     && uncollectedReadyPacks > 0;
   const collectionControl = isReady && !supplyIncomplete;
-  const deliveryGuidance = (prescription.latestShipmentAt || prescription.placedAt)
-    ? curaleafDeliveryGuidance(prescription.latestShipmentAt || prescription.placedAt)
+  const deliveryGuidanceSource = prescription.latestShipmentAt ?? prescription.placedAt;
+  const deliveryGuidance = deliveryGuidanceSource
+    ? curaleafDeliveryGuidance(deliveryGuidanceSource)
     : null;
   const totalOrderedPacks = prescription.items.reduce((s, i) => s + i.qty, 0);
   const totalDispatchedPacks = prescription.items.reduce((s, i) => {
@@ -2575,7 +2558,7 @@ function PrescriptionCard({ prescription, index, receiptDraft, busy, onReceiptDr
 
   const resolveProductName = (item: { name?: string; productId: string; formulaId?: string }) => {
     const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Prescribed product'].includes(item.name);
-    if (!isGeneric) return item.name;
+    if (!isGeneric) return item.name!;
     const cat = state.catalogue.find(c => c.id === item.productId || (item.formulaId && c.formulaId === item.formulaId));
     return cat?.name ?? item.name ?? 'Curaleaf medication';
   };
@@ -3094,6 +3077,12 @@ function OrderDetailsDrawer({ order, patient, cleanStreetAddress, patientPostcod
                 <div>
                   <dt>Dispensing fee</dt>
                   <dd><LedgerValue>{money(order.dispensingFee)}</LedgerValue></dd>
+                </div>
+              ) : null}
+              {order.pharmacyDelivery ? (
+                <div>
+                  <dt>Pharmacy Delivery</dt>
+                  <dd><LedgerValue>{money(order.pharmacyDelivery)}</LedgerValue></dd>
                 </div>
               ) : null}
               <div className="order-details-total">

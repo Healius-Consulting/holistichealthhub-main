@@ -149,6 +149,7 @@ export function toPortalOrganisation(
     emailLogoWidth?: number | null;
     emailLogoHeight?: number | null;
     emailLogoUpdatedAt?: string | null;
+    curaleafPharmacyCode?: string | null;
   },
 ) {
   return {
@@ -168,6 +169,7 @@ export function toPortalOrganisation(
     mainContactName: organisation.mainContactName ?? undefined,
     mainContactPhone: organisation.mainContactPhone ?? undefined,
     mainContactEmail: organisation.mainContactEmail ?? undefined,
+    curaleafPharmacyCode: extras?.curaleafPharmacyCode ?? undefined,
     address: organisationAddressSummary(organisation),
     addressLine1: organisation.addressLine1 ?? undefined,
     addressLine2: organisation.addressLine2 ?? undefined,
@@ -180,6 +182,7 @@ export function toPortalOrganisation(
     portalName: organisation.portalName,
     worldpayEnabled: organisation.worldpayEnabled,
     defaultPaymentRoute: lower(organisation.defaultPaymentRoute),
+    pharmacyDeliveryEnabled: organisation.pharmacyDeliveryEnabled,
     autoPlacementEnabled: organisation.autoPlacementEnabled,
     intakeEnabled: organisation.intakeEnabled,
     testAccount: organisation.classification === 'TRAINING',
@@ -435,7 +438,7 @@ export function toPortalOrder(order: PortalOrderSource) {
     const sqlQty = Number(item.quantity ?? item.qty ?? item.count ?? 0);
     const rockyQty = Number(poItem?.packsOrderedCount || 0);
     const itemQty = Math.max(sqlQty, rockyQty) || 1;
-    const rawTotal = order.totalPence ? Math.max(0, order.totalPence - (order.dispensingFeePence || 0)) : 0;
+    const rawTotal = order.totalPence ? Math.max(0, order.totalPence - (order.dispensingFeePence || 0) - (order.pharmacyDeliveryPence || 0)) : 0;
     const unitPricePence = Number(
       item.unitPricePence ||
       item.retailPence ||
@@ -633,13 +636,17 @@ export function toPortalOrder(order: PortalOrderSource) {
 
   return {
     id: order.id,
+    orderNumber: order.orderNumber ?? undefined,
     organisationId: order.organisationId,
     patientId: order.patientId,
     lineItems,
     prescriptions,
     prescriptionFlow,
     pricingQuote: pricingQuote ?? undefined,
+    medicineTotalPence: Number(order.medicineTotalPence),
     dispensingFeePence: Number(order.dispensingFeePence),
+    pharmacyDeliveryPence: Number(order.pharmacyDeliveryPence),
+    deliveryPence: Number(order.deliveryPence),
     totalPence: Number(order.totalPence),
     currency: order.currency === 'GBP' ? 'GBP' as const : 'GBP' as const,
     paymentRoute: lower(order.paymentRoute) === 'worldpay' ? 'worldpay' as const : 'manual' as const,
@@ -696,6 +703,7 @@ export function toPortalOrderDraft(draft: OrderDraftRecord) {
     organisationId: draft.organisationId,
     patientId: draft.patientId,
     status: 'draft' as const,
+    pharmacyDeliveryEnabledAtCreation: Boolean(draft.pharmacyDeliveryEnabledAtCreation),
     payload: draft.payload && typeof draft.payload === 'object' && !Array.isArray(draft.payload)
       ? draft.payload as Record<string, unknown>
       : {},

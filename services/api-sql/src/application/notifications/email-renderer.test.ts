@@ -29,6 +29,9 @@ describe('email template renderer', () => {
     const rendered = renderEmailTemplate('patient_payment_confirmation', {
       firstName: 'Avery',
       amountPence: 12500,
+      medicineTotalPence: 10_000,
+      dispensingFeePence: 500,
+      pharmacyDeliveryPence: 2_000,
       currency: 'GBP',
       orderNumber: 'ORD-123',
       receiptHash: 'a'.repeat(64),
@@ -38,6 +41,9 @@ describe('email template renderer', () => {
     assert.match(rendered.subject, /Payment received/);
     assert.match(rendered.text, /Avery/);
     assert.match(rendered.html, /ORD-123/);
+    assert.match(rendered.html, /Medicine/);
+    assert.match(rendered.html, /Dispensing Cost/);
+    assert.match(rendered.html, /Pharmacy Delivery/);
     assert.match(rendered.html, /cid:email-header-logo/);
     assert.match(rendered.html, /cid:email-curaleaf-logo/);
     assert.match(rendered.html, /Powered by/);
@@ -57,6 +63,9 @@ describe('email template renderer', () => {
     const request = renderEmailTemplate('patient_payment_request', {
       firstName: 'Avery',
       amountPence: 8900,
+      medicineTotalPence: 8_900,
+      dispensingFeePence: 0,
+      pharmacyDeliveryPence: 0,
       currency: 'GBP',
       orderNumber: 'ORD-890',
       paymentUrl: 'https://payments.example/pay',
@@ -65,6 +74,8 @@ describe('email template renderer', () => {
     assert.match(request.subject, /Payment needed/);
     assert.match(request.html, /Pay now/);
     assert.match(request.html, /https:\/\/payments\.example\/pay/);
+    assert.doesNotMatch(request.html, /Dispensing Cost/);
+    assert.doesNotMatch(request.html, /Pharmacy Delivery/);
 
     const refunded = renderEmailTemplate('patient_refunded', {
       firstName: 'Avery',

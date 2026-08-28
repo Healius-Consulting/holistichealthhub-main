@@ -267,8 +267,28 @@
 
 .pharmacy-settings-route{
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
+
+.pharmacy-settings-toggle{
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+.pharmacy-settings-toggle > span:first-child{ min-width: 0; flex: 1; }
+.pharmacy-settings-toggle strong,
+.pharmacy-settings-toggle small{ display: block; }
+.pharmacy-settings-toggle small{ margin-top: 3px; color: var(--text-tertiary); }
+.pharmacy-settings-toggle input{ position: absolute; opacity: 0; pointer-events: none; }
+.pharmacy-settings-toggle > span:last-child{ position: relative; width: 42px; height: 24px; flex: 0 0 auto; border-radius: 999px; background: var(--border-strong, var(--border)); transition: background 160ms ease; }
+.pharmacy-settings-toggle > span:last-child::after{ position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 25%); content: ''; transition: transform 160ms ease; }
+.pharmacy-settings-toggle input:checked + span{ background: var(--tenant-primary); }
+.pharmacy-settings-toggle input:checked + span::after{ transform: translateX(18px); }
+.pharmacy-settings-toggle input:focus-visible + span{ outline: 2px solid var(--tenant-primary); outline-offset: 3px; }
+.pharmacy-settings-toggle input:disabled + span{ opacity: .55; }
 
 .pharmacy-settings-route button{
   display: grid;
@@ -333,6 +353,7 @@
   border-radius: 10px;
   background: var(--bg-elevated);
 }
+.pharmacy-settings-connection .btn{ justify-self: end; align-self: center; min-height: 44px; }
 
 .pharmacy-settings-connection > div{ display: grid; gap: 2px; min-width: 0; }
 
@@ -400,6 +421,8 @@
   border-style: dashed;
   background: var(--bg-elevated);
 }
+.pharmacy-settings-packs{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+.pharmacy-settings-tool.is-coming-soon{ opacity: .72; }
 
 .pharmacy-settings-qr{
   display: block;
@@ -460,4 +483,14 @@
   .pharmacy-settings-curaleaf{ align-items: stretch; }
   .pharmacy-settings-curaleaf .btn{ width: 100%; justify-content: center; }
   .pharmacy-settings-assets__tools{ grid-template-columns: 1fr; }
+  .pharmacy-settings-packs{ grid-template-columns: 1fr; }
+}
+
+@media (min-width: 681px) and (max-width: 1000px){ .pharmacy-settings-packs{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+@media (max-width: 640px){ .pharmacy-settings-route{ grid-template-columns: 1fr; } }
+
+@media (prefers-reduced-motion: reduce){
+  .pharmacy-settings-toggle > span:last-child,
+  .pharmacy-settings-toggle > span:last-child::after{ transition: none; }
 }

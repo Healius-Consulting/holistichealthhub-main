@@ -21,6 +21,7 @@ const order: OrderRecord = {
   currency: 'GBP',
   medicineTotalPence: 10000,
   dispensingFeePence: 500,
+  pharmacyDeliveryPence: 0,
   deliveryPence: 0,
   taxPence: 0,
   totalPence: 10500,

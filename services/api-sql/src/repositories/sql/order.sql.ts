@@ -20,6 +20,7 @@ const GET_ORDER_DRAFT_BY_ID_GQL = `
       patientId
       status
       paymentStatus
+      pharmacyDeliveryEnabledAtCreation
       payload
       version
       createdAt
@@ -33,6 +34,7 @@ const CREATE_ORDER_DRAFT_GQL = `
     $organisationId: UUID!
     $patientId: UUID
     $payload: Any!
+    $pharmacyDeliveryEnabledAtCreation: Boolean!
     $createdByUid: String!
   ) {
     orderDraft_insert(data: {
@@ -40,6 +42,7 @@ const CREATE_ORDER_DRAFT_GQL = `
       patientId: $patientId
       status: DRAFT
       paymentStatus: NONE
+      pharmacyDeliveryEnabledAtCreation: $pharmacyDeliveryEnabledAtCreation
       payload: $payload
       createdByUid: $createdByUid
     })
@@ -84,6 +87,7 @@ const LIST_TENANT_ORDER_DRAFTS_GQL = `
       patientId
       status
       paymentStatus
+      pharmacyDeliveryEnabledAtCreation
       payload
       version
       createdAt
@@ -104,6 +108,7 @@ const LIST_OPEN_ORDER_DRAFTS_GQL = `
       patientId
       status
       paymentStatus
+      pharmacyDeliveryEnabledAtCreation
       payload
       version
       createdAt
@@ -147,6 +152,7 @@ const GET_ORDER_BY_ID_GQL = `
       currency
       medicineTotalPence
       dispensingFeePence
+      pharmacyDeliveryPence
       deliveryPence
       taxPence
       totalPence
@@ -179,6 +185,7 @@ const CREATE_ORDER_GQL = `
     $currency: String!
     $medicineTotalPence: Int64!
     $dispensingFeePence: Int64!
+    $pharmacyDeliveryPence: Int64!
     $deliveryPence: Int64!
     $taxPence: Int64!
     $totalPence: Int64!
@@ -197,6 +204,7 @@ const CREATE_ORDER_GQL = `
       currency: $currency
       medicineTotalPence: $medicineTotalPence
       dispensingFeePence: $dispensingFeePence
+      pharmacyDeliveryPence: $pharmacyDeliveryPence
       deliveryPence: $deliveryPence
       taxPence: $taxPence
       totalPence: $totalPence
@@ -328,6 +336,7 @@ const LIST_TENANT_ORDERS_GQL = `
       currency
       medicineTotalPence
       dispensingFeePence
+      pharmacyDeliveryPence
       deliveryPence
       taxPence
       totalPence
@@ -369,6 +378,7 @@ const LIST_PAID_OPEN_ORDERS_GQL = `
       currency
       medicineTotalPence
       dispensingFeePence
+      pharmacyDeliveryPence
       deliveryPence
       taxPence
       totalPence
@@ -440,6 +450,7 @@ export class SqlOrderRepository implements OrderRepositoryPort {
     organisationId: string;
     patientId?: string | null;
     payload: unknown;
+    pharmacyDeliveryEnabledAtCreation: boolean;
     createdByUid: string;
   }): Promise<{ id?: string }> {
     const result = await dataConnect.executeGraphql<{ orderDraft_insert: { id: string } }, any>(
@@ -449,6 +460,7 @@ export class SqlOrderRepository implements OrderRepositoryPort {
           organisationId: data.organisationId,
           patientId: data.patientId ?? null,
           payload: data.payload,
+          pharmacyDeliveryEnabledAtCreation: data.pharmacyDeliveryEnabledAtCreation,
           createdByUid: data.createdByUid,
         },
       }
@@ -533,6 +545,7 @@ export class SqlOrderRepository implements OrderRepositoryPort {
           currency: data.currency,
           medicineTotalPence: data.medicineTotalPence,
           dispensingFeePence: data.dispensingFeePence,
+          pharmacyDeliveryPence: data.pharmacyDeliveryPence,
           deliveryPence: data.deliveryPence,
           taxPence: data.taxPence,
           totalPence: data.totalPence,

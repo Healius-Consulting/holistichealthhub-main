@@ -91,6 +91,7 @@ query GetOrganisationById($id: UUID!) @auth(level: NO_ACCESS) {
     resourcesEnabled
     worldpayEnabled
     defaultPaymentRoute
+    pharmacyDeliveryEnabled
     autoPlacementEnabled
     gdprComplianceFlag
     pausedReason
@@ -259,6 +260,7 @@ query GetOrderDraftById(
     patientId
     status
     paymentStatus
+    pharmacyDeliveryEnabledAtCreation
     payload
     version
     createdAt
@@ -289,6 +291,7 @@ query GetOrderById(
     currency
     medicineTotalPence
     dispensingFeePence
+    pharmacyDeliveryPence
     deliveryPence
     taxPence
     totalPence
@@ -380,4 +383,3 @@ query ListTenantGoodsReceipts($organisationId: UUID!, $limit: Int!) @auth(level:
     notes
   }
 }
-

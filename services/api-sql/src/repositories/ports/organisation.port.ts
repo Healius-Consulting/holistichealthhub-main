@@ -29,6 +29,7 @@ export interface OrganisationRecord {
   resourcesEnabled: boolean;
   worldpayEnabled: boolean;
   defaultPaymentRoute: 'MANUAL' | 'WORLDPAY';
+  pharmacyDeliveryEnabled: boolean;
   autoPlacementEnabled: boolean;
   gdprComplianceFlag: boolean;
   pausedReason: string | null;
@@ -135,6 +136,7 @@ export interface OrganisationRepositoryPort {
   updateOrganisationClassification(id: string, classification: OrganisationRecord['classification']): Promise<void>;
   updateOrganisationStatus(id: string, status: OrganisationRecord['status']): Promise<void>;
   updateOrganisationPaymentRoute(id: string, defaultPaymentRoute: OrganisationRecord['defaultPaymentRoute'], worldpayEnabled: boolean): Promise<void>;
+  updateOrganisationPharmacyDelivery(id: string, enabled: boolean): Promise<void>;
   updateOrganisationIntakeEnabled(id: string, intakeEnabled: boolean): Promise<void>;
   findDirectoryByTokenHash(tokenHash: string): Promise<PublicPharmacyResolution | null>;
   findReferralTokenByHash(tokenHash: string): Promise<ReferralTokenRecord | null>;

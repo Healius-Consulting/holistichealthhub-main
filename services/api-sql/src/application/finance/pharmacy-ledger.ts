@@ -28,11 +28,35 @@ export type PharmacyLedgerOrder = {
   totalPence?: number | null;
   medicineTotalPence?: number | null;
   dispensingFeePence?: number | null;
+  pharmacyDeliveryPence?: number | null;
   currency?: string | null;
   quoteSnapshot?: unknown;
 };
 
 export type PharmacyLedgerRow = ReturnType<typeof buildPharmacyLedgerRows>[number];
+
+export function allocatePatientRevenueAfterRefund(input: {
+  productRevenuePence: number;
+  pharmacyDeliveryPence: number;
+  dispensingFeePence: number;
+  refundPence: number;
+  fullyRefunded?: boolean;
+}) {
+  if (input.fullyRefunded) {
+    return { productRevenuePence: 0, pharmacyDeliveryPence: 0, dispensingFeePence: 0, patientRevenuePence: 0 };
+  }
+  const productRevenuePence = Math.max(0, input.productRevenuePence - input.refundPence);
+  const deliveryRefundPence = Math.max(0, input.refundPence - input.productRevenuePence);
+  const pharmacyDeliveryPence = Math.max(0, input.pharmacyDeliveryPence - deliveryRefundPence);
+  const dispensingRefundPence = Math.max(0, deliveryRefundPence - input.pharmacyDeliveryPence);
+  const dispensingFeePence = Math.max(0, input.dispensingFeePence - dispensingRefundPence);
+  return {
+    productRevenuePence,
+    pharmacyDeliveryPence,
+    dispensingFeePence,
+    patientRevenuePence: productRevenuePence + pharmacyDeliveryPence + dispensingFeePence,
+  };
+}
 
 export function buildPharmacyLedgerRows(input: {
   orders: PharmacyLedgerOrder[];
@@ -57,7 +81,7 @@ export function buildPharmacyLedgerRows(input: {
         item.retailPence ||
         item.patientPackPricePence ||
         (item.patientPackPrice ? Math.round(Number(item.patientPackPrice) * 100) : 0) ||
-        (order.totalPence && qty > 0 ? Math.round((Number(order.totalPence) - Number(order.dispensingFeePence || 0)) / qty) : 0)
+        (order.totalPence && qty > 0 ? Math.round((Number(order.totalPence) - Number(order.dispensingFeePence || 0) - Number(order.pharmacyDeliveryPence || 0)) / qty) : 0)
       );
       const wholesaleUnit = quoted.prices.get(packId) ?? null;
       return {
@@ -78,11 +102,16 @@ export function buildPharmacyLedgerRows(input: {
     });
     const grossProductRevenuePence = revenueBasis.productRevenuePence;
     const grossDispensingFeePence = revenueBasis.dispensingFeePence;
+    const grossPharmacyDeliveryPence = revenueBasis.pharmacyDeliveryPence;
     const grossPatientRevenuePence = revenueBasis.patientRevenuePence;
     const completedRefundPence = flags.refunded || flags.partialRefund ? flags.refundAmountPence : 0;
-    const dispensingFeePence = flags.refunded ? 0 : grossDispensingFeePence;
-    const productRevenuePence = flags.refunded ? 0 : Math.max(0, grossProductRevenuePence - completedRefundPence);
-    const patientRevenuePence = Math.max(0, grossPatientRevenuePence - completedRefundPence);
+    const { productRevenuePence, pharmacyDeliveryPence, dispensingFeePence, patientRevenuePence } = allocatePatientRevenueAfterRefund({
+      productRevenuePence: grossProductRevenuePence,
+      pharmacyDeliveryPence: grossPharmacyDeliveryPence,
+      dispensingFeePence: grossDispensingFeePence,
+      refundPence: completedRefundPence,
+      fullyRefunded: flags.refunded,
+    });
     const wholesaleProductPence = quoted.wholesaleProductPence;
     const shippingPence = quoted.shippingPence;
     const wholesalePence = quoted.wholesalePence;
@@ -120,6 +149,7 @@ export function buildPharmacyLedgerRows(input: {
       refundAmountPence: completedRefundPence,
       refundPending: flags.refundPending,
       productRevenuePence,
+      pharmacyDeliveryPence,
       dispensingFeePence,
       patientRevenuePence,
       wholesaleProductPence,

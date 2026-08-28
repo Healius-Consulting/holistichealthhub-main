@@ -5,6 +5,7 @@ import { useAuth } from '../auth/useAuth';
 import { useApp, type Screen } from '../context/AppContext';
 import HhhBrandMark from './HhhBrandMark';
 import WorkspaceNavigation, { type WorkspaceNavGroup } from './WorkspaceNavigation';
+import { PORTAL_APP_VERSION } from '../constants/pharmacy';
 
 export default function Navigation() {
   const { state, dispatch } = useApp();
@@ -47,7 +48,8 @@ export default function Navigation() {
       groups={groups}
       mobilePrimaryKeys={['home', 'create', 'orders', 'patients']}
       onNavigate={screen => dispatch({ type: 'SET_SCREEN', screen })}
-      brand={{ title: 'Holistic Health Hub', subtitle: 'Pharmacy operations', partner: organisation.tradingName, logo: <HhhBrandMark /> }}
+      brand={{ title: 'Holistic Health Hub', subtitle: 'Pharmacy operations', partner: organisation.tradingName, code: organisation.curaleafPharmacyCode, logo: <HhhBrandMark /> }}
+      version={PORTAL_APP_VERSION}
       user={{ initials: staffInitials, name: staffName, role: isAdminViewingClient ? 'HHH administrator' : `Pharmacy staff · ${state.workspaceMode === 'live' ? 'Live' : 'Training'}` }}
       exitAction={{
         label: isAdminViewingClient ? 'Return to administration' : 'Sign out',

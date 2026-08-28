@@ -464,6 +464,7 @@ export interface PortalOrderInput {
   patientId: string;
   medicineTotalPence?: number;
   dispensingFeePence: number;
+  pharmacyDeliveryPence: number;
   totalPence?: number;
   quoteSnapshot?: Record<string, unknown>;
   pricingQuote?: CuraleafQuote;
@@ -509,7 +510,6 @@ export interface PortalOrderInput {
       quantity: number;
     }>;
   }>;
-  dispensingFeePence: number;
   currency: 'GBP';
   redoContext?: {
     originalOrderId: string | number;
@@ -622,6 +622,7 @@ export interface PortalCuraleafOrderState {
 
 export interface PortalOrderRecord {
   id: string;
+  orderNumber?: string;
   organisationId: string;
   patientId: string;
   lineItems: Array<{
@@ -635,7 +636,10 @@ export interface PortalOrderRecord {
   }>;
   prescriptions?: PortalOrderInput['prescriptions'];
   prescriptionFlow?: Record<string, PrescriptionFlowRecord>;
+  medicineTotalPence?: number;
   dispensingFeePence: number;
+  pharmacyDeliveryPence: number;
+  deliveryPence?: number;
   totalPence: number;
   quotedTotalPence?: number;
   pharmacyContributionPence?: number;
@@ -756,6 +760,7 @@ export interface OrderDraftRecord {
   organisationId: string;
   patientId: string | null;
   status: 'draft';
+  pharmacyDeliveryEnabledAtCreation: boolean;
   payload: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1209,6 +1214,7 @@ export interface PharmacyPrescriptionFinanceReport {
     patientRevenuePence: number;
     productRevenuePence: number;
     dispensingFeesPence: number;
+    pharmacyDeliveryFeesPence: number;
     wholesaleKnownForCount: number;
     wholesalePendingForCount: number;
     /** Subset of costed rows priced from the shared quote bank rather than a paid quote. */
@@ -1237,6 +1243,7 @@ export interface PharmacyPrescriptionFinanceReport {
     refundPending: boolean;
     productRevenuePence: number;
     dispensingFeePence: number;
+    pharmacyDeliveryPence: number;
     patientRevenuePence: number;
     wholesaleProductPence: number | null;
     shippingPence: number | null;
@@ -1393,6 +1400,7 @@ export interface PortalOrganisation {
   portalName?: string;
   worldpayEnabled?: boolean;
   defaultPaymentRoute?: 'manual' | 'worldpay';
+  pharmacyDeliveryEnabled?: boolean;
   autoPlacementEnabled?: boolean;
   curaleafTestValidation?: CuraleafValidationRecord | null;
   curaleafLiveValidation?: CuraleafValidationRecord | null;
@@ -1441,6 +1449,8 @@ export interface PaymentSettings {
   organisationId: string;
   pharmacyId?: string;
   defaultPaymentRoute: 'manual' | 'worldpay';
+  worldpayEnabled?: boolean;
+  pharmacyDeliveryEnabled: boolean;
   updatedAt: string;
 }
 

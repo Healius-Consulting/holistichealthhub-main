@@ -14,11 +14,13 @@ export default function WorldpayConnectionPanel({
   organisationId,
   onConnected,
   onNotify,
+  onRefreshControl,
 }: {
   organisationId: string;
   onConnected: (status: WorldpayConnectionStatus) => void;
   /** Reports the outcome of a person-initiated refresh; automatic loads stay silent. */
   onNotify?: (message: string, tone: 'success' | 'warning' | 'error') => void;
+  onRefreshControl?: (control: { refresh: () => void; busy: boolean } | null) => void;
 }) {
   const [status, setStatus] = useState<WorldpayConnectionStatus | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -68,6 +70,10 @@ export default function WorldpayConnectionPanel({
   }, [applyStatus, organisationId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    onRefreshControl?.({ refresh: () => void refresh(true), busy });
+    return () => onRefreshControl?.(null);
+  }, [busy, onRefreshControl, refresh]);
 
   const connect = async () => {
     if (!form.username.trim() || !form.password || !form.entityId.trim()) return;
@@ -133,9 +139,6 @@ export default function WorldpayConnectionPanel({
           </button>
           <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => void removeConnection()}>
             <Unplug size={13} /> Remove connection
-          </button>
-          <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void refresh(true)}>
-            <RefreshCw size={13} className={busy ? 'spin' : ''} /> Refresh status
           </button>
         </div>
       ) : status?.configured ? (

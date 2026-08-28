@@ -843,9 +843,15 @@ export function updateStaffAccessibilityPreferences(preferences: StaffAccessibil
   });
 }
 
-export function updatePaymentSettings(organisationId: string, defaultPaymentRoute: 'manual' | 'worldpay') {
+export function updatePaymentSettings(
+  organisationId: string,
+  settings: { defaultPaymentRoute?: 'manual' | 'worldpay'; pharmacyDeliveryEnabled?: boolean } | 'manual' | 'worldpay',
+) {
   return apiRequest<PaymentSettings>('/v1/portal/payment-settings', {
     method: 'PUT',
-    body: JSON.stringify({ organisationId, defaultPaymentRoute }),
+    body: JSON.stringify({
+      organisationId,
+      ...(typeof settings === 'string' ? { defaultPaymentRoute: settings } : settings),
+    }),
   });
 }

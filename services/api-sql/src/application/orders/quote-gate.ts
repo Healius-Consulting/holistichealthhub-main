@@ -32,8 +32,29 @@ export function quoteWholesaleTotalPence(quote: ParsedQuote) {
   return quote.items.reduce((total, item) => total + item.wholesalePence * item.quantity, 0) + quote.shippingPence;
 }
 
-export function quotePaymentTotalPence(quote: ParsedQuote, dispensingFeePence: number) {
-  return patientQuoteTotalPence(quote) + quote.shippingPence + Math.max(0, Math.round(dispensingFeePence));
+export const CURRENT_PRICING_POLICY_VERSION = 2;
+
+export function quotePaymentTotalPence(
+  quote: ParsedQuote,
+  dispensingFeePence: number,
+  pharmacyDeliveryPence = 0,
+  includeCuraleafDeliveryInPatientTotal = false,
+) {
+  return patientQuoteTotalPence(quote)
+    + (includeCuraleafDeliveryInPatientTotal ? quote.shippingPence : 0)
+    + Math.max(0, Math.round(dispensingFeePence))
+    + Math.max(0, Math.round(pharmacyDeliveryPence));
+}
+
+export function quotePricingPolicy(snapshot: unknown) {
+  const record = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+    ? snapshot as Record<string, unknown>
+    : {};
+  const version = Number(record.pricingPolicyVersion || 0);
+  return {
+    version,
+    includeCuraleafDeliveryInPatientTotal: version < CURRENT_PRICING_POLICY_VERSION,
+  };
 }
 
 export type QuoteGateEvaluation = {
@@ -84,6 +105,8 @@ export function evaluateQuoteGate(input: {
   basket: QuoteBasketLine[];
   baseline?: QuoteCheckRecord | null;
   dispensingFeePence?: number;
+  pharmacyDeliveryPence?: number;
+  includeCuraleafDeliveryInPatientTotal?: boolean;
 }): QuoteGateEvaluation {
   const quote = parseQuote(input.rawQuote);
   if (!quote) throw new Error('Curaleaf returned an invalid quote.');
@@ -92,7 +115,12 @@ export function evaluateQuoteGate(input: {
   const basketFingerprint = quoteBasketFingerprint(expected);
   const actualFingerprint = quoteBasketFingerprint(actual);
   const fingerprint = quoteFingerprint(quote);
-  const patientTotalPence = quotePaymentTotalPence(quote, input.dispensingFeePence ?? 0);
+  const patientTotalPence = quotePaymentTotalPence(
+    quote,
+    input.dispensingFeePence ?? 0,
+    input.pharmacyDeliveryPence ?? 0,
+    input.includeCuraleafDeliveryInPatientTotal ?? false,
+  );
   const base = {
     quote,
     quoteFingerprint: fingerprint,
@@ -152,6 +180,8 @@ export function quoteCheckInput(input: {
   rawQuote: unknown;
   baseline?: QuoteCheckRecord | null;
   dispensingFeePence?: number;
+  pharmacyDeliveryPence?: number;
+  includeCuraleafDeliveryInPatientTotal?: boolean;
 }) {
   const evaluated = evaluateQuoteGate(input);
   return {

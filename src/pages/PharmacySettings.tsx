@@ -39,6 +39,8 @@ export default function PharmacySettings() {
   const organisation = useMemo(() => state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0], [state]);
   const [activeTab, setActiveTab] = useState<'settings' | 'assets'>('settings');
   const [savingRoute, setSavingRoute] = useState(false);
+  const [savingDelivery, setSavingDelivery] = useState(false);
+  const [worldpayRefreshControl, setWorldpayRefreshControl] = useState<{ refresh: () => void; busy: boolean } | null>(null);
   const [qr, setQr] = useState('');
   const [formUrl, setFormUrl] = useState('');
   const [linkLoading, setLinkLoading] = useState(true);
@@ -247,6 +249,27 @@ export default function PharmacySettings() {
     }
   };
 
+  const setPharmacyDelivery = async (enabled: boolean) => {
+    const previous = organisation.pharmacyDeliveryEnabled;
+    setSavingDelivery(true);
+    dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { pharmacyDeliveryEnabled: enabled } });
+    try {
+      if (!isLocalPortalPreview && isApiConfigured) await updatePaymentSettings(organisation.id, { pharmacyDeliveryEnabled: enabled });
+      dispatch({
+        type: 'ADD_TOAST',
+        message: enabled
+          ? 'Pharmacy Delivery is enabled for new drafts.'
+          : 'Pharmacy Delivery is disabled for new drafts. Existing eligible drafts are unchanged.',
+        toastType: 'success',
+      });
+    } catch (error) {
+      dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { pharmacyDeliveryEnabled: previous } });
+      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'Pharmacy Delivery could not be updated.', toastType: 'error' });
+    } finally {
+      setSavingDelivery(false);
+    }
+  };
+
   return (
     <div className="page-body pharmacy-settings">
       <header className="pharmacy-settings__header">
@@ -272,6 +295,21 @@ export default function PharmacySettings() {
       {activeTab === 'settings' ? (
         <div className="pharmacy-settings__flow" id="settings-panel-organisation" role="tabpanel" aria-labelledby="settings-tab-organisation">
           <section className="pharmacy-settings-section">
+            <header>
+              <h3><Building2 size={16} aria-hidden="true" /> Pharmacy Delivery</h3>
+              <span className={`pill ${organisation.pharmacyDeliveryEnabled ? 'pill-green' : 'pill-neutral'}`}>
+                {organisation.pharmacyDeliveryEnabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </header>
+            <p className="pharmacy-settings-section__lead">Allow new order drafts to add a pharmacy-managed delivery charge of up to £15. Existing eligible drafts keep their choice if this is later disabled.</p>
+            <label className="pharmacy-settings-toggle">
+              <span><strong>Offer Pharmacy Delivery</strong><small>{organisation.pharmacyDeliveryEnabled ? 'Enabled for new drafts.' : 'Disabled for new drafts.'}</small></span>
+              <input type="checkbox" checked={organisation.pharmacyDeliveryEnabled} disabled={savingDelivery} onChange={event => void setPharmacyDelivery(event.target.checked)} />
+              <span aria-hidden="true" />
+            </label>
+          </section>
+
+          <section className="pharmacy-settings-section">
             <header><h3><Tags size={16} aria-hidden="true" /> Curaleaf</h3></header>
             <div className="pharmacy-settings-curaleaf">
               <div className="pharmacy-settings-curaleaf__id">
@@ -282,7 +320,7 @@ export default function PharmacySettings() {
                 <RefreshCw size={14} aria-hidden="true" /> {curaleafRefreshing ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
-            <p className="pharmacy-settings-section__lead">Curaleaf supplies patient price and wholesale cost. Your team can only add an optional dispensing charge while building an order.</p>
+            <p className="pharmacy-settings-section__lead">Curaleaf supplies patient price and wholesale cost. Your team can add optional dispensing and eligible Pharmacy Delivery charges while building an order.</p>
             <button type="button" className="pharmacy-settings-link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
           </section>
 
@@ -401,6 +439,9 @@ export default function PharmacySettings() {
               <div className="pharmacy-settings-connection">
                 <div><span>Environment</span><strong>{organisation.worldpay.environment === 'live' ? 'Live' : 'Try'}</strong></div>
                 <div><span>Last verified</span><strong>{formatLastVerified(organisation.worldpay.lastSyncedAt)}</strong></div>
+                <button type="button" className="btn btn-sm" disabled={!worldpayRefreshControl || worldpayRefreshControl.busy} onClick={() => worldpayRefreshControl?.refresh()}>
+                  <RefreshCw size={13} className={worldpayRefreshControl?.busy ? 'spin' : ''} /> {worldpayRefreshControl?.busy ? 'Refreshing…' : 'Refresh status'}
+                </button>
               </div>
             )}
 
@@ -411,6 +452,7 @@ export default function PharmacySettings() {
             <WorldpayConnectionPanel
               organisationId={organisation.id}
               onNotify={(message, tone) => dispatch({ type: 'ADD_TOAST', message, toastType: tone, dedupeKey: 'worldpay-refresh' })}
+              onRefreshControl={setWorldpayRefreshControl}
               onConnected={connection => {
                 dispatch({
                   type: 'UPDATE_WORLDPAY',
@@ -476,20 +518,24 @@ export default function PharmacySettings() {
             </section>
           </div>
 
-          <section className="pharmacy-settings-section pharmacy-settings-tool pharmacy-settings-tool--secondary">
-            <header><h3><FileArchive size={16} aria-hidden="true" /> Pack for your web developer</h3></header>
-            <p className="pharmacy-settings-section__lead">Suggested page copy, the hosted-form link, QR usage notes and the high-resolution image, zipped up to hand over.</p>
-            <div className="pharmacy-settings-actions">
-              <button
-                className="btn btn-secondary"
-                type="button"
-                disabled={!formUrl}
-                onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}
-              >
-                <FileArchive size={15} /> Download content pack (.zip)
-              </button>
-            </div>
-          </section>
+          <div className="pharmacy-settings-packs" aria-label="Content packs">
+            <section className="pharmacy-settings-section pharmacy-settings-tool pharmacy-settings-tool--secondary">
+              <header><h3><FileArchive size={16} aria-hidden="true" /> Developer pack</h3></header>
+              <p className="pharmacy-settings-section__lead">Suggested page copy, the hosted-form link, QR usage notes and the high-resolution image, zipped up to hand over.</p>
+              <div className="pharmacy-settings-actions">
+                <button className="btn btn-secondary" type="button" disabled={!formUrl} onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}>
+                  <FileArchive size={15} /> Download content pack (.zip)
+                </button>
+              </div>
+            </section>
+            {[2, 3].map(number => (
+              <section key={number} className="pharmacy-settings-section pharmacy-settings-tool pharmacy-settings-tool--secondary is-coming-soon">
+                <header><h3><FileArchive size={16} aria-hidden="true" /> Content pack {number}</h3><span className="pill pill-neutral">Coming soon</span></header>
+                <p className="pharmacy-settings-section__lead">Additional approved pharmacy materials will appear here when available.</p>
+                <div className="pharmacy-settings-actions"><button className="btn btn-secondary" type="button" disabled>Coming soon</button></div>
+              </section>
+            ))}
+          </div>
 
           <p className="pharmacy-settings-attribution">
             <Link2 size={14} aria-hidden="true" />

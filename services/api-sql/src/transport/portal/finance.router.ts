@@ -146,6 +146,7 @@ export function createPortalFinanceRouter(): Router {
         patientRevenuePence: realisedRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
         productRevenuePence: realisedRows.reduce((sum, r) => sum + r.productRevenuePence, 0),
         dispensingFeesPence: realisedRows.reduce((sum, r) => sum + r.dispensingFeePence, 0),
+        pharmacyDeliveryFeesPence: realisedRows.reduce((sum, r) => sum + r.pharmacyDeliveryPence, 0),
         wholesaleKnownForCount: costedRows.length,
         wholesalePendingForCount: realisedRows.length - costedRows.length,
         wholesaleEstimatedForCount: costedRows.filter(r => r.wholesaleEstimated).length,

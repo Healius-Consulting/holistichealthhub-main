@@ -46,6 +46,7 @@ export const ORGANISATIONS: PharmacyTenant[] = [
     status: 'onboarding',
     staffCount: 4,
     defaultPaymentRoute: 'manual',
+    pharmacyDeliveryEnabled: false,
     brand: { primary: '#0f766e', portalName: 'Primary Branch' },
     worldpay: { enabled: false, status: 'not-connected', environment: 'sandbox', merchantId: null, merchantName: null, lastSyncedAt: null },
   },
@@ -68,6 +69,7 @@ export const ORGANISATIONS: PharmacyTenant[] = [
     status: 'live',
     staffCount: 2,
     defaultPaymentRoute: 'manual',
+    pharmacyDeliveryEnabled: false,
     brand: { primary: '#1e40af', portalName: 'Eastwood Health Pharmacy' },
     worldpay: { enabled: false, status: 'not-connected', environment: 'sandbox', merchantId: null, merchantName: null, lastSyncedAt: null },
   },
@@ -199,7 +201,7 @@ export function trainingWorkspace(organisationId: string): {
     quantityMismatch: false,
     ...partial,
   });
-  const paid = (id: number, days: number, notes: string, total = amount, tender: PatientOrder['payment']['manualTender'] = 'epos-card'): PatientOrder['payment'] => ({
+  const paid = (id: number, days: number, notes: string, total: number = amount, tender: PatientOrder['payment']['manualTender'] = 'epos-card'): PatientOrder['payment'] => ({
     status: 'paid',
     route: 'pharmacy',
     amount: total,
@@ -218,6 +220,8 @@ export function trainingWorkspace(organisationId: string): {
     patientId: bySlug[slug].id,
     date: daysAgo(days),
     dispensingFee: 0,
+    pharmacyDelivery: 0,
+    pharmacyDeliveryAllowed: false,
     paymentRoute: 'manual',
     payment,
     prescriptions,
@@ -290,6 +294,7 @@ export function trainingWorkspace(organisationId: string): {
   };
 
   const orders: PatientOrder[] = [
+    orderShell(100, 'casey', 0, { status: 'none', route: 'pharmacy', amount: 0, ref: null, sentAt: null, paidAt: null, manualTender: null, manualReference: null, manualNotes: null, manualRecordedBy: null }, []),
     {
       id: 101,
       backendId: 'training-order-101',
@@ -297,6 +302,8 @@ export function trainingWorkspace(organisationId: string): {
       patientId: patients[1].id,
       date: daysAgo(1),
       dispensingFee: 0,
+      pharmacyDelivery: 0,
+      pharmacyDeliveryAllowed: false,
       paymentRoute: 'manual',
       payment: {
         status: 'sent',
@@ -322,6 +329,8 @@ export function trainingWorkspace(organisationId: string): {
       patientId: patients[2].id,
       date: daysAgo(2),
       dispensingFee: 0,
+      pharmacyDelivery: 0,
+      pharmacyDeliveryAllowed: false,
       paymentRoute: 'manual',
       payment: {
         status: 'paid',
@@ -348,6 +357,8 @@ export function trainingWorkspace(organisationId: string): {
       patientId: patients[3].id,
       date: daysAgo(5),
       dispensingFee: 0,
+      pharmacyDelivery: 0,
+      pharmacyDeliveryAllowed: false,
       paymentRoute: 'manual',
       payment: {
         status: 'paid',
@@ -395,6 +406,8 @@ export function trainingWorkspace(organisationId: string): {
       patientId: patients[4].id,
       date: daysAgo(8),
       dispensingFee: 0,
+      pharmacyDelivery: 0,
+      pharmacyDeliveryAllowed: false,
       paymentRoute: 'manual',
       payment: {
         status: 'paid',
@@ -446,6 +459,8 @@ export function trainingWorkspace(organisationId: string): {
       patientId: patients[5].id,
       date: daysAgo(14),
       dispensingFee: 0,
+      pharmacyDelivery: 0,
+      pharmacyDeliveryAllowed: false,
       paymentRoute: 'manual',
       payment: {
         status: 'paid',
@@ -756,12 +771,16 @@ export function trainingWorkspace(organisationId: string): {
     }),
   ];
 
-  const nextRx = Math.max(...orders.flatMap(order => order.prescriptions.map(rx => rx.id)), 0) + 1;
-  const nextOrder = Math.max(...orders.map(order => order.id), 0) + 1;
+  const drillOrderIds = new Set([100, 101, 102, 112, 104, 105, 121, 131, 132]);
+  const drillOrders = orders.filter(order => drillOrderIds.has(order.id));
+  const referencedPatientIds = new Set(drillOrders.map(order => order.patientId).filter((id): id is string => Boolean(id)));
+  const drillPatients = patients.filter(patient => referencedPatientIds.has(patient.id));
+  const nextRx = Math.max(...drillOrders.flatMap(order => order.prescriptions.map(rx => rx.id)), 0) + 1;
+  const nextOrder = Math.max(...drillOrders.map(order => order.id), 0) + 1;
 
   return {
-    crm: patients,
-    orders,
+    crm: drillPatients,
+    orders: drillOrders,
     nextIds: { patient: 2000, rx: nextRx, order: nextOrder, submission: 5, invoice: 4072 },
   };
 }

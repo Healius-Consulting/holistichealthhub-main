@@ -227,6 +227,7 @@ mutation CreateOrderDraft(
   $organisationId: UUID!
   $patientId: UUID
   $payload: Any!
+  $pharmacyDeliveryEnabledAtCreation: Boolean!
   $createdByUid: String!
 ) @auth(level: NO_ACCESS) {
   orderDraft_insert(data: {
@@ -234,6 +235,7 @@ mutation CreateOrderDraft(
     patientId: $patientId
     status: DRAFT
     paymentStatus: NONE
+    pharmacyDeliveryEnabledAtCreation: $pharmacyDeliveryEnabledAtCreation
     payload: $payload
     createdByUid: $createdByUid
   })
@@ -251,6 +253,7 @@ mutation CreateOrder(
   $currency: String!
   $medicineTotalPence: Int64!
   $dispensingFeePence: Int64!
+  $pharmacyDeliveryPence: Int64!
   $deliveryPence: Int64!
   $taxPence: Int64!
   $totalPence: Int64!
@@ -269,6 +272,7 @@ mutation CreateOrder(
     currency: $currency
     medicineTotalPence: $medicineTotalPence
     dispensingFeePence: $dispensingFeePence
+    pharmacyDeliveryPence: $pharmacyDeliveryPence
     deliveryPence: $deliveryPence
     taxPence: $taxPence
     totalPence: $totalPence
@@ -473,7 +477,6 @@ mutation CreateReferralToken(
     intakeVersion: $intakeVersion
   })
 }
-
 
 
 

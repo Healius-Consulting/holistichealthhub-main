@@ -312,7 +312,6 @@ export function orderAwaitingCuraleafCancel(order: PatientOrder): boolean {
 function supplierCancelled(order: PatientOrder) {
   return order.unresolvedReason === 'cancelled'
     || order.cancellation?.status === 'refund_required'
-    || order.cancellation?.status === 'confirmed'
     || order.curaleafCancellation?.status === 'confirmed'
     || order.prescriptions.some(rx => rx.status === 'cancelled' || rx.purchaseOrderState === 'CANCELLED');
 }
@@ -329,7 +328,7 @@ export function orderCancellationResolution(order: PatientOrder): CancellationRe
   const supplierActionOutstanding = ['contact_required', 'awaiting_confirmation'].includes(order.curaleafCancellation?.status ?? '')
     || ['curaleaf_contact_required', 'awaiting_curaleaf_confirmation'].includes(order.cancellation?.status ?? '');
   const refundActionOutstanding = order.cancellation?.status === 'refund_required'
-    || Boolean(order.refund && order.refund.status !== 'completed')
+    || Boolean(order.refund)
     || order.payment.status === 'paid';
 
   if (supplierActionOutstanding || refundActionOutstanding) return 'needs-action';

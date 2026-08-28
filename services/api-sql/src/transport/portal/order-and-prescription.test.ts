@@ -11,6 +11,7 @@ describe('Order Drafts and Prescription Files Lifecycle', () => {
       patientId: null,
       status: 'DRAFT',
       paymentStatus: 'NONE',
+      pharmacyDeliveryEnabledAtCreation: false,
       payload: null,
       version: 1,
       createdAt: '2026-08-17T02:00:00.000Z',
@@ -31,6 +32,7 @@ describe('Order Drafts and Prescription Files Lifecycle', () => {
       patientId: '00000000-0000-4000-a000-000000000001',
       status: 'DRAFT',
       paymentStatus: 'NONE',
+      pharmacyDeliveryEnabledAtCreation: false,
       payload: {
         prescriptions: [
           {

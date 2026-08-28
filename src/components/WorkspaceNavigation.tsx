@@ -36,7 +36,8 @@ interface WorkspaceNavigationProps<Key extends string> {
   groups: WorkspaceNavGroup<Key>[];
   mobilePrimaryKeys: Key[];
   onNavigate: (key: Key) => void;
-  brand: { title: string; subtitle: string; partner?: string; logoText?: string; logoSrc?: string; logo?: ReactNode };
+  brand: { title: string; subtitle: string; partner?: string; code?: string; logoText?: string; logoSrc?: string; logo?: ReactNode };
+  version?: string;
   user: { initials: string; name: string; role: string };
   exitAction: { label: string; icon: ReactNode; onClick: () => void };
   footerAction?: { label: string; icon: ReactNode; onClick: () => void };
@@ -50,6 +51,7 @@ export default function WorkspaceNavigation<Key extends string>({
   mobilePrimaryKeys,
   onNavigate,
   brand,
+  version,
   user,
   exitAction,
   footerAction,
@@ -118,7 +120,7 @@ export default function WorkspaceNavigation<Key extends string>({
             <span className={brand.partner ? 'sidebar-brand-copy sidebar-brand-copy--cobrand' : 'sidebar-brand-copy'}>
               <strong>{brand.title}</strong>
               {brand.partner
-                ? <><i className="sidebar-brand-joiner" aria-hidden="true">×</i><small>{brand.partner}</small></>
+                ? <><i className="sidebar-brand-joiner" aria-hidden="true">×</i><small>{brand.partner}</small>{brand.code ? <em>Curaleaf ID: {brand.code}</em> : null}</>
                 : <small>{brand.subtitle}</small>}
             </span>
           </div>
@@ -147,6 +149,7 @@ export default function WorkspaceNavigation<Key extends string>({
             </div>
           ))}
         </nav>
+        {version ? <span className="sidebar-version" aria-label={`Portal version ${version}`}>{version}</span> : null}
         <div className="sidebar-footer">
           {footerAction ? (
             <button type="button" className="btn btn-sm sidebar-footer-action" onClick={footerAction.onClick}>

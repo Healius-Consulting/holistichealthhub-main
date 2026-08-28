@@ -12,8 +12,8 @@ describe('quote gates', () => {
   it('derives payment amount from the supplier quote and server fee', () => {
     const check = evaluateQuoteGate({ rawQuote: raw, basket: [{ packId: 'pack-a', quantity: 2 }], dispensingFeePence: 1000 });
     assert.equal(check.status, 'MATCHED');
-    assert.equal(check.patientTotalPence, 18_500);
-    assert.equal(quotePaymentTotalPence(check.quote, 1000), 18_500);
+    assert.equal(check.patientTotalPence, 18_000);
+    assert.equal(quotePaymentTotalPence(check.quote, 1000), 18_000);
   });
 
   it('freezes totals and line prices from the supplier quote', () => {
@@ -21,7 +21,7 @@ describe('quote gates', () => {
     const pricing = authoritativeQuotePricing(check);
     assert.equal(pricing.medicineTotalPence, 17_000);
     assert.equal(pricing.deliveryPence, 500);
-    assert.equal(pricing.totalPence, 18_500);
+    assert.equal(pricing.totalPence, 18_000);
     assert.deepEqual(pricing.unitPrices.get('pack-a'), { patientPence: 8_500, wholesalePence: 6_800 });
     assert.deepEqual(authoritativeQuoteLineItems([
       { packId: 'pack-a', quantity: 2, unitPricePence: 1, name: 'Caller metadata is retained' },
@@ -29,6 +29,14 @@ describe('quote gates', () => {
       packId: 'pack-a', quantity: 2, unitPricePence: 8_500, wholesalePackPricePence: 6_800,
       name: 'Caller metadata is retained',
     }]);
+  });
+
+  it('adds Pharmacy Delivery but never Curaleaf Delivery to a new patient total', () => {
+    assert.equal(quotePaymentTotalPence(evaluateQuoteGate({ rawQuote: raw, basket: [{ packId: 'pack-a', quantity: 2 }] }).quote, 500, 1_500), 19_000);
+  });
+
+  it('retains Curaleaf Delivery for unstamped legacy-order rechecks', () => {
+    assert.equal(quotePaymentTotalPence(evaluateQuoteGate({ rawQuote: raw, basket: [{ packId: 'pack-a', quantity: 2 }] }).quote, 500, 0, true), 18_000);
   });
 
   it('rejects incomplete or substituted baskets', () => {

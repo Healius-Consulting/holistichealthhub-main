@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
-import { CheckCircle, FileText, Search } from 'lucide-react';
+import { FileText, Search } from 'lucide-react';
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
 import DraftBasketSheet from './DraftBasketSheet';
 import DraftSessionBar from './DraftSessionBar';
@@ -19,12 +19,8 @@ import type { WizardStep } from './types';
 import {
   useApp,
   money,
-  lineRevenue,
-  lineCost,
-  lineMargin,
   orderRevenue,
   orderCost,
-  marginPct,
   getUnresolvedReason,
   orderReference,
   type LineItem,
@@ -49,7 +45,7 @@ export default function CreateOrderPage() {
   const activeOrder = state.orders.find(order => order.organisationId === state.currentOrganisationId && order.id === state.activeOrderId && order.payment.status === 'none');
   const selectedPaymentRoute = activeOrder?.paymentRoute ?? (canUseWorldpay ? 'worldpay' : 'manual');
   const redoSourceOrder = activeOrder?.redoContext
-    ? state.orders.find(order => order.organisationId === state.currentOrganisationId && order.id === activeOrder.redoContext!.originalOrderId)
+    ? state.orders.find(order => order.organisationId === state.currentOrganisationId && order.id === activeOrder.redoContext!.originalOrderId) ?? null
     : null;
   const patient = activeOrder?.patientId ? organisationPatients.find(candidate => candidate.id === activeOrder.patientId) ?? null : null;
   const [selectedRxId, setSelectedRxId] = useState<number | null>(null);
@@ -58,12 +54,11 @@ export default function CreateOrderPage() {
   const [patientSearchOpen, setPatientSearchOpen] = useState(true);
   const [patientActiveIndex, setPatientActiveIndex] = useState(0);
   const [confirmingDraftDeleteId, setConfirmingDraftDeleteId] = useState<number | null>(null);
-  const [confirmingRxDeleteId, setConfirmingRxDeleteId] = useState<number | null>(null);
   const [quoteBusy, setQuoteBusy] = useState(false);
   const [quoteError, setQuoteError] = useState<{ title: string; detail: string } | null>(null);
   const [quotedSignature, setQuotedSignature] = useState<string | null>(null);
   const [quoteSummary, setQuoteSummary] = useState<{ shippingPrice: number } | null>(null);
-  const [latestQuote, setLatestQuote] = useState<import('../shared/contracts').CuraleafQuote | null>(null);
+  const [latestQuote, setLatestQuote] = useState<import('../../shared/contracts').CuraleafQuote | null>(null);
   const [quoteCheckedAt, setQuoteCheckedAt] = useState<string | null>(null);
   const [quotedUnavailableProductIds, setQuotedUnavailableProductIds] = useState<string[]>([]);
   const quoteRequestVersion = useRef(0);
@@ -85,6 +80,7 @@ export default function CreateOrderPage() {
     patientId: activeOrder.patientId,
     prescriptions: activeOrder.prescriptions,
     dispensingFeePence: Math.round(activeOrder.dispensingFee * 100),
+    pharmacyDeliveryPence: Math.round(activeOrder.pharmacyDelivery * 100),
     paymentRoute: selectedPaymentRoute,
     redoContext: activeOrder.redoContext ?? null,
   } : null, [activeOrder, selectedPaymentRoute]);
@@ -154,7 +150,6 @@ export default function CreateOrderPage() {
     setPatientSearchOpen(!activeOrder?.patientId);
     setPatientActiveIndex(0);
     setConfirmingDraftDeleteId(null);
-    setConfirmingRxDeleteId(null);
     setConfirmingFileRemoveRxId(null);
     setQuoteError(null);
     setQuotedSignature(null);
@@ -205,7 +200,6 @@ export default function CreateOrderPage() {
   }, [activeOrder?.redoContext?.originalOrderId, selectedUnresolvedOrderId, unresolvedOrdersForPatient]);
 
   const selectedRx = activeOrder?.prescriptions.find(rx => rx.id === selectedRxId) ?? null;
-  const selectedRxIndex = activeOrder && selectedRx ? activeOrder.prescriptions.findIndex(rx => rx.id === selectedRx.id) : -1;
   const requiresLiveCuraleafEvidence = state.workspaceMode === 'live' && !isLocalPortalPreview;
   const hasPrescriptionRecords = Boolean(activeOrder?.prescriptions.length);
   const readiness = activeOrder ? [
@@ -221,9 +215,6 @@ export default function CreateOrderPage() {
     .every(item => item.complete);
   const prescriptionReady = readiness.every(item => item.complete);
   const wholesaleKnown = Boolean(activeOrder?.prescriptions.every(rx => rx.items.every(item => item.cost !== null)));
-  const orderMargin = activeOrder && wholesaleKnown
-    ? marginPct(orderCost(activeOrder), orderRevenue(activeOrder))
-    : null;
   const currentQuoteItems = activeOrder?.prescriptions.flatMap(rx => rx.items.map(item => ({ packId: item.productId, quantity: item.qty }))) ?? [];
   const currentQuoteSignature = JSON.stringify(currentQuoteItems.slice().sort((a, b) => a.packId.localeCompare(b.packId)));
 
@@ -260,7 +251,6 @@ export default function CreateOrderPage() {
   const outstandingPaymentGates = paymentGate.filter(item => !item.complete);
   const patientLinked = Boolean(patient);
   const patientReady = patientLinked && canCreateOrderForPatient(patient);
-  const prescriptionUploaded = Boolean(selectedRx && (selectedRx.copyFileName || selectedRx.clinicScanId));
   const readyForProducts = selectedRx?.entryMode === 'clinic'
     ? Boolean(selectedRx.clinicScanId)
     : Boolean(
@@ -487,12 +477,11 @@ export default function CreateOrderPage() {
         }));
         const orderRevPence = Math.round(orderRevenue(activeOrder) * 100);
         const dispensingFeePence = Math.round((activeOrder.dispensingFee || 0) * 100);
-        const medicineTotalPence = Math.max(0, orderRevPence - dispensingFeePence);
+        const pharmacyDeliveryPence = Math.round((activeOrder.pharmacyDelivery || 0) * 100);
+        const medicineTotalPence = Math.max(0, orderRevPence - dispensingFeePence - pharmacyDeliveryPence);
         const totalPence = orderRevPence > 0 ? orderRevPence : Math.round(activeOrder.payment.amount * 100);
         const shippingPence = pricingQuote
-          ? (typeof pricingQuote.shippingPence === 'number'
-            ? pricingQuote.shippingPence
-            : Math.round(Number(pricingQuote.shippingPrice || 0) * 100))
+          ? Math.round(Number(pricingQuote.shippingPrice || 0) * 100)
           : undefined;
         const wholesaleProductPence = lineItems.reduce((sum, item) => sum + (item.wholesalePackPricePence || 0) * item.quantity, 0);
 
@@ -503,8 +492,9 @@ export default function CreateOrderPage() {
           paymentRoute: selectedPaymentRoute,
           medicineTotalPence,
           dispensingFeePence,
+          pharmacyDeliveryPence,
           totalPence,
-          pricingQuote,
+          pricingQuote: pricingQuote ?? undefined,
           prePaymentQuote: pricingQuote && quoteCheckedAt ? {
             checkedAt: quoteCheckedAt,
             basketFingerprint: currentQuoteSignature,
@@ -559,7 +549,7 @@ export default function CreateOrderPage() {
           } : {}),
         });
         if (!activeOrder.backendId) {
-          dispatch({ type: 'SET_ORDER_BACKEND_ID', orderId: activeOrder.id, backendId: persisted.id });
+          dispatch({ type: 'SET_ORDER_BACKEND_ID', orderId: activeOrder.id, backendId: persisted.id, orderNumber: 'orderNumber' in persisted ? persisted.orderNumber : undefined });
           if ('lineItems' in persisted) dispatch({
             type: 'SYNC_ORDER_PATIENT_PRICES',
             orderId: activeOrder.id,
@@ -962,10 +952,10 @@ export default function CreateOrderPage() {
           <div className="rx-create-layout__main">
             <OrderStepper progress={wizard.progress} focusedStep={wizard.focusedStep} onStepClick={wizard.goToStep} />
 
-            <header className="rx-guided__stage-head">
+              <header className="rx-guided__stage-head">
               <p className="section-label">Step {wizard.focusedStep} of 4</p>
               <h2 key={wizard.focusedStep} ref={wizard.stageHeadingRef} tabIndex={-1}>{stageTitle}</h2>
-            </header>
+              </header>
 
             {wizard.lockNotice ? <p className="rx-guided__lock-notice" role="status">{wizard.lockNotice}</p> : null}
 
@@ -981,11 +971,11 @@ export default function CreateOrderPage() {
                     onRequestDeleteDraft={() => setConfirmingDraftDeleteId(activeOrder.id)}
                     initials={initials}
                   />
-                  {patient && !canCreateOrderForPatient(patient) ? (
-                    <ProviderStatusNotice title="This patient cannot start an order" detail="The linked patient is no longer approved or referred. Change the patient, or wait until their record is eligible again." />
-                  ) : null}
+          {patient && !canCreateOrderForPatient(patient) ? (
+            <ProviderStatusNotice title="This patient cannot start an order" detail="The linked patient is no longer approved or referred. Change the patient, or wait until their record is eligible again." />
+          ) : null}
                 </>
-              ) : null}
+          ) : null}
 
               {activeOrder.redoContext && patient ? (
                 <ReplacementBanner
@@ -1001,9 +991,9 @@ export default function CreateOrderPage() {
                   onSelect={setSelectedUnresolvedOrderId}
                   onApply={handleRedoPrescription}
                 />
-              ) : null}
+                        ) : null}
 
-              {wizard.focusedStep === 2 && selectedRx ? (
+              {wizard.focusedStep === 2 && selectedRx && rxDispatch ? (
                 <Step2PrescriptionPanel
                   selectedRx={selectedRx}
                   rxSubStep={wizard.progress.rxSubStep}
@@ -1028,12 +1018,12 @@ export default function CreateOrderPage() {
                   onCancelRemoveFile={() => setConfirmingFileRemoveRxId(null)}
                   {...rxDispatch}
                 />
-              ) : null}
+                  ) : null}
 
               {wizard.focusedStep === 3 && selectedRx && rxDispatch ? (
                 <Step3FormularyPanel
                   selectedRx={selectedRx}
-                  catalogue={state.catalogue}
+                            catalogue={state.catalogue}
                   catalogueLoading={state.catalogueLoading}
                   catalogueError={state.catalogueError}
                   onRetryCatalogue={() => dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' })}
@@ -1042,7 +1032,7 @@ export default function CreateOrderPage() {
                   onSaveFormulary={() => setEditingClinicFormularyRxId(null)}
                   {...rxDispatch}
                 />
-              ) : null}
+                  ) : null}
 
               {wizard.focusedStep === 4 ? (
                 <Step4CheckoutPanel
@@ -1053,7 +1043,7 @@ export default function CreateOrderPage() {
                   paidRedoAmountMatches={paidRedoAmountMatches}
                   paidRedoAmountDifference={paidRedoAmountDifference}
                   wholesaleKnown={wholesaleKnown}
-                  orderMargin={orderMargin}
+                  pharmacyDeliveryCurrentlyEnabled={organisation.pharmacyDeliveryEnabled}
                   workspaceMode={state.workspaceMode}
                   quoteAvailable={quoteAvailable}
                   quoteBusy={quoteBusy}
@@ -1072,16 +1062,17 @@ export default function CreateOrderPage() {
                   checkoutBusy={checkoutBusy}
                   onRefreshQuote={() => void refreshQuote()}
                   onSetDispensingFee={amount => dispatch({ type: 'SET_ORDER_DISPENSING_FEE', orderId: activeOrder.id, amount })}
+                  onSetPharmacyDelivery={amount => dispatch({ type: 'SET_ORDER_PHARMACY_DELIVERY', orderId: activeOrder.id, amount })}
                   onChooseAbsorbDifference={chooseAbsorbDifference}
                   onCancelReplacement={() => setConfirmingDraftDeleteId(activeOrder.id)}
                   onSetPaymentRoute={paymentRoute => dispatch({ type: 'SET_ORDER_PAYMENT_ROUTE', orderId: activeOrder.id, paymentRoute })}
                   onSubmit={() => void createPaymentRequest()}
                 />
-              ) : null}
-            </div>
+                    ) : null}
+                  </div>
 
             {nextHint ? <p className="rx-guided__next-hint" role="status">{nextHint}</p> : null}
-          </div>
+                    </div>
 
           <OrderSummaryRail
             progress={wizard.progress}
@@ -1091,6 +1082,7 @@ export default function CreateOrderPage() {
             draftBasketTotal={draftBasketTotal}
             draftBasketCosts={draftBasketCosts}
             dispensingFee={activeOrder.dispensingFee}
+            pharmacyDelivery={activeOrder.pharmacyDelivery}
             draftBasketItems={draftBasketItems}
             draftBasketIssues={draftBasketIssues}
             draftBasketBlockedCount={draftBasketBlockedCount}
@@ -1101,8 +1093,8 @@ export default function CreateOrderPage() {
             onEditQuantity={(rxId, productId, qty) => dispatch({ type: 'UPDATE_ITEM_QTY', orderId: activeOrder.id, rxId, productId, qty })}
             onRemoveItem={(rxId, productId) => dispatch({ type: 'REMOVE_ITEM_FROM_RX', orderId: activeOrder.id, rxId, productId })}
           />
-        </div>
-      )}
+                    </div>
+                  )}
 
       {activeOrder ? (
         <DraftBasketSheet
@@ -1114,7 +1106,7 @@ export default function CreateOrderPage() {
           draftBasketBlockedCount={draftBasketBlockedCount}
           draftBasketWarningCount={draftBasketWarningCount}
         />
-      ) : null}
-    </div>
+            ) : null}
+          </div>
   );
 }

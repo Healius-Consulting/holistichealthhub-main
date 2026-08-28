@@ -3,7 +3,6 @@ import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
 import { ORGANISATIONS, AppProvider, useApp, type PharmacyTenant, type Screen, type StaffSession } from './context/AppContext';
 import Header from './components/Header';
 import Navigation from './components/Navigation';
-import Dashboard from './pages/Dashboard';
 import PharmacyOverview from './pages/PharmacyOverview';
 import CreateOrder from './pages/CreateOrder';
 import Orders from './pages/Orders';
@@ -31,7 +30,6 @@ import { isLocalPortalPreview, withLocationSearch } from './dev/localPortalPrevi
 import { resolvePharmacyWorkspaceMode } from './training/workspace';
 import LocalPortalSwitcher from './dev/LocalPortalSwitcher';
 import CommandPalette from './components/CommandPalette';
-import { serverSessionAuth } from './auth/firebase';
 import { appPathPrefix, isCurrentSurfacePath } from './auth/surface-path';
 import { surfaceRelativePath, surfaceRoutePath } from './routing/surfaceRoute';
 
@@ -69,6 +67,7 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
     intakeEnabled: record.intakeEnabled,
     staffCount: 0,
     defaultPaymentRoute: record.defaultPaymentRoute ?? 'manual',
+    pharmacyDeliveryEnabled: Boolean(record.pharmacyDeliveryEnabled),
     brand: { primary: record.primaryColour, portalName: record.portalName ?? record.name },
     worldpay: {
       enabled: record.defaultPaymentRoute === 'worldpay' || Boolean(record.worldpayEnabled),
@@ -255,7 +254,7 @@ function StaffWorkspace() {
 
   const renderScreen = () => {
     switch (state.screen) {
-      case 'home': return state.workspaceMode === 'training' ? <Dashboard /> : serverSessionAuth ? <PharmacyOverview /> : <Dashboard />;
+      case 'home': return <PharmacyOverview />;
       case 'formulary': return <FormularyPricing />;
       case 'create': return <CreateOrder />;
       case 'orders':
@@ -282,7 +281,7 @@ function StaffWorkspace() {
         );
       case 'finance': return <PharmacyFinance />;
       case 'settings': return <PharmacySettings />;
-      default: return state.workspaceMode === 'training' ? <Dashboard /> : serverSessionAuth ? <PharmacyOverview /> : <Dashboard />;
+      default: return <PharmacyOverview />;
     }
   };
 
