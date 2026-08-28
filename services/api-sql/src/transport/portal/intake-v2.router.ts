@@ -347,7 +347,6 @@ export function createPortalIntakeV2Router(): Router {
         'pharmacy_new_patient_referred',
         {
           caseReference: record.id,
-          pharmacyName: destination?.tradingName || destination?.name || '',
           ...pharmacyContext,
         },
         ['pharmacy-referred', record.id, record.assignedOrganisationId],
