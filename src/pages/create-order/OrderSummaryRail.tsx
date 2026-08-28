@@ -30,7 +30,7 @@ type OrderSummaryRailProps = {
   patient: CRMPatient | null;
   focusedStep: number;
   draftBasketCount: number;
-  draftBasketTotal: number;
+  quotedPatientTotals: { medicine: number; total: number } | null;
   /** Null until a current Curaleaf quote supplies wholesale cost and delivery. */
   draftBasketCosts: { wholesale: number; delivery: number } | null;
   dispensingFee: number;
@@ -66,7 +66,7 @@ export default function OrderSummaryRail({
   patient,
   focusedStep,
   draftBasketCount,
-  draftBasketTotal,
+  quotedPatientTotals,
   draftBasketCosts,
   dispensingFee,
   pharmacyDelivery,
@@ -82,13 +82,11 @@ export default function OrderSummaryRail({
   onRemoveItem,
 }: OrderSummaryRailProps) {
   const showContinue = focusedStep < 4;
-  // The patient pays for medicines plus optional dispensing and pharmacy delivery;
-  // medicine price alone is what staff compare with the wholesale product line.
-  const patientPrice = draftBasketTotal - dispensingFee - pharmacyDelivery;
-  // Gross margin keeps both optional pharmacy charges, so it is the whole patient
-  // total less supplier product and Curaleaf delivery costs.
+  const pendingQuote = 'Quote pending';
+  const patientPrice = quotedPatientTotals?.medicine ?? null;
+  const patientTotal = quotedPatientTotals?.total ?? null;
   const pharmacyTotal = draftBasketCosts ? draftBasketCosts.wholesale + draftBasketCosts.delivery : null;
-  const grossMargin = pharmacyTotal == null ? null : draftBasketTotal - pharmacyTotal;
+  const grossMargin = pharmacyTotal == null || patientTotal == null ? null : patientTotal - pharmacyTotal;
 
   return (
     <aside className="rx-order-summary-rail" aria-label="Order summary">
@@ -162,7 +160,7 @@ export default function OrderSummaryRail({
                     </div>
                     <div className="rx-order-summary-rail__headline">
                       {editable ? null : <span>{packLabel}</span>}
-                      <strong>{money(lineRevenue(item))}</strong>
+                      <strong>{quotedPatientTotals ? money(lineRevenue(item)) : pendingQuote}</strong>
                     </div>
                     {issue ? (
                       <p className="rx-order-summary-rail__issue">
@@ -173,11 +171,11 @@ export default function OrderSummaryRail({
                     <dl className="rx-order-summary-rail__economics">
                       <div>
                         <dt title={WHOLESALE_LABEL}>{WHOLESALE_LABEL_SHORT}</dt>
-                        <dd>{item.cost !== null ? money(lineCost(item)) : 'Pending'}</dd>
+                        <dd>{quotedPatientTotals && item.cost !== null ? money(lineCost(item)) : 'Pending'}</dd>
                       </div>
                       <div>
                         <dt>Margin</dt>
-                        <dd>{formatMargin(lineContribution(item), lineRevenue(item))}</dd>
+                        <dd>{quotedPatientTotals ? formatMargin(lineContribution(item), lineRevenue(item)) : 'Pending'}</dd>
                       </div>
                     </dl>
                     {editable ? (
@@ -221,19 +219,19 @@ export default function OrderSummaryRail({
               </div>
               <div>
                 <dt>{MEDICINE_COST_LABEL}</dt>
-                <dd>{money(patientPrice)}</dd>
+                <dd>{patientPrice == null ? pendingQuote : money(patientPrice)}</dd>
               </div>
               {dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(dispensingFee)}</dd></div> : null}
               {pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(pharmacyDelivery)}</dd></div> : null}
               <div className="rx-order-summary-rail__margin">
                 <dt>Gross Margin</dt>
-                <dd className={marginToneClass(marginPercent(grossMargin, draftBasketTotal))}>
-                  {formatMargin(grossMargin, draftBasketTotal)}
+                <dd className={marginToneClass(marginPercent(grossMargin, patientTotal ?? 0))}>
+                  {formatMargin(grossMargin, patientTotal ?? 0)}
                 </dd>
               </div>
               <div className="is-total">
                 <dt>{PATIENT_TOTAL_LABEL}</dt>
-                <dd>{money(draftBasketTotal)}</dd>
+                <dd>{patientTotal == null ? pendingQuote : money(patientTotal)}</dd>
               </div>
             </dl>
           </>

@@ -32,6 +32,7 @@ import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 import { checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
 import { formatPatientDob } from '../../utils/patientDob';
 import { canCreateOrderForPatient } from '../../utils/patientOrderEligibility';
+import { quoteMedicineTotalPence } from '../../utils/pricing';
 import { MAX_PRESCRIPTION_FILE_BYTES, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
 
 function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
@@ -332,6 +333,15 @@ export default function CreateOrderPage() {
   const draftBasketCosts = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
     ? { wholesale: orderCost(activeOrder), delivery: quoteSummary.shippingPrice }
     : null;
+  const quotedMedicinePence = quotedSignature === currentQuoteSignature
+    ? quoteMedicineTotalPence(latestQuote, draftBasketItems)
+    : null;
+  const quotedPatientTotals = quotedMedicinePence == null || !activeOrder
+    ? null
+    : {
+      medicine: quotedMedicinePence / 100,
+      total: quotedMedicinePence / 100 + activeOrder.dispensingFee + activeOrder.pharmacyDelivery,
+    };
   const draftBasketIssues = draftBasketItems.map(item => basketItemIssue({
     productId: item.productId,
     cost: item.cost,
@@ -518,6 +528,9 @@ export default function CreateOrderPage() {
         const quoteItems = Array.isArray(pricingQuote?.items) ? pricingQuote.items : [];
         const lineItems = activeOrder.prescriptions.flatMap(rx => rx.items.map(item => {
           const quoted = quoteItems.find(entry => entry.packId === item.productId);
+          const quotedPatientPence = quoted
+            ? Math.round(Number(quoted.patientPackPrice) * 100)
+            : 0;
           const wholesalePackPricePence = quoted ? Math.round(Number(quoted.wholesalePackPrice) * 100) : undefined;
           const catalogueItem = state.catalogue.find(entry => entry.id === item.productId);
           const packSize = Number.isInteger(catalogueItem?.packSize) && (catalogueItem?.packSize ?? 0) > 0
@@ -531,16 +544,16 @@ export default function CreateOrderPage() {
             quantity: item.qty,
             packSize,
             unitsNeededCount: packSize ? packSize * item.qty : item.unitsNeededCount,
-            unitPricePence: Math.round((item.retail || 0) * 100),
+            unitPricePence: quotedPatientPence > 0 ? quotedPatientPence : Math.round((item.retail || 0) * 100),
             wholesalePackPrice: quoted?.wholesalePackPrice,
             wholesalePackPricePence,
           };
         }));
-        const orderRevPence = Math.round(orderRevenue(activeOrder) * 100);
         const dispensingFeePence = Math.round((activeOrder.dispensingFee || 0) * 100);
         const pharmacyDeliveryPence = Math.round((activeOrder.pharmacyDelivery || 0) * 100);
-        const medicineTotalPence = Math.max(0, orderRevPence - dispensingFeePence - pharmacyDeliveryPence);
-        const totalPence = orderRevPence > 0 ? orderRevPence : Math.round(activeOrder.payment.amount * 100);
+        const medicineTotalPence = quoteMedicineTotalPence(pricingQuote, draftBasketItems)
+          ?? Math.max(0, Math.round(orderRevenue(activeOrder) * 100) - dispensingFeePence - pharmacyDeliveryPence);
+        const totalPence = medicineTotalPence + dispensingFeePence + pharmacyDeliveryPence;
         const shippingPence = pricingQuote
           ? Math.round(Number(pricingQuote.shippingPrice || 0) * 100)
           : undefined;
@@ -614,7 +627,9 @@ export default function CreateOrderPage() {
           if ('lineItems' in persisted) dispatch({
             type: 'SYNC_ORDER_PATIENT_PRICES',
             orderId: activeOrder.id,
-            items: persisted.lineItems.map(item => ({ productId: item.productId, patientPrice: item.unitPricePence / 100 })),
+            items: quoteItems.length
+              ? quoteItems.map(item => ({ productId: item.packId, patientPrice: Number(item.patientPackPrice) }))
+              : persisted.lineItems.map(item => ({ productId: item.productId, patientPrice: item.unitPricePence / 100 })),
           });
         }
         if (paidRedo) {
@@ -1119,6 +1134,7 @@ export default function CreateOrderPage() {
                   quoteError={quoteError}
                   quoteCheckedAt={quoteCheckedAt}
                   quoteSummary={quoteSummary}
+                  quotedPatientTotals={quotedPatientTotals}
                   currentQuoteItemsCount={currentQuoteItems.length}
                   draftBasketBlockedCount={draftBasketBlockedCount}
                   draftBasketWarningCount={draftBasketWarningCount}
@@ -1147,7 +1163,7 @@ export default function CreateOrderPage() {
             patient={patient}
             focusedStep={wizard.focusedStep}
             draftBasketCount={draftBasketCount}
-            draftBasketTotal={draftBasketTotal}
+            quotedPatientTotals={quotedPatientTotals}
             draftBasketCosts={draftBasketCosts}
             dispensingFee={activeOrder.dispensingFee}
             pharmacyDelivery={activeOrder.pharmacyDelivery}
@@ -1171,7 +1187,7 @@ export default function CreateOrderPage() {
           onToggle={() => setMobileSheetOpen(open => !open)}
           progress={wizard.progress}
           draftBasketCount={draftBasketCount}
-          draftBasketTotal={draftBasketTotal}
+          draftBasketTotal={quotedPatientTotals?.total ?? draftBasketTotal}
           draftBasketBlockedCount={draftBasketBlockedCount}
           draftBasketWarningCount={draftBasketWarningCount}
         />

@@ -361,6 +361,38 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.pricingQuote?.items[0]?.packId, '9f2d6958-2d76-4338-9e5f-6fd383dfff36');
   });
 
+  it('prefers the stored quote patient price over snapshot unit prices', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-08-18T18:25:53.380340Z',
+      quoteSnapshot: {
+        lineItems: [{
+          packId: 'pack-a',
+          productId: 'pack-a',
+          formulaId: 'formula-a',
+          name: 'Quoted pack',
+          quantity: 1,
+          unitPricePence: 8500,
+          wholesalePackPricePence: 5000,
+        }],
+        quote: {
+          shippingPrice: '5.00',
+          taxRate: '0',
+          items: [{
+            packId: 'pack-a',
+            quantity: 1,
+            inStock: true,
+            wholesalePackPrice: '72.00',
+            patientPackPrice: '92.00',
+          }],
+        },
+      },
+    });
+    assert.equal(mapped.lineItems[0]?.unitPricePence, 9200);
+    assert.equal(mapped.lineItems[0]?.wholesalePackPricePence, 7200);
+  });
+
   it('unwraps nested quote wrappers and id-keyed items onto line wholesale', () => {
     const mapped = toPortalOrder({
       ...order,

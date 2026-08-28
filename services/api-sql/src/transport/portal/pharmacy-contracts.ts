@@ -73,12 +73,12 @@ function portalQuotePayload(quote: ParsedQuote) {
 }
 
 function lineWholesalePence(item: Record<string, unknown>, quoted: ParsedQuoteItem | undefined): number | undefined {
+  if (quoted && quoted.wholesalePence > 0) return quoted.wholesalePence;
   if (typeof item.wholesalePackPricePence === 'number' && Number.isFinite(item.wholesalePackPricePence) && item.wholesalePackPricePence > 0) {
     return Math.round(item.wholesalePackPricePence);
   }
   const stamped = Number(item.wholesalePackPrice ?? item.wholesalePrice);
   if (Number.isFinite(stamped) && stamped > 0) return Math.round(stamped * 100);
-  if (quoted && quoted.wholesalePence > 0) return quoted.wholesalePence;
   return undefined;
 }
 
@@ -460,12 +460,17 @@ export function toPortalOrder(order: PortalOrderSource) {
     const rockyQty = Number(poItem?.packsOrderedCount || 0);
     const itemQty = Math.max(sqlQty, rockyQty) || 1;
     const rawTotal = order.totalPence ? Math.max(0, order.totalPence - (order.dispensingFeePence || 0) - (order.pharmacyDeliveryPence || 0)) : 0;
-    const unitPricePence = Number(
+    const quotedPatientPence = quote && quote.patientPence > 0 ? quote.patientPence : 0;
+    const snapshotPatientPence = Number(
       item.unitPricePence ||
       item.retailPence ||
       item.patientPackPricePence ||
-      (quote && quote.patientPence > 0 ? quote.patientPence : 0) ||
-      (rawTotal && rawLines.length === 1 && itemQty > 0 ? Math.round(rawTotal / itemQty) : 0)
+      0,
+    );
+    const unitPricePence = Number(
+      quotedPatientPence ||
+      snapshotPatientPence ||
+      (rawTotal && rawLines.length === 1 && itemQty > 0 ? Math.round(rawTotal / itemQty) : 0),
     );
     const wholesalePackPricePence = lineWholesalePence(item, quote);
 

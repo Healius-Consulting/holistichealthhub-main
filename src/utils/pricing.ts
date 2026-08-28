@@ -70,6 +70,46 @@ export function optionalChargeVisible(pence: number | null | undefined) {
   return safePence(pence) > 0;
 }
 
+type QuotePatientLine = {
+  packId?: string;
+  patientPackPrice?: string;
+  patientPackPricePence?: number;
+};
+
+function quotePatientUnitPence(item: QuotePatientLine): number | null {
+  if (typeof item.patientPackPricePence === 'number' && Number.isFinite(item.patientPackPricePence) && item.patientPackPricePence > 0) {
+    return Math.round(item.patientPackPricePence);
+  }
+  const pounds = Number(item.patientPackPrice);
+  if (!Number.isFinite(pounds) || pounds <= 0) return null;
+  return Math.round(pounds * 100);
+}
+
+/**
+ * Patient medicine subtotal from a live Curaleaf quote. Null when any basket
+ * line is missing from the quote — catalogue / quote-bank prices must not stand in.
+ */
+export function quoteMedicineTotalPence(
+  quote: { items?: QuotePatientLine[] } | null | undefined,
+  basket: Array<{ productId: string; qty: number }>,
+): number | null {
+  if (!quote?.items?.length || !basket.length) return null;
+  const byPack = new Map<string, number>();
+  for (const item of quote.items) {
+    const packId = String(item.packId || '').trim();
+    const unit = quotePatientUnitPence(item);
+    if (!packId || unit == null) continue;
+    byPack.set(packId, unit);
+  }
+  let total = 0;
+  for (const line of basket) {
+    const unit = byPack.get(line.productId);
+    if (unit == null) return null;
+    total += unit * line.qty;
+  }
+  return total;
+}
+
 export function validOptionalChargePence(value: number) {
   return Number.isInteger(value) && value >= 0 && value <= 1_500;
 }

@@ -6,7 +6,6 @@ import {
   money,
   orderCost,
   orderReference,
-  orderRevenue,
   type PatientOrder,
 } from '../../context/AppContext';
 import { CURALEAF_DELIVERY_LABEL, MEDICINE_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL, marginPercent } from '../../utils/pricing';
@@ -27,6 +26,7 @@ type Step4CheckoutPanelProps = {
   quoteError: { title: string; detail: string } | null;
   quoteCheckedAt: string | null;
   quoteSummary: { shippingPrice: number } | null;
+  quotedPatientTotals: { medicine: number; total: number } | null;
   currentQuoteItemsCount: number;
   draftBasketBlockedCount: number;
   draftBasketWarningCount: number;
@@ -96,6 +96,7 @@ export default function Step4CheckoutPanel({
   quoteError,
   quoteCheckedAt,
   quoteSummary,
+  quotedPatientTotals,
   currentQuoteItemsCount,
   draftBasketBlockedCount,
   draftBasketWarningCount,
@@ -113,11 +114,11 @@ export default function Step4CheckoutPanel({
   onSetPaymentRoute,
   onSubmit,
 }: Step4CheckoutPanelProps) {
-  const productSubtotal = orderRevenue(activeOrder) - activeOrder.dispensingFee - activeOrder.pharmacyDelivery;
-  const patientTotal = orderRevenue(activeOrder);
+  const productSubtotal = quotedPatientTotals?.medicine ?? null;
+  const patientTotal = quotedPatientTotals?.total ?? null;
   const curaleafDelivery = quoteSummary?.shippingPrice ?? 0;
   const pharmacyTotal = wholesaleKnown && quoteSummary ? orderCost(activeOrder) + curaleafDelivery : null;
-  const grossMargin = pharmacyTotal == null ? null : patientTotal - pharmacyTotal;
+  const grossMargin = pharmacyTotal == null || patientTotal == null ? null : patientTotal - pharmacyTotal;
   const quoteStatus = quoteStatusLine({
     workspaceMode,
     quoteAvailable,
@@ -198,19 +199,19 @@ export default function Step4CheckoutPanel({
           </div>
           <div>
             <dt>{MEDICINE_COST_LABEL}</dt>
-            <dd>{money(productSubtotal)}</dd>
+            <dd>{productSubtotal == null ? 'Quote pending' : money(productSubtotal)}</dd>
           </div>
           {activeOrder.dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(activeOrder.dispensingFee)}</dd></div> : null}
           {activeOrder.pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(activeOrder.pharmacyDelivery)}</dd></div> : null}
           <div className="rx-step4-ledger__margin">
             <dt>Gross Margin</dt>
-            <dd className={marginToneClass(marginPercent(grossMargin, patientTotal))}>
-              {grossMargin == null ? 'Pending' : formatMargin(grossMargin, patientTotal)}
+            <dd className={marginToneClass(marginPercent(grossMargin, patientTotal ?? 0))}>
+              {formatMargin(grossMargin, patientTotal ?? 0)}
             </dd>
           </div>
           <div className="is-total">
             <dt>{PATIENT_TOTAL_LABEL}</dt>
-            <dd>{money(patientTotal)}</dd>
+            <dd>{patientTotal == null ? 'Quote pending' : money(patientTotal)}</dd>
           </div>
         </dl>
 

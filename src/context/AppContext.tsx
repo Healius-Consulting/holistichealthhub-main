@@ -790,10 +790,10 @@ function lineWholesalePounds(
   quote: Record<string, unknown> | undefined,
   catalogueCostPence?: number,
 ): number | null {
-  const fromLine = poundsFromQuoteMoney(persisted?.wholesalePackPricePence, undefined);
-  if (fromLine != null) return fromLine;
   const fromQuote = poundsFromQuoteMoney(quote?.wholesalePackPricePence, quote?.wholesalePackPrice ?? quote?.wholesalePrice);
   if (fromQuote != null) return fromQuote;
+  const fromLine = poundsFromQuoteMoney(persisted?.wholesalePackPricePence, undefined);
+  if (fromLine != null) return fromLine;
   if (catalogueCostPence && catalogueCostPence > 0) return catalogueCostPence / 100;
   return null;
 }
@@ -815,8 +815,11 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
     let unitRetail = 0;
     const itemQty = item.quantity || 1;
     const basketItemsTotal = Math.max(0, (record.totalPence - (record.dispensingFeePence || 0) - (record.pharmacyDeliveryPence || 0)) / 100);
+    const quotedRetail = poundsFromQuoteMoney(quote?.patientPackPricePence, quote?.patientPackPrice ?? quote?.patientPrice);
 
-    if (persisted && persisted.unitPricePence > 0) {
+    if (quotedRetail != null) {
+      unitRetail = quotedRetail;
+    } else if (persisted && persisted.unitPricePence > 0) {
       const candidatePrice = persisted.unitPricePence / 100;
       // If persisted.unitPricePence was the total order basket value, calculate true unit pack price
       if (basketItemsTotal > 0 && Math.abs(candidatePrice - basketItemsTotal) < 0.01 && itemQty > 1) {
@@ -824,8 +827,6 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
       } else {
         unitRetail = candidatePrice;
       }
-    } else if (quote && Number(quote.patientPackPrice) > 0) {
-      unitRetail = Number(quote.patientPackPrice);
     } else if (record.totalPence > 0) {
       const totalQty = items.reduce((sum, it) => sum + (it.quantity || 1), 0) || 1;
       unitRetail = basketItemsTotal > 0 ? basketItemsTotal / totalQty : (record.totalPence / 100) / totalQty;
