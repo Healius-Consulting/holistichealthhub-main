@@ -701,6 +701,13 @@ export function getWorldpayConnectionStatus(organisationId: string) {
   return apiRequest<WorldpayConnectionStatus>(`/v1/portal/integrations/worldpay/status?organisationId=${encodeURIComponent(organisationId)}`);
 }
 
+export function refreshWorldpayConnection(organisationId: string) {
+  return apiRequest<WorldpayConnectionStatus>('/v1/portal/integrations/worldpay/refresh', {
+    method: 'POST',
+    body: JSON.stringify({ organisationId }),
+  });
+}
+
 export function createOrganisation(input: CreateOrganisationInput) {
   return apiRequest<CreatedOrganisation>('/v1/portal/admin/organisations', {
     method: 'POST',

@@ -1095,6 +1095,22 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(curaleaf?.checkedAt, null);
   });
 
+  it('does not treat stored Worldpay credentials as connected without a vendor call', () => {
+    const [, worldpay] = overviewIntegrationHealth([
+      {
+        integration: 'WORLDPAY',
+        environment: 'TEST',
+        status: 'ACTIVE',
+        secretResourceName: 'projects/demo/secrets/worldpay',
+        lastSuccessfulAt: null,
+        validatedAt: '2026-08-15T09:00:00.000Z',
+      },
+    ]);
+    assert.equal(worldpay?.state, 'degraded');
+    assert.equal(worldpay?.checkedAt, null);
+    assert.equal(worldpay?.detail, 'Credentials stored but never confirmed with the supplier.');
+  });
+
   it('reports a pharmacy with no credentials as not configured', () => {
     const [curaleaf] = overviewIntegrationHealth([]);
     assert.equal(curaleaf?.state, 'not-configured');

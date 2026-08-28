@@ -8,8 +8,10 @@ import {
 } from '../../application/integrations/curaleaf-quote-bank.service.js';
 import {
   maskWorldpayIdentifier,
+  probeWorldpayConnection,
   revokeWorldpayCredential,
   validateWorldpayCredentials,
+  worldpayStatusPayload,
   writeWorldpayCredential,
   type WorldpayCredential,
 } from '../../application/integrations/worldpay.service.js';
@@ -98,23 +100,6 @@ function curaleafStatusPayload(
   };
 }
 
-async function worldpayConnectionStatus(
-  connection: IntegrationConnectionRecord | null,
-  organisationId: string,
-) {
-  const disconnected = !connection || connection.status === 'DISCONNECTED';
-  const configured = !disconnected && Boolean(connection?.secretResourceName);
-  const connected = connection?.status === 'ACTIVE';
-  return {
-    configured,
-    connected,
-    status: disconnected || !configured ? 'verification_required' as const : connected ? 'connected' as const : 'attention' as const,
-    environment: connection?.environment === 'PRODUCTION' ? 'live' as const : 'try' as const,
-    maskedIdentifier: connection?.maskedCredential ?? undefined,
-    updatedAt: connection?.updatedAt,
-  };
-}
-
 export function createPortalIntegrationRouter(): Router {
   const router = Router();
   const integrationRepo = new SqlIntegrationRepository();
@@ -143,12 +128,49 @@ export function createPortalIntegrationRouter(): Router {
         res.status(200).json(curaleafStatusPayload(connection));
         return;
       }
-      res.status(200).json(await worldpayConnectionStatus(connection, organisationId));
+      res.status(200).json(worldpayStatusPayload(connection));
     } catch (error) { next(error); }
   };
 
   router.get('/portal/integrations/curaleaf/status', requireStaff('any'), status('CURALEAF'));
   router.get('/portal/integrations/worldpay/status', requireStaff('any'), status('WORLDPAY'));
+
+  // Pharmacy-safe: re-probes the stored merchant credential and stamps the
+  // Overview's lastSuccessfulAt. It never accepts or returns a secret.
+  router.post('/portal/integrations/worldpay/refresh', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = curaleafOrganisationSchema.parse(req.body ?? {});
+      const organisationId = await authorisedOrganisationId(req.context, input.organisationId, organisationRepo);
+      const connection = await integrationRepo.findConnection(organisationId, 'WORLDPAY');
+      if (!connection?.secretResourceName || connection.status === 'DISCONNECTED') {
+        res.status(200).json(worldpayStatusPayload(connection, {
+          message: 'Worldpay is not connected for this pharmacy.',
+        }));
+        return;
+      }
+      const probe = await probeWorldpayConnection(connection);
+      const restored = await integrationRepo.restoreConnection({
+        organisationId,
+        integration: 'WORLDPAY',
+        environment: worldpayEnvironmentFromValidation(probe.environment),
+        status: 'ACTIVE',
+        secretResourceName: connection.secretResourceName,
+        externalCustomerId: connection.externalCustomerId,
+        maskedCredential: connection.maskedCredential,
+      });
+      // Await the stamp: unlike a catalogue fetch, this endpoint exists so
+      // Overview can show the same check Settings just ran.
+      try {
+        await integrationRepo.recordSuccessfulCall(organisationId, 'WORLDPAY');
+      } catch (error) {
+        console.warn(`Could not record WORLDPAY success for ${organisationId}:`, error);
+      }
+      res.status(200).json(worldpayStatusPayload(restored, {
+        message: probe.message,
+        checkedAt: probe.checkedAt,
+      }));
+    } catch (error) { next(error); }
+  });
 
   router.put('/portal/integrations/curaleaf/credentials', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -224,7 +246,6 @@ export function createPortalIntegrationRouter(): Router {
       };
       const existing = await integrationRepo.findConnection(organisationId, 'WORLDPAY');
       const validation = await validateWorldpayCredentials(credential);
-      noteVendorSuccess(organisationId, 'WORLDPAY');
       const secretResourceName = await writeWorldpayCredential(organisationId, credential, existing?.secretResourceName);
       const restored = await integrationRepo.restoreConnection({
         organisationId,
@@ -235,7 +256,16 @@ export function createPortalIntegrationRouter(): Router {
         externalCustomerId: credential.entityId,
         maskedCredential: maskWorldpayIdentifier(credential.entityId),
       });
-      res.status(200).json(await worldpayConnectionStatus(restored, organisationId));
+      // Stamp after restore so a first-time insert is not missed. The Overview
+      // chip only accepts lastSuccessfulAt as a check.
+      try {
+        await integrationRepo.recordSuccessfulCall(organisationId, 'WORLDPAY');
+      } catch (error) {
+        console.warn(`Could not record WORLDPAY success for ${organisationId}:`, error);
+      }
+      res.status(200).json(worldpayStatusPayload(restored, {
+        checkedAt: validation.checkedAt,
+      }));
     } catch (error) { next(error); }
   });
 
@@ -244,7 +274,7 @@ export function createPortalIntegrationRouter(): Router {
       const organisationId = await authorisedOrganisationId(req.context, req.body?.organisationId ?? req.query.organisationId, organisationRepo);
       const existing = await integrationRepo.findConnection(organisationId, 'WORLDPAY');
       if (!existing || existing.status === 'DISCONNECTED') {
-        res.status(200).json(await worldpayConnectionStatus(existing, organisationId));
+        res.status(200).json(worldpayStatusPayload(existing));
         return;
       }
       await revokeWorldpayCredential(existing.secretResourceName);
@@ -257,7 +287,7 @@ export function createPortalIntegrationRouter(): Router {
         externalCustomerId: null,
         maskedCredential: null,
       });
-      res.status(200).json(await worldpayConnectionStatus(restored, organisationId));
+      res.status(200).json(worldpayStatusPayload(restored));
     } catch (error) { next(error); }
   });
 

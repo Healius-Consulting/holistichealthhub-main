@@ -461,7 +461,7 @@ export default function PharmacySettings() {
                     status: connection.connected ? 'connected' : connection.configured ? 'onboarding' : 'not-connected',
                     environment: connection.environment === 'live' ? 'live' : 'sandbox',
                     merchantId: connection.maskedIdentifier ?? null,
-                    lastSyncedAt: connection.updatedAt ?? new Date().toISOString(),
+                    lastSyncedAt: connection.checkedAt ?? connection.updatedAt ?? new Date().toISOString(),
                   },
                 });
                 if (!connection.connected && organisation.defaultPaymentRoute === 'worldpay') {

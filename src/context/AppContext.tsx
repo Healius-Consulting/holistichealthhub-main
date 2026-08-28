@@ -2252,7 +2252,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           status: status.connected ? 'connected' : status.configured ? 'onboarding' : 'not-connected',
           environment: status.environment === 'live' ? 'live' : 'sandbox',
           merchantId: status.maskedIdentifier ?? null,
-          lastSyncedAt: status.updatedAt ?? new Date().toISOString(),
+          lastSyncedAt: status.checkedAt ?? status.updatedAt ?? new Date().toISOString(),
         },
       });
     }).catch(error => {

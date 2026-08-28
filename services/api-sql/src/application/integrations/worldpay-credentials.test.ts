@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { maskWorldpayIdentifier, worldpayBaseUrl, worldpaySecretPayload, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
+import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
+import { maskWorldpayIdentifier, worldpayBaseUrl, worldpaySecretPayload, worldpayStatusPayload, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
 
 describe('Worldpay credential helpers', () => {
   // Hosted-page customisation was removed: the stored secret is now exactly the
@@ -43,5 +44,63 @@ describe('Worldpay credential helpers', () => {
     const masked = maskWorldpayIdentifier('PO1234567890');
     assert.equal(masked.endsWith('7890'), true);
     assert.equal(masked.includes('PO1234'), false);
+  });
+});
+
+function worldpayConnection(overrides: Partial<IntegrationConnectionRecord> = {}): IntegrationConnectionRecord {
+  return {
+    id: 'conn-1',
+    organisationId: 'org-1',
+    integration: 'WORLDPAY',
+    environment: 'TEST',
+    status: 'ACTIVE',
+    secretResourceName: 'projects/demo/secrets/hhh-worldpay-org-europe-west2',
+    externalCustomerId: 'PO1234567890',
+    maskedCredential: '••••7890',
+    validatedAt: null,
+    lastSuccessfulAt: null,
+    lastErrorCode: null,
+    version: 1,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+describe('Worldpay status payload', () => {
+  it('does not report connected from a stored ACTIVE row that has never been checked', () => {
+    const payload = worldpayStatusPayload(worldpayConnection());
+    assert.equal(payload.configured, true);
+    assert.equal(payload.connected, false);
+    assert.equal(payload.status, 'attention');
+    assert.equal(payload.checkedAt, null);
+    assert.equal(payload.environment, 'try');
+  });
+
+  it('reports connected only when a successful vendor call can be pointed at', () => {
+    const payload = worldpayStatusPayload(worldpayConnection({
+      lastSuccessfulAt: '2026-08-16T09:00:00.000Z',
+    }));
+    assert.equal(payload.connected, true);
+    assert.equal(payload.status, 'connected');
+    assert.equal(payload.checkedAt, '2026-08-16T09:00:00.000Z');
+  });
+
+  it('accepts a just-completed check even if the row has not been re-read yet', () => {
+    const payload = worldpayStatusPayload(worldpayConnection(), {
+      checkedAt: '2026-08-29T00:10:00.000Z',
+    });
+    assert.equal(payload.connected, true);
+    assert.equal(payload.checkedAt, '2026-08-29T00:10:00.000Z');
+  });
+
+  it('clears the check timestamp after disconnect', () => {
+    const payload = worldpayStatusPayload(worldpayConnection({
+      status: 'DISCONNECTED',
+      lastSuccessfulAt: '2026-08-16T09:00:00.000Z',
+    }));
+    assert.equal(payload.configured, false);
+    assert.equal(payload.connected, false);
+    assert.equal(payload.checkedAt, null);
   });
 });

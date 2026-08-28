@@ -155,6 +155,57 @@ export async function validateWorldpayCredentials(credential: WorldpayCredential
   throw new HttpError(502, `Worldpay could not validate the connection (${lastStatus}).`, 'WORLDPAY_VALIDATION_FAILED');
 }
 
+export type WorldpayStatusPayload = {
+  configured: boolean;
+  connected: boolean;
+  status: 'verification_required' | 'connected' | 'attention';
+  environment: 'try' | 'live';
+  /** When Worldpay last answered a real call. Null means never confirmed. */
+  checkedAt: string | null;
+  message?: string;
+  maskedIdentifier?: string;
+  updatedAt?: string;
+};
+
+/**
+ * Settings and Overview share this payload. `connected` is only true when the
+ * vendor has answered — an ACTIVE row with a stored secret is not a check.
+ */
+export function worldpayStatusPayload(
+  connection: IntegrationConnectionRecord | null,
+  extras?: { checkedAt?: string | null; message?: string },
+): WorldpayStatusPayload {
+  const disconnected = !connection || connection.status === 'DISCONNECTED';
+  const configured = !disconnected && Boolean(connection?.secretResourceName);
+  const checkedAt = disconnected ? null : (extras?.checkedAt ?? connection?.lastSuccessfulAt ?? null);
+  const connected = Boolean(configured && connection?.status === 'ACTIVE' && checkedAt);
+  return {
+    configured,
+    connected,
+    status: disconnected || !configured ? 'verification_required' : connected ? 'connected' : 'attention',
+    environment: connection?.environment === 'PRODUCTION' ? 'live' : 'try',
+    checkedAt,
+    message: extras?.message,
+    maskedIdentifier: connection?.maskedCredential ?? undefined,
+    updatedAt: connection?.updatedAt,
+  };
+}
+
+export async function probeWorldpayConnection(connection: IntegrationConnectionRecord) {
+  const credential = await readStoredWorldpayCredential(connection, connection.organisationId);
+  if (!credential) {
+    throw new HttpError(503, 'Worldpay credentials could not be loaded for this pharmacy.', 'WORLDPAY_SECRET_UNAVAILABLE');
+  }
+  const validation = await validateWorldpayCredentials(credential);
+  return {
+    passed: true as const,
+    checkedAt: validation.checkedAt,
+    environment: validation.environment,
+    entityId: validation.entityId,
+    message: 'The stored Worldpay credential responded successfully.',
+  };
+}
+
 export async function writeWorldpayCredential(
   organisationId: string,
   credential: WorldpayCredential,

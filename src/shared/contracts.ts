@@ -1012,6 +1012,8 @@ export interface WorldpayConnectionStatus {
   connected: boolean;
   status?: 'verification_required' | 'connected' | 'attention';
   environment?: 'try' | 'live';
+  /** When Worldpay last answered a real call. Null means never confirmed. */
+  checkedAt?: string | null;
   maskedIdentifier?: string;
   updatedAt?: string;
 }

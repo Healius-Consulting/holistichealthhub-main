@@ -3,6 +3,7 @@ import { CheckCircle2, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck, Unplug } f
 import {
   connectWorldpayPharmacy,
   getWorldpayConnectionStatus,
+  refreshWorldpayConnection,
   removeWorldpayConnection,
 } from '../shared/api';
 import type { WorldpayConnectionStatus } from '../shared/contracts';
@@ -46,7 +47,11 @@ export default function WorldpayConnectionPanel({
     setBusy(true);
     setError(null);
     try {
-      const result = await getWorldpayConnectionStatus(organisationId);
+      // Opening Settings is a status read. Only a person who pressed Refresh
+      // re-tests the stored credential against Worldpay — the same check Overview uses.
+      const result = announce
+        ? await refreshWorldpayConnection(organisationId)
+        : await getWorldpayConnectionStatus(organisationId);
       applyStatus(result);
       // Only a person who pressed Refresh gets told; the load on mount would
       // otherwise fire a toast every time Settings is opened.
