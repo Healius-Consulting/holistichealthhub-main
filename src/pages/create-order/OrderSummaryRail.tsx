@@ -12,7 +12,7 @@ import {
   money,
   type CRMPatient,
 } from '../../context/AppContext';
-import { CURALEAF_DELIVERY_LABEL, DISPENSING_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
+import { CURALEAF_DELIVERY_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
 import type { WizardProgress, WizardStep } from './types';
 import { WIZARD_STEP_LABELS } from './types';
 
@@ -188,30 +188,38 @@ export default function OrderSummaryRail({
             ) : null}
 
             <dl className="rx-order-summary-rail__totals">
-              <div className="rx-order-summary-rail__totals-heading is-total">
-                <dt>{PHARMACY_TOTAL_LABEL}</dt>
-                <dd>{pharmacyTotal == null ? 'Quote pending' : money(pharmacyTotal)}</dd>
+              <div className="rx-order-summary-rail__totals-heading">
+                <dt>Pharmacy Cost</dt>
+                <dd />
               </div>
               <div>
                 <dt>{WHOLESALE_COST_LABEL}</dt>
                 <dd>{draftBasketCosts ? money(draftBasketCosts.wholesale) : 'Quote pending'}</dd>
               </div>
               {draftBasketCosts?.delivery ? <div><dt>{CURALEAF_DELIVERY_LABEL}</dt><dd>{money(draftBasketCosts.delivery)}</dd></div> : null}
-              <div className="rx-order-summary-rail__totals-heading is-total is-ruled">
-                <dt>{PATIENT_TOTAL_LABEL}</dt>
-                <dd>{money(draftBasketTotal)}</dd>
+              <div className="is-total">
+                <dt>{PHARMACY_TOTAL_LABEL}</dt>
+                <dd>{pharmacyTotal == null ? 'Quote pending' : money(pharmacyTotal)}</dd>
+              </div>
+              <div className="rx-order-summary-rail__totals-heading is-ruled">
+                <dt>Patient Cost</dt>
+                <dd />
               </div>
               <div>
-                <dt>Pharmacy Cost</dt>
+                <dt>Curaleaf PX Cost</dt>
                 <dd>{money(patientPrice)}</dd>
               </div>
-              {dispensingFee > 0 ? <div><dt>{DISPENSING_COST_LABEL}</dt><dd>{money(dispensingFee)}</dd></div> : null}
-              {pharmacyDelivery > 0 ? <div><dt>{PHARMACY_DELIVERY_LABEL}</dt><dd>{money(pharmacyDelivery)}</dd></div> : null}
+              {dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(dispensingFee)}</dd></div> : null}
+              {pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(pharmacyDelivery)}</dd></div> : null}
               <div className="rx-order-summary-rail__margin">
-                <dt>Gross margin</dt>
+                <dt>Gross Margin</dt>
                 <dd className={marginToneClass(marginPercent(grossMargin, draftBasketTotal))}>
                   {formatMargin(grossMargin, draftBasketTotal)}
                 </dd>
+              </div>
+              <div className="is-total">
+                <dt>{PATIENT_TOTAL_LABEL}</dt>
+                <dd>{money(draftBasketTotal)}</dd>
               </div>
             </dl>
           </>

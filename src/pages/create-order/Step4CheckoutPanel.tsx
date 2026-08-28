@@ -9,7 +9,7 @@ import {
   orderRevenue,
   type PatientOrder,
 } from '../../context/AppContext';
-import { CURALEAF_DELIVERY_LABEL, DISPENSING_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL, marginPercent } from '../../utils/pricing';
+import { CURALEAF_DELIVERY_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL, marginPercent } from '../../utils/pricing';
 
 type Step4CheckoutPanelProps = {
   activeOrder: PatientOrder;
@@ -179,30 +179,38 @@ export default function Step4CheckoutPanel({
         </div>
 
         <dl className="rx-step4-ledger" aria-label="Order commercial summary">
-          <div className="rx-step4-ledger__section is-total">
-            <dt>{PHARMACY_TOTAL_LABEL}</dt>
-            <dd>{pharmacyTotal == null ? 'Quote required' : money(pharmacyTotal)}</dd>
+          <div className="rx-step4-ledger__section">
+            <dt>Pharmacy Cost</dt>
+            <dd />
           </div>
           <div>
             <dt>{WHOLESALE_COST_LABEL}</dt>
             <dd>{wholesaleKnown ? money(orderCost(activeOrder)) : workspaceMode === 'training' ? 'Not supplied' : 'Quote required'}</dd>
           </div>
           {curaleafDelivery > 0 ? <div><dt>{CURALEAF_DELIVERY_LABEL}</dt><dd>{money(curaleafDelivery)}</dd></div> : null}
-          <div className="rx-step4-ledger__section is-total is-ruled">
-            <dt>{PATIENT_TOTAL_LABEL}</dt>
-            <dd>{money(patientTotal)}</dd>
+          <div className="is-total">
+            <dt>{PHARMACY_TOTAL_LABEL}</dt>
+            <dd>{pharmacyTotal == null ? 'Quote required' : money(pharmacyTotal)}</dd>
+          </div>
+          <div className="rx-step4-ledger__section is-ruled">
+            <dt>Patient Cost</dt>
+            <dd />
           </div>
           <div>
-            <dt>Pharmacy Cost</dt>
+            <dt>Curaleaf PX Cost</dt>
             <dd>{money(productSubtotal)}</dd>
           </div>
-          {activeOrder.dispensingFee > 0 ? <div><dt>{DISPENSING_COST_LABEL}</dt><dd>{money(activeOrder.dispensingFee)}</dd></div> : null}
-          {activeOrder.pharmacyDelivery > 0 ? <div><dt>{PHARMACY_DELIVERY_LABEL}</dt><dd>{money(activeOrder.pharmacyDelivery)}</dd></div> : null}
+          {activeOrder.dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(activeOrder.dispensingFee)}</dd></div> : null}
+          {activeOrder.pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(activeOrder.pharmacyDelivery)}</dd></div> : null}
           <div className="rx-step4-ledger__margin">
-            <dt>Gross margin</dt>
+            <dt>Gross Margin</dt>
             <dd className={marginToneClass(marginPercent(grossMargin, patientTotal))}>
               {grossMargin == null ? 'Pending' : formatMargin(grossMargin, patientTotal)}
             </dd>
+          </div>
+          <div className="is-total">
+            <dt>{PATIENT_TOTAL_LABEL}</dt>
+            <dd>{money(patientTotal)}</dd>
           </div>
         </dl>
 

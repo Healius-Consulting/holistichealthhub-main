@@ -17515,9 +17515,9 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
 }
 
 .rx-order-summary-rail__margin{
-  margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .rx-order-summary-rail__margin dd{
@@ -17713,9 +17713,9 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
 }
 
 .rx-step4-ledger__margin{
-  margin-top: 2px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--border);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .rx-step4-ledger__margin dt,
