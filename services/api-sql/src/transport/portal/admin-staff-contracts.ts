@@ -1,4 +1,7 @@
+import { resolveOwnerUid } from '../../domain/identity/pharmacy-owner.js';
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
+
+export { resolveOwnerUid };
 
 export interface PortalPharmacyStaffAccount {
   uid: string;
@@ -61,11 +64,6 @@ function lowerStaffStatus(status: StaffUserRecord['status']): PortalPharmacyStaf
   if (status === 'ACTIVE') return 'active';
   if (status === 'DISABLED') return 'disabled';
   return 'invited';
-}
-
-export function resolveOwnerUid(staff: StaffUserRecord[]) {
-  const sorted = [...staff].sort((left, right) => String(left.createdAt ?? '').localeCompare(String(right.createdAt ?? '')));
-  return sorted[0]?.uid ?? null;
 }
 
 export function toPortalPharmacyStaffAccounts(

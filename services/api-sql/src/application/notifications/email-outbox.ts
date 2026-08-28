@@ -1,4 +1,5 @@
 import { sha256 } from '../../security/session-utils.js';
+import { resolveOwnerUid } from '../../domain/identity/pharmacy-owner.js';
 import type { EmailTemplateCode } from './message-kinds.js';
 import { messageIdempotencyKey } from './message-kinds.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
@@ -86,10 +87,23 @@ export async function listPlatformAdminRecipients(identityRepo: IdentityReposito
   })));
 }
 
-function activeStaffRecipients(staff: StaffUserRecord[]) {
-  return staff
-    .filter(member => member.status !== 'REMOVED' && !member.disabled)
-    .map(member => ({ email: member.email, displayName: member.displayName }));
+function ownerRecipient(staff: StaffUserRecord[], organisation: OrganisationRecord | null | undefined) {
+  const ownerUid = resolveOwnerUid(staff);
+  const owner = staff.find(member => member.uid === ownerUid);
+  if (owner && owner.status !== 'REMOVED' && !owner.disabled) {
+    return [{ email: owner.email, displayName: owner.displayName }];
+  }
+  if (organisation?.mainContactEmail) {
+    return [{ email: organisation.mainContactEmail, displayName: organisation.mainContactName }];
+  }
+  return [];
+}
+
+export function pharmacyOwnerRecipients(
+  staff: StaffUserRecord[],
+  organisation: OrganisationRecord | null | undefined,
+) {
+  return dedupeRecipients(ownerRecipient(staff, organisation));
 }
 
 export async function listPharmacyRecipients(
@@ -103,10 +117,5 @@ export async function listPharmacyRecipients(
     deps.identityRepo.listPharmacyStaffByOrganisationId(organisationId),
     deps.organisationRepo.findOrganisationById(organisationId),
   ]);
-  return dedupeRecipients([
-    ...activeStaffRecipients(staff),
-    ...(organisation?.mainContactEmail
-      ? [{ email: organisation.mainContactEmail, displayName: organisation.mainContactName }]
-      : []),
-  ]);
+  return pharmacyOwnerRecipients(staff, organisation);
 }

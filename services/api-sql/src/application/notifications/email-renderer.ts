@@ -52,6 +52,7 @@ function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
     || kind === 'pharmacy_2fa_enabled'
     || kind === 'pharmacy_2fa_disabled'
   ) return 'Staff account';
+  if (kind === 'patient_referred') return 'Your pharmacy';
   if (kind.startsWith('patient_')) return 'Patient order update';
   return 'Pharmacy update';
 }
@@ -114,6 +115,25 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
   ];
 
   switch (kind) {
+    case 'patient_referred':
+      return render({
+        kind,
+        payload,
+        subject: 'You have been referred',
+        preheader: `${value(payload, 'pharmacyName') || 'Your pharmacy'} will be your point of contact for prescription orders.`,
+        title: 'You have been referred',
+        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nYou have been referred. ${value(payload, 'pharmacyName') || 'The pharmacy'} will be your point of contact for your prescription orders.\n`,
+        paragraphs: [
+          `Hi ${firstName},`,
+          `You have been referred. <strong>${pharmacyName}</strong> will be your point of contact for your prescription orders.`,
+        ],
+        detailsTitle: 'Your pharmacy',
+        details: pharmacyDetails,
+        nextSteps: [
+          'Use the contact details above if you have questions about your prescription orders.',
+        ],
+        footerNote: 'If you were not expecting this email, you can ignore it.',
+      });
     case 'patient_payment_request':
       return render({
         kind,
@@ -200,13 +220,13 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
         preheader: 'A new eligibility enquiry is waiting in the portal.',
         title: 'New enquiry received',
         text: [
-          'A new eligibility enquiry has been received. Open the portal to view the full patient record.',
+          'A new eligibility enquiry has been received.',
           enquiry.name ? `Name: ${enquiry.name}` : '',
           enquiry.phone ? `Phone: ${enquiry.phone}` : '',
           enquiry.email ? `Email: ${enquiry.email}` : '',
         ].filter(Boolean).join('\n'),
         paragraphs: [
-          'A patient has submitted an eligibility enquiry. Identifiable details are masked here. Open the portal to view the full name, phone number and email address.',
+          'A patient has submitted an eligibility enquiry.',
         ],
         cta: { label: 'Open portal', href: 'https://portal.holistichealthhub.live' },
         detailsTitle: 'Patient details',
@@ -214,12 +234,12 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
           { label: 'Name', value: enquiry.name },
           { label: 'Phone', value: enquiry.phone },
           { label: 'Email', value: enquiry.email },
+          { label: 'Reference', value: value(payload, 'caseReference') },
           { label: 'Provisional pharmacy', value: value(payload, 'provisionalPharmacyName') },
           { label: 'Source', value: enquirySourceLabel(value(payload, 'sourceType')) },
         ],
         nextSteps: [
-          'Open the portal to view the full patient record.',
-          'Assign or continue the enquiry from there.',
+          'Open the portal to continue the enquiry.',
           'Do not ask the patient to reply to this email.',
         ],
       });

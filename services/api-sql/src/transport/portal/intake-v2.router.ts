@@ -8,7 +8,7 @@ import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntakeRepository } from '../../repositories/sql/intake.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
-import { listPharmacyRecipients, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
 import { canActivateReferredPatient, canReceiveReferral } from '../../domain/organisation/access.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
@@ -340,19 +340,32 @@ export function createPortalIntakeV2Router(): Router {
       const pharmacyRecipients = canActivateReferredPatient(destination)
         ? await listPharmacyRecipients(record.assignedOrganisationId, { identityRepo, organisationRepo })
         : [];
+      const pharmacyContext = pharmacyEmailContext(destination);
       await queueEmailToRecipients(
         notificationRepo,
         pharmacyRecipients,
         'pharmacy_new_patient_referred',
         {
           caseReference: record.id,
-          patientFirstName: record.firstName,
-          patientSurname: record.surname,
           pharmacyName: destination?.tradingName || destination?.name || '',
+          ...pharmacyContext,
         },
         ['pharmacy-referred', record.id, record.assignedOrganisationId],
         { organisationId: record.assignedOrganisationId, patientId },
       );
+      if (record.email) {
+        await queueEmailToRecipients(
+          notificationRepo,
+          [{ email: record.email, displayName: record.firstName || null }],
+          'patient_referred',
+          {
+            firstName: record.firstName || 'there',
+            ...pharmacyContext,
+          },
+          ['patient-referred', record.id, record.assignedOrganisationId],
+          { organisationId: record.assignedOrganisationId, patientId },
+        );
+      }
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ id: caseId, decision: 'approved', patientId, assignmentVersion: newVersion });
     } catch (error) {

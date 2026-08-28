@@ -1,4 +1,5 @@
 export const EMAIL_TEMPLATE_CODES = [
+  'patient_referred',
   'patient_payment_request',
   'patient_payment_confirmation',
   'patient_refunded',
@@ -21,6 +22,7 @@ export const EMAIL_TEMPLATE_CODES = [
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
 
 export const PATIENT_MESSAGE_KINDS = [
+  'patient_referred',
   'patient_payment_request',
   'patient_payment_confirmation',
   'patient_refunded',

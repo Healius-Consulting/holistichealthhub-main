@@ -5,6 +5,7 @@ import { renderEmailTemplate } from './email-renderer.js';
 
 describe('email template kinds', () => {
   it('recognises supported template codes', () => {
+    assert.equal(isEmailTemplateCode('patient_referred'), true);
     assert.equal(isEmailTemplateCode('patient_payment_confirmation'), true);
     assert.equal(isEmailTemplateCode('patient_refunded'), true);
     assert.equal(isEmailTemplateCode('pharmacy_2fa_enabled'), true);
@@ -14,6 +15,7 @@ describe('email template kinds', () => {
   });
 
   it('keeps patient template recognition narrow', () => {
+    assert.equal(isPatientMessageKind('patient_referred'), true);
     assert.equal(isPatientMessageKind('patient_ready_for_collection'), true);
     assert.equal(isPatientMessageKind('patient_refunded'), true);
     assert.equal(isPatientMessageKind('pharmacy_payment_received'), false);
@@ -25,6 +27,21 @@ describe('email template kinds', () => {
 });
 
 describe('email template renderer', () => {
+  it('renders the patient referral introduction', () => {
+    const rendered = renderEmailTemplate('patient_referred', {
+      firstName: 'Avery',
+      pharmacyName: 'Eastwood Health',
+      pharmacyPhone: '01522 000 000',
+      pharmacyEmail: 'contact@eastwoodhealthpharmacy.cc',
+      pharmacyAddress: 'Nottinghamshire',
+    });
+    assert.match(rendered.subject, /referred/i);
+    assert.match(rendered.text, /point of contact for your prescription orders/);
+    assert.match(rendered.html, /Eastwood Health/);
+    assert.match(rendered.html, /01522 000 000/);
+    assert.doesNotMatch(rendered.html, /Avery Patel/);
+  });
+
   it('renders a patient payment confirmation', () => {
     const rendered = renderEmailTemplate('patient_payment_confirmation', {
       firstName: 'Avery',
@@ -131,7 +148,7 @@ describe('email template renderer', () => {
     assert.equal(rendered.html.includes('Pay now'), false);
   });
 
-  it('masks enquiry contact details and keeps the full record on the portal', () => {
+  it('shows full enquiry contact details', () => {
     const rendered = renderEmailTemplate('admin_new_enquiry_received', {
       firstName: 'Avery',
       surname: 'Patel',
@@ -142,14 +159,12 @@ describe('email template renderer', () => {
       sourceType: 'PHARMACY_QR',
     });
     assert.match(rendered.subject, /New enquiry received/);
-    assert.equal(rendered.html.includes('Avery Patel'), false);
-    assert.equal(rendered.html.includes('07700900000'), false);
-    assert.equal(rendered.html.includes('avery@example.com'), false);
-    assert.equal(rendered.html.includes('HHH-20260819-ABCDEF12'), false);
-    assert.match(rendered.html, /A\*{4}/);
-    assert.match(rendered.html, /P\*{4}/);
-    assert.match(rendered.html, /07\*{9}/);
-    assert.match(rendered.html, /a\*{4}@e\*{6}\.com/);
+    assert.match(rendered.html, /Avery Patel/);
+    assert.match(rendered.html, /07700900000/);
+    assert.match(rendered.html, /avery@example.com/);
+    assert.match(rendered.html, /HHH-20260819-ABCDEF12/);
+    assert.doesNotMatch(rendered.html, /A\*{4}/);
+    assert.doesNotMatch(rendered.text, /masked/i);
     assert.match(rendered.html, /Open the portal/);
     assert.match(rendered.html, /cid:email-hhh-logo/);
     assert.match(rendered.html, /cid:email-curaleaf-logo/);

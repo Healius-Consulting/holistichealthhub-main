@@ -13,7 +13,6 @@ import { publicReferralResolveLimiter, publicSubmissionLimiter } from '../../sec
 import { sha256 } from '../../security/session-utils.js';
 import type { CreateSubmissionInput } from '../../repositories/ports/intake.port.js';
 import { listPlatformAdminRecipients, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
-import { maskEmailAddress, maskPersonName, maskPhoneNumber } from '../../application/notifications/email-mask.js';
 
 export const referralTokenSchema = z.string().min(12).max(160).regex(/^[A-Za-z0-9_-]+$/);
 const opaqueIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
@@ -221,9 +220,11 @@ export function createPublicIntakeV2Router(): Router {
           adminRecipients,
           'admin_new_enquiry_received',
           {
-            maskedName: maskPersonName(`${input.firstName} ${input.surname}`),
-            maskedPhone: maskPhoneNumber(input.mobile),
-            maskedEmail: maskEmailAddress(input.email),
+            firstName: input.firstName,
+            surname: input.surname,
+            mobile: input.mobile,
+            email: input.email,
+            caseReference: caseReference(submission.id, submission.submittedAt || new Date().toISOString()),
             sourceType,
             provisionalPharmacyName,
           },
