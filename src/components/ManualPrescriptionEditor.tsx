@@ -153,6 +153,7 @@ export default function ManualPrescriptionEditor({
   const [prescriberBusy, setPrescriberBusy] = useState(false);
   const [prescriberError, setPrescriberError] = useState<string | null>(null);
   const directoryEnabled = isApiConfigured && !isLocalPortalPreview && state.workspaceMode === 'live';
+  const serialReuse = serialReuseDisplay(prescription.issueDate);
   const selectedProductIds = useMemo(() => new Set(prescription.items.map(item => item.productId)), [prescription.items]);
   const activeProducts = useMemo(
     () => catalogue.filter(product => product.supplierState === 'ACTIVE' && product.formulaId),
@@ -271,7 +272,7 @@ export default function ManualPrescriptionEditor({
             {prescription.serialInherited ? (
               <div className="manual-rx-inherited">
                 <small>
-                  {serialReuseDisplay(prescription.issueDate)?.text
+                  {serialReuse?.text
                     ?? 'This serial was copied from the previous prescription and stays locked while it is reused.'}
                 </small>
                 {onUnlockInheritedSerial ? (
@@ -280,6 +281,10 @@ export default function ManualPrescriptionEditor({
                   </button>
                 ) : null}
               </div>
+            ) : serialReuse ? (
+              <small className={serialReuse.tone === 'red' ? 'manual-rx-field-error' : 'manual-rx-field-help'}>
+                {serialReuse.text}
+              </small>
             ) : null}
           </section>
 

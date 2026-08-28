@@ -3,7 +3,9 @@ import test from 'node:test';
 
 import {
   curaleafSerialAllowsCreate,
+  curaleafSerialLookupDecision,
   evaluateSerialOccupancy,
+  manualSerialCreatePolicy,
   prescriptionFileIsUsable,
   replacementSerialPolicy,
   serialReuseIsCurrent,
@@ -98,6 +100,38 @@ test('Curaleaf GET by serial only allows a new POST when Rocky is gone or termin
   assert.deepEqual(curaleafSerialAllowsCreate({ state: 'CANCELLED' }), { allowed: true, reason: 'create' });
   assert.deepEqual(curaleafSerialAllowsCreate({ state: 'ACTIVE' }), { allowed: false, reason: 'CURALEAF_SERIAL_STILL_LIVE' });
   assert.deepEqual(curaleafSerialAllowsCreate({ state: 'PENDING' }), { allowed: false, reason: 'CURALEAF_SERIAL_STILL_LIVE' });
+});
+
+test('create-order Curaleaf lookup blocks live serials and fails open on outages', () => {
+  assert.equal(curaleafSerialLookupDecision({ httpStatus: 404 }), 'allow');
+  assert.equal(curaleafSerialLookupDecision({ state: 'CANCELLED' }), 'allow');
+  assert.equal(curaleafSerialLookupDecision({ state: 'FULFILLED' }), 'allow');
+  assert.equal(curaleafSerialLookupDecision({ state: 'ACTIVE' }), 'block_live');
+  assert.equal(curaleafSerialLookupDecision({ state: 'PENDING' }), 'block_live');
+  assert.equal(curaleafSerialLookupDecision({ httpStatus: 409 }), 'block_live');
+  assert.equal(curaleafSerialLookupDecision({ httpStatus: 422 }), 'block_live');
+  assert.equal(curaleafSerialLookupDecision({ httpStatus: 500 }), 'fail_open');
+});
+
+test('create order blocks a serial older than 24 London days before checkout', () => {
+  assert.equal(manualSerialCreatePolicy({
+    serialNumber: 'RX-1',
+    issueDate: '2026-07-18',
+    occupancy: { allowed: true, reason: 'free' },
+    asOf: NOW,
+  }).reason, 'SERIAL_REUSE_EXPIRED');
+  assert.deepEqual(manualSerialCreatePolicy({
+    serialNumber: 'RX-1',
+    issueDate: '2026-07-19',
+    occupancy: { allowed: true, reason: 'free' },
+    asOf: NOW,
+  }), { allowed: true, reason: 'ok' });
+  assert.equal(manualSerialCreatePolicy({
+    serialNumber: 'RX-1',
+    issueDate: '2026-08-01',
+    occupancy: { allowed: false, reason: 'SERIAL_IN_USE', occupyingOrderId: 'other-1' },
+    asOf: NOW,
+  }).reason, 'SERIAL_IN_USE');
 });
 
 test('deleted prescription files are not reusable', () => {

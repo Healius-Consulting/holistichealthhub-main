@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
+import { prescriptionDateIsCurrent, serialReuseIsCurrent } from '@hhh/domain/prescription-date';
 import { FileText, Search } from 'lucide-react';
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
 import DraftBasketSheet from './DraftBasketSheet';
@@ -207,6 +207,7 @@ export default function CreateOrderPage() {
     { label: 'Prescription evidence attached', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => Boolean(rx.copyFileName) && (!requiresLiveCuraleafEvidence || Boolean(rx.fileId))) },
     { label: 'Serial number / Clinic source verified', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.entryMode === 'manual' ? Boolean(rx.serialNumber?.trim()) : Boolean(rx.clinicScanId && rx.curaleafPrescriptionId)) },
     { label: 'Prescription inside its 28-day window', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => prescriptionDateIsCurrent(rx.issueDate, rx.expiryDate)) },
+    { label: 'Prescription serial inside its 24-day reuse window', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.entryMode === 'clinic' || serialReuseIsCurrent(rx.issueDate)) },
     { label: 'Prescriber details complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => Boolean(rx.issueDate && rx.prescriber.trim() && (rx.entryMode === 'manual' ? rx.prescriberPin?.trim() : rx.prescriberId))) },
     { label: 'Priced medicines and quantities complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.items.length > 0 && rx.items.every(item => Boolean(item.productId && item.formulaId) && Number.isInteger(item.qty) && item.qty > 0 && Number.isInteger(item.unitsNeededCount) && item.unitsNeededCount! > 0 && Number.isFinite(item.retail) && item.retail > 0)) },
   ] : [];
@@ -259,7 +260,8 @@ export default function CreateOrderPage() {
       && selectedRx.serialNumber?.trim()
       && selectedRx.issueDate
       && selectedRx.prescriberPin?.trim()
-      && prescriptionDateIsCurrent(selectedRx.issueDate, selectedRx.expiryDate),
+      && prescriptionDateIsCurrent(selectedRx.issueDate, selectedRx.expiryDate)
+      && serialReuseIsCurrent(selectedRx.issueDate),
     );
   const draftBasketItems = activeOrder
     ? activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({ ...item, rxId: rx.id })))

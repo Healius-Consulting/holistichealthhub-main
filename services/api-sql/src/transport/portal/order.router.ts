@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
 import { queryWorldpayPayment } from '../../application/integrations/worldpay.service.js';
 import { verifyWorldpayRefund } from '../../application/payments/worldpay-query.js';
-import { executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
+import { assertCuraleafSerialAvailableForCreate, executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
 import { curaleafOwnsCancellation, curaleafRequiresSupplierCancel, stampCuraleafCancellationOnSnapshot, supplierCancellationAlreadyConfirmed } from '../../application/integrations/curaleaf-events.js';
 import {
   curaleafCancellationBlocksPlacement,
@@ -60,6 +60,7 @@ import {
 } from '../../application/orders/paid-refund.js';
 import {
   evaluateSerialOccupancy,
+  manualSerialCreatePolicy,
   normalizeSerialNumber,
   prescriptionFileIsUsable,
 } from '../../application/prescriptions/serial-reuse.js';
@@ -549,19 +550,30 @@ export function createPortalOrderRouter(): Router {
         };
       }
 
-      const submittedSerial = normalizeSerialNumber(input.prescriptions[0]?.serialNumber);
-      if (submittedSerial && !redoContext?.isPaidRedo) {
-        const liveSerial = await serialRepo.findLive(scope.organisationId, submittedSerial);
+      const serialConnection = await integrationRepo.findConnection(scope.organisationId, 'CURALEAF').catch(() => null);
+      for (const rx of input.prescriptions) {
+        if (rx.clinicScanId || rx.curaleafPrescriptionId) continue;
+        const submittedSerial = normalizeSerialNumber(rx.serialNumber);
+        const liveSerial = submittedSerial
+          ? await serialRepo.findLive(scope.organisationId, submittedSerial)
+          : null;
         const occupancy = evaluateSerialOccupancy({
           liveOrderId: liveSerial?.orderId,
           livePatientId: liveSerial?.patientId,
-          sourceOrderId: redoContext?.originalOrderId,
+          sourceOrderId: replacement?.source.id ?? redoContext?.originalOrderId,
           currentPatientId: input.patientId,
         });
-        if (!occupancy.allowed) {
-          throw new HttpError(409, 'This prescription serial is already on another live order.', 'SERIAL_IN_USE', {
-            occupyingOrderId: occupancy.occupyingOrderId,
-          });
+        const conflict = serialPolicyConflict({
+          ...manualSerialCreatePolicy({
+            serialNumber: rx.serialNumber,
+            issueDate: rx.issueDate,
+            occupancy,
+          }),
+          reusesSourceSerial: false,
+        });
+        if (conflict) throw conflict;
+        if (submittedSerial && serialConnection?.secretResourceName) {
+          await assertCuraleafSerialAvailableForCreate(serialConnection, submittedSerial);
         }
       }
 
