@@ -17,6 +17,14 @@ export type StageFilter = 'current' | 'all' | 'awaiting-payment' | 'awaiting-ful
 
 export type CancellationResolution = 'none' | 'needs-action' | 'resolved' | 'refunded';
 
+/**
+ * The pharmacy's direct cancellation action is strictly a pre-payment action.
+ * Check both fields so a live record fails closed while payment updates settle.
+ */
+export function orderPaymentAllowsManualCancellation(order: Pick<PatientOrder, 'payment'>) {
+  return !order.payment.paidAt && (order.payment.status === 'none' || order.payment.status === 'sent');
+}
+
 export function hasDispatchedRemainder(line: { ordered: number; shipped: number }) {
   return line.shipped > 0 && line.shipped < line.ordered;
 }

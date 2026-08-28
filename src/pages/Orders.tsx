@@ -63,6 +63,7 @@ import {
   orderHasPartialCuraleafDispense,
   orderHasUncollectedReceivedPacks,
   orderIsSplitFulfilment,
+  orderPaymentAllowsManualCancellation,
   orderRequiresCuraleafCancel,
   orderAwaitingCuraleafCancel,
   orderSplitPackSnapshot,
@@ -432,6 +433,14 @@ export default function Orders() {
   }, []);
 
   useEffect(() => {
+    if (cancelOrderId === null) return;
+    const order = state.orders.find(candidate => candidate.id === cancelOrderId);
+    if (order && orderPaymentAllowsManualCancellation(order)) return;
+    setCancelOrderId(null);
+    setCancelNote('');
+  }, [cancelOrderId, state.orders]);
+
+  useEffect(() => {
     const current = new Map(state.orders.map(order => [order.id, new Set(order.prescriptions.filter(prescription => prescription.placed).map(prescription => prescription.id))]));
     if (!observedPlacements.current) {
       observedPlacements.current = current;
@@ -628,13 +637,23 @@ export default function Orders() {
     setCallCuraleafModalOrder(null);
   };
 
-  const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'refresh') => {
+  const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'cancel' | 'refresh') => {
     if (quoteReviewBusyOrderId) return;
     const trainingLocal = isLocalPortalPreview || state.workspaceMode !== 'live' || !order.backendId;
     if (trainingLocal) {
       const review = order.quoteReview;
       if (action === 'refresh') {
         dispatch({ type: 'ADD_TOAST', message: `Quote still needs review for ${orderReference(order)}.`, toastType: 'warning' });
+        return;
+      }
+      if (action === 'cancel') {
+        dispatch({
+          type: 'SET_QUOTE_REVIEW',
+          orderId: order.id,
+          quoteReview: review ? { ...review, status: 'recreate_required' } : undefined,
+          resolution: { status: 'OPEN', reason: 'CANCELLED' },
+        });
+        dispatch({ type: 'ADD_TOAST', message: `Choose a replacement or refund for ${orderReference(order)}.`, toastType: 'warning' });
         return;
       }
       dispatch({
@@ -663,10 +682,12 @@ export default function Orders() {
         orderId: order.id,
         quoteReview: result.order.quoteReview,
         refund: result.order.refund,
+        resolution: result.order.resolution ?? undefined,
         dispensingFee: result.order.dispensingFeePence / 100,
       });
       const messages: Record<typeof action, string> = {
         absorb: `Price change absorbed for ${orderReference(order)}. Placement will continue.`,
+        cancel: `Choose a replacement or refund for ${orderReference(order)}.`,
         refresh: result.order.quoteReview && ['required', 'awaiting_top_up', 'awaiting_refund'].includes(result.order.quoteReview.status)
           ? `Quote still needs review for ${orderReference(order)}.`
           : `Quote rechecked for ${orderReference(order)}. Placement can continue.`,
@@ -1431,7 +1452,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   onConfirmRefund: () => void;
   refundBusy: boolean;
   quoteReviewBusy: boolean;
-  onQuoteReviewResolve: (action: 'absorb' | 'refresh') => void;
+  onQuoteReviewResolve: (action: 'absorb' | 'cancel' | 'refresh') => void;
   cancellationEditorOpen: boolean;
   cancellationNote: string;
   cancellationReference: string;
@@ -1460,7 +1481,10 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const hideJourneyRail = stage === 'cancelled' || stage === 'collected' || cancellationResolution !== 'none';
   const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => prescription.placed);
   const paymentFormVisible = stage === 'awaiting-payment' && order.payment.route === 'pharmacy';
-  const mayCancel = !order.cancellation && !['collected', 'cancelled'].includes(stage) && (quoteReviewIsOpen(order) || !orderRequiresCuraleafCancel(order));
+  const mayCancel = orderPaymentAllowsManualCancellation(order)
+    && !order.cancellation
+    && !['collected', 'cancelled'].includes(stage)
+    && (quoteReviewIsOpen(order) || !orderRequiresCuraleafCancel(order));
   const hasCuraleafOrder = orderRequiresCuraleafCancel(order);
   const supplyIncomplete = orderSupplyIncomplete(order);
   const canFullHandout = stage === 'ready' && !supplyIncomplete && orderUncollectedReadyPacks(order) > 0;
@@ -1549,7 +1573,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
       <ReplacementLineage order={order} allOrders={state.orders} />
       <PlacementStatusPanel order={order} />
 
-      {!cancellationClosed && cancellationEditorOpen && !order.cancellation ? (
+      {!cancellationClosed && cancellationEditorOpen && mayCancel ? (
         <OrderCancellationPanel
           order={order}
           editorOpen={cancellationEditorOpen}
@@ -1557,7 +1581,9 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
           busy={cancellationBusy}
           onClose={onCloseCancellation}
           onNoteChange={onCancellationNoteChange}
-          onRequest={onRequestCancellation}
+          onRequest={() => {
+            if (orderPaymentAllowsManualCancellation(order)) onRequestCancellation();
+          }}
         />
       ) : null}
 
@@ -1573,7 +1599,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
           order={order}
           busy={quoteReviewBusy || refundBusy || cancellationBusy}
           onResolve={onQuoteReviewResolve}
-          onCancel={onRequestCancellation}
         />
       ) : null}
 
@@ -2080,11 +2105,10 @@ function PlacementStatusPanel({ order }: { order: PatientOrder }) {
   );
 }
 
-function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
+function QuoteReviewPanel({ order, busy, onResolve }: {
   order: PatientOrder;
   busy: boolean;
-  onResolve: (action: 'absorb' | 'refresh') => void;
-  onCancel: () => void;
+  onResolve: (action: 'absorb' | 'cancel' | 'refresh') => void;
 }) {
   const review = order.quoteReview;
   const quoteCheck = order.activeQuoteCheck;
@@ -2138,7 +2162,7 @@ function QuoteReviewPanel({ order, busy, onResolve, onCancel }: {
             Accept
           </button>
         )}
-        <button type="button" className="btn btn-secondary" disabled={busy} onClick={onCancel}>
+        <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => onResolve('cancel')}>
           <XCircle size={13} /> Cancel order
         </button>
       </div>

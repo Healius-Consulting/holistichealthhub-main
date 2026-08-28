@@ -43,6 +43,7 @@ import { buildPharmacyOverview } from './pharmacy-overview.js';
 import { randomToken } from './session-utils.js';
 import { referralTokenSchema, secureOpaqueTokenSchema } from './tokens.js';
 import { portalIntakeV2Router, publicIntakeV2Router } from './intake-v2.js';
+import { orderAllowsManualCancellation, orderMoneyWasTaken } from './order-cancellation-policy.js';
 
 
 
@@ -2550,6 +2551,12 @@ app.post('/v1/portal/orders/:id/cancellations', async (request, response, next) 
     const order = await getTenantRecord('orders', orderId, organisationId);
     if (order.status === 'cancelled' && order.cancellation) return response.status(200).json(enrichOrderRecord(order as Record<string, unknown>));
     if (order.fulfilmentStatus === 'collected') throw new HttpError(409, 'A collected order cannot be cancelled.', 'ORDER_ALREADY_COLLECTED');
+    if (!orderAllowsManualCancellation(order)) {
+      if (orderMoneyWasTaken(order)) {
+        throw new HttpError(409, 'A paid order cannot use pharmacy cancellation. Use its resolution workflow instead.', 'PAID_ORDER_REQUIRES_RESOLUTION');
+      }
+      throw new HttpError(409, 'This order is not available for pharmacy cancellation.', 'ORDER_CANCELLATION_NOT_AVAILABLE');
+    }
 
     const references = curaleafOrderReference(order);
     const hasCuraleafOrder = Boolean(references.purchaseOrderId || references.prescriptionId || references.customerReference);

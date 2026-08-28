@@ -8,6 +8,12 @@ export function orderMoneyWasTaken(order: { paymentStatus?: string | null; paidA
   return Boolean(order.paidAt);
 }
 
+/** Direct pharmacy cancellation is an unpaid-order operation. Unknown states fail closed. */
+export function orderAllowsManualCancellation(order: { paymentStatus?: string | null; paidAt?: string | null }) {
+  if (orderMoneyWasTaken(order)) return false;
+  return ['NONE', 'PENDING', 'FAILED'].includes(String(order.paymentStatus || '').toUpperCase());
+}
+
 export function snapshotRefundCompleted(snapshot: unknown) {
   return String(asRecord(asRecord(snapshot).refund).status || '') === 'completed';
 }

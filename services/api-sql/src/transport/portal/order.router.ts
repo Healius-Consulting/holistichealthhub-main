@@ -51,6 +51,7 @@ import { replacementAllocationAmount, replacementPrescriptionPolicy, replacement
 import { generateOrderNumber, pharmacyDeliveryChargeAllowed, pharmacyDeliveryPermitted } from '../../application/orders/order-policy.js';
 import {
   completedManualRefund,
+  orderAllowsManualCancellation,
   orderMoneyWasTaken,
   pendingManualRefund,
   snapshotRefundCompleted,
@@ -782,6 +783,12 @@ export function createPortalOrderRouter(): Router {
       if (order.archivedAt || String(order.resolutionStatus || '').toUpperCase() === 'RESOLVED') {
         throw new HttpError(409, 'This order has already been resolved and cannot be cancelled again.', 'ORDER_ALREADY_RESOLVED');
       }
+      if (!orderAllowsManualCancellation(order)) {
+        if (orderMoneyWasTaken(order)) {
+          throw new HttpError(409, 'A paid order cannot use pharmacy cancellation. Use its resolution workflow instead.', 'PAID_ORDER_REQUIRES_RESOLUTION');
+        }
+        throw new HttpError(409, 'This order is not available for pharmacy cancellation.', 'ORDER_CANCELLATION_NOT_AVAILABLE');
+      }
       if (curaleafOwnsCancellation(order.quoteSnapshot) && !supplierOrderCancelled(order.quoteSnapshot)) {
         throw new HttpError(409, 'This order is already with Curaleaf. Cancellation is recorded when Curaleaf cancels the prescription or purchase order.', 'CURALEAF_CANCEL_REQUIRED');
       }
@@ -828,6 +835,9 @@ export function createPortalOrderRouter(): Router {
       }).parse(req.body);
       const order = await orderRepo.findOrderById(orderId, scope.organisationId);
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
+      if (!orderMoneyWasTaken(order)) {
+        throw new HttpError(409, 'Quote-review cancellation is available only after payment.', 'PAYMENT_REQUIRED');
+      }
       if (curaleafCancellationBlocksPlacement(order.quoteSnapshot)) {
         throw new HttpError(409, 'This Curaleaf purchase order was cancelled.', 'CURALEAF_ORDER_CANCELLED');
       }

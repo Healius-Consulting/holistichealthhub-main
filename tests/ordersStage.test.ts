@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
+import { hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderPaymentAllowsManualCancellation, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
 import type { PatientOrder } from '../src/context/AppContext.tsx';
 
 const taxonomy: Array<[OrderStage, StageFilter]> = [
@@ -31,6 +31,14 @@ test('current filter keeps operational stages and excludes terminal history', ()
   assert.equal(stageMatchesFilter('cancelled', 'current'), false);
   assert.equal(stageMatchesFilter('archived', 'current'), false);
   assert.equal(stageMatchesFilter('collected', 'current'), false);
+});
+
+test('manual pharmacy cancellation closes as soon as payment settles', () => {
+  assert.equal(orderPaymentAllowsManualCancellation({ payment: { status: 'none', paidAt: null } } as PatientOrder), true);
+  assert.equal(orderPaymentAllowsManualCancellation({ payment: { status: 'sent', paidAt: null } } as PatientOrder), true);
+  assert.equal(orderPaymentAllowsManualCancellation({ payment: { status: 'paid', paidAt: new Date() } } as PatientOrder), false);
+  assert.equal(orderPaymentAllowsManualCancellation({ payment: { status: 'sent', paidAt: new Date() } } as PatientOrder), false);
+  assert.equal(orderPaymentAllowsManualCancellation({ payment: { status: 'refund_required', paidAt: new Date() } } as PatientOrder), false);
 });
 
 test('cancelled orders distinguish outstanding work from closed outcomes', () => {
@@ -437,4 +445,3 @@ test('prescription chips use the same In Transit and Checked In language as the 
   assert.equal(prescriptionStatusLabel(partInTransit), 'Part In Transit');
   assert.equal(prescriptionStatusLabel(checkedIn), 'Checked In');
 });
-

@@ -658,7 +658,7 @@ export function createPrescriberDirectoryRecord(input: Omit<import('./contracts'
 
 export function resolvePortalQuoteReview(orderId: string, input: {
   organisationId: string;
-  action: 'absorb' | 'refresh';
+  action: 'absorb' | 'cancel' | 'refresh';
 }) {
   return apiRequest<{ action: string; order: import('./contracts').PortalOrderRecord }>(
     `/v1/portal/orders/${encodeURIComponent(orderId)}/quote-review/resolve`,

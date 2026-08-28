@@ -698,7 +698,7 @@ export type Action =
   | { type: 'RECORD_CURALEAF_CANCELLATION_CONTACT'; orderId: number; reference: string; note?: string }
   | { type: 'CONFIRM_CURALEAF_CANCELLATION'; orderId: number; reference: string }
   | { type: 'SET_ORDER_CANCELLATION'; orderId: number; cancellation: OrderCancellationState; curaleafCancellation?: CuraleafCancellationState; lifecycleStatus?: string; paymentStatus?: PaymentStatus }
-  | { type: 'SET_QUOTE_REVIEW'; orderId: number; quoteReview?: PatientOrder['quoteReview']; refund?: OrderRefundState; dispensingFee?: number }
+  | { type: 'SET_QUOTE_REVIEW'; orderId: number; quoteReview?: PatientOrder['quoteReview']; refund?: OrderRefundState; resolution?: PatientOrder['resolution']; dispensingFee?: number }
   | { type: 'CONFIRM_PAYMENT'; orderId: number }
   | { type: 'RECORD_MANUAL_PAYMENT'; orderId: number; tender: ManualTender; reference?: string; notes?: string }
   // Submission to Curaleaf.
@@ -1943,6 +1943,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...order,
         quoteReview: action.quoteReview,
         refund: action.refund ?? order.refund,
+        resolution: action.resolution ?? order.resolution,
         dispensingFee: action.dispensingFee ?? order.dispensingFee,
       }));
     case 'CONFIRM_PAYMENT':
