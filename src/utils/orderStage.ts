@@ -25,6 +25,12 @@ export function orderPaymentAllowsManualCancellation(order: Pick<PatientOrder, '
   return !order.payment.paidAt && (order.payment.status === 'none' || order.payment.status === 'sent');
 }
 
+export function unpaidCancellationConfirmation(route: PatientOrder['payment']['route']) {
+  return route === 'worldpay'
+    ? 'Order cancelled and its payment link retired in the platform.'
+    : 'Order cancelled. No patient payment was recorded.';
+}
+
 export function hasDispatchedRemainder(line: { ordered: number; shipped: number }) {
   return line.shipped > 0 && line.shipped < line.ordered;
 }

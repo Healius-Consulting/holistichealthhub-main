@@ -17,6 +17,8 @@ test('generic cancellation rejects non-unpaid orders before any mutation', () =>
   assert.ok(snapshotMutation > guard, 'snapshot mutation occurs only after the unpaid-order guard');
   assert.ok(statusMutation > guard, 'status mutation occurs only after the unpaid-order guard');
   assert.match(handler, /PAID_ORDER_REQUIRES_RESOLUTION/);
+  assert.match(handler, /stampUnpaidManualCancellation/);
+  assert.doesNotMatch(handler, /action: supplierOrderCancelled[\s\S]*?'confirmed'/);
 });
 
 test('paid quote-review cancellation stays on the dedicated resolution endpoint', () => {

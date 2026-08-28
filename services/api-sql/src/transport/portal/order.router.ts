@@ -55,6 +55,7 @@ import {
   orderMoneyWasTaken,
   pendingManualRefund,
   snapshotRefundCompleted,
+  stampUnpaidManualCancellation,
   withPendingPaidRefund,
 } from '../../application/orders/paid-refund.js';
 
@@ -793,12 +794,21 @@ export function createPortalOrderRouter(): Router {
         throw new HttpError(409, 'This order is already with Curaleaf. Cancellation is recorded when Curaleaf cancels the prescription or purchase order.', 'CURALEAF_CANCEL_REQUIRED');
       }
       const requiresCuraleafCancel = curaleafRequiresSupplierCancel(order.quoteSnapshot) && !supplierOrderCancelled(order.quoteSnapshot);
-      const snapshot = stampCuraleafCancellationOnSnapshot(order.quoteSnapshot, {
-        action: supplierOrderCancelled(order.quoteSnapshot) || !requiresCuraleafCancel ? 'confirmed' : 'requested',
-        reason: input.reason,
-        note: input.note,
-        actorUid: scope.uid,
-      });
+      const requestedAt = new Date().toISOString();
+      const snapshot = requiresCuraleafCancel
+        ? stampCuraleafCancellationOnSnapshot(order.quoteSnapshot, {
+          action: 'requested',
+          reason: input.reason,
+          note: input.note,
+          actorUid: scope.uid,
+          now: requestedAt,
+        })
+        : stampUnpaidManualCancellation(order.quoteSnapshot, {
+          reason: input.reason,
+          note: input.note,
+          actorUid: scope.uid,
+          now: requestedAt,
+        });
       const moneyTaken = orderMoneyWasTaken(order);
       const exception = requiresCuraleafCancel || moneyTaken || supplierOrderCancelled(snapshot);
       await orderRepo.updateQuoteSnapshot({
@@ -812,7 +822,7 @@ export function createPortalOrderRouter(): Router {
           id: orderId,
           organisationId: scope.organisationId,
           status: 'CANCELLED',
-          cancelledAt: new Date().toISOString(),
+          cancelledAt: requestedAt,
         });
       }
       const mapped = toPortalOrder({

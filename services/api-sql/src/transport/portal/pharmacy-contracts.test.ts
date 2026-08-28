@@ -552,6 +552,27 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.refund, undefined);
   });
 
+  it('repairs legacy unpaid cancellations that were incorrectly stamped refund due', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      status: 'CANCELLED',
+      paymentStatus: 'PENDING',
+      paidAt: null,
+      fulfilmentStatus: 'EXCEPTION',
+      quoteSnapshot: {
+        cancellation: { status: 'refund_required', reason: 'patient_request' },
+        curaleafCancellation: { status: 'confirmed', purchaseOrderId: null, prescriptionId: null },
+        refund: { id: 'invalid-unpaid-refund', status: 'pending_confirmation' },
+      },
+    });
+
+    assert.equal(mapped.paymentStatus, 'cancelled');
+    assert.equal(mapped.cancellation?.status, 'cancelled');
+    assert.equal(mapped.curaleafCancellation, undefined);
+    assert.equal(mapped.refund, undefined);
+    assert.equal(mapped.unresolvedReason, undefined);
+  });
+
   it('keeps a live Curaleaf purchase order visible after HHH marks the order cancelled and refunded', () => {
     const mapped = toPortalOrder({
       ...order,

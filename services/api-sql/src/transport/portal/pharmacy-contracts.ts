@@ -340,10 +340,20 @@ export function toPortalOrder(order: PortalOrderSource) {
   const persistedCuraleaf = snapshot?.curaleaf && typeof snapshot.curaleaf === 'object' ? snapshot.curaleaf : null;
   const po = order.curaleaf || persistedCuraleaf;
   const isHhhCancelled = order.status === 'CANCELLED';
+  const snapshotCuraleafCancellation = snapshot?.curaleafCancellation && typeof snapshot.curaleafCancellation === 'object'
+    ? snapshot.curaleafCancellation
+    : null;
+  const hasSupplierCancellationReference = Boolean(
+    po?.purchaseOrderId
+    || po?.prescriptionId
+    || snapshotCuraleafCancellation?.purchaseOrderId
+    || snapshotCuraleafCancellation?.prescriptionId,
+  );
+  const supplierCancellationConfirmed = snapshotCuraleafCancellation?.status === 'confirmed' && hasSupplierCancellationReference;
   const isSupplierCancelled = po?.state === 'CANCELLED'
     || po?.purchaseOrderState === 'CANCELLED'
     || po?.prescriptionState === 'CANCELLED'
-    || snapshot?.curaleafCancellation?.status === 'confirmed';
+    || supplierCancellationConfirmed;
   const supplierStillLive = !isSupplierCancelled
     && !supplierCancellationAlreadyConfirmed(snapshot)
     && curaleafRequiresSupplierCancel({ ...snapshot, curaleaf: po || persistedCuraleaf });
@@ -353,16 +363,26 @@ export function toPortalOrder(order: PortalOrderSource) {
     ? null
     : (order.sqlRefund && typeof order.sqlRefund === 'object' ? order.sqlRefund : null)
       ?? (snapshot?.refund && typeof snapshot.refund === 'object' ? snapshot.refund : null);
-  const refundCompleted = !supplierStillLive && (
+  const refundCompleted = moneyTaken && !supplierStillLive && (
     String(existingRefund?.status || '') === 'completed'
     || snapshotRefundCompleted(snapshot)
     || String(order.paymentStatus).toUpperCase() === 'REFUNDED'
   );
-  const refundPrepared = !supplierStillLive && (
+  const refundPrepared = moneyTaken && !supplierStillLive && (
     String(existingRefund?.status || '') === 'pending_confirmation'
     || String(order.paymentStatus).toUpperCase() === 'REFUND_REQUIRED'
   );
-  const refund = existingRefund?.status ? existingRefund : undefined;
+  const refund = moneyTaken && existingRefund?.status ? existingRefund : undefined;
+  const storedCancellation = snapshot?.cancellation && typeof snapshot.cancellation === 'object'
+    ? snapshot.cancellation
+    : null;
+  const cancellation = !moneyTaken && isHhhCancelled && storedCancellation
+    ? { ...storedCancellation, status: 'cancelled' }
+    : storedCancellation ?? undefined;
+  const curaleafCancellation = snapshotCuraleafCancellation
+    && (snapshotCuraleafCancellation.status !== 'confirmed' || hasSupplierCancellationReference)
+    ? snapshotCuraleafCancellation
+    : undefined;
   const isPaid = moneyTaken && !refundCompleted && !isCancelledOrder && !refundPrepared;
   const quoteReview = snapshot?.quoteReview && typeof snapshot.quoteReview === 'object' && !isSupplierCancelled
     ? snapshot.quoteReview
@@ -688,8 +708,8 @@ export function toPortalOrder(order: PortalOrderSource) {
     redoOfOrderId: order.redoOfId ?? null,
     redoContext: snapshot.redoContext ?? undefined,
     pharmacyContributionPence: Number(snapshot?.pharmacyContributionPence || quoteReview?.pharmacyContributionPence || 0) || undefined,
-    cancellation: supplierStillLive ? undefined : snapshot?.cancellation ?? undefined,
-    curaleafCancellation: supplierStillLive ? undefined : snapshot?.curaleafCancellation ?? undefined,
+    cancellation: supplierStillLive ? undefined : cancellation,
+    curaleafCancellation: supplierStillLive ? undefined : curaleafCancellation,
     refund,
     unresolvedReason: isSupplierCancelled ? 'cancelled' : undefined,
     createdAt: order.createdAt,

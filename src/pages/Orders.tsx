@@ -76,6 +76,7 @@ import {
   prescriptionStatusLabel,
   prescriptionStatusChipTone,
   stageMatchesFilter,
+  unpaidCancellationConfirmation,
   type OrderStage,
   type StageFilter,
 } from '../utils/orderStage';
@@ -597,7 +598,7 @@ export default function Orders() {
       }
       if (order.patientId) dispatch({ type: 'LOG_INTERACTION', patientId: order.patientId, interactionType: 'Order cancellation requested', detail: `Cancellation requested for ${orderReference(order)}. ${order.payment.status === 'paid' ? 'Paid order requires pharmacy action.' : 'No settled patient payment recorded.'}` });
       const hasCuraleafOrder = orderRequiresCuraleafCancel(order);
-      dispatch({ type: 'ADD_TOAST', message: hasCuraleafOrder ? 'Cancellation opened. Contact Curaleaf and record their confirmation before refunding or reordering.' : order.payment.status === 'paid' ? 'Paid cancellation flagged for pharmacy refund action.' : 'Order cancelled and its payment link retired in the platform.', toastType: hasCuraleafOrder || order.payment.status === 'paid' ? 'warning' : 'success' });
+      dispatch({ type: 'ADD_TOAST', message: hasCuraleafOrder ? 'Cancellation opened. Contact Curaleaf and record their confirmation before refunding or reordering.' : order.payment.status === 'paid' ? 'Paid cancellation flagged for pharmacy refund action.' : unpaidCancellationConfirmation(order.payment.route), toastType: hasCuraleafOrder || order.payment.status === 'paid' ? 'warning' : 'success' });
       setCancelOrderId(null);
       setCancelNote('');
     } catch (error) {

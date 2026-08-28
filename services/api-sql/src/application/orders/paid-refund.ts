@@ -14,6 +14,32 @@ export function orderAllowsManualCancellation(order: { paymentStatus?: string | 
   return ['NONE', 'PENDING', 'FAILED'].includes(String(order.paymentStatus || '').toUpperCase());
 }
 
+export function stampUnpaidManualCancellation(
+  snapshot: unknown,
+  input: {
+    reason: 'added_in_error' | 'patient_request' | 'other';
+    note?: string | null;
+    actorUid?: string | null;
+    now?: string;
+  },
+) {
+  const root = asRecord(snapshot);
+  const prior = asRecord(root.cancellation);
+  const requestedAt = input.now ?? new Date().toISOString();
+  return {
+    ...root,
+    quoteReview: null,
+    curaleafCancellation: null,
+    cancellation: {
+      status: 'cancelled' as const,
+      reason: input.reason,
+      note: input.note ?? prior.note ?? null,
+      requestedAt,
+      requestedBy: input.actorUid ?? prior.requestedBy ?? null,
+    },
+  };
+}
+
 export function snapshotRefundCompleted(snapshot: unknown) {
   return String(asRecord(asRecord(snapshot).refund).status || '') === 'completed';
 }

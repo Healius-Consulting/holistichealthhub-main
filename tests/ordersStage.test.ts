@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderPaymentAllowsManualCancellation, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
+import { hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderPaymentAllowsManualCancellation, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, unpaidCancellationConfirmation, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
 import type { PatientOrder } from '../src/context/AppContext.tsx';
 
 const taxonomy: Array<[OrderStage, StageFilter]> = [
@@ -41,6 +41,11 @@ test('manual pharmacy cancellation closes as soon as payment settles', () => {
   assert.equal(orderPaymentAllowsManualCancellation({ payment: { status: 'refund_required', paidAt: new Date() } } as PatientOrder), false);
 });
 
+test('unpaid cancellation confirmation mentions a link only for Worldpay', () => {
+  assert.equal(unpaidCancellationConfirmation('worldpay'), 'Order cancelled and its payment link retired in the platform.');
+  assert.equal(unpaidCancellationConfirmation('pharmacy'), 'Order cancelled. No patient payment was recorded.');
+});
+
 test('cancelled orders distinguish outstanding work from closed outcomes', () => {
   const base = {
     lifecycleStatus: 'cancelled',
@@ -50,6 +55,7 @@ test('cancelled orders distinguish outstanding work from closed outcomes', () =>
   } as PatientOrder;
 
   assert.equal(orderCancellationResolution({ ...base, cancellation: { status: 'cancelled' } } as PatientOrder), 'resolved');
+  assert.equal(orderCancellationResolution({ ...base, payment: { status: 'cancelled', paidAt: null }, cancellation: { status: 'cancelled' }, refund: undefined } as PatientOrder), 'resolved');
   assert.equal(orderCancellationResolution({ ...base, payment: { status: 'paid' }, cancellation: { status: 'refund_required' } } as PatientOrder), 'needs-action');
   assert.equal(orderCancellationResolution({ ...base, payment: { status: 'paid' }, cancellation: { status: 'refund_required' }, refund: { status: 'completed' } } as PatientOrder), 'refunded');
   assert.equal(orderCancellationResolution({
