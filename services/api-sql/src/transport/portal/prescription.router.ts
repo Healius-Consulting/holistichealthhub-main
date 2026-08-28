@@ -1,10 +1,14 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
+import { assertCuraleafSerialAvailableForCreate } from '../../application/integrations/curaleaf.service.js';
+import { assertSerialAvailableForCreate } from '../../application/prescriptions/serial-availability.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { MAX_PRESCRIPTION_UPLOAD_BYTES, PRESCRIPTION_SIGNATURE_PREFIX_BYTES, matchesDeclaredFileSignature, uploadedObjectMatchesDeclaration } from '../../providers/storage/upload-constraints.js';
 import type { PrescriberRecord } from '../../repositories/ports/prescription.port.js';
+import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
+import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
@@ -47,6 +51,17 @@ function filterPrescribers(records: PrescriberRecord[], query: string) {
     .includes(needle)).slice(0, 50);
 }
 
+const serialAvailabilityInputSchema = z.object({
+  organisationId: uuidLikeSchema.optional(),
+  serialNumber: z.string().trim().max(200).optional(),
+  issueDate: z.string().trim().max(10).optional(),
+  sourceOrderId: uuidLikeSchema.nullable().optional(),
+  sourceSerial: z.string().trim().max(200).nullable().optional(),
+  patientId: z.string().trim().max(64).nullable().optional(),
+  clinicScanId: z.string().trim().max(200).nullable().optional(),
+  curaleafPrescriptionId: z.string().trim().max(200).nullable().optional(),
+});
+
 const uploadTargetSchema = z.object({
   organisationId: z.string().optional(),
   filename: z.string().min(1).max(255),
@@ -58,6 +73,8 @@ const uploadTargetSchema = z.object({
 export function createPortalPrescriptionRouter(): Router {
   const router = Router();
   const prescriptionRepo = new SqlPrescriptionRepository();
+  const serialRepo = new SqlPrescriptionSerialRepository();
+  const integrationRepo = new SqlIntegrationRepository();
   const storageProvider = new StorageProvider();
 
   // POST /v1/portal/prescription-files/upload-url and /upload-target
@@ -226,6 +243,38 @@ export function createPortalPrescriptionRouter(): Router {
       });
 
       res.status(existing ? 200 : 201).json(mapPrescriberDirectoryRecord(record));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/prescription-serials/availability — occupancy, reuse, and Curaleaf lookup
+  router.post('/portal/prescription-serials/availability', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      const input = serialAvailabilityInputSchema.parse(req.body);
+      if (input.organisationId && input.organisationId.replace(/-/g, '') !== scope.organisationId.replace(/-/g, '')) {
+        throw new HttpError(403, 'Cross-pharmacy access is not permitted.', 'TENANT_SCOPE_VIOLATION');
+      }
+      const connection = await integrationRepo.findConnection(scope.organisationId, 'CURALEAF').catch(() => null);
+      const result = await assertSerialAvailableForCreate({
+        organisationId: scope.organisationId,
+        clinicOwned: Boolean(input.clinicScanId || input.curaleafPrescriptionId),
+        serialNumber: input.serialNumber,
+        issueDate: input.issueDate,
+        sourceSerial: input.sourceSerial,
+        sourceOrderId: input.sourceOrderId,
+        currentPatientId: input.patientId,
+        findLive: (organisationId, serialNumber) => serialRepo.findLive(organisationId, serialNumber),
+        lookupCuraleaf: connection?.secretResourceName
+          ? serial => assertCuraleafSerialAvailableForCreate(connection, serial)
+          : undefined,
+      });
+      res.status(200).json({
+        allowed: result.allowed,
+        reason: result.reason,
+        occupyingOrderId: result.occupyingOrderId ?? null,
+      });
     } catch (error) {
       next(error);
     }

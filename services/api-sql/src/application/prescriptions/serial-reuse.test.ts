@@ -5,7 +5,6 @@ import {
   curaleafSerialAllowsCreate,
   curaleafSerialLookupDecision,
   evaluateSerialOccupancy,
-  manualSerialCreatePolicy,
   prescriptionFileIsUsable,
   replacementSerialPolicy,
   serialReuseIsCurrent,
@@ -111,27 +110,6 @@ test('create-order Curaleaf lookup blocks live serials and fails open on outages
   assert.equal(curaleafSerialLookupDecision({ httpStatus: 409 }), 'block_live');
   assert.equal(curaleafSerialLookupDecision({ httpStatus: 422 }), 'block_live');
   assert.equal(curaleafSerialLookupDecision({ httpStatus: 500 }), 'fail_open');
-});
-
-test('create order blocks a serial older than 24 London days before checkout', () => {
-  assert.equal(manualSerialCreatePolicy({
-    serialNumber: 'RX-1',
-    issueDate: '2026-07-18',
-    occupancy: { allowed: true, reason: 'free' },
-    asOf: NOW,
-  }).reason, 'SERIAL_REUSE_EXPIRED');
-  assert.deepEqual(manualSerialCreatePolicy({
-    serialNumber: 'RX-1',
-    issueDate: '2026-07-19',
-    occupancy: { allowed: true, reason: 'free' },
-    asOf: NOW,
-  }), { allowed: true, reason: 'ok' });
-  assert.equal(manualSerialCreatePolicy({
-    serialNumber: 'RX-1',
-    issueDate: '2026-08-01',
-    occupancy: { allowed: false, reason: 'SERIAL_IN_USE', occupyingOrderId: 'other-1' },
-    asOf: NOW,
-  }).reason, 'SERIAL_IN_USE');
 });
 
 test('deleted prescription files are not reusable', () => {

@@ -138,28 +138,18 @@ export default function FormularyPricing() {
                 <small><Tags size={12} /> {TYPE_LABELS[product.type] || product.type}</small>
               </span>
               <span className="pricing-pack" role="cell">
-                <Package size={14} />
-                <span><strong>{product.packSize ?? '—'} {product.unit ?? 'units'}</strong><small>Curaleaf pack size</small></span>
+                <Package size={14} aria-hidden="true" />
+                <strong>{product.packSize ?? '—'} {product.unit ?? 'units'}</strong>
               </span>
               <span className={`pricing-stock ${product.supplierState === 'ACTIVE' ? 'stock-in' : 'stock-out'}`} role="cell">
                 <i aria-hidden="true" />{product.supplierState === 'ACTIVE' ? 'Active' : 'Unavailable'}
               </span>
               <span className="pricing-patient-price" role="cell">
-                <CircleDollarSign size={14} />
-                <span><strong>{product.retail > 0 ? money(product.retail) : 'Not supplied'}</strong><small>{product.retail > 0 ? 'Set by Curaleaf' : 'Awaiting Curaleaf price'}</small></span>
+                <CircleDollarSign size={14} aria-hidden="true" />
+                <strong>{product.retail > 0 ? money(product.retail) : 'Not supplied'}</strong>
               </span>
               <span className="pricing-cost" role="cell">
-                {product.cost && product.cost > 0 ? (
-                  <>
-                    <small>Quote bank</small>
-                    <strong>{money(product.cost)}</strong>
-                  </>
-                ) : (
-                  <>
-                    <small>Order-specific</small>
-                    <strong>Confirmed by quote</strong>
-                  </>
-                )}
+                <strong>{product.cost && product.cost > 0 ? money(product.cost) : 'Confirmed by quote'}</strong>
               </span>
             </div>
           ))}

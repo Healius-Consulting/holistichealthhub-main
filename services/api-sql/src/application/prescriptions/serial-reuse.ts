@@ -122,24 +122,6 @@ export function curaleafSerialLookupDecision(input: { state?: string | null; htt
   return 'fail_open' as const;
 }
 
-export function manualSerialCreatePolicy(input: {
-  serialNumber?: string | null;
-  issueDate?: string | null;
-  occupancy: ReturnType<typeof evaluateSerialOccupancy>;
-  asOf?: Date | string;
-}) {
-  if (!normalizeSerialNumber(input.serialNumber)) {
-    return { allowed: false as const, reason: 'SERIAL_REQUIRED' as const };
-  }
-  if (!serialReuseIsCurrent(input.issueDate, input.asOf)) {
-    return { allowed: false as const, reason: 'SERIAL_REUSE_EXPIRED' as const };
-  }
-  if (!input.occupancy.allowed) {
-    return { allowed: false as const, reason: 'SERIAL_IN_USE' as const, occupyingOrderId: input.occupancy.occupyingOrderId };
-  }
-  return { allowed: true as const, reason: 'ok' as const };
-}
-
 export function replacementSerialPolicy(input: {
   sourceSerial?: string | null;
   sourceIssueDate?: string | null;

@@ -22,6 +22,7 @@ import {
   purgeOrderPrescriptionFiles,
 } from '../prescriptions/prescription-file-purge.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
+import { recordVerifiedPrescriberInDirectory } from '../prescriptions/verified-prescriber-directory.js';
 import {
   curaleafSerialLookupDecision,
   normalizeSerialNumber,
@@ -935,6 +936,13 @@ export async function executeCuraleafOrderPlacement(
         prescriberId,
       });
     }
+    await recordVerifiedPrescriberInDirectory(new SqlPrescriptionRepository(), {
+      name: typeof prescriberInfo.name === 'string' ? prescriberInfo.name : null,
+      initials: typeof prescriberInfo.initials === 'string' ? prescriberInfo.initials : null,
+      pin: prescriberPin,
+      gmcNumber: prescriberGmc,
+      gphcNumber: prescriberGphc,
+    });
   }
 
   // Step 2: Extract line items. Units are pack count × product pack size — never a 10g guess.

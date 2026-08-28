@@ -28,6 +28,7 @@ import type {
   PortalOrderInput,
   PortalOrderRecord,
   ExpiryCheckState,
+  PrescriptionSerialAvailability,
   PrescriptionUploadRequest,
   PrescriptionUploadTarget,
   CuraleafClinicScan,
@@ -644,6 +645,22 @@ export function deleteOrderDraft(id: string, organisationId: string) {
 
 export function deletePrescriptionFile(id: string, organisationId: string) {
   return apiRequest<void>(`/v1/portal/prescription-files/${encodeURIComponent(id)}?organisationId=${encodeURIComponent(organisationId)}`, { method: 'DELETE' });
+}
+
+export function checkPrescriptionSerialAvailability(input: {
+  organisationId: string;
+  serialNumber?: string;
+  issueDate?: string;
+  sourceOrderId?: string | null;
+  sourceSerial?: string | null;
+  patientId?: string | null;
+  clinicScanId?: string | null;
+  curaleafPrescriptionId?: string | null;
+}) {
+  return apiRequest<PrescriptionSerialAvailability>('/v1/portal/prescription-serials/availability', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export function getPrescriberDirectory(organisationId: string, query = '') {

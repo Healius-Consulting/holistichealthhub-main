@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { prescriptionDateIsCurrent, serialReuseIsCurrent } from '@hhh/domain/prescription-date';
+import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
 import { FileText, Search } from 'lucide-react';
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
 import DraftBasketSheet from './DraftBasketSheet';
@@ -29,10 +29,18 @@ import {
 } from '../../context/AppContext';
 import { TRAINING_PRESCRIBER, TRAINING_PRODUCT } from '../../training/workspace';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
-import { createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
+import { checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
 import { formatPatientDob } from '../../utils/patientDob';
 import { canCreateOrderForPatient } from '../../utils/patientOrderEligibility';
 import { MAX_PRESCRIPTION_FILE_BYTES, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
+
+function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
+  if (reason === 'SERIAL_IN_USE') return 'This prescription serial is already on another live order.';
+  if (reason === 'CURALEAF_SERIAL_STILL_LIVE') return 'Curaleaf still has a live prescription with this serial. Call Curaleaf to cancel it before creating this order.';
+  if (reason === 'SERIAL_REUSE_EXPIRED' && !inherited) return 'This prescription cannot be reused. Enter a new serial.';
+  if (reason === 'SERIAL_CHECK_FAILED') return 'This serial could not be checked. Try again.';
+  return null;
+}
 
 export default function CreateOrderPage() {
   const { state, dispatch } = useApp();
@@ -74,6 +82,11 @@ export default function CreateOrderPage() {
   const [selectedUnresolvedOrderId, setSelectedUnresolvedOrderId] = useState<number | null>(null);
   const [confirmingRouteSwitch, setConfirmingRouteSwitch] = useState<'clinic' | 'manual' | null>(null);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
+  const [serialAvailability, setSerialAvailability] = useState<{ allowed: boolean; reason: string | null; pending: boolean }>({
+    allowed: false,
+    reason: null,
+    pending: false,
+  });
   const durableDraftEnabled = isApiConfigured && !isLocalPortalPreview && state.workspaceMode === 'live';
   const durableDraftPayload = useMemo(() => activeOrder ? {
     localOrderId: activeOrder.id,
@@ -200,6 +213,51 @@ export default function CreateOrderPage() {
   }, [activeOrder?.redoContext?.originalOrderId, selectedUnresolvedOrderId, unresolvedOrdersForPatient]);
 
   const selectedRx = activeOrder?.prescriptions.find(rx => rx.id === selectedRxId) ?? null;
+
+  useEffect(() => {
+    if (selectedRx?.entryMode === 'clinic') {
+      setSerialAvailability({ allowed: Boolean(selectedRx.clinicScanId), reason: 'clinic', pending: false });
+      return;
+    }
+    const serial = selectedRx?.serialNumber?.trim() ?? '';
+    if (!selectedRx || !serial) {
+      setSerialAvailability({ allowed: false, reason: null, pending: false });
+      return;
+    }
+    if (isLocalPortalPreview || !isApiConfigured) {
+      setSerialAvailability({ allowed: true, reason: 'ok', pending: false });
+      return;
+    }
+    setSerialAvailability(current => ({ ...current, pending: true }));
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void checkPrescriptionSerialAvailability({
+        organisationId: state.currentOrganisationId,
+        serialNumber: serial,
+        issueDate: selectedRx.issueDate,
+        sourceOrderId: activeOrder?.redoContext?.originalBackendId ?? null,
+        sourceSerial: selectedRx.serialInherited ? serial : null,
+        patientId: activeOrder?.patientId ?? null,
+      }).then(result => {
+        if (!cancelled) setSerialAvailability({ allowed: result.allowed, reason: result.reason, pending: false });
+      }).catch(() => {
+        if (!cancelled) setSerialAvailability({ allowed: false, reason: 'SERIAL_CHECK_FAILED', pending: false });
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeOrder?.patientId,
+    activeOrder?.redoContext?.originalBackendId,
+    selectedRx?.clinicScanId,
+    selectedRx?.entryMode,
+    selectedRx?.issueDate,
+    selectedRx?.serialInherited,
+    selectedRx?.serialNumber,
+    state.currentOrganisationId,
+  ]);
   const requiresLiveCuraleafEvidence = state.workspaceMode === 'live' && !isLocalPortalPreview;
   const hasPrescriptionRecords = Boolean(activeOrder?.prescriptions.length);
   const readiness = activeOrder ? [
@@ -207,13 +265,13 @@ export default function CreateOrderPage() {
     { label: 'Prescription evidence attached', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => Boolean(rx.copyFileName) && (!requiresLiveCuraleafEvidence || Boolean(rx.fileId))) },
     { label: 'Serial number / Clinic source verified', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.entryMode === 'manual' ? Boolean(rx.serialNumber?.trim()) : Boolean(rx.clinicScanId && rx.curaleafPrescriptionId)) },
     { label: 'Prescription inside its 28-day window', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => prescriptionDateIsCurrent(rx.issueDate, rx.expiryDate)) },
-    { label: 'Prescription serial inside its 24-day reuse window', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.entryMode === 'clinic' || serialReuseIsCurrent(rx.issueDate)) },
     { label: 'Prescriber details complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => Boolean(rx.issueDate && rx.prescriber.trim() && (rx.entryMode === 'manual' ? rx.prescriberPin?.trim() : rx.prescriberId))) },
     { label: 'Priced medicines and quantities complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.items.length > 0 && rx.items.every(item => Boolean(item.productId && item.formulaId) && Number.isInteger(item.qty) && item.qty > 0 && Number.isInteger(item.unitsNeededCount) && item.unitsNeededCount! > 0 && Number.isFinite(item.retail) && item.retail > 0)) },
   ] : [];
   const prescriptionAuthenticated = readiness
     .filter(item => item.label !== 'Priced medicines and quantities complete')
-    .every(item => item.complete);
+    .every(item => item.complete)
+    && (selectedRx?.entryMode !== 'manual' || (serialAvailability.allowed && !serialAvailability.pending));
   const prescriptionReady = readiness.every(item => item.complete);
   const wholesaleKnown = Boolean(activeOrder?.prescriptions.every(rx => rx.items.every(item => item.cost !== null)));
   const currentQuoteItems = activeOrder?.prescriptions.flatMap(rx => rx.items.map(item => ({ packId: item.productId, quantity: item.qty }))) ?? [];
@@ -261,7 +319,8 @@ export default function CreateOrderPage() {
       && selectedRx.issueDate
       && selectedRx.prescriberPin?.trim()
       && prescriptionDateIsCurrent(selectedRx.issueDate, selectedRx.expiryDate)
-      && serialReuseIsCurrent(selectedRx.issueDate),
+      && serialAvailability.allowed
+      && !serialAvailability.pending,
     );
   const draftBasketItems = activeOrder
     ? activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({ ...item, rxId: rx.id })))
@@ -1024,6 +1083,7 @@ export default function CreateOrderPage() {
                   onRequestRemoveFile={() => setConfirmingFileRemoveRxId(selectedRx.id)}
                   onConfirmRemoveFile={() => void removePrescriptionFile(selectedRx.id)}
                   onCancelRemoveFile={() => setConfirmingFileRemoveRxId(null)}
+                  serialFieldError={serialAvailability.pending ? null : serialOccupancyFieldError(serialAvailability.reason, selectedRx.serialInherited)}
                   {...rxDispatch}
                 />
                   ) : null}
@@ -1096,6 +1156,7 @@ export default function CreateOrderPage() {
             draftBasketBlockedCount={draftBasketBlockedCount}
             canEditBasketItems={canEditBasketItems}
             selectedRxId={selectedRx?.id ?? null}
+            onStepClick={wizard.goToStep}
             onContinue={advanceStep}
             continueDisabled={wizard.focusedStep >= wizard.progress.furthestUnlocked}
             onEditQuantity={(rxId, productId, qty) => dispatch({ type: 'UPDATE_ITEM_QTY', orderId: activeOrder.id, rxId, productId, qty })}

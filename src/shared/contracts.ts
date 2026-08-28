@@ -770,6 +770,12 @@ export interface OrderDraftRecord {
   updatedAt: string;
 }
 
+export interface PrescriptionSerialAvailability {
+  allowed: boolean;
+  reason: string;
+  occupyingOrderId?: string | null;
+}
+
 export interface PrescriberDirectoryRecord {
   id: string;
   name: string;

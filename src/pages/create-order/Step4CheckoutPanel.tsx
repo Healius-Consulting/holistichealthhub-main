@@ -9,7 +9,7 @@ import {
   orderRevenue,
   type PatientOrder,
 } from '../../context/AppContext';
-import { CURALEAF_DELIVERY_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL, marginPercent } from '../../utils/pricing';
+import { CURALEAF_DELIVERY_LABEL, MEDICINE_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL, marginPercent } from '../../utils/pricing';
 
 type Step4CheckoutPanelProps = {
   activeOrder: PatientOrder;
@@ -197,7 +197,7 @@ export default function Step4CheckoutPanel({
             <dd />
           </div>
           <div>
-            <dt>Curaleaf PX Cost</dt>
+            <dt>{MEDICINE_COST_LABEL}</dt>
             <dd>{money(productSubtotal)}</dd>
           </div>
           {activeOrder.dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(activeOrder.dispensingFee)}</dd></div> : null}
@@ -226,7 +226,7 @@ export default function Step4CheckoutPanel({
           </p>
         ) : null}
 
-        <div className="rx-step4-decide">
+        <div className={`rx-step4-decide${activeOrder.pharmacyDeliveryAllowed ? ' rx-step4-decide--with-delivery' : ''}`}>
           <div className="rx-step4-decide__fee">
             <p className="section-label">Dispensing charge</p>
             <div className="rx-dispensing-presets" role="group" aria-label="Set dispensing charge">
@@ -270,12 +270,12 @@ export default function Step4CheckoutPanel({
             <div className="rx-step4-decide__fee">
               <p className="section-label">{PHARMACY_DELIVERY_LABEL}</p>
               {!pharmacyDeliveryCurrentlyEnabled ? <p className="rx-dispensing-hint" role="status">This draft can retain Pharmacy Delivery because it was created while the setting was enabled.</p> : null}
-              <div className="rx-dispensing-presets" role="group" aria-label="Set Pharmacy Delivery charge">
+              <div className="rx-dispensing-presets" role="group" aria-label="Set delivery charge">
                 {[5, 10, 15].map(amount => <button type="button" key={amount} aria-pressed={activeOrder.pharmacyDelivery === amount} onClick={() => onSetPharmacyDelivery(amount)}>{money(amount)}</button>)}
                 <button type="button" aria-pressed={activeOrder.pharmacyDelivery === 0} onClick={() => onSetPharmacyDelivery(0)}>None</button>
               </div>
               <label className="rx-dispensing-custom">
-                <span className="money-input"><span>£</span><input type="number" min="0" max="15" step="0.01" value={activeOrder.pharmacyDelivery || ''} onFocus={event => event.currentTarget.select()} onChange={event => { const amount = Number(event.target.value); onSetPharmacyDelivery(event.target.value === '' ? 0 : Math.max(0, Math.min(15, amount))); }} aria-label="Pharmacy Delivery charge" aria-describedby="rx-pharmacy-delivery-hint" /></span>
+                <span className="money-input"><span>£</span><input type="number" min="0" max="15" step="0.01" value={activeOrder.pharmacyDelivery || ''} onFocus={event => event.currentTarget.select()} onChange={event => { const amount = Number(event.target.value); onSetPharmacyDelivery(event.target.value === '' ? 0 : Math.max(0, Math.min(15, amount))); }} aria-label="Delivery charge" aria-describedby="rx-pharmacy-delivery-hint" /></span>
               </label>
               <p className="rx-dispensing-hint" id="rx-pharmacy-delivery-hint">Any amount from £0 to £15. Presets above are shortcuts.</p>
             </div>
@@ -299,7 +299,7 @@ export default function Step4CheckoutPanel({
                 </div>
               </div>
             ) : (
-              <div className="rx-payment-route-toggle" role="radiogroup" aria-label="Pharmacy payment route">
+              <div className="rx-payment-route-toggle rx-payment-route-toggle--choices" role="radiogroup" aria-label="Pharmacy payment route">
                 <button
                   type="button"
                   role="radio"

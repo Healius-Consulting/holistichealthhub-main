@@ -45,7 +45,8 @@ test('replacement banner distinguishes a carried serial from a new scan', () => 
   }, new Date('2026-08-12T12:00:00.000Z'));
   assert.equal(carried.serialCarried, true);
   assert.equal(carried.scanOnFile, true);
-  assert.equal(carried.serialTitle, 'Serial carried forward');
+  assert.equal(carried.serialTitle, 'Prescription carried forward');
+  assert.equal(carried.serialDetail, 'This prescription can be reused.');
   assert.equal(carried.scanTitle, 'Stored scan kept');
 
   const expired = replacementBannerState({
@@ -58,5 +59,6 @@ test('replacement banner distinguishes a carried serial from a new scan', () => 
   assert.equal(expired.serialCarried, false);
   assert.equal(expired.scanOnFile, false);
   assert.equal(expired.serialTitle, 'New serial required');
+  assert.equal(expired.serialDetail, 'This prescription cannot be reused. Enter a new serial.');
   assert.equal(expired.scanTitle, 'New scan required');
 });

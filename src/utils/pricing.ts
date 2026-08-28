@@ -28,9 +28,10 @@ export const PATIENT_PRICE_LABEL = 'Patient price';
 export const PHARMACY_COST_LABEL = 'Pharmacy cost';
 export const PHARMACY_TOTAL_LABEL = 'Pharmacy Total';
 export const PATIENT_TOTAL_LABEL = 'Patient Total';
-export const WHOLESALE_COST_LABEL = 'Wholesale Cost';
+export const WHOLESALE_COST_LABEL = 'Wholesale Cost (excl. VAT)';
 export const CURALEAF_DELIVERY_LABEL = 'Curaleaf Delivery';
-export const PHARMACY_DELIVERY_LABEL = 'Pharmacy Delivery';
+export const PHARMACY_DELIVERY_LABEL = 'Delivery Charge';
+export const MEDICINE_COST_LABEL = 'Medicine Cost';
 export const DISPENSING_COST_LABEL = 'Dispensing Cost';
 
 export type OrderPricingPence = {

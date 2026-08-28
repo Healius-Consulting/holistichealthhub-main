@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { normalisePrescriptionDateParts, prescriptionDateWindowStatus, prescriptionExpiryDisplay, serialReuseDisplay } from '@hhh/domain/prescription-date';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { normalisePrescriptionDateParts, prescriptionDateWindowStatus, prescriptionExpiryDisplay, serialReuseIsCurrent } from '@hhh/domain/prescription-date';
 import { Check, ChevronLeft, ChevronRight, Minus, Package, Plus, Search, Trash2 } from 'lucide-react';
 import MedicineLabel from './MedicineLabel';
 import type { CatalogueItem, LineItem, Prescription } from '../context/AppContext';
-import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, WHOLESALE_LABEL_SHORT, formatMargin, marginToneClass, money, useApp } from '../context/AppContext';
+import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, marginToneClass, money, useApp } from '../context/AppContext';
 import './ManualPrescriptionEditor.css';
-import { createPrescriberDirectoryRecord, getPrescriberDirectory, isApiConfigured } from '../shared/api';
+import { getPrescriberDirectory, isApiConfigured } from '../shared/api';
 import type { PrescriberDirectoryRecord } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 
@@ -31,7 +31,41 @@ const dateParts = (value?: string) => {
   return match ? { day: match[3], month: match[2], year: match[1] } : { day: '', month: '', year: '' };
 };
 
-function ManualDateField({ label, value, onChange, readOnly = false }: { label: string; value?: string; onChange: (value: string) => void; readOnly?: boolean }) {
+function issueDateHelp(prescription: { serialInherited?: boolean; issueDate?: string }) {
+  const expiry = prescription.issueDate ? prescriptionExpiryDisplay(prescription.issueDate) : null;
+  if (prescription.serialInherited && prescription.issueDate && !serialReuseIsCurrent(prescription.issueDate)) {
+    return { text: 'This prescription cannot be reused. Enter a new serial.', tone: 'red' as const };
+  }
+  if (prescription.serialInherited && expiry) {
+    const until = expiry.text.replace(/\s*·\s*.+$/, '').replace(/^Valid until /, 'valid until ');
+    return { text: `Using the previous prescription · ${until}`, tone: expiry.tone };
+  }
+  if (expiry) {
+    return {
+      text: expiry.daysRemaining < 0 ? expiry.text : expiry.text.replace(/ · .+d left\.$/, ' · 28 days').replace(/ · last day\.$/, ' · 28 days'),
+      tone: expiry.tone,
+    };
+  }
+  return { text: 'Schedule 2 CD Rx valid 28 days from issue', tone: 'neutral' as const };
+}
+
+function ManualDateField({
+  label,
+  value,
+  onChange,
+  readOnly = false,
+  overrideHelp,
+  overrideTone,
+  action,
+}: {
+  label: string;
+  value?: string;
+  onChange: (value: string) => void;
+  readOnly?: boolean;
+  overrideHelp?: string | null;
+  overrideTone?: 'green' | 'amber' | 'red' | 'neutral';
+  action?: ReactNode;
+}) {
   const initial = dateParts(value);
   const [day, setDay] = useState(initial.day);
   const [month, setMonth] = useState(initial.month);
@@ -98,7 +132,19 @@ function ManualDateField({ label, value, onChange, readOnly = false }: { label: 
   };
 
   const localDate = normalisePrescriptionDateParts(day, month, year);
-  const expiry = localDate.status === 'valid' && prescriptionDateWindowStatus(localDate.value) !== 'future' ? prescriptionExpiryDisplay(localDate.value) : null;
+  const expiry = !overrideHelp && localDate.status === 'valid' && prescriptionDateWindowStatus(localDate.value) !== 'future'
+    ? prescriptionExpiryDisplay(localDate.value)
+    : null;
+  const typedHelp = expiry
+    ? {
+      text: expiry.daysRemaining < 0
+        ? expiry.text
+        : expiry.text.replace(/ · .+d left\.$/, ' · 28 days').replace(/ · last day\.$/, ' · 28 days'),
+      tone: expiry.tone,
+    }
+    : { text: 'Schedule 2 CD Rx valid 28 days from issue', tone: 'neutral' as const };
+  const help = overrideHelp || typedHelp.text;
+  const helpTone = overrideHelp ? (overrideTone ?? 'neutral') : typedHelp.tone;
 
   return (
     <label className="manual-rx-date-label">
@@ -110,10 +156,10 @@ function ManualDateField({ label, value, onChange, readOnly = false }: { label: 
         <i>/</i>
         <input aria-label={`${label} year`} inputMode="numeric" placeholder="YYYY" value={year} readOnly={readOnly} disabled={readOnly} onChange={event => updatePart('year', event.target.value)} />
       </span>
-      <small className={validationError ? 'manual-rx-field-error' : 'manual-rx-field-help'}>
-        {validationError ?? 'Schedule 2 CD Rx valid 28 days from issue'}
+      <small className={validationError || helpTone === 'red' ? 'manual-rx-field-error' : helpTone === 'neutral' || !help ? 'manual-rx-field-help' : `manual-rx-expiry manual-rx-expiry--${helpTone}`}>
+        {validationError ?? help}
       </small>
-      {expiry ? <small className={`manual-rx-expiry manual-rx-expiry--${expiry.tone}`}>{expiry.text}</small> : null}
+      {action}
     </label>
   );
 }
@@ -126,6 +172,7 @@ export default function ManualPrescriptionEditor({
   onPrescriberChange,
   onMetadataChange,
   onUnlockInheritedSerial,
+  serialFieldError,
   onAddItem,
   onRemoveItem,
   onUpdateQuantity,
@@ -138,6 +185,7 @@ export default function ManualPrescriptionEditor({
   onPrescriberChange: (value: string) => void;
   onMetadataChange: (field: MetadataField, value: string) => void;
   onUnlockInheritedSerial?: () => void;
+  serialFieldError?: string | null;
   onAddItem: (item: LineItem) => void;
   onRemoveItem: (productId: string) => void;
   onUpdateQuantity: (productId: string, quantity: number) => void;
@@ -150,10 +198,9 @@ export default function ManualPrescriptionEditor({
   const resultsRef = useRef<HTMLDivElement>(null);
   const [prescriberQuery, setPrescriberQuery] = useState(prescription.prescriber);
   const [prescribers, setPrescribers] = useState<PrescriberDirectoryRecord[]>([]);
-  const [prescriberBusy, setPrescriberBusy] = useState(false);
   const [prescriberError, setPrescriberError] = useState<string | null>(null);
   const directoryEnabled = isApiConfigured && !isLocalPortalPreview && state.workspaceMode === 'live';
-  const serialReuse = serialReuseDisplay(prescription.issueDate);
+  const dateHelp = issueDateHelp(prescription);
   const selectedProductIds = useMemo(() => new Set(prescription.items.map(item => item.productId)), [prescription.items]);
   const activeProducts = useMemo(
     () => catalogue.filter(product => product.supplierState === 'ACTIVE' && product.formulaId),
@@ -200,23 +247,6 @@ export default function ManualPrescriptionEditor({
     setPrescriberQuery(record.name);
   };
 
-  const addPrescriber = async () => {
-    const name = prescriberQuery.trim();
-    const pin = prescription.prescriberPin?.trim() ?? '';
-    if (!name || !pin) return setPrescriberError('Enter the prescriber name and PIN before adding them.');
-    setPrescriberBusy(true);
-    setPrescriberError(null);
-    try {
-      const record = await createPrescriberDirectoryRecord({ organisationId: state.currentOrganisationId, name, initials: name.split(/\s+/).map(part => part[0]).join('').toUpperCase().slice(0, 20), pin, gmcNumber: prescription.prescriberGmcNumber ? Number(prescription.prescriberGmcNumber) : null, gphcNumber: prescription.prescriberGphcNumber?.trim() || null });
-      setPrescribers(current => [record, ...current.filter(item => item.id !== record.id)]);
-      selectPrescriber(record);
-    } catch (error) {
-      setPrescriberError(error instanceof Error ? error.message : 'The prescriber could not be added.');
-    } finally {
-      setPrescriberBusy(false);
-    }
-  };
-
   const addProduct = (product: CatalogueItem) => {
     if (selectedProductIds.has(product.id)) return;
     onAddItem({
@@ -259,33 +289,26 @@ export default function ManualPrescriptionEditor({
                   placeholder="Enter exactly as printed on the prescription"
                   readOnly={Boolean(prescription.serialInherited)}
                   aria-readonly={prescription.serialInherited || undefined}
+                  aria-invalid={Boolean(serialFieldError) || undefined}
+                  aria-describedby={serialFieldError ? 'manual-rx-serial-error' : undefined}
                   onChange={event => onMetadataChange('serialNumber', event.target.value)}
                 />
+                {serialFieldError ? <small id="manual-rx-serial-error" className="manual-rx-field-error" role="status">{serialFieldError}</small> : null}
               </label>
               <ManualDateField
                 label="Issue date"
                 value={prescription.issueDate}
                 readOnly={Boolean(prescription.serialInherited)}
+                overrideHelp={prescription.serialInherited ? dateHelp.text : null}
+                overrideTone={prescription.serialInherited ? dateHelp.tone : undefined}
                 onChange={issueDate => onMetadataChange('issueDate', issueDate)}
-              />
-            </div>
-            {prescription.serialInherited ? (
-              <div className="manual-rx-inherited">
-                <small>
-                  {serialReuse?.text
-                    ?? 'This serial was copied from the previous prescription and stays locked while it is reused.'}
-                </small>
-                {onUnlockInheritedSerial ? (
+                action={prescription.serialInherited && onUnlockInheritedSerial ? (
                   <button type="button" className="btn btn-secondary btn-sm" onClick={onUnlockInheritedSerial}>
                     Use a different serial
                   </button>
                 ) : null}
-              </div>
-            ) : serialReuse ? (
-              <small className={serialReuse.tone === 'red' ? 'manual-rx-field-error' : 'manual-rx-field-help'}>
-                {serialReuse.text}
-              </small>
-            ) : null}
+              />
+            </div>
           </section>
 
 
@@ -295,7 +318,7 @@ export default function ManualPrescriptionEditor({
                 <span>Prescriber’s full name</span>
                 <input className="input" value={prescriberQuery} maxLength={200} placeholder="Search name, PIN, GMC or GPhC" onChange={event => { setPrescriberQuery(event.target.value); onPrescriberChange(event.target.value); }} />
                 {directoryEnabled && prescribers.length ? <span className="manual-prescriber-results">{prescribers.slice(0, 6).map(record => <button type="button" key={record.id} onClick={() => selectPrescriber(record)}><strong>{record.name}</strong><small>PIN {record.pin}{record.gmcNumber ? ` · GMC ${record.gmcNumber}` : record.gphcNumber ? ` · GPhC ${record.gphcNumber}` : ''}</small></button>)}</span> : null}
-                {directoryEnabled ? <button type="button" className="btn btn-sm" disabled={prescriberBusy || !prescriberQuery.trim() || !prescription.prescriberPin?.trim()} onClick={() => void addPrescriber()}>{prescriberBusy ? 'Adding…' : 'Add to central directory'}</button> : <small className="manual-rx-field-help">Directory search becomes available in the connected live workspace.</small>}
+                <small className="manual-rx-field-help">{directoryEnabled ? 'Prescribers Curaleaf has verified appear here for later prescriptions.' : 'Directory search becomes available in the connected live workspace.'}</small>
                 {prescriberError ? <small className="manual-rx-field-error">{prescriberError}</small> : null}
               </label>
               <label>
@@ -396,26 +419,45 @@ export default function ManualPrescriptionEditor({
               <button type="button" key={type} aria-pressed={typeFilter === type} onClick={() => setTypeFilter(type)}>{catalogueTypeLabels[type]} <small>{activeProducts.filter(product => product.type === type).length}</small></button>
             ))}
           </div>
-          <div className="manual-rx-picker__results" aria-live="polite" ref={resultsRef}>
+          <div className="manual-rx-picker__table">
+            <div className="manual-rx-picker__heading-row">
+              <span>Product</span>
+              <span>Pack size</span>
+              <span>Patient price</span>
+              <span title={WHOLESALE_LABEL}>Wholesale</span>
+              <span>Margin</span>
+              <span>Add</span>
+            </div>
+            <div className="manual-rx-picker__results" aria-live="polite" ref={resultsRef}>
             {visibleProducts.length ? visibleProducts.map(product => {
               const selected = selectedProductIds.has(product.id);
+              const packLabel = `${product.packSize ?? '—'} ${product.unit ?? 'units'}`;
+              const marginLabel = formatMargin(product.cost === null ? null : product.retail - product.cost, product.retail);
               return (
-                <button type="button" key={product.id} disabled={selected} className={selected ? 'is-selected' : ''} onClick={() => addProduct(product)}>
-                  <span className="manual-rx-picker__product"><small>{catalogueTypeLabels[product.type]} · active</small><MedicineLabel name={product.name} /></span>
-                  <span className="manual-rx-picker__pack"><small>Pack size</small><strong>{product.packSize ?? '—'} {product.unit ?? 'units'}</strong></span>
-                  <span className="manual-rx-picker__price"><small>{PATIENT_PRICE_LABEL}</small><strong>{money(product.retail)}</strong></span>
+                <button
+                  type="button"
+                  key={product.id}
+                  disabled={selected}
+                  className={selected ? 'is-selected' : ''}
+                  aria-label={`${product.name}, ${catalogueTypeLabels[product.type]}, pack size ${packLabel}, ${PATIENT_PRICE_LABEL} ${money(product.retail)}, ${WHOLESALE_LABEL} ${product.cost !== null ? money(product.cost) : 'pending'}, margin ${marginLabel}, ${selected ? 'Added' : 'Add'}`}
+                  onClick={() => addProduct(product)}
+                >
+                  <span className="manual-rx-picker__product">
+                    <MedicineLabel name={product.name} />
+                  </span>
+                  <span className="manual-rx-picker__pack"><strong>{packLabel}</strong></span>
+                  <span className="manual-rx-picker__price"><strong>{money(product.retail)}</strong></span>
                   <span className="manual-rx-picker__wholesale" title={WHOLESALE_LABEL}>
-                    <small>{WHOLESALE_LABEL_SHORT}</small>
                     <strong>{product.cost !== null ? money(product.cost) : '—'}</strong>
                   </span>
                   <span className="manual-rx-picker__margin">
-                    <small>Margin</small>
-                    <strong>{formatMargin(product.cost === null ? null : product.retail - product.cost, product.retail)}</strong>
+                    <strong>{marginLabel}</strong>
                   </span>
-                  <span className="manual-rx-picker__add">{selected ? <Check size={14} /> : <Plus size={14} />} {selected ? 'Added' : 'Add'}</span>
+                  <span className="manual-rx-picker__add">{selected ? <Check size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />} {selected ? 'Added' : 'Add'}</span>
                 </button>
               );
             }) : <span className="manual-rx-picker__empty">No active Curaleaf packs match this search and medicine type.</span>}
+            </div>
           </div>
           {filteredProducts.length > pageSize ? (
             <nav className="manual-rx-picker__pager" aria-label="Catalogue pages">

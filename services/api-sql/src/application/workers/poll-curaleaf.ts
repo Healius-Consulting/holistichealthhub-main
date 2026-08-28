@@ -22,6 +22,7 @@ import { advanceFulfilmentStatus } from '../orders/curaleaf-fulfilment.js';
 import { listPharmacyRecipients, queueEmailToRecipients } from '../notifications/email-outbox.js';
 import { curaleafApiRequest } from '../integrations/curaleaf.service.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
+import { recordVerifiedPrescriberInDirectory } from '../prescriptions/verified-prescriber-directory.js';
 import type { CuraleafPurchaseOrderLike, CuraleafShipmentLike } from '../orders/curaleaf-fulfilment.js';
 import { supplierShipmentRowInput } from './poll-curaleaf-shipment-row.js';
 import type { FulfilmentRepositoryPort } from '../../repositories/ports/fulfilment.port.js';
@@ -306,6 +307,15 @@ async function pollKind(
       if (kind === 'prescriber') {
         const prescriberState = String(record.state || '').toUpperCase();
         if (!['UNVERIFIED', 'VERIFIED', 'ARCHIVED'].includes(prescriberState)) continue;
+        if (prescriberState === 'VERIFIED' && deps.prescriptionRepo) {
+          await recordVerifiedPrescriberInDirectory(deps.prescriptionRepo, {
+            name: typeof record.name === 'string' ? record.name : null,
+            initials: typeof record.initials === 'string' ? record.initials : null,
+            pin: typeof record.pin === 'string' ? record.pin : null,
+            gmcNumber: typeof record.gmcNumber === 'number' || typeof record.gmcNumber === 'string' ? record.gmcNumber : null,
+            gphcNumber: typeof record.gphcNumber === 'string' ? record.gphcNumber : null,
+          });
+        }
         const orders = await deps.orderRepo.listTenantOrders(connection.organisationId, 500);
         for (const order of orders) {
           if (!orderMatchesRejectedPrescriber(order, record)) continue;

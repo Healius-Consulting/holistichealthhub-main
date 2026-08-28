@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, Minus, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Banknote, FilePenLine, Minus, Pill, Plus, Trash2, User } from 'lucide-react';
 import MedicineLabel from '../../components/MedicineLabel';
 import {
   WHOLESALE_LABEL,
@@ -12,7 +12,7 @@ import {
   money,
   type CRMPatient,
 } from '../../context/AppContext';
-import { CURALEAF_DELIVERY_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
+import { CURALEAF_DELIVERY_LABEL, MEDICINE_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
 import type { WizardProgress, WizardStep } from './types';
 import { WIZARD_STEP_LABELS } from './types';
 
@@ -40,11 +40,19 @@ type OrderSummaryRailProps = {
   draftBasketBlockedCount: number;
   canEditBasketItems: boolean;
   selectedRxId: number | null;
+  onStepClick: (step: WizardStep) => void;
   onContinue: () => void;
   continueDisabled: boolean;
   onEditQuantity: (rxId: number, productId: string, qty: number) => void;
   onRemoveItem: (rxId: number, productId: string) => void;
 };
+
+const STEP_ICONS = {
+  1: User,
+  2: FilePenLine,
+  3: Pill,
+  4: Banknote,
+} as const;
 
 function continueLabel(focusedStep: number): string {
   if (focusedStep <= 1) return 'Continue to prescription';
@@ -67,6 +75,7 @@ export default function OrderSummaryRail({
   draftBasketBlockedCount,
   canEditBasketItems,
   selectedRxId,
+  onStepClick,
   onContinue,
   continueDisabled,
   onEditQuantity,
@@ -90,27 +99,32 @@ export default function OrderSummaryRail({
         </div>
       ) : null}
 
-      <div className="rx-order-summary-rail__section">
-        <p className="section-label">Progress</p>
-        <ul className="rx-order-summary-rail__checklist" aria-label="Step progress">
-          {([1, 2, 3, 4] as WizardStep[]).map(step => {
-            const complete = progress.steps[step].complete;
-            const current = focusedStep === step;
-            return (
-              <li
-                key={step}
-                className={complete ? 'is-complete' : current ? 'is-current' : ''}
-                aria-current={current ? 'step' : undefined}
-              >
-                {complete
-                  ? <CheckCircle size={14} aria-hidden="true" />
-                  : <span className="rx-order-summary-rail__dot" aria-hidden="true" />}
-                <span>{WIZARD_STEP_LABELS[step]}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      <nav className="rx-order-summary-rail__steps" aria-label="Create order progress">
+        {([1, 2, 3, 4] as WizardStep[]).map(step => {
+          const complete = progress.steps[step].complete;
+          const current = focusedStep === step;
+          const unlocked = step <= progress.furthestUnlocked;
+          const locked = !unlocked && !complete;
+          const label = WIZARD_STEP_LABELS[step];
+          const Icon = STEP_ICONS[step];
+          return (
+            <button
+              key={step}
+              type="button"
+              className={`rx-order-summary-rail__step${complete ? ' is-complete' : ''}${current ? ' is-current' : ''}${locked ? ' is-locked' : ''}`}
+              data-label={label}
+              aria-label={label}
+              aria-current={current ? 'step' : undefined}
+              aria-disabled={locked}
+              disabled={locked}
+              onClick={() => onStepClick(step)}
+            >
+              <Icon size={16} aria-hidden="true" />
+              <span className="rx-order-summary-rail__step-name">{label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       <div className="rx-order-summary-rail__section rx-order-summary-rail__basket">
         <div className="rx-order-summary-rail__basket-head">
@@ -206,7 +220,7 @@ export default function OrderSummaryRail({
                 <dd />
               </div>
               <div>
-                <dt>Curaleaf PX Cost</dt>
+                <dt>{MEDICINE_COST_LABEL}</dt>
                 <dd>{money(patientPrice)}</dd>
               </div>
               {dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(dispensingFee)}</dd></div> : null}

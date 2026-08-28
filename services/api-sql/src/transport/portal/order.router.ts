@@ -58,9 +58,8 @@ import {
   stampUnpaidManualCancellation,
   withPendingPaidRefund,
 } from '../../application/orders/paid-refund.js';
+import { assertSerialAvailableForCreate, serialAvailabilityHttpError } from '../../application/prescriptions/serial-availability.js';
 import {
-  evaluateSerialOccupancy,
-  manualSerialCreatePolicy,
   normalizeSerialNumber,
   prescriptionFileIsUsable,
 } from '../../application/prescriptions/serial-reuse.js';
@@ -80,7 +79,7 @@ function serialPolicyConflict(policy: {
     });
   }
   if (policy.reason === 'SERIAL_REUSE_EXPIRED') {
-    return new HttpError(409, 'This prescription serial is more than 24 days from its issue date and cannot be reused.', 'SERIAL_REUSE_EXPIRED');
+    return new HttpError(409, 'This prescription cannot be reused. Enter a new serial.', 'SERIAL_REUSE_EXPIRED');
   }
   if (policy.reason === 'SERIAL_BASKET_MISMATCH') {
     return new HttpError(409, 'A copied serial can only be used for the same prescribed medicines.', 'SERIAL_BASKET_MISMATCH');
@@ -374,6 +373,7 @@ export function createPortalOrderRouter(): Router {
         pharmacyAdjustmentPence: number;
         reusesSourceSerial: boolean;
       } = null;
+      let sourceSerial: string | null = null;
 
       if (redoContext?.isPaidRedo) {
         const source = await orderRepo.findOrderById(redoContext.originalOrderId, scope.organisationId);
@@ -406,6 +406,7 @@ export function createPortalOrderRouter(): Router {
         const sourcePrescription = sourcePrescriptions[0] && typeof sourcePrescriptions[0] === 'object'
           ? sourcePrescriptions[0] as Record<string, any>
           : {};
+        sourceSerial = String(sourcePrescription.serialNumber || '') || null;
         const sourceRxItems = Array.isArray(sourcePrescription.items) ? sourcePrescription.items as Array<Record<string, unknown>> : [];
         const replacementRx = (input.prescriptions[0] ?? {}) as {
           serialNumber?: string;
@@ -552,29 +553,21 @@ export function createPortalOrderRouter(): Router {
 
       const serialConnection = await integrationRepo.findConnection(scope.organisationId, 'CURALEAF').catch(() => null);
       for (const rx of input.prescriptions) {
-        if (rx.clinicScanId || rx.curaleafPrescriptionId) continue;
-        const submittedSerial = normalizeSerialNumber(rx.serialNumber);
-        const liveSerial = submittedSerial
-          ? await serialRepo.findLive(scope.organisationId, submittedSerial)
-          : null;
-        const occupancy = evaluateSerialOccupancy({
-          liveOrderId: liveSerial?.orderId,
-          livePatientId: liveSerial?.patientId,
-          sourceOrderId: replacement?.source.id ?? redoContext?.originalOrderId,
+        const availability = await assertSerialAvailableForCreate({
+          organisationId: scope.organisationId,
+          clinicOwned: Boolean(rx.clinicScanId || rx.curaleafPrescriptionId),
+          serialNumber: rx.serialNumber,
+          issueDate: rx.issueDate,
+          sourceSerial,
+          sourceOrderId: replacement?.source.id ?? redoContext?.originalOrderId ?? null,
           currentPatientId: input.patientId,
+          findLive: (organisationId, serialNumber) => serialRepo.findLive(organisationId, serialNumber),
+          lookupCuraleaf: serialConnection?.secretResourceName
+            ? serial => assertCuraleafSerialAvailableForCreate(serialConnection, serial)
+            : undefined,
         });
-        const conflict = serialPolicyConflict({
-          ...manualSerialCreatePolicy({
-            serialNumber: rx.serialNumber,
-            issueDate: rx.issueDate,
-            occupancy,
-          }),
-          reusesSourceSerial: false,
-        });
+        const conflict = serialAvailabilityHttpError(availability);
         if (conflict) throw conflict;
-        if (submittedSerial && serialConnection?.secretResourceName) {
-          await assertCuraleafSerialAvailableForCreate(serialConnection, submittedSerial);
-        }
       }
 
       const result = await orderRepo.createOrder({
