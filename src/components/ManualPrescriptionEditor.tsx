@@ -3,7 +3,8 @@ import { normalisePrescriptionDateParts, prescriptionDateWindowStatus, prescript
 import { Check, ChevronLeft, ChevronRight, Minus, Package, Plus, Search, Trash2 } from 'lucide-react';
 import MedicineLabel from './MedicineLabel';
 import type { CatalogueItem, LineItem, Prescription } from '../context/AppContext';
-import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, marginToneClass, money, useApp } from '../context/AppContext';
+import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, WHOLESALE_LABEL_SHORT, formatMargin, marginToneClass, money, useApp } from '../context/AppContext';
+import { catalogueStockLabel, catalogueStockPillClass, catalogueStockStatus, catalogueStockToneClass } from '../utils/catalogueStock';
 import './ManualPrescriptionEditor.css';
 import { getPrescriberDirectory, isApiConfigured } from '../shared/api';
 import type { PrescriberDirectoryRecord } from '../shared/contracts';
@@ -354,17 +355,16 @@ export default function ManualPrescriptionEditor({
               const wholesaleTotal = item.cost === null ? null : item.cost * item.qty;
               const contribution = wholesaleTotal === null ? null : patientTotal - wholesaleTotal;
               const margin = wholesaleTotal === null || patientTotal <= 0 ? null : Math.round((contribution! / patientTotal) * 100);
-              const stockLabel = product?.availability === 'out' ? 'Out of stock' : product?.availability === 'low' ? 'Low stock' : product?.availability === 'in' ? 'In stock' : 'Stock check required';
-              const stockPill = product?.availability === 'out' ? 'pill-red' : product?.availability === 'low' || product?.availability === 'unknown' ? 'pill-amber' : 'pill-green';
+              const stock = product ? catalogueStockStatus(product) : 'unknown';
               return (
                 <article className="manual-pack-card" key={item.productId}>
                   <header className="manual-pack-card__header">
                     <span className="manual-rx-medicines__number">{index + 1}</span>
                     <span className="manual-rx-medicines__identity">
                       <small>{catalogueTypeLabels[product?.type ?? 'other']} · Curaleaf pack</small>
-                      <MedicineLabel name={item.name} />
+                      <MedicineLabel name={item.name} static />
                     </span>
-                    <span className={`pill ${stockPill}`}>{stockLabel}</span>
+                    <span className={`pill ${catalogueStockPillClass(stock)}`}>{catalogueStockLabel(stock)}</span>
                     <button type="button" className="icon-button danger" aria-label={`Remove ${item.name}`} onClick={() => onRemoveItem(item.productId)}><Trash2 size={14} /></button>
                   </header>
 
@@ -422,36 +422,49 @@ export default function ManualPrescriptionEditor({
           <div className="manual-rx-picker__table">
             <div className="manual-rx-picker__heading-row">
               <span>Product</span>
-              <span>Pack size</span>
-              <span>Patient price</span>
-              <span title={WHOLESALE_LABEL}>Wholesale</span>
-              <span>Margin</span>
+              <span className="manual-rx-picker__meta">
+                <span>Pack</span>
+                <span>Stock Status</span>
+                <span>{PATIENT_PRICE_LABEL}</span>
+              </span>
               <span>Add</span>
             </div>
             <div className="manual-rx-picker__results" aria-live="polite" ref={resultsRef}>
             {visibleProducts.length ? visibleProducts.map(product => {
               const selected = selectedProductIds.has(product.id);
               const packLabel = `${product.packSize ?? '—'} ${product.unit ?? 'units'}`;
-              const marginLabel = formatMargin(product.cost === null ? null : product.retail - product.cost, product.retail);
+              const stock = catalogueStockStatus(product);
+              const stockLabel = catalogueStockLabel(stock);
               return (
                 <button
                   type="button"
                   key={product.id}
                   disabled={selected}
-                  className={selected ? 'is-selected' : ''}
-                  aria-label={`${product.name}, ${catalogueTypeLabels[product.type]}, pack size ${packLabel}, ${PATIENT_PRICE_LABEL} ${money(product.retail)}, ${WHOLESALE_LABEL} ${product.cost !== null ? money(product.cost) : 'pending'}, margin ${marginLabel}, ${selected ? 'Added' : 'Add'}`}
+                  className={[
+                    selected ? 'is-selected' : '',
+                    stock === 'out' ? 'is-out' : '',
+                  ].filter(Boolean).join(' ')}
+                  aria-label={`${product.name}, ${catalogueTypeLabels[product.type]}, pack ${packLabel}, ${stockLabel}, ${PATIENT_PRICE_LABEL} ${money(product.retail)}, ${selected ? 'Added' : 'Add'}`}
                   onClick={() => addProduct(product)}
                 >
                   <span className="manual-rx-picker__product">
-                    <MedicineLabel name={product.name} />
+                    <small>{catalogueTypeLabels[product.type]}</small>
+                    <MedicineLabel name={product.name} static />
                   </span>
-                  <span className="manual-rx-picker__pack"><strong>{packLabel}</strong></span>
-                  <span className="manual-rx-picker__price"><strong>{money(product.retail)}</strong></span>
-                  <span className="manual-rx-picker__wholesale" title={WHOLESALE_LABEL}>
-                    <strong>{product.cost !== null ? money(product.cost) : '—'}</strong>
-                  </span>
-                  <span className="manual-rx-picker__margin">
-                    <strong>{marginLabel}</strong>
+                  <span className="manual-rx-picker__meta">
+                    <span className="manual-rx-picker__pack">
+                      <small>Pack</small>
+                      <strong>{packLabel}</strong>
+                    </span>
+                    <span className={`manual-rx-picker__stock pricing-stock ${catalogueStockToneClass(stock)}`}>
+                      <i aria-hidden="true" />
+                      {stockLabel}
+                    </span>
+                    <span className="manual-rx-picker__price">
+                      <small>{PATIENT_PRICE_LABEL}</small>
+                      <strong>{money(product.retail)}</strong>
+                      <small title={WHOLESALE_LABEL}>{product.cost !== null ? `${WHOLESALE_LABEL_SHORT} ${money(product.cost)}` : 'Wholesale on quote'}</small>
+                    </span>
                   </span>
                   <span className="manual-rx-picker__add">{selected ? <Check size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />} {selected ? 'Added' : 'Add'}</span>
                 </button>

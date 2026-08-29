@@ -55,7 +55,7 @@
 .manual-rx-medicines__number { align-self: center; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--tenant-primary-soft); color: var(--tenant-primary); font-size: 11px; font-weight: 800; }
 .manual-rx-medicines__identity { align-self: center; min-width: 0; }
 .manual-rx-medicines__identity strong, .manual-rx-medicines__identity small { display: block; }
-.manual-rx-medicines__identity strong { overflow: hidden; margin-top: 3px; color: var(--text-primary); white-space: nowrap; font-size: 13px; }
+.manual-rx-medicines__identity strong { overflow: hidden; margin-top: 3px; color: var(--text-primary); font-size: 13px; line-height: 1.35; white-space: normal; }
 .manual-rx-medicines__identity .medicine-label__strength { overflow: hidden; font-size: 12px; }
 .manual-rx-medicines__identity small { color: var(--tenant-primary-strong); font-size: 8px; font-weight: 750; letter-spacing: .065em; text-transform: uppercase; }
 .manual-pack-card__body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg-elevated) 55%, var(--bg-surface)); }
@@ -98,14 +98,14 @@
 .manual-rx-picker__filters button small { display: grid; min-width: 18px; height: 18px; place-items: center; padding: 0 4px; border-radius: 999px; color: var(--text-tertiary); background: var(--bg-elevated); font-size: 7px; font-variant-numeric: tabular-nums; }
 .manual-rx-picker__filters button[aria-pressed="true"] { border-color: var(--tenant-primary); color: var(--tenant-primary-strong); background: var(--tenant-primary-soft); }
 .manual-rx-picker__filters button[aria-pressed="true"] small { color: var(--tenant-primary-strong); background: var(--bg-surface); }
-.manual-rx-picker__table { overflow-x: auto; border-top: 1px solid var(--border); }
+.manual-rx-picker__table { border-top: 1px solid var(--border); }
 .manual-rx-picker__heading-row,
 .manual-rx-picker__results button {
   display: grid;
-  grid-template-columns: minmax(200px, 1fr) 88px 100px 88px 118px 88px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.7fr) 88px;
   align-items: center;
-  gap: 12px;
-  min-width: 742px;
+  gap: 12px 16px;
+  min-width: 0;
 }
 .manual-rx-picker__heading-row {
   position: sticky;
@@ -120,32 +120,38 @@
   letter-spacing: .055em;
   text-transform: uppercase;
 }
+.manual-rx-picker__meta {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 0.7fr) minmax(7.5rem, 1fr) minmax(5.5rem, 0.9fr);
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
 .manual-rx-picker__results { max-height: 420px; overflow: auto; background: var(--bg-surface); -webkit-overflow-scrolling: touch; }
-.manual-rx-picker__results button { width: 100%; min-height: 58px; padding: 8px 13px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; color: var(--text-primary); }
+.manual-rx-picker__results button { width: 100%; min-height: 64px; padding: 10px 13px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; color: var(--text-primary); }
 .manual-rx-picker__results button:last-child { border-bottom: 0; }
 .manual-rx-picker__results button:hover, .manual-rx-picker__results button:focus-visible { background: var(--tenant-primary-soft); }
 .manual-rx-picker__results button:disabled { opacity: 1; cursor: default; }
 .manual-rx-picker__results button.is-selected { background: color-mix(in srgb, var(--tenant-primary-soft) 58%, var(--bg-surface)); }
+.manual-rx-picker__results button.is-out:not(.is-selected) { background: color-mix(in srgb, var(--color-danger) 4%, var(--bg-surface)); }
 .manual-rx-picker__results strong, .manual-rx-picker__results small { display: block; }
 .manual-rx-picker__results small { color: var(--text-tertiary); font-size: 8px; }
 .manual-rx-picker__results strong { margin-top: 0; color: var(--text-primary); font-size: 10px; }
-.manual-rx-picker__product { min-width: 0; overflow: hidden; }
-.manual-rx-picker__product strong { display: block; min-width: 0; overflow: hidden; font-size: 11px; }
-.manual-rx-picker__product .medicine-label__strength { overflow: hidden; font-size: 10px; }
-.manual-rx-picker__pack strong, .manual-rx-picker__price strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.manual-rx-picker__product { display: grid; gap: 3px; min-width: 0; }
+.manual-rx-picker__product > small { color: var(--tenant-primary-strong); font-size: 8px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase; }
+.manual-rx-picker__product strong { display: block; min-width: 0; overflow: visible; font-size: 12px; font-weight: 650; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
+.manual-rx-picker__product .medicine-label__strength,
+.manual-rx-picker__product .medicine-label__static { overflow: visible; white-space: normal; text-overflow: unset; }
+.manual-rx-picker__product .medicine-label__strength { font-size: 11px; }
+.manual-rx-picker__pack,
+.manual-rx-picker__price { min-width: 0; }
+.manual-rx-picker__pack small,
+.manual-rx-picker__price > small:first-child { display: none; }
+.manual-rx-picker__pack strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.manual-rx-picker__stock.pricing-stock { align-items: center; font-size: 11px; font-weight: 650; }
 .manual-rx-picker__price { text-align: right; }
-/* What the patient pays is the number staff pick on, so it leads the row; the
-   supplier cost and the margin sit behind it as supporting detail. */
-.manual-rx-picker__price strong { color: var(--text-primary); font-size: 14px; font-weight: 800; }
-.manual-rx-picker__wholesale,
-.manual-rx-picker__margin { min-width: 0; }
-.manual-rx-picker__wholesale strong,
-.manual-rx-picker__margin strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.manual-rx-picker__wholesale strong, .manual-rx-picker__margin strong { color: var(--text-secondary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.manual-rx-picker__price strong { color: var(--text-primary); font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.manual-rx-picker__price small:last-child { margin-top: 2px; color: var(--text-tertiary); font-size: 8px; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .manual-rx-picker__add { display: flex; align-self: center; align-items: center; justify-content: center; gap: 4px; width: 88px; min-width: 88px; height: 44px; min-height: 44px; border: 1px solid color-mix(in srgb, var(--tenant-primary) 34%, var(--border)); border-radius: 6px; color: var(--tenant-primary-strong); background: var(--tenant-primary-soft); font-size: 9px; font-weight: 700; box-sizing: border-box; }
 .manual-rx-picker__results button.is-selected .manual-rx-picker__add { border-color: transparent; color: var(--text-secondary); background: transparent; }
 .manual-rx-picker__empty { display: block; padding: 18px; color: var(--text-tertiary); font-size: 10px; text-align: center; }
@@ -163,13 +169,32 @@
   .manual-rx-fields__wide { grid-column: auto; }
   .manual-rx-section-heading, .manual-rx-picker__heading { min-height: 0; align-items: flex-start; flex-direction: column; gap: 6px; }
   .manual-pack-card__header { grid-template-columns: 26px minmax(0, 1fr) 34px; gap: 9px; }
-  .manual-pack-card__header > .pill { display: none; }
+  .manual-pack-card__header > .pill { grid-column: 2; justify-self: start; }
   .manual-pack-card__body { grid-template-columns: 1fr 1fr; }
   .manual-pack-quantity { border-right: 0; }
   .manual-pack-pricing { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(110px, 1fr)); border-top: 1px solid var(--border); }
   .manual-pack-pricing > div:nth-child(2) { border-right: 0; }
   .manual-pack-pricing > div:nth-child(-n + 2) { border-bottom: 1px solid var(--border); }
   .manual-rx-picker__heading > small { text-align: left; }
+  .manual-rx-picker__heading-row { display: none; }
+  .manual-rx-picker__heading-row,
+  .manual-rx-picker__results button {
+    grid-template-columns: minmax(0, 1fr) 88px;
+  }
+  .manual-rx-picker__results button {
+    align-items: start;
+    gap: 8px 12px;
+  }
+  .manual-rx-picker__product { grid-column: 1; }
+  .manual-rx-picker__meta {
+    grid-column: 1;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    padding-top: 2px;
+  }
+  .manual-rx-picker__add { grid-column: 2; grid-row: 1 / span 2; }
+  .manual-rx-picker__pack small,
+  .manual-rx-picker__price > small:first-child { display: block; margin-bottom: 3px; color: var(--text-tertiary); font-size: 8px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; }
+  .manual-rx-picker__price { text-align: left; }
 }
 @media (max-width: 460px) {
   .manual-pack-card__body { grid-template-columns: 1fr; }

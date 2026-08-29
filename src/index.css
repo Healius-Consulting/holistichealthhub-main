@@ -16956,7 +16956,7 @@ html[data-theme='dark'] .auth-loading-page{
   font-size: 11px;
 }
 
-/* One medicine per row so the price columns line up and stay comparable. */
+/* Product, pack, stock and price sit in one scannable row; names wrap. */
 .rx-workbench--guided .manual-rx-picker__table{
   padding: 0 16px 16px;
 }
@@ -16976,14 +16976,14 @@ html[data-theme='dark'] .auth-loading-page{
 
 .rx-workbench--guided .manual-rx-picker__heading-row,
 .rx-workbench--guided .manual-rx-picker__results button{
-  grid-template-columns: minmax(200px, 1fr) 88px 100px 88px 118px 88px;
-  min-width: 742px;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.7fr) 88px;
+  min-width: 0;
 }
 
 .rx-workbench--guided .manual-rx-picker__results button{
   align-items: center;
-  gap: 10px 12px;
-  min-height: 64px;
+  gap: 10px 16px;
+  min-height: 72px;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -17000,34 +17000,38 @@ html[data-theme='dark'] .auth-loading-page{
 
 .rx-workbench--guided .manual-rx-picker__product{
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.rx-workbench--guided .manual-rx-picker__product > small{
+  font-size: 10px;
 }
 
 .rx-workbench--guided .manual-rx-picker__product strong{
-  overflow: hidden;
-  font-size: 13px;
+  overflow: visible;
+  font-size: 14px;
   line-height: 1.35;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .rx-workbench--guided .manual-rx-picker__product .medicine-label__strength{
   font-size: 12px;
 }
 
-.rx-workbench--guided .manual-rx-picker__pack strong,
-.rx-workbench--guided .manual-rx-picker__wholesale strong,
-.rx-workbench--guided .manual-rx-picker__margin strong{
+.rx-workbench--guided .manual-rx-picker__pack strong{
   font-size: 13px;
 }
 
-/* Patient price is the decision number in the guided picker too. */
+.rx-workbench--guided .manual-rx-picker__stock.pricing-stock{
+  font-size: 12px;
+}
+
 .rx-workbench--guided .manual-rx-picker__price strong{
   font-size: 16px;
 }
 
-.rx-workbench--guided .manual-rx-picker__wholesale strong,
-.rx-workbench--guided .manual-rx-picker__margin strong{
-  color: var(--text-secondary);
+.rx-workbench--guided .manual-rx-picker__price small:last-child{
+  font-size: 11px;
 }
 
 .rx-workbench--guided .manual-rx-picker__add{
@@ -17057,6 +17061,23 @@ html[data-theme='dark'] .auth-loading-page{
 @media (max-width: 760px){
   .rx-workbench--guided{
     padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .rx-workbench--guided .manual-rx-picker__heading-row{
+    display: none;
+  }
+
+  .rx-workbench--guided .manual-rx-picker__heading-row,
+  .rx-workbench--guided .manual-rx-picker__results button{
+    grid-template-columns: minmax(0, 1fr) 88px;
+  }
+
+  .rx-workbench--guided .manual-rx-picker__results button{
+    align-items: start;
+  }
+
+  .rx-workbench--guided .manual-rx-picker__add{
+    align-self: center;
   }
 }
 
