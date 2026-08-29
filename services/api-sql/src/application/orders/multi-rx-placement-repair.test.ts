@@ -17,7 +17,7 @@ function fixture(): any {
           { id: '3506', serialNumber: 'PT3', curaleafPrescriptionId: MULTI_RX_REPAIR.overwrittenPrescriptionId, items: [{ productId: 'same-pack' }] },
         ],
         curaleafSubOrders: {
-          3504: { id: MULTI_RX_REPAIR.overwrittenPurchaseOrderId, purchaseOrderId: MULTI_RX_REPAIR.overwrittenPurchaseOrderId, prescriptionId: MULTI_RX_REPAIR.overwrittenPrescriptionId, items: [{ productId: 'same-pack', purchaseOrderId: MULTI_RX_REPAIR.overwrittenPurchaseOrderId }] },
+          3504: { id: MULTI_RX_REPAIR.overwrittenPurchaseOrderId, purchaseOrderId: MULTI_RX_REPAIR.overwrittenPurchaseOrderId, prescriptionId: MULTI_RX_REPAIR.overwrittenPrescriptionId, items: [{ id: MULTI_RX_REPAIR.overwrittenPurchaseOrderItemId, productId: 'same-pack', purchaseOrderId: MULTI_RX_REPAIR.overwrittenPurchaseOrderId }] },
           3505: { id: '310eff18-6979-425b-91ee-d68def952e33', prescriptionId: 'c5e9b198-e836-4719-a8b6-559fc189fb65' },
           3506: { id: MULTI_RX_REPAIR.overwrittenPurchaseOrderId, prescriptionId: MULTI_RX_REPAIR.overwrittenPrescriptionId },
         },
@@ -38,6 +38,7 @@ describe('planMultiRxPlacementRepair', () => {
     const next = plan.nextSnapshot as any;
     assert.equal(next.prescriptions[0]?.curaleafPrescriptionId, MULTI_RX_REPAIR.prescriptionId);
     assert.equal(next.curaleafSubOrders['3504']?.purchaseOrderId, MULTI_RX_REPAIR.purchaseOrderId);
+    assert.equal(next.curaleafSubOrders['3504']?.items[0]?.id, MULTI_RX_REPAIR.purchaseOrderItemId);
     assert.deepEqual(next.prescriptions.slice(1), before.prescriptions.slice(1));
     assert.deepEqual(next.curaleafSubOrders['3505'], before.curaleafSubOrders['3505']);
     assert.deepEqual(next.curaleafSubOrders['3506'], before.curaleafSubOrders['3506']);

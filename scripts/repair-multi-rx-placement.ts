@@ -91,6 +91,7 @@ console.log(JSON.stringify({
     serial: MULTI_RX_REPAIR.serialNumber,
     prescriptionId: MULTI_RX_REPAIR.prescriptionId,
     purchaseOrderId: MULTI_RX_REPAIR.purchaseOrderId,
+    purchaseOrderItemId: MULTI_RX_REPAIR.purchaseOrderItemId,
     customerReference: MULTI_RX_REPAIR.customerReference,
     preserved: ['Prescription 2', 'Prescription 3'],
     curaleafAction: 'none',
@@ -150,8 +151,8 @@ executeGraphql(`
   supplierPrescriptionId: MULTI_RX_REPAIR.prescriptionId,
   supplierPurchaseOrderId: MULTI_RX_REPAIR.purchaseOrderId,
   quoteSnapshot: plan.nextSnapshot,
-  reason: 'Corrected Prescription 1 supplier identity from the verified existing Curaleaf purchase order; no supplier request was sent.',
-  externalReference: 'repair:multi-rx-placement:ORD-MTDUS9JV-816507F909:v1',
+  reason: 'Corrected Prescription 1 supplier and purchase-order line identity from the verified existing Curaleaf purchase order; no supplier request was sent.',
+  externalReference: 'repair:multi-rx-placement:ORD-MTDUS9JV-816507F909:v2',
 });
 
 console.log('Prescription 1 SQL identity repaired. Curaleaf was not called and no supplier order was created.');
