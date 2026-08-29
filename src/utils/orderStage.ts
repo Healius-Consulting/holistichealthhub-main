@@ -191,10 +191,13 @@ export function prescriptionStatusLabel(prescription: OrderPrescription) {
   if (prescription.status === 'partially-received' && !hasCheckedInPacks && totals.shipped > 0) {
     return prescription.dispatchStatus === 'partial' ? 'Part In Transit' : 'In Transit';
   }
+  if (!prescription.placed && ['draft', 'awaiting-approval'].includes(prescription.status)) {
+    return 'Waiting for Curaleaf';
+  }
 
   return ({
     draft: 'Draft',
-    'awaiting-approval': 'Curaleaf Review',
+    'awaiting-approval': 'Waiting for Curaleaf',
     processing: 'Curaleaf Dispensing',
     approved: 'Curaleaf Dispensing',
     dispatched: prescription.dispatchStatus === 'partial' ? 'Part In Transit' : 'In Transit',
@@ -384,7 +387,12 @@ export function orderStage(order: PatientOrder, now = new Date()): { stage: Orde
   if (statuses.length && statuses.every(status => status === 'cancelled')) return { stage: 'cancelled', unresolvedReason };
   if (statuses.length && statuses.every(status => status === 'collected') && !remainingOpen) return { stage: 'collected', unresolvedReason };
   if (hasInTransitPacks) return { stage: 'dispatched', unresolvedReason };
-  if (readyForCollection) return { stage: 'ready', unresolvedReason };
+  const prescriptionOutstanding = order.prescriptions.some(prescription => {
+    if (prescription.status === 'cancelled' || prescription.status === 'collected') return false;
+    if (prescriptionReadyForCollection(prescription)) return false;
+    return true;
+  });
+  if (readyForCollection && !prescriptionOutstanding) return { stage: 'ready', unresolvedReason };
   if (orderHasPartialPharmacyReceipt(order)) return { stage: 'dispatched', unresolvedReason };
   const usesPackProgress = order.prescriptions.some(prescriptionUsesPackProgress);
   if (deliveredAtPharmacy || (!usesPackProgress && statuses.some(status => status === 'received' || status === 'partially-received'))) {

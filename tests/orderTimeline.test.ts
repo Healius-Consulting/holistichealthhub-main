@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { PatientOrder, Prescription } from '../src/context/AppContext.tsx';
-import { buildOrderStageRail, buildOrderTimelineEvents, buildPrescriptionTimelineEvents, placementRoute } from '../src/utils/orderTimeline.ts';
+import { buildOrderStageRail, buildOrderTimelineEvents, buildPrescriptionStageRail, buildPrescriptionTimelineEvents, placementRoute } from '../src/utils/orderTimeline.ts';
 
 const tenPackPrescription: Prescription = {
   id: 101,
@@ -251,3 +251,36 @@ test('a fully ready order still reads as fully ready', () => {
   assert.equal(ready!.state, 'complete');
   assert.equal(ready!.detail, 'Patient notified');
 });
+
+test('an unplaced prescription card has a 3-step placement rail and no dispensing steps', () => {
+  const clinic = { ...unplacedPrescription, entryMode: 'clinic' as const, clinicScanId: 'scan-1', status: 'awaiting-approval' as const };
+  const order = orderWith({
+    payment: { ...partialOrder.payment, status: 'paid' },
+    prescriptions: [clinic],
+  });
+  const rail = buildPrescriptionStageRail(order, clinic);
+  assert.deepEqual(rail.placement?.map(entry => entry.key), ['prescriber', 'prescription', 'purchase-order']);
+  assert.equal(rail.dispensing, null);
+  assert.equal(rail.route, 'clinic_barcode');
+  assert.equal(rail.placement?.some(entry => entry.key === 'payment'), false);
+});
+
+test('a placed sibling shows dispensing steps while an unplaced sibling does not', () => {
+  const clinic = { ...unplacedPrescription, id: 201, entryMode: 'clinic' as const, clinicScanId: 'scan-1', status: 'awaiting-approval' as const };
+  const manualPlaced = { ...tenPackPrescription, id: 202, entryMode: 'manual' as const };
+  const order = orderWith({
+    payment: { ...partialOrder.payment, status: 'paid' },
+    prescriptions: [clinic, manualPlaced],
+  });
+  const pending = buildPrescriptionStageRail(order, clinic);
+  const placed = buildPrescriptionStageRail(order, manualPlaced);
+  assert.ok(pending.placement);
+  assert.equal(pending.dispensing, null);
+  assert.equal(pending.route, 'clinic_barcode');
+  assert.equal(placed.placement, null);
+  assert.deepEqual(placed.dispensing?.map(entry => entry.key), ['ordered', 'dispensed', 'in-transit', 'checked-in', 'ready', 'collected']);
+  assert.equal(placed.route, 'manual');
+  const chrome = `${pending.placement?.map(step => `${step.label} ${step.detail}`).join(' ')} ${placed.dispensing?.map(step => `${step.label} ${step.detail}`).join(' ')}`;
+  assert.doesNotMatch(chrome, /RX-|serial|file-2|S2/i);
+});
+

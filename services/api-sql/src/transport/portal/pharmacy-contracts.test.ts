@@ -1324,4 +1324,84 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.prescriptionFlow?.['1']?.purchaseOrderId, 'po-clinic');
     assert.equal(mapped.prescriptionFlow?.['2']?.purchaseOrderId, 'po-manual');
   });
+
+  it('keeps fulfilment lines on the matching prescription and leaves an unplaced sibling empty', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-08-18T10:00:00.000Z',
+      fulfilmentStatus: 'SUPPLIER_PROCESSING',
+      quoteSnapshot: {
+        lineItems: [
+          { packId: 'pack-a', productId: 'pack-a', formulaId: 'f-a', name: 'Oil', quantity: 2, unitPricePence: 4800, localPrescriptionId: '1' },
+          { packId: 'pack-b', productId: 'pack-b', formulaId: 'f-b', name: 'Flower', quantity: 1, unitPricePence: 8500, localPrescriptionId: '2' },
+        ],
+        prescriptions: [
+          { id: '1', fileId: 'file-1', serialNumber: 'S1', issueDate: '2026-08-01', items: [{ packId: 'pack-a', productId: 'pack-a', quantity: 2 }] },
+          { id: '2', fileId: 'file-2', serialNumber: 'S2', issueDate: '2026-08-01', items: [{ packId: 'pack-b', productId: 'pack-b', quantity: 1 }] },
+        ],
+        curaleafSubOrders: {
+          1: { prescriptionId: 'curaleaf-1', purchaseOrderId: 'po-1', status: 'purchase_order_submitted' },
+        },
+      },
+      curaleaf: {
+        id: 'po-1',
+        state: 'PROCESSING',
+        items: [
+          { productId: 'pack-a', packsOrderedCount: 2, packsAllocatedCount: 2, packsReturnedCount: 0 },
+          { productId: 'pack-b', packsOrderedCount: 1, packsAllocatedCount: 1, packsReturnedCount: 0 },
+        ],
+        shipments: [{
+          id: 'ship-a',
+          purchaseOrderId: 'po-1',
+          createdAt: '2026-08-18T12:00:00.000Z',
+          items: [
+            { productId: 'pack-a', packCount: 2 },
+            { productId: 'pack-b', packCount: 1 },
+          ],
+        }],
+      },
+    } as OrderRecord & { curaleaf: unknown });
+    const placed = mapped.prescriptionFlow?.['1'];
+    const pending = mapped.prescriptionFlow?.['2'];
+    assert.equal(placed?.purchaseOrderId, 'po-1');
+    assert.equal(placed?.state, 'PLACED');
+    assert.equal(placed?.lines.length, 1);
+    assert.equal(placed?.lines[0]?.productId, 'pack-a');
+    assert.deepEqual(placed?.shipmentIds, ['ship-a']);
+    assert.equal(pending?.purchaseOrderId, null);
+    assert.equal(pending?.state, 'PENDING_PLACEMENT');
+    assert.equal(pending?.lines.length, 0);
+    assert.deepEqual(pending?.shipmentIds, []);
+  });
+
+  it('attributes a legacy single purchase order by pack overlap instead of dumping it on the first prescription', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-08-18T10:00:00.000Z',
+      fulfilmentStatus: 'SUPPLIER_PROCESSING',
+      quoteSnapshot: {
+        lineItems: [
+          { packId: 'pack-a', productId: 'pack-a', formulaId: 'f-a', name: 'Oil', quantity: 1, unitPricePence: 4800, localPrescriptionId: '1' },
+          { packId: 'pack-b', productId: 'pack-b', formulaId: 'f-b', name: 'Flower', quantity: 1, unitPricePence: 8500, localPrescriptionId: '2' },
+        ],
+        prescriptions: [
+          { id: '1', fileId: 'file-1', serialNumber: 'S1', issueDate: '2026-08-01', items: [{ packId: 'pack-a', productId: 'pack-a', quantity: 1 }] },
+          { id: '2', fileId: 'file-2', serialNumber: 'S2', issueDate: '2026-08-01', items: [{ packId: 'pack-b', productId: 'pack-b', quantity: 1 }] },
+        ],
+      },
+      curaleaf: {
+        id: 'po-legacy',
+        state: 'PROCESSING',
+        items: [{ productId: 'pack-a', packsOrderedCount: 1, packsAllocatedCount: 1, packsReturnedCount: 0 }],
+      },
+    } as OrderRecord & { curaleaf: unknown });
+    assert.equal(mapped.prescriptionFlow?.['1']?.purchaseOrderId, 'po-legacy');
+    assert.equal(mapped.prescriptionFlow?.['1']?.lines.length, 1);
+    assert.equal(mapped.prescriptionFlow?.['1']?.lines[0]?.productId, 'pack-a');
+    assert.equal(mapped.prescriptionFlow?.['2']?.purchaseOrderId, null);
+    assert.equal(mapped.prescriptionFlow?.['2']?.state, 'PENDING_PLACEMENT');
+    assert.equal(mapped.prescriptionFlow?.['2']?.lines.length, 0);
+  });
 });

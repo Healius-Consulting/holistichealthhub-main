@@ -37,28 +37,29 @@ function prescriptionPackTotals(prescription: Prescription) {
  * which has no per-consignment record falls back to its full ordered count,
  * which is the pre-split behaviour and correct for a single-consignment order.
  */
+export function readyPackCountForPrescription(prescription: Prescription): number {
+  const states = prescription.shipmentStates ?? {};
+  const shipments = prescription.shipments ?? [];
+  const readyIds = Object.entries(states)
+    .filter(([, state]) => state === 'ready_for_collection' || state === 'collected')
+    .map(([id]) => id);
+
+  if (readyIds.length && shipments.length) {
+    const counted = shipments
+      .filter(shipment => readyIds.includes(shipment.id))
+      .reduce((packs, shipment) => packs + (shipment.items ?? []).reduce((n, item) => n + (item.packCount ?? 0), 0), 0);
+    if (counted > 0) return counted;
+  }
+
+  const totals = prescriptionPackTotals(prescription);
+  if (readyIds.length || prescription.status === 'ready' || prescription.status === 'collected') {
+    return Math.max(totals.ordered, totals.collected);
+  }
+  return totals.collected;
+}
+
 function readyPackCount(order: { prescriptions: Prescription[] }): number {
-  return order.prescriptions.reduce((sum, prescription) => {
-    const states = prescription.shipmentStates ?? {};
-    const shipments = prescription.shipments ?? [];
-    const readyIds = Object.entries(states)
-      .filter(([, state]) => state === 'ready_for_collection' || state === 'collected')
-      .map(([id]) => id);
-
-    if (readyIds.length && shipments.length) {
-      const counted = shipments
-        .filter(shipment => readyIds.includes(shipment.id))
-        .reduce((packs, shipment) => packs + (shipment.items ?? []).reduce((n, item) => n + (item.packCount ?? 0), 0), 0);
-      if (counted > 0) return sum + counted;
-    }
-
-    const totals = prescriptionPackTotals(prescription);
-    // No consignment detail to go on: a ready prescription is ready in full.
-    if (readyIds.length || prescription.status === 'ready' || prescription.status === 'collected') {
-      return sum + Math.max(totals.ordered, totals.collected);
-    }
-    return sum + totals.collected;
-  }, 0);
+  return order.prescriptions.reduce((sum, prescription) => sum + readyPackCountForPrescription(prescription), 0);
 }
 
 function shipmentIdsFor(prescription: Prescription) {
@@ -314,6 +315,11 @@ export function placementRoute(order: PatientOrder): PlacementRoute {
   return 'manual';
 }
 
+export function prescriptionPlacementRoute(prescription: Pick<Prescription, 'entryMode' | 'clinicScanId'>): PlacementRoute {
+  if (prescription.entryMode === 'clinic' || Boolean(prescription.clinicScanId)) return 'clinic_barcode';
+  return 'manual';
+}
+
 function pharmacyPlacementSteps(order: PatientOrder, purchaseOrderExists: boolean): OrderStageStep[] {
   const placement = order.curaleafPlacement;
   const route = placementRoute(order);
@@ -343,6 +349,45 @@ function pharmacyPlacementSteps(order: PatientOrder, purchaseOrderExists: boolea
   ];
 }
 
+function dispensingStepsForPrescription(prescription: Prescription): OrderStageStep[] {
+  const totals = prescriptionPackTotals(prescription);
+  const allocated = (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + (line.allocated ?? 0), 0);
+
+  const packLabel = (count: number) => `${count} pack${count === 1 ? '' : 's'}`;
+  const partOf = (done: number) => `${done} of ${totals.ordered} ${totals.ordered === 1 ? 'pack' : 'packs'}`;
+
+  const dispensedComplete = totals.ordered > 0 && allocated >= totals.ordered;
+  const inTransit = Math.max(0, totals.shipped - totals.received);
+  const shippedComplete = totals.ordered > 0 && totals.shipped >= totals.ordered;
+  const receivedComplete = totals.ordered > 0 && totals.received >= totals.ordered;
+  const collectedComplete = totals.ordered > 0 && totals.collected >= totals.ordered;
+  const readyPacks = readyPackCountForPrescription(prescription);
+  const readyComplete = totals.ordered > 0 && readyPacks >= totals.ordered;
+  const readySome = readyPacks > 0;
+
+  const state = (complete: boolean, some: boolean, active: boolean): OrderStageState =>
+    complete ? 'complete' : some ? 'partial' : active ? 'active' : 'pending';
+
+  return [
+    step('ordered', 'Ordered', 'PO sent', 'complete'),
+    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf',
+      state(dispensedComplete, allocated > 0, true)),
+    step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
+      state(shippedComplete, totals.shipped > 0, dispensedComplete)),
+    step('checked-in', 'Checked in', receivedComplete ? 'Verified at dispensary' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
+      state(receivedComplete, totals.received > 0, totals.shipped > 0)),
+    step('ready', 'Ready',
+      readyComplete
+        ? 'Patient notified'
+        : readySome
+          ? `${partOf(readyPacks)} ready · patient notified for those`
+          : 'Pending pharmacy checks',
+      readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending'),
+    step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
+      state(collectedComplete, totals.collected > 0, readyComplete)),
+  ];
+}
+
 function dispensingSteps(order: PatientOrder): OrderStageStep[] {
   const totals = order.prescriptions.reduce((sum, prescription) => {
     const packs = prescriptionPackTotals(prescription);
@@ -365,16 +410,6 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
   const shippedComplete = totals.ordered > 0 && totals.shipped >= totals.ordered;
   const receivedComplete = totals.ordered > 0 && totals.received >= totals.ordered;
   const collectedComplete = totals.ordered > 0 && totals.collected >= totals.ordered;
-  /*
-   * Ready is counted in packs, not in "any consignment is ready".
-   *
-   * A split order arrives in several consignments. The old rule marked the whole
-   * Ready step complete — with "Patient notified" underneath — as soon as one of
-   * them was ready, so an order with two packs on the shelf and eight still at
-   * Curaleaf told staff the patient had been told their order was ready. They
-   * had been told about one consignment. Packs already collected count as ready
-   * because they plainly reached the patient.
-   */
   const readyPacks = readyPackCount(order);
   const readyComplete = totals.ordered > 0 && readyPacks >= totals.ordered;
   const readySome = readyPacks > 0;
@@ -395,14 +430,51 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
       readyComplete
         ? 'Patient notified'
         : readySome
-          // Named as partial, because "Patient notified" on a partial order is a
-          // claim about a conversation that only covered part of it.
           ? `${partOf(readyPacks)} ready · patient notified for those`
           : 'Pending pharmacy checks',
       readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending'),
     step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
       state(collectedComplete, totals.collected > 0, readyComplete)),
   ];
+}
+
+function prescriptionPlacementSteps(prescription: Prescription, paid: boolean): OrderStageStep[] {
+  const scanned = prescriptionPlacementRoute(prescription) === 'clinic_barcode';
+  const purchaseOrderExists = Boolean(prescription.placed || prescription.poRef);
+  const prescriberComplete = purchaseOrderExists || scanned
+    || prescription.curaleafPrescriptionState === 'ACTIVE';
+  const prescriptionComplete = purchaseOrderExists || scanned
+    || prescription.curaleafPrescriptionState === 'ACTIVE';
+  const prescriptionPending = prescription.curaleafPrescriptionState === 'PENDING';
+
+  return [
+    step('prescriber', 'Prescriber',
+      scanned ? 'Verified at clinic scan' : prescriberComplete ? 'Verified' : paid ? 'Awaiting Curaleaf' : 'Checking',
+      prescriberComplete ? 'complete' : paid ? 'active' : 'pending'),
+    step('prescription', 'Prescription',
+      scanned ? 'Held by Curaleaf from the clinic QR' : prescriptionComplete ? 'Active' : prescriptionPending ? 'Awaiting Curaleaf' : 'Pending',
+      prescriptionComplete ? 'complete' : prescriberComplete ? 'active' : 'pending'),
+    step('purchase-order', 'PO sent', purchaseOrderExists ? 'Sent to Curaleaf' : 'Pending',
+      purchaseOrderExists ? 'complete' : prescriptionComplete && paid ? 'active' : 'pending'),
+  ];
+}
+
+export interface PrescriptionStageRail {
+  /** Clinic/manual 3-step rail. Null after this Rx has a purchase order. */
+  placement: OrderStageStep[] | null;
+  /** Ordered → Collected for this Rx only. Null until this Rx has a purchase order. */
+  dispensing: OrderStageStep[] | null;
+  route: PlacementRoute;
+}
+
+export function buildPrescriptionStageRail(order: PatientOrder, prescription: Prescription): PrescriptionStageRail {
+  const purchaseOrderExists = Boolean(prescription.placed || prescription.poRef);
+  const paid = order.payment.status === 'paid';
+  return {
+    placement: purchaseOrderExists ? null : prescriptionPlacementSteps(prescription, paid),
+    dispensing: purchaseOrderExists ? dispensingStepsForPrescription(prescription) : null,
+    route: prescriptionPlacementRoute(prescription),
+  };
 }
 
 export function buildOrderStageRail(order: PatientOrder): OrderStageRail {

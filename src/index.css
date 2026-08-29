@@ -13444,6 +13444,17 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-crm-record__value > small{ color: var(--text-tertiary); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .order-crm-record__value > strong{ color: var(--text-primary); font-size: 24px; font-weight: 650; letter-spacing: -.04em; }
 .order-crm-record__opened{ color: var(--text-secondary); font-size: 11px; font-weight: 550; }
+.order-crm-record__payment-status{
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+.order-crm-legacy-po{
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .order-crm-record__actions{
   display: flex;
   flex-wrap: wrap;
@@ -14849,10 +14860,36 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-rx-card--unified .order-supplier-fulfilment{
   border-top: 1px solid var(--border);
 }
-.order-rx-card > header{ display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
-.order-rx-card > header small, .order-rx-card > header strong{ display: block; }
-.order-rx-card > header small{ color: var(--tenant-primary-strong); font-size: 9.5px; font-weight: 720; text-transform: uppercase; letter-spacing: .04em; }
-.order-rx-card > header strong{ margin-top: 2px; color: var(--text-primary); font-size: 12px; font-weight: 650; }
+.order-rx-card > header, .order-rx-card__header{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+.order-rx-card > header small, .order-rx-card > header strong, .order-rx-card__header small, .order-rx-card__header strong{ display: block; }
+.order-rx-card > header small, .order-rx-card__header small{ color: var(--tenant-primary-strong); font-size: 9.5px; font-weight: 720; text-transform: uppercase; letter-spacing: .04em; }
+.order-rx-card > header strong, .order-rx-card__header strong{ margin-top: 2px; color: var(--text-primary); font-size: 12px; font-weight: 650; }
+.order-rx-card__meta{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.order-rx-card__meta > strong{ margin-top: 0; font-size: 13px; color: var(--text-primary); }
+.order-rx-card .order-stage-rail{
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+.order-rx-card .order-ready-control .btn,
+.order-rx-card .order-goods-in__actions .btn{
+  min-height: 44px;
+}
+@media (max-width: 360px){
+  .order-rx-card .order-stage-rail__steps li{
+    flex: 0 0 50%;
+  }
+}
+.order-rx-card .order-stage-rail__lane + .order-stage-rail__lane{
+  margin-top: 10px;
+  padding-top: 10px;
+}
+.order-rx-line-note{
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
 .rx-status-chip{
   display: inline-flex;
   min-height: 24px;
@@ -15442,6 +15479,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .order-shipments-tab {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
   gap: 8px;
   padding: 6px 12px;

@@ -32,14 +32,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
-  PATIENT_PRICE_LABEL,
-  WHOLESALE_LABEL,
-  formatMargin,
-  lineContribution,
-  lineCost,
-  lineMargin,
   lineRevenue,
-  marginToneClass,
   money,
   orderReference,
   rxRevenue,
@@ -93,7 +86,7 @@ import {
   quoteReviewIsOpen,
   type OrderBoardLane,
 } from '../utils/orderBoardLanes';
-import { buildOrderStageRail, buildOrderTimelineEvents, type OrderStageStep } from '../utils/orderTimeline';
+import { buildOrderTimelineEvents, buildPrescriptionStageRail, type OrderStageStep } from '../utils/orderTimeline';
 import { visiblePaymentGateCheck } from '../utils/quoteGate';
 import RecordDialog from '../components/RecordDialog';
 import {
@@ -1343,6 +1336,9 @@ function OrderListRow({ record, selected, laneLabel, sectionKey, onSelect }: { r
   // the accessible name, so nothing is lost for a screen reader.
   const headingKey = sectionKey ?? orderBoardSlug(laneLabel ?? '');
   const showTag = orderBoardSlug(cardLabel) !== headingKey;
+  const rxCount = record.order.prescriptions.length;
+  const placedCount = record.order.prescriptions.filter(prescription => prescription.placed).length;
+  const mixedPlaced = rxCount > 1 && placedCount > 0 && placedCount < rxCount;
   return (
     <button
       type="button"
@@ -1353,7 +1349,7 @@ function OrderListRow({ record, selected, laneLabel, sectionKey, onSelect }: { r
       onClick={onSelect}
     >
       <span className={`order-crm-row__stage order-tone--${meta.tone}`}><Icon size={15} aria-hidden="true" /></span>
-      <span className="order-crm-row__identity"><strong title={patientName}>{compactPatientName(patientName)}</strong><small>{record.order.redoContext ? 'Replacement' : 'Order'} {orderReference(record.order)} · {record.order.prescriptions.length} Rx</small></span>
+      <span className="order-crm-row__identity"><strong title={patientName}>{compactPatientName(patientName)}</strong><small>{record.order.redoContext ? 'Replacement' : 'Order'} {orderReference(record.order)} · {rxCount} Rx{mixedPlaced ? ` · ${placedCount} of ${rxCount} placed` : ''}</small></span>
       {showTag ? (
         <span className="order-crm-row__marks">
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{cardLabel}</span>
@@ -1479,8 +1475,10 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const cancellationResolution = orderCancellationResolution(order);
   const typedResolutionClosed = ['REPLACED', 'REFUNDED', 'SPLIT_RESOLVED'].includes(order.resolution?.status ?? '');
   const cancellationClosed = ['resolved', 'refunded'].includes(cancellationResolution) || typedResolutionClosed;
-  const hideJourneyRail = stage === 'cancelled' || stage === 'collected' || cancellationResolution !== 'none';
   const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => prescription.placed);
+  const placedCount = order.prescriptions.filter(prescription => prescription.placed).length;
+  const sharesLegacyPurchaseOrder = placedCount > 1 && new Set(order.prescriptions.filter(prescription => prescription.placed && prescription.poRef).map(prescription => prescription.poRef)).size === 1;
+  const paymentStatusLabel = order.payment.status === 'paid' ? 'paid' : order.payment.status === 'sent' ? 'awaiting payment' : order.payment.status === 'cancelled' ? 'cancelled' : 'unpaid';
   const paymentFormVisible = stage === 'awaiting-payment' && order.payment.route === 'pharmacy';
   const mayCancel = orderPaymentAllowsManualCancellation(order)
     && !order.cancellation
@@ -1537,6 +1535,8 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
               <strong>{patient?.name ?? 'Unknown patient'}</strong>
               <span className="order-crm-record__ref">
                 {order.redoContext ? 'Replacement' : 'Order'} {orderReference(order)}
+                {` · ${paymentStatusLabel}`}
+                {` · ${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'}`}
                 {order.redoContext ? ` · replaces #${order.redoContext.originalOrderId}` : ''}
               </span>
             </div>
@@ -1549,6 +1549,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
             <strong>{money(order.payment.amount)}</strong>
             <span className="order-crm-record__opened">Opened {formatDate(order.date)}</span>
           </div>
+          <span className="order-crm-record__payment-status">Payment {paymentStatusLabel}</span>
           <div className="order-crm-record__actions" role="group" aria-label="Order actions">
             {canFullHandout ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(false)}><Check size={13} /> Handout</button> : null}
             {order.patientId ? (
@@ -1568,7 +1569,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
         <FulfilmentDeliveryStatus order={order} now={now} />
       ) : null}
 
-      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : hideJourneyRail ? null : <OrderStageRail order={order} />}
+      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : null}
 
       <ExpiryCountdown order={order} now={now} />
       <ReplacementLineage order={order} allOrders={state.orders} />
@@ -1620,9 +1621,13 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
       <div className="order-crm-record__body">
         <section className="order-crm-main">
           <div className="order-crm-section-heading"><span><small>Prescription fulfilment</small><strong>{order.prescriptions.length} prescription{order.prescriptions.length === 1 ? '' : 's'}</strong></span><FileText size={16} /></div>
+          {sharesLegacyPurchaseOrder ? (
+            <p className="order-crm-legacy-po" role="note">One Curaleaf purchase order covers more than one prescription on this order.</p>
+          ) : null}
           <div className="order-crm-prescriptions">
             {order.prescriptions.map((prescription, index) => <PrescriptionCard
               key={prescription.id}
+              order={order}
               prescription={prescription}
               index={index}
               receiptDraft={receiptDrafts[prescription.id] ?? {
@@ -1643,7 +1648,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
 
           {stage === 'paid' && !allPlaced && !busy && !reviewOpen && !showSupplierCancel ? (
             <div className="order-crm-next-action order-crm-next-action--waiting">
-              <Clock3 size={16} /><span><strong>Waiting for supplier update</strong><small>No action is needed. This order will update here when it moves forward.</small></span>
+              <Clock3 size={16} /><span><strong>Waiting for Curaleaf on remaining prescriptions</strong><small>No action is needed on prescriptions that are already placed. Remaining scripts update here when Curaleaf accepts them.</small></span>
             </div>
           ) : null}
 
@@ -2300,26 +2305,30 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
 }
 
 /**
- * Fixed two-lane rail. Every stage is always listed, so an outstanding step is
- * visible as outstanding rather than simply missing from a list of events.
+ * Per-prescription rail. Payment stays on the order record; this card only
+ * shows clinic placement until its own purchase order exists, then dispensing.
  */
-function OrderStageRail({ order }: { order: PatientOrder }) {
-  const rail = buildOrderStageRail(order);
-  // Named for who is holding the order, which is the question staff are actually
-  // asking: "Clinic" and "Dispensing" described neither party clearly.
+function PrescriptionStageRail({ order, prescription }: { order: PatientOrder; prescription: Prescription }) {
+  const rail = buildPrescriptionStageRail(order, prescription);
   const lanes: Array<{ key: string; label: string; note: string | null; steps: OrderStageStep[] }> = [
-    {
-      key: 'pharmacy-placement',
-      label: 'Pharmacy Placement',
-      // Which route this took changes what the steps below can claim, so it is
-      // stated rather than left to be inferred from the step wording.
-      note: rail.route === 'clinic_barcode' ? 'Clinic QR' : 'Manual entry',
-      steps: rail.pharmacyPlacement,
-    },
-    ...(rail.curaleafPlacement
-      ? [{ key: 'curaleaf-placement', label: 'Curaleaf Placement', note: null, steps: rail.curaleafPlacement }]
+    ...(rail.placement
+      ? [{
+        key: 'prescription-placement',
+        label: rail.route === 'clinic_barcode' ? 'Clinic placement' : 'Manual placement',
+        note: rail.route === 'clinic_barcode' ? 'Clinic QR' : 'Manual entry',
+        steps: rail.placement,
+      }]
+      : []),
+    ...(rail.dispensing
+      ? [{
+        key: 'prescription-dispensing',
+        label: 'Curaleaf dispensing',
+        note: null,
+        steps: rail.dispensing,
+      }]
       : []),
   ];
+  if (!lanes.length) return null;
   return (
     <div className="order-stage-rail">
       {lanes.map(lane => (
@@ -2406,84 +2415,8 @@ function aggregateFulfilmentProgress(lines: FulfilmentDisplayLine[]): Fulfilment
   };
 }
 
-function FulfilmentItemCard({
-  line,
-  index,
-  defaultOpen,
-}: {
-  line: FulfilmentDisplayLine;
-  index: number;
-  defaultOpen: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  const margin = lineMargin(line.item);
-  const contribution = lineContribution(line.item);
-  const panelId = `fulfilment-item-${line.productId}`;
-
-  return (
-    <article className={`order-fulfilment-item-card${open ? ' is-open' : ''}`}>
-      <button
-        type="button"
-        className="order-fulfilment-item-card__header"
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen(current => !current)}
-      >
-        <span className="order-fulfilment-item-card__index">{String(index + 1).padStart(2, '0')}</span>
-        <span className="order-fulfilment-item-card__identity">
-          <strong>{line.displayName}</strong>
-          {/* The margin lives in one place on this row — the chip on the right,
-              in the house format. A bare percentage here was the same number
-              said twice, in two different shapes. */}
-          <small>
-            {line.orderedPacks} pack{line.orderedPacks === 1 ? '' : 's'}
-            {' · '}
-            {money(lineRevenue(line.item))} line
-          </small>
-        </span>
-        <span className={`order-fulfilment-item-card__margin ${marginToneClass(margin)}`.trimEnd()}>
-          {contribution === null ? 'Margin pending' : formatMargin(contribution, lineRevenue(line.item))}
-        </span>
-        {open ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-      </button>
-
-      {open ? (
-        <div id={panelId} className="order-fulfilment-item-card__body">
-          <div className="order-fulfilment-item-card__pricing">
-            <div className="order-fulfilment-item-card__metric">
-              <small>{PATIENT_PRICE_LABEL}</small>
-              <strong>{money(line.item.retail)}</strong>
-              <em>{money(lineRevenue(line.item))} line</em>
-            </div>
-            <div className="order-fulfilment-item-card__metric">
-              <small>{WHOLESALE_LABEL}</small>
-              <strong>{line.item.cost === null ? 'Quote required' : money(line.item.cost)}</strong>
-              <em>{line.item.cost === null ? 'Order-specific' : `${money(lineCost(line.item))} line`}</em>
-            </div>
-            <div className={`order-fulfilment-item-card__metric order-fulfilment-item-card__metric--margin ${marginToneClass(margin)}`.trimEnd()}>
-              <small>Gross margin</small>
-              <strong>{formatMargin(contribution, lineRevenue(line.item))}</strong>
-            </div>
-          </div>
-
-          {line.quantityMismatch ? (
-            <span className="mismatch-tag">
-              PO reports {line.supplierReportedOrdered} pk (mismatch)
-            </span>
-          ) : null}
-          {line.cancelledRemainderPacks > 0 ? (
-            <div className="order-fulfilment-remainder" role="status">
-              <XCircle size={14} aria-hidden="true" />
-              <span><strong>{line.cancelledRemainderPacks} pack{line.cancelledRemainderPacks === 1 ? '' : 's'} cancelled by Curaleaf</strong><small>{line.receivedPacks + line.inTransitPacks} supplied or in transit · choose replacement or refund for the cancelled remainder.</small></span>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-function PrescriptionCard({ prescription, index, busy, onReceiptDraftChange, onConfirmDelivery, onManualPlace, onChaseCuraleaf, onOpenHandout }: {
+function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChange, onConfirmDelivery, onManualPlace, onChaseCuraleaf, onOpenHandout }: {
+  order: PatientOrder;
   prescription: Prescription;
   index: number;
   receiptDraft: GoodsReceiptDraft;
@@ -2635,21 +2568,26 @@ function PrescriptionCard({ prescription, index, busy, onReceiptDraftChange, onC
     };
   });
 
-  const hasSupplierSection = Boolean(prescription.placed && (prescription.fulfilmentLines?.length || isDispatchedPhase || isPartiallyDelivered || isDelivered || isReady));
+  const placed = Boolean(prescription.placed);
+  const routeLabel = prescription.entryMode === 'clinic' || prescription.clinicScanId ? 'Clinic' : 'Manual';
   const totalAwaitingDispatchPacks = displayLines.reduce((sum, line) => sum + line.awaitingDispatchPacks, 0);
   const arrivingPacks = totalConsignmentPacks || totalDispatchedPacks;
   const combinedProgress = aggregateFulfilmentProgress(displayLines);
 
   return (
     <div className="order-rx-pair">
-      <article className={`order-rx-card${hasSupplierSection ? ' order-rx-card--unified' : ''}${isCancelled ? ' order-rx-card--cancelled' : ''}`}>
-        <header>
-          <span><small>Prescription {index + 1}</small><strong>{prescription.prescriber || 'Prescriber pending'}</strong></span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <strong style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{money(rxRevenue(prescription))}</strong>
+      <article className={`order-rx-card order-rx-card--unified${isCancelled ? ' order-rx-card--cancelled' : ''}`}>
+        <header className="order-rx-card__header">
+          <span>
+            <small>Prescription {index + 1} · {routeLabel}</small>
+            <strong>{statusLabel}</strong>
+          </span>
+          <div className="order-rx-card__meta">
+            <strong>{money(rxRevenue(prescription))}</strong>
             <span className={`rx-status-chip rx-status-chip--${statusChipTone}`}>{statusLabel}</span>
           </div>
         </header>
+        <PrescriptionStageRail order={order} prescription={prescription} />
         {prescription.manualPlaceRequired ? (
           <div className="order-ready-control">
             <span>
@@ -2665,25 +2603,35 @@ function PrescriptionCard({ prescription, index, busy, onReceiptDraftChange, onC
           </div>
         ) : null}
 
-        {!hasSupplierSection ? (
-          <div className="order-rx-lines">
-            {prescription.items.map(item => (
-              <div key={item.productId}>
-                <span>
-                  <strong>{resolveProductName(item)}</strong>
-                  <small>{item.qty} pack{item.qty === 1 ? '' : 's'}{item.retail ? ` · ${money(item.retail * item.qty)}` : ''}</small>
-                </span>
-                <span className="pack-qty-badge">{item.qty} pack{item.qty === 1 ? '' : 's'}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
+        <div className="order-rx-lines">
+          {displayLines.map(line => (
+            <div key={line.productId}>
+              <span>
+                <strong>{line.displayName}</strong>
+                <small>
+                  {line.orderedPacks} pack{line.orderedPacks === 1 ? '' : 's'}
+                  {line.item.retail ? ` · ${money(lineRevenue(line.item))}` : ''}
+                  {placed ? ` · ${line.allocatedPacks} allocated · ${line.inTransitPacks} in transit · ${line.receivedPacks} checked in` : ''}
+                </small>
+                {line.quantityMismatch ? (
+                  <span className="mismatch-tag">PO reports {line.supplierReportedOrdered} pk (mismatch)</span>
+                ) : null}
+                {line.cancelledRemainderPacks > 0 ? (
+                  <span className="order-rx-line-note">{line.cancelledRemainderPacks} pack{line.cancelledRemainderPacks === 1 ? '' : 's'} cancelled by Curaleaf</span>
+                ) : null}
+              </span>
+              <span className="pack-qty-badge">{line.orderedPacks} pack{line.orderedPacks === 1 ? '' : 's'}</span>
+            </div>
+          ))}
+        </div>
+
+        {placed ? (
           <>
             {shipmentIds.length > 1 ? (
               <div className="order-shipments-segmented-bar">
                 <div className="order-shipments-segmented-bar__meta">
                   <Truck size={13} />
-                  <span><strong>{shipmentIds.length} Consignments Dispatched</strong> · Select parcel to inspect & check in:</span>
+                  <span><strong>{shipmentIds.length} consignments dispatched</strong> · Select parcel to inspect and check in:</span>
                 </div>
                 <div className="order-shipments-segmented-tabs">
                   {shipmentIds.map((id, shipmentIndex) => {
@@ -2742,18 +2690,8 @@ function PrescriptionCard({ prescription, index, busy, onReceiptDraftChange, onC
                   </span>
                 ) : null}
               </header>
-              <div className="order-supplier-fulfilment__body">
-                <div className="order-fulfilment-item-stack">
-                  {displayLines.map((line, lineIndex) => (
-                    <FulfilmentItemCard
-                      key={line.productId}
-                      line={line}
-                      index={lineIndex}
-                      defaultOpen={displayLines.length <= 2 || lineIndex === 0}
-                    />
-                  ))}
-                </div>
-                {isCancelled ? (
+              {isCancelled ? (
+                <div className="order-supplier-fulfilment__body">
                   <div className="order-fulfilment-stopped" role="status">
                     <XCircle size={18} aria-hidden="true" />
                     <span>
@@ -2770,13 +2708,8 @@ function PrescriptionCard({ prescription, index, busy, onReceiptDraftChange, onC
                       </small>
                     </span>
                   </div>
-                ) : null}
-                {/* The combined progress rail is gone. It restated, as one set of
-                    aggregate pack counts, what the per-line cards above already
-                    show line by line — and the aggregate was the less actionable
-                    of the two, because work is done per line item. The cancelled
-                    banner stays: that is a state the line cards cannot express. */}
-              </div>
+                </div>
+              ) : null}
             </div>
 
             {isCancelled ? null : receiving ? (
@@ -2905,7 +2838,7 @@ function PrescriptionCard({ prescription, index, busy, onReceiptDraftChange, onC
               </div>
             ) : null}
           </>
-        )}
+        ) : null}
       </article>
     </div>
   );

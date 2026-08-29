@@ -112,6 +112,26 @@ test('mixed ready and in-flight prescriptions do not classify the order as ready
   assert.equal(orderStage(order).stage, 'dispatched');
 });
 
+test('mixed ready and unplaced prescriptions do not classify the order as ready', () => {
+  const order = {
+    date: new Date(),
+    payment: { status: 'paid' },
+    prescriptions: [
+      {
+        status: 'ready',
+        placed: true,
+        fulfilmentLines: [{ productId: 'p1', ordered: 2, shipped: 2, received: 2, remaining: 0, collected: 0, requested: 2, sent: null, supplierReportedOrdered: 2, allocated: 2, returned: 0, backordered: false, quantityMismatch: false }],
+      },
+      {
+        status: 'awaiting-approval',
+        placed: false,
+        items: [{ productId: 'p2', name: 'Vape', qty: 1, cost: 10, retail: 20 }],
+      },
+    ],
+  } as PatientOrder;
+  assert.notEqual(orderStage(order).stage, 'ready');
+});
+
 test('partial dispatch with zero check-in stays in transit despite stale ready shipment state', () => {
   const order = {
     date: new Date(),
@@ -450,4 +470,9 @@ test('prescription chips use the same In Transit and Checked In language as the 
   assert.equal(prescriptionStatusLabel(inTransit), 'In Transit');
   assert.equal(prescriptionStatusLabel(partInTransit), 'Part In Transit');
   assert.equal(prescriptionStatusLabel(checkedIn), 'Checked In');
+  assert.equal(prescriptionStatusLabel({
+    status: 'awaiting-approval',
+    placed: false,
+    items: [],
+  } as PatientOrder['prescriptions'][number]), 'Waiting for Curaleaf');
 });

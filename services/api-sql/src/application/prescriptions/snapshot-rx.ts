@@ -51,12 +51,25 @@ export function pendingPlacementRxIndexes(snapshot: unknown): number[] {
   ));
 }
 
+type PackIdSource = {
+  packId?: unknown;
+  productId?: unknown;
+};
+
+export function packIdFromRecord(row: PackIdSource | null | undefined): string {
+  if (!row) return '';
+  return String(row.packId || row.productId || '').trim();
+}
+
 export function packIdsForRx(rx: Record<string, unknown>): string[] {
   const items = Array.isArray(rx.items) ? rx.items : [];
   return items
-    .map(item => {
-      const row = item && typeof item === 'object' ? item as Record<string, unknown> : {};
-      return String(row.packId || row.productId || '').trim();
-    })
+    .map(item => packIdFromRecord(item && typeof item === 'object' ? item as PackIdSource : undefined))
     .filter(Boolean);
+}
+
+export function filterRecordsByPackIds<T extends PackIdSource>(rows: T[], packIds: Iterable<string>): T[] {
+  const allowed = packIds instanceof Set ? packIds : new Set(Array.from(packIds));
+  if (!allowed.size) return [];
+  return rows.filter(row => allowed.has(packIdFromRecord(row)));
 }

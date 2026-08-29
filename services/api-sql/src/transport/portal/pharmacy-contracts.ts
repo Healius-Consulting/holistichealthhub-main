@@ -8,6 +8,7 @@ import {
   mergePriorPharmacyLines,
   normalisedFulfilmentLines,
   supplierFulfilmentStatus,
+  type CuraleafShipmentLike,
 } from '../../application/orders/curaleaf-fulfilment.js';
 import { parseQuote, type ParsedQuote, type ParsedQuoteItem } from '../../application/orders/quote-review.js';
 import { curaleafRequiresSupplierCancel, supplierCancellationAlreadyConfirmed } from '../../application/integrations/curaleaf-events.js';
@@ -22,7 +23,13 @@ import { sqlIntakeCaseReference } from './intake-contracts.js';
 import { pendingEnquiryDisplayStatus, portalSourceType } from './intake-source.js';
 import { overviewFinanceSnapshot } from '../../application/finance/pharmacy-ledger.js';
 import { serialReuseUntilDate } from '../../application/prescriptions/serial-reuse.js';
-import { snapshotRxKey } from '../../application/prescriptions/snapshot-rx.js';
+import {
+  curaleafSubOrders,
+  filterRecordsByPackIds,
+  packIdFromRecord,
+  packIdsForRx,
+  snapshotRxKey,
+} from '../../application/prescriptions/snapshot-rx.js';
 
 type PortalOrder = ReturnType<typeof toPortalOrder>;
 
@@ -573,39 +580,84 @@ export function toPortalOrder(order: PortalOrderSource) {
   };
   const placedAt = po?.createdAt || po?.issuedDate || order.paidAt || order.submittedAt || order.createdAt;
   const latestShipmentAt = latestShipmentCreatedAt(shipments);
+  const subOrders = curaleafSubOrders(snapshot);
+  const hasNamedSubOrders = Object.keys(subOrders).length > 0;
   const prescriptionFlow: Record<string, any> = {};
-  for (const rx of prescriptions) {
-    const rxKey = String(rx.id || rx.fileId || `rx-${order.id.slice(0, 8)}`);
-    const sub = snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
-      ? (snapshot.curaleafSubOrders as Record<string, any>)[rxKey]
-      : null;
+  for (const [index, rx] of prescriptions.entries()) {
+    const rxRecord = rx && typeof rx === 'object' ? rx as Record<string, unknown> : {};
+    const rxKey = snapshotRxKey(rxRecord, index);
+    const packIds = new Set(packIdsForRx(rxRecord));
+    const sub = subOrders[rxKey] ?? null;
+    const overlappingLines = filterRecordsByPackIds(lines, packIds);
+    const poPackIds = new Set(
+      ([
+        ...(Array.isArray(po?.items) ? po.items : []),
+        ...(Array.isArray(po?.lines) ? po.lines : []),
+      ] as Array<{ packId?: unknown; productId?: unknown }>)
+        .map(row => packIdFromRecord(row))
+        .filter(Boolean),
+    );
+    const overlappingPoLines = poPackIds.size
+      ? overlappingLines.filter(line => poPackIds.has(packIdFromRecord(line)))
+      : overlappingLines;
+    const legacySharedPo = multiRx && !hasNamedSubOrders && Boolean(purchaseOrderId) && overlappingPoLines.length > 0;
     const rxPurchaseOrderId = typeof sub?.purchaseOrderId === 'string' && sub.purchaseOrderId.trim()
       ? sub.purchaseOrderId.trim()
-      : (prescriptions.length <= 1 ? purchaseOrderId : null);
+      : (!multiRx ? purchaseOrderId : (legacySharedPo ? purchaseOrderId : null));
     const rxHasPo = Boolean(rxPurchaseOrderId);
+    const rxLines = !rxHasPo
+      ? []
+      : (multiRx ? (legacySharedPo ? overlappingPoLines : overlappingLines) : lines);
+    const sourceShipments: CuraleafShipmentLike[] = Array.isArray(shipments) ? shipments : [];
+    const rxShipments: CuraleafShipmentLike[] = !rxHasPo
+      ? []
+      : (multiRx
+        ? sourceShipments.filter(shipment => {
+          const items = Array.isArray(shipment.items) ? shipment.items : [];
+          if (!items.length) return false;
+          return items.some(item => packIds.has(packIdFromRecord(item)));
+        }).map(shipment => {
+          const items = Array.isArray(shipment.items) ? shipment.items : [];
+          return {
+            ...shipment,
+            items: filterRecordsByPackIds(items, packIds),
+          };
+        })
+        : sourceShipments);
+    const rxShipmentIds = rxHasPo
+      ? (multiRx
+        ? rxShipments.map(shipment => String(shipment.id || '').trim()).filter(Boolean)
+        : shipmentIds)
+      : [];
+    const rxShipmentStates = Object.fromEntries(
+      Object.entries(shipmentStates).filter(([id]) => rxShipmentIds.includes(id)),
+    );
+    const rxCheckedIn = rxLines.some(line => Number(line.received || 0) > 0 || Number(line.collected || 0) > 0);
+    const rxRemainingOpen = rxCheckedIn && rxLines.some(line => Number(line.remaining || 0) > 0 || Number(line.received || 0) < Number(line.ordered || 0));
+    const rxDispatch = rxHasPo ? dispatchStatusFromLines(rxShipments, rxLines) : dispatchStatus;
     prescriptionFlow[rxKey] = {
       id: rxKey,
       orderId: rxKey,
-      state: isSupplierCancelled ? 'CANCELLED_PURCHASE_ORDER'
-        : reviewBlocking && quoteReview?.type === 'out_of_stock' ? 'HELD_STOCK'
+      state: reviewBlocking && quoteReview?.type === 'out_of_stock' ? 'HELD_STOCK'
         : reviewBlocking ? 'HELD_PRICE'
-        : remainingOpenAfterGoodsIn ? 'PARTIALLY_RECEIVED'
-        : hasCheckedInPacks && order.fulfilmentStatus === 'COLLECTED' ? 'COLLECTED'
-        : hasCheckedInPacks && order.fulfilmentStatus === 'READY_FOR_COLLECTION' ? 'READY_FOR_COLLECTION'
-        : hasCheckedInPacks && order.fulfilmentStatus === 'RECEIVED' ? 'RECEIVED'
-        : hasCheckedInPacks && (order.fulfilmentStatus === 'PARTIALLY_RECEIVED' || computedFulfilment === 'PARTIALLY_RECEIVED') ? 'PARTIALLY_RECEIVED'
-        : rxHasPo || (prescriptions.length <= 1 && (isSupplierFlowActive || hasPurchaseOrderRecord)) ? 'PLACED'
-        : isPaid ? 'PENDING_PLACEMENT'
-        : 'AWAITING_PAYMENT',
-      lines: rxHasPo || prescriptions.length <= 1 ? lines : [],
-      shipmentIds,
-      shipmentStates,
-      dispatchStatus,
-      quantityMismatch: lines.some(line => line.quantityMismatch),
+        : !rxHasPo
+          ? (isPaid ? 'PENDING_PLACEMENT' : 'AWAITING_PAYMENT')
+        : isSupplierCancelled ? 'CANCELLED_PURCHASE_ORDER'
+        : rxRemainingOpen ? 'PARTIALLY_RECEIVED'
+        : rxCheckedIn && order.fulfilmentStatus === 'COLLECTED' ? 'COLLECTED'
+        : rxCheckedIn && order.fulfilmentStatus === 'READY_FOR_COLLECTION' ? 'READY_FOR_COLLECTION'
+        : rxCheckedIn && order.fulfilmentStatus === 'RECEIVED' ? 'RECEIVED'
+        : rxCheckedIn && (order.fulfilmentStatus === 'PARTIALLY_RECEIVED' || computedFulfilment === 'PARTIALLY_RECEIVED') ? 'PARTIALLY_RECEIVED'
+        : 'PLACED',
+      lines: rxLines,
+      shipmentIds: rxShipmentIds,
+      shipmentStates: rxShipmentStates,
+      dispatchStatus: rxDispatch,
+      quantityMismatch: rxLines.some(line => Boolean(line.quantityMismatch)),
       purchaseOrderId: rxPurchaseOrderId,
-      placedAt,
-      latestShipmentAt,
-      goodsInAt: hasCheckedInPacks ? (persistedCuraleaf?.goodsInAt ?? po?.goodsInAt ?? null) : null,
+      placedAt: rxHasPo ? placedAt : null,
+      latestShipmentAt: rxHasPo ? latestShipmentCreatedAt(rxShipments) : null,
+      goodsInAt: rxCheckedIn ? (persistedCuraleaf?.goodsInAt ?? po?.goodsInAt ?? null) : null,
     };
   }
 

@@ -12,6 +12,13 @@ import { CATALOGUE_TTL_MS, catalogueIsStale } from '../utils/catalogueFreshness'
 import { mapCuraleafCatalogue } from '../utils/mapCuraleafCatalogue';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
+import {
+  fulfilmentLinesForPrescription,
+  portalPrescriptionFlow,
+  portalPrescriptionIsMultiRx,
+  resolvePortalPrescriptionCuraleaf,
+  shipmentsForPrescription,
+} from '../utils/portalPrescriptionSubOrder';
 import { formatShippingAddress } from '../utils/shippingAddress';
 import { nextDraftIdAfterDeletion, preferredDraftIndex, preferredDraftPaymentRoute } from '../utils/createOrderDraft';
 import { replacementPrescriptionCopy, replacementSourcePrescriptions } from '../utils/replacementPrescriptionCopy';
@@ -828,14 +835,22 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
   const isPaid = ['paid', 'refund_required', 'refunded'].includes(record.paymentStatus) || Boolean(record.paidAt) || Boolean(record.curaleaf?.purchaseOrderId);
   const prescriptions: Prescription[] = record.prescriptions?.length
     ? record.prescriptions.map((prescription, rxIndex) => {
-        const rawCuraleaf = isPaid ? (record.curaleafSubOrders?.[prescription.fileId] ?? record.curaleaf) : undefined;
+        const flowKey = prescription.id ?? prescription.fileId;
+        const multiRx = portalPrescriptionIsMultiRx(record);
+        const rawCuraleaf = isPaid ? resolvePortalPrescriptionCuraleaf(record, prescription) : undefined;
         const poRef = (rawCuraleaf?.customerReference || '').trim();
         const isMatchedPO = !rawCuraleaf || !poRef || customerReferenceBelongsToOrder(poRef, record);
-        const curaleaf = isMatchedPO ? rawCuraleaf : undefined;
-        const flowKey = prescription.id ?? prescription.fileId;
-        const flow = isMatchedPO ? record.prescriptionFlow?.[flowKey] : undefined;
-        const isFlowPlaced = isPaid && flow?.state === 'PLACED';
-        const flowLines = (isPaid && flow?.lines?.length && flow.state !== 'AWAITING_PAYMENT') ? flow.lines : [];
+        const flow = isPaid && isMatchedPO ? portalPrescriptionFlow(record, prescription) : undefined;
+        const rxHasPo = isPaid && isMatchedPO && Boolean(String(flow?.purchaseOrderId || rawCuraleaf?.purchaseOrderId || '').trim());
+        const curaleaf = rxHasPo ? rawCuraleaf : undefined;
+        const isFlowPlaced = rxHasPo && flow?.state === 'PLACED';
+        const flowLines = rxHasPo
+          ? fulfilmentLinesForPrescription(
+            (flow?.lines?.length && flow.state !== 'AWAITING_PAYMENT' ? flow.lines : curaleaf?.lines) ?? [],
+            prescription.items,
+            { failClosedWhenEmpty: multiRx },
+          )
+          : [];
         const totalReceivedPacks = flowLines.reduce((sum, line) => sum + (line.received ?? 0), 0);
         const totalShippedPacks = flowLines.reduce((sum, line) => sum + (line.shipped ?? 0), 0);
         const hasCheckedInPacks = totalReceivedPacks > 0;
@@ -851,16 +866,27 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           : !hasCheckedInPacks && totalShippedPacks > 0 ? 'dispatched'
           : isFlowPlaced && curaleaf?.purchaseOrderState === 'CANCELLED' ? 'cancelled'
           : isFlowPlaced && (totalShippedPacks > 0 || flow?.shipmentIds?.length || curaleaf?.shipmentIds?.length) ? 'dispatched'
-          : isFlowPlaced ? 'processing'
-          : null;
-        const shipmentIds = (isPaid && flow?.shipmentIds?.length) ? flow.shipmentIds : (isPaid ? (curaleaf?.shipmentIds ?? []) : []);
-        const latestShipmentAt = isPaid
-          ? (curaleaf?.shipments ?? []).map(shipment => shipment.createdAt).filter((value): value is string => Boolean(value)).sort().at(-1)
+          : isFlowPlaced || rxHasPo ? 'processing'
+          : flow?.state === 'PENDING_PLACEMENT' || flow?.state === 'AWAITING_PAYMENT' || flow?.state === 'PAID' || flow?.state === 'HELD_PRICE' || flow?.state === 'HELD_STOCK'
+            ? 'awaiting-approval'
+            : null;
+        const sourceShipments = rxHasPo
+          ? shipmentsForPrescription(
+            curaleaf?.shipments ?? record.curaleaf?.shipments,
+            prescription.items,
+            { failClosedWhenEmpty: multiRx },
+          )
+          : [];
+        const shipmentIds = rxHasPo
+          ? (flow?.shipmentIds?.length ? flow.shipmentIds : sourceShipments.map(shipment => shipment.id).filter(Boolean))
+          : [];
+        const latestShipmentAt = rxHasPo
+          ? sourceShipments.map(shipment => shipment.createdAt).filter((value): value is string => Boolean(value)).sort().at(-1)
             ?? flow?.latestShipmentAt
             ?? null
           : null;
-        const mappedShipments = isPaid
-          ? (curaleaf?.shipments ?? []).map(shipment => ({
+        const mappedShipments = rxHasPo
+          ? sourceShipments.map(shipment => ({
             id: shipment.id,
             createdAt: shipment.createdAt ?? null,
             shipmentCharge: shipment.shipmentCharge ?? null,
@@ -871,7 +897,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
             })),
           }))
           : undefined;
-        const deliveryAddress = isPaid
+        const deliveryAddress = rxHasPo
           ? (
             formatShippingAddress(mappedShipments?.find(shipment => shipment.shippingAddress)?.shippingAddress)
             ?? formatShippingAddress(curaleaf?.shippingAddress)
@@ -884,10 +910,10 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           entryMode: prescription.clinicScanId ? 'clinic' : 'manual',
           clinicScanId: prescription.clinicScanId,
           curaleafPrescriptionId: prescription.curaleafPrescriptionId,
-          curaleafPrescriptionState: curaleaf?.prescriptionState,
-          purchaseOrderState: curaleaf?.purchaseOrderState,
-          dispatchStatus: isPaid ? (flow?.dispatchStatus ?? curaleaf?.dispatchStatus) : undefined,
-          quantityMismatch: isPaid ? (flow?.quantityMismatch ?? curaleaf?.quantityMismatch) : false,
+          curaleafPrescriptionState: curaleaf?.prescriptionState ?? (rxHasPo ? record.curaleaf?.prescriptionState : undefined),
+          purchaseOrderState: curaleaf?.purchaseOrderState ?? (rxHasPo ? record.curaleaf?.purchaseOrderState : undefined),
+          dispatchStatus: rxHasPo ? (flow?.dispatchStatus ?? curaleaf?.dispatchStatus ?? record.curaleaf?.dispatchStatus) : undefined,
+          quantityMismatch: rxHasPo ? (flow?.quantityMismatch ?? curaleaf?.quantityMismatch ?? record.curaleaf?.quantityMismatch) : false,
           prescriber: curaleaf?.prescriberName ?? prescription.prescriber.name,
           prescriberId: prescription.prescriber.id,
           prescriberPin: prescription.prescriber.pin,
@@ -899,17 +925,19 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           copyFileName: null,
           fileId: prescription.fileId,
           items: orderItems(prescription.items),
-          placed: isPaid && Boolean(flow?.purchaseOrderId || curaleaf?.purchaseOrderId || isFlowPlaced),
-          placedAt: isPaid ? (flow?.placedAt ?? curaleaf?.createdAt ?? curaleaf?.issuedDate ?? record.paidAt ?? record.createdAt) : null,
-          poRef: isPaid ? (curaleaf?.customerReference ?? record.orderNumber ?? record.paymentTransactionReference ?? flow?.purchaseOrderId ?? null) : null,
-          status: flowStatus ?? portalPrescriptionStatus({ curaleaf: isPaid ? curaleaf : undefined, fulfilmentStatus: isPaid ? record.fulfilmentStatus : 'supplier_pending' }),
+          placed: rxHasPo,
+          placedAt: rxHasPo ? (flow?.placedAt ?? curaleaf?.createdAt ?? curaleaf?.issuedDate ?? record.paidAt ?? record.createdAt) : null,
+          poRef: rxHasPo ? (curaleaf?.customerReference ?? record.curaleaf?.customerReference ?? record.orderNumber ?? record.paymentTransactionReference ?? flow?.purchaseOrderId ?? null) : null,
+          status: flowStatus ?? (isPaid && !rxHasPo
+            ? 'awaiting-approval'
+            : portalPrescriptionStatus({ curaleaf: isPaid ? curaleaf : undefined, fulfilmentStatus: isPaid ? record.fulfilmentStatus : 'supplier_pending' })),
           invoiceRef: null,
           trackingNumber: null,
           carrier: curaleaf?.courier ? String(curaleaf.courier) : null,
           deliveryAddress,
           shipmentId: shipmentIds[0],
           shipmentIds,
-          shipmentStates: isPaid ? (flow?.shipmentStates ?? curaleaf?.shipmentStates) : undefined,
+          shipmentStates: rxHasPo ? (flow?.shipmentStates ?? curaleaf?.shipmentStates ?? record.curaleaf?.shipmentStates) : undefined,
           manualPlaceRequired: isPaid ? flow?.manualPlaceRequired : false,
           receivedItems,
           // Only a real dispensary check-in time, never the supplier's dispatch time:
@@ -933,7 +961,13 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
             backordered: line.backordered,
             quantityMismatch: line.quantityMismatch,
           })) : undefined,
-          supplierItems: isPaid ? (curaleaf?.supplierItems ?? []) : undefined,
+          supplierItems: rxHasPo
+            ? fulfilmentLinesForPrescription(
+              curaleaf?.supplierItems ?? record.curaleaf?.supplierItems ?? [],
+              prescription.items,
+              { failClosedWhenEmpty: multiRx },
+            )
+            : undefined,
           latestShipmentAt,
           shipments: mappedShipments,
         };
