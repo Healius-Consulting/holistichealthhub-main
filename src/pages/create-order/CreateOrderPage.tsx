@@ -37,6 +37,7 @@ import { canCreateOrderForPatient } from '../../utils/patientOrderEligibility';
 import { quoteMedicineTotalPence } from '../../utils/pricing';
 import { MAX_PRESCRIPTION_FILE_BYTES, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
 import { draftAllowsAdditionalPrescriptions } from '../../utils/replacementPrescriptionCopy';
+import { flattenPrescriptionLines } from './prescriptionLineOwnership';
 
 function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
   if (reason === 'SERIAL_IN_USE') return 'This prescription serial is already on another live order.';
@@ -597,7 +598,7 @@ export default function CreateOrderPage() {
         if (!quoteAvailable) throw new Error('A complete in-stock Curaleaf quote is required before creating the live order.');
         const pricingQuote = latestQuote;
         const quoteItems = Array.isArray(pricingQuote?.items) ? pricingQuote.items : [];
-          const lineItems = activeOrder.prescriptions.flatMap(rx => rx.items.map(item => {
+        const lineItems = flattenPrescriptionLines(activeOrder.prescriptions, ((item: LineItem) => {
           const quoted = quoteItems.find(entry => entry.packId === item.productId);
           const quotedPatientPence = quoted
             ? Math.round(Number(quoted.patientPackPrice) * 100)
@@ -618,7 +619,6 @@ export default function CreateOrderPage() {
             unitPricePence: quotedPatientPence > 0 ? quotedPatientPence : Math.round((item.retail || 0) * 100),
             wholesalePackPrice: quoted?.wholesalePackPrice,
             wholesalePackPricePence,
-            localPrescriptionId: String(rx.id),
           };
         }));
         const dispensingFeePence = Math.round((activeOrder.dispensingFee || 0) * 100);

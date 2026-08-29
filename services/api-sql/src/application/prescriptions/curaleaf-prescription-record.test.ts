@@ -92,4 +92,33 @@ describe('stampCuraleafPrescriptionOnSnapshot', () => {
     assert.equal(subOrders['2']?.purchaseOrderId, 'po-2');
     assert.equal(subOrders['1'], undefined);
   });
+
+  it('preserves three separately placed prescriptions and purchase orders', () => {
+    let snapshot: unknown = {
+      prescriptions: [
+        { id: '1', serialNumber: 'MultiTest1' },
+        { id: '2', serialNumber: 'MultiTest2' },
+        { id: '3', serialNumber: 'MultiTest3' },
+      ],
+    };
+    for (const [index, key] of ['1', '2', '3'].entries()) {
+      snapshot = stampCuraleafPrescriptionOnSnapshot(snapshot, {
+        rxKey: key,
+        prescriptionId: `curaleaf-rx-${key}`,
+        purchaseOrder: { id: `po-${key}` },
+        customerReferenceFallback: index === 0 ? 'ORD-MTDQOYO5-204A222B97' : `ORD-MTDQOYO5-204A222B97-r${index}`,
+      });
+    }
+
+    const subOrders = (snapshot as Record<string, unknown>).curaleafSubOrders as Record<string, Record<string, unknown>>;
+    assert.deepEqual(Object.fromEntries(Object.entries(subOrders).map(([key, value]) => [key, {
+      prescriptionId: value.prescriptionId,
+      purchaseOrderId: value.purchaseOrderId,
+      customerReference: value.customerReference,
+    }])), {
+      1: { prescriptionId: 'curaleaf-rx-1', purchaseOrderId: 'po-1', customerReference: 'ORD-MTDQOYO5-204A222B97' },
+      2: { prescriptionId: 'curaleaf-rx-2', purchaseOrderId: 'po-2', customerReference: 'ORD-MTDQOYO5-204A222B97-r1' },
+      3: { prescriptionId: 'curaleaf-rx-3', purchaseOrderId: 'po-3', customerReference: 'ORD-MTDQOYO5-204A222B97-r2' },
+    });
+  });
 });

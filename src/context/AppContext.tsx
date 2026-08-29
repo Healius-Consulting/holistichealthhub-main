@@ -26,6 +26,7 @@ import { orderRequiresCuraleafCancel, orderSupplyIncomplete } from '../utils/ord
 import { PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
 import { businessOrderReference } from '../utils/orderReference';
 import { formatPounds } from '../utils/pricing';
+import { compactCustomerReferenceBelongsToOrder } from '../utils/curaleafCustomerReference';
 
 export { ORGANISATIONS };
 
@@ -714,6 +715,7 @@ function customerReferenceBelongsToOrder(reference: string | null | undefined, r
   if (!ref) return false;
   const orderNum = String(record.paymentTransactionReference || '').trim();
   const orderId = String(record.id || '').trim();
+  if (compactCustomerReferenceBelongsToOrder(ref, orderNum, orderId)) return true;
   if (orderNum && (
     ref === orderNum
     || ref === `ORD-${orderNum}`

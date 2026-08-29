@@ -114,6 +114,15 @@ const tenPackShipment = {
 };
 
 describe('Curaleaf fulfilment mapping', () => {
+  it('matches compact pharmacy-prefixed references for every prescription', () => {
+    const order = { id: 'order-id', orderNumber: 'ORD-MTDQOYO5-204A222B97' };
+    assert.equal(customerReferenceMatchesOrder('M75-204A222B97-P1', order), true);
+    assert.equal(customerReferenceMatchesOrder('M75-204A222B97-P2', order), true);
+    assert.equal(customerReferenceMatchesOrder('M75-204A222B97-P3', order), true);
+    assert.equal(customerReferenceMatchesOrder('M75-204A222B97-r1', order), true);
+    assert.equal(customerReferenceMatchesOrder('M75-AAAAAAAAAA-r1', order), false);
+  });
+
   it('matches HHH-{orderId}-{hash} customer references to the SQL order id', () => {
     assert.equal(customerReferenceMatchesOrder(beachWeddingPo.customerReference, order), true);
     assert.equal(matchPurchaseOrder(order, [beachWeddingPo])?.id, beachWeddingPo.id);

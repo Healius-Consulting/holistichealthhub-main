@@ -1227,9 +1227,9 @@ describe('SQL pharmacy compatibility contracts', () => {
       }],
     });
     assert.equal(mapped.lineItems.length, 1);
-    assert.equal(mapped.lineItems[0].packId, 'sql-pack');
-    assert.equal(mapped.lineItems[0].quantity, 2);
-    assert.equal(mapped.lineItems[0].unitPricePence, 8500);
+    assert.equal(mapped.lineItems[0]?.packId, 'sql-pack');
+    assert.equal(mapped.lineItems[0]?.quantity, 2);
+    assert.equal(mapped.lineItems[0]?.unitPricePence, 8500);
   });
 
   it('does not shrink submitted pack quantity when SQL lines are 1 but Curaleaf ordered 10', () => {
@@ -1294,6 +1294,50 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.prescriptionFlow?.['2']?.purchaseOrderId, null);
     assert.equal(mapped.prescriptionFlow?.['1']?.state, 'PLACED');
     assert.equal(mapped.prescriptionFlow?.['2']?.state, 'PENDING_PLACEMENT');
+  });
+
+  it('uses SQL prescription ownership when three prescriptions contain the same pack', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      quoteSnapshot: {
+        prescriptions: [
+          { id: '1', hhhPrescriptionId: 'sql-rx-1', serialNumber: 'MultiTest1', issueDate: '2026-08-01', items: [{ packId: 'shared-pack', quantity: 1 }] },
+          { id: '2', hhhPrescriptionId: 'sql-rx-2', serialNumber: 'MultiTest2', issueDate: '2026-08-01', items: [{ packId: 'shared-pack', quantity: 2 }] },
+          { id: '3', hhhPrescriptionId: 'sql-rx-3', serialNumber: 'MultiTest3', issueDate: '2026-08-01', items: [{ packId: 'shared-pack', quantity: 3 }] },
+        ],
+        curaleafSubOrders: {
+          1: { purchaseOrderId: 'po-1', items: [{ productId: 'shared-pack', packsOrderedCount: 1 }] },
+          2: { purchaseOrderId: 'po-2', items: [{ productId: 'shared-pack', packsOrderedCount: 2 }] },
+          3: { purchaseOrderId: 'po-3', items: [{ productId: 'shared-pack', packsOrderedCount: 3 }] },
+        },
+      },
+      sqlLines: [
+        { packId: 'shared-pack', productId: 'shared-pack', formulaId: 'shared-formula', name: 'Shared medicine', quantity: 1, unitPricePence: 1000, prescriptionId: 'sql-rx-1' },
+        { packId: 'shared-pack', productId: 'shared-pack', formulaId: 'shared-formula', name: 'Shared medicine', quantity: 2, unitPricePence: 1000, prescriptionId: 'sql-rx-2' },
+        { packId: 'shared-pack', productId: 'shared-pack', formulaId: 'shared-formula', name: 'Shared medicine', quantity: 3, unitPricePence: 1000, prescriptionId: 'sql-rx-3' },
+      ],
+      curaleaf: {
+        id: 'po-3',
+        items: [{ productId: 'shared-pack', packsOrderedCount: 9 }],
+      },
+    });
+
+    assert.deepEqual(mapped.prescriptions?.map(rx => ({
+      serialNumber: rx.serialNumber,
+      quantities: rx.items.map((item: { quantity: number }) => item.quantity),
+    })), [
+      { serialNumber: 'MultiTest1', quantities: [1] },
+      { serialNumber: 'MultiTest2', quantities: [2] },
+      { serialNumber: 'MultiTest3', quantities: [3] },
+    ]);
+    assert.deepEqual(['1', '2', '3'].map(key => ({
+      purchaseOrderId: mapped.prescriptionFlow?.[key]?.purchaseOrderId,
+      ordered: mapped.prescriptionFlow?.[key]?.lines[0]?.ordered,
+    })), [
+      { purchaseOrderId: 'po-1', ordered: 1 },
+      { purchaseOrderId: 'po-2', ordered: 2 },
+      { purchaseOrderId: 'po-3', ordered: 3 },
+    ]);
   });
 
   it('keeps a clinic script and a manual script as separate sub-orders', () => {

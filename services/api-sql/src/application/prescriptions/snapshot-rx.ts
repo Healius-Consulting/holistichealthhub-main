@@ -18,9 +18,32 @@ export function snapshotRxKey(rx: Record<string, unknown> | undefined, index: nu
   return `rx-${index}`;
 }
 
-export function customerReferenceForRx(orderNumber: string | null | undefined, orderId: string, index: number): string {
-  const base = orderNumber || `HHH-${orderId}`;
-  return index === 0 ? base : `${base}-r${index}`;
+export function compactOrderReferenceToken(orderNumber: string | null | undefined, orderId: string): string {
+  const source = String(orderNumber || orderId).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return source.slice(-10);
+}
+
+export function pharmacyReferencePrefix(organisationId: string): string {
+  const tenant = organisationId.trim().toUpperCase();
+  if (!tenant) throw new Error('Cannot generate a Curaleaf reference without a pharmacy organisation ID');
+
+  // FNV-1a keeps the prefix stable without exposing the tenant identifier to Curaleaf.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < tenant.length; index += 1) {
+    hash ^= tenant.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return (hash % (36 ** 3)).toString(36).toUpperCase().padStart(3, '0');
+}
+
+export function customerReferenceForRx(
+  orderNumber: string | null | undefined,
+  orderId: string,
+  index: number,
+  organisationId: string,
+): string {
+  const base = `${pharmacyReferencePrefix(organisationId)}-${compactOrderReferenceToken(orderNumber, orderId)}`;
+  return `${base}-P${index + 1}`;
 }
 
 export function curaleafSubOrders(snapshot: unknown): Record<string, Record<string, unknown>> {
@@ -49,6 +72,21 @@ export function pendingPlacementRxIndexes(snapshot: unknown): number[] {
   return snapshotRxList(snapshot).flatMap((rx, index) => (
     rxHasPurchaseOrder(snapshot, snapshotRxKey(rx, index)) ? [] : [index]
   ));
+}
+
+export function curaleafPlacementTargets(
+  snapshot: unknown,
+  orderNumber: string | null | undefined,
+  orderId: string,
+  organisationId: string,
+) {
+  const prescriptions = snapshotRxList(snapshot);
+  return pendingPlacementRxIndexes(snapshot).map(rxIndex => ({
+    rxIndex,
+    rxKey: snapshotRxKey(prescriptions[rxIndex], rxIndex),
+    customerReference: customerReferenceForRx(orderNumber, orderId, rxIndex, organisationId),
+    prescription: prescriptions[rxIndex]!,
+  }));
 }
 
 type PackIdSource = {

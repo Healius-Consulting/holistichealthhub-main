@@ -20,6 +20,7 @@ export function sqlLinesToPortal(lines: OrderLineRecord[]): PortalSqlLine[] {
     formulaId: line.formulaId || undefined,
     name: line.formulaName || undefined,
     quantity: Number(line.quantity || 0),
+    prescriptionId: line.prescriptionId ?? undefined,
     unitPricePence: Number(line.fixedPatientPricePence || 0),
     wholesalePackPricePence: line.wholesalePackPricePence == null ? undefined : Number(line.wholesalePackPricePence),
   }));

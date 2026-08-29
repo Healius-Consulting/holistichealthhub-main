@@ -3,7 +3,6 @@ import { curaleafCancellationBlocksPlacement } from '../orders/quote-review.js';
 import { quoteCheckInput, quotePricingPolicy } from '../orders/quote-gate.js';
 import { existingCuraleafPurchaseOrder } from '../orders/curaleaf-fulfilment.js';
 import { pendingPlacementRxIndexes, snapshotRxList } from '../prescriptions/snapshot-rx.js';
-import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import { promotePatientAfterCuraleafPlacement } from '../patient-finance/patient-finance.js';
 import type { PatientFinanceDeps } from '../patient-finance/patient-finance.js';
 import type { IntegrationRepositoryPort } from '../../repositories/ports/integration.port.js';
@@ -247,22 +246,6 @@ export async function placeOrderAfterWorldpaySettlement(
 
   let curaleafResult: Awaited<ReturnType<typeof executeCuraleafOrderPlacement>> | null = null;
   curaleafResult = await executeCuraleafOrderPlacement(connection, order);
-
-  if (curaleafResult && ('prescriptionId' in curaleafResult || 'purchaseOrder' in curaleafResult)) {
-    const placed = curaleafResult as { prescriptionId?: string; prescriberId?: string; purchaseOrder?: Record<string, unknown> | null };
-    if (placed.prescriptionId || placed.purchaseOrder) {
-      await persistCuraleafPrescriptionIdentity({
-        organisationId: payment.organisationId,
-        orderId: order.id,
-        patientId: order.patientId,
-        snapshot: order.quoteSnapshot,
-        prescriptionId: placed.prescriptionId,
-        prescriberId: placed.prescriberId,
-        purchaseOrder: placed.purchaseOrder ?? null,
-        fulfilmentStatus: placed.purchaseOrder ? 'SUPPLIER_PROCESSING' : undefined,
-      });
-    }
-  }
 
   await promotePatientAfterCuraleafPlacement(deps.patientFinanceDeps, order, curaleafResult).catch(err =>
     console.warn('Patient activation after Curaleaf placement note:', err),

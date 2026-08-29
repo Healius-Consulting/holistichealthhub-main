@@ -66,6 +66,7 @@ import {
 } from '../../application/prescriptions/serial-reuse.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
+import { prescriptionOwnershipError } from '../../application/prescriptions/order-line-ownership.js';
 
 const UUID_LIKE = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 
@@ -345,6 +346,8 @@ export function createPortalOrderRouter(): Router {
     try {
       const scope = assertTenantScope(req.context!);
       const input = createOrderInputSchema.parse(req.body);
+      const ownershipError = prescriptionOwnershipError(input);
+      if (ownershipError) throw new HttpError(400, ownershipError, 'PRESCRIPTION_LINE_OWNERSHIP_INVALID');
       const organisation = await organisationRepo.findOrganisationById(scope.organisationId);
       if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
       const sourceDraft = input.draftId
@@ -631,8 +634,20 @@ export function createPortalOrderRouter(): Router {
             });
             rxSqlIds.set(localKey, saved.id);
           } catch (error) {
-            console.warn('[Order create] Prescription row note:', error);
+            console.error('[Order create] Prescription row failed:', error);
+            await orderRepo.updateOrderStatus({
+              id: result.id,
+              organisationId: scope.organisationId,
+              status: 'EXCEPTION',
+              paymentStatus: 'FAILED',
+              fulfilmentStatus: 'EXCEPTION',
+            }).catch(statusError => console.error('[Order create] Failed to quarantine partial order:', statusError));
+            throw new HttpError(500, 'The prescription records could not be saved. No payment was requested.', 'PRESCRIPTION_RECORD_CREATE_FAILED');
           }
+        }
+
+        if (rxSqlIds.size !== input.prescriptions.length) {
+          throw new HttpError(500, 'The prescription records could not be saved. No payment was requested.', 'PRESCRIPTION_RECORD_CREATE_FAILED');
         }
 
         quoteSnapshot = {

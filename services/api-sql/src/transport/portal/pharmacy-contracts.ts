@@ -274,11 +274,25 @@ export function buildPharmacyPatientDirectory(input: {
 export type PortalSqlLine = {
   packId: string;
   productId?: string;
+  /** Internal ownership key used while mapping an order; not returned to the portal. */
+  prescriptionId?: string;
   formulaId?: string;
   name?: string;
   quantity: number;
   unitPricePence?: number;
   wholesalePackPricePence?: number;
+};
+
+type PortalMappedLine = {
+  productId: string;
+  formulaId: string;
+  packId: string;
+  name: string;
+  quantity: number;
+  unitPricePence: number;
+  wholesalePackPricePence?: number;
+  prescriptionId?: string;
+  localPrescriptionId?: string;
 };
 
 export type PortalOrderSource = OrderRecord & {
@@ -459,13 +473,17 @@ export function toPortalOrder(order: PortalOrderSource) {
   const pricingQuote = parsedQuote
     ? portalQuotePayload(parsedQuote)
     : (snapshot?.pricingQuote || snapshot?.quote || null);
+  const rawPrescriptions = snapshot?.prescriptions || [];
+  const multiRx = Array.isArray(rawPrescriptions) && rawPrescriptions.length > 1;
 
-  const lineItems = Array.isArray(rawLines) && rawLines.length > 0 ? rawLines.map((item: any) => {
+  const lineItemsWithOwnership: PortalMappedLine[] = Array.isArray(rawLines) && rawLines.length > 0 ? rawLines.map((item: any): PortalMappedLine => {
     const packId = String(item.packId || item.productId || item.id || '');
     const quote = quoteByPackId.get(packId);
     const poItem = poItemMap.get(packId);
     const sqlQty = Number(item.quantity ?? item.qty ?? item.count ?? 0);
-    const rockyQty = Number(poItem?.packsOrderedCount || 0);
+    // The order-level supplier record is a legacy single-prescription summary. In a
+    // multi-prescription order its pack quantity belongs only to its keyed placement.
+    const rockyQty = multiRx ? 0 : Number(poItem?.packsOrderedCount || 0);
     const itemQty = Math.max(sqlQty, rockyQty) || 1;
     const rawTotal = order.totalPence ? Math.max(0, order.totalPence - (order.dispensingFeePence || 0) - (order.pharmacyDeliveryPence || 0)) : 0;
     const quotedPatientPence = quote && quote.patientPence > 0 ? quote.patientPence : 0;
@@ -489,9 +507,11 @@ export function toPortalOrder(order: PortalOrderSource) {
       name: String(item.name || item.formulaName || (quote ? 'Curaleaf medication' : 'Curaleaf prescription item')),
       quantity: itemQty,
       unitPricePence,
+      prescriptionId: typeof item.prescriptionId === 'string' ? item.prescriptionId : undefined,
+      localPrescriptionId: typeof item.localPrescriptionId === 'string' ? item.localPrescriptionId : undefined,
       ...(wholesalePackPricePence != null ? { wholesalePackPricePence } : {}),
     };
-  }) : poItems.map((poIt: any) => {
+  }) : poItems.map((poIt: any): PortalMappedLine => {
     const packId = String(poIt.productId || '');
     const quote = quoteByPackId.get(packId);
     const wholesalePackPricePence = quote && quote.wholesalePence > 0 ? quote.wholesalePence : undefined;
@@ -506,8 +526,8 @@ export function toPortalOrder(order: PortalOrderSource) {
     };
   });
 
-  const rawPrescriptions = snapshot?.prescriptions || [];
-  const multiRx = Array.isArray(rawPrescriptions) && rawPrescriptions.length > 1;
+  const lineItems = lineItemsWithOwnership.map(({ prescriptionId: _prescriptionId, localPrescriptionId: _localPrescriptionId, ...item }) => item);
+  const hasExplicitLineOwnership = lineItemsWithOwnership.some(item => item.prescriptionId || item.localPrescriptionId);
   const prescriptions = Array.isArray(rawPrescriptions) && rawPrescriptions.length > 0 ? rawPrescriptions.map((rx: any, index: number) => {
     const rxKey = snapshotRxKey(rx && typeof rx === 'object' ? rx : {}, index);
     const sub = snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
@@ -515,11 +535,34 @@ export function toPortalOrder(order: PortalOrderSource) {
       : null;
     const snapshotLines = Array.isArray(snapshot?.lineItems) ? snapshot.lineItems as Array<Record<string, unknown>> : [];
     const localId = String(rx?.id ?? '');
-    const attributed = snapshotLines.filter(line => String(line.localPrescriptionId || '') === localId);
+    const sqlId = String(rx?.hhhPrescriptionId ?? '');
+    const attributed = lineItemsWithOwnership.filter(line => (
+      (sqlId && line.prescriptionId === sqlId)
+      || (localId && line.localPrescriptionId === localId)
+    ));
+    const snapshotAttributed = snapshotLines.filter(line => String(line.localPrescriptionId || '') === localId);
     const packIds = new Set(
-      (attributed.length ? attributed : Array.isArray(rx?.items) ? rx.items : []).map((item: any) => String(item.packId || item.productId || '')).filter(Boolean),
+      (snapshotAttributed.length ? snapshotAttributed : Array.isArray(rx?.items) ? rx.items : []).map((item: any) => String(item.packId || item.productId || '')).filter(Boolean),
     );
-    const ownItems = packIds.size ? lineItems.filter((item: { packId: string; productId: string }) => packIds.has(item.packId) || packIds.has(item.productId)) : [];
+    const prescriptionItems = Array.isArray(rx?.items) ? rx.items as Array<Record<string, unknown>> : [];
+    const reconstructed = !hasExplicitLineOwnership && prescriptionItems.length
+      ? prescriptionItems.map(item => {
+        const packId = String(item.packId || item.productId || '');
+        const priced = lineItems.find(line => line.packId === packId || line.productId === packId);
+        return {
+          ...(priced ?? {}),
+          productId: String(item.productId || item.packId || priced?.productId || ''),
+          formulaId: String(item.formulaId || priced?.formulaId || ''),
+          packId,
+          name: String(item.name || priced?.name || 'Curaleaf prescription item'),
+          quantity: Number(item.quantity ?? item.qty ?? item.count ?? priced?.quantity ?? 1),
+        };
+      })
+      : [];
+    const legacyByPack = !hasExplicitLineOwnership && !reconstructed.length && packIds.size
+      ? lineItems.filter((item: { packId: string; productId: string }) => packIds.has(item.packId) || packIds.has(item.productId))
+      : [];
+    const ownItems = attributed.length ? attributed.map(({ prescriptionId: _prescriptionId, localPrescriptionId: _localPrescriptionId, ...item }) => item) : (reconstructed.length ? reconstructed : legacyByPack);
     return {
       ...rx,
       curaleafPrescriptionId: rx.curaleafPrescriptionId || sub?.prescriptionId || (!multiRx ? (prescriptionId || persistedCuraleaf?.prescriptionId || null) : null),
@@ -605,10 +648,27 @@ export function toPortalOrder(order: PortalOrderSource) {
       ? sub.purchaseOrderId.trim()
       : (!multiRx ? purchaseOrderId : (legacySharedPo ? purchaseOrderId : null));
     const rxHasPo = Boolean(rxPurchaseOrderId);
+    const subShipments: CuraleafShipmentLike[] = Array.isArray(sub?.shipments) ? sub.shipments : [];
+    const sourceShipments: CuraleafShipmentLike[] = subShipments.length
+      ? subShipments
+      : Array.isArray(shipments) ? shipments : [];
+    const ownRequestedItems = (Array.isArray(rxRecord.items) ? rxRecord.items : []).flatMap(item => {
+      const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+      const packId = packIdFromRecord(record);
+      const quantity = Number(record.quantity ?? record.qty ?? record.count ?? 0);
+      return packId && quantity > 0 ? [{ packId, productId: packId, quantity }] : [];
+    });
+    const subLines = sub && rxHasPo ? normalisedFulfilmentLines({
+      purchaseOrder: sub,
+      shipments: sourceShipments,
+      requestedItems: ownRequestedItems,
+      priorLines: Array.isArray(sub.lines) ? sub.lines : [],
+    }) : [];
     const rxLines = !rxHasPo
       ? []
-      : (multiRx ? (legacySharedPo ? overlappingPoLines : overlappingLines) : lines);
-    const sourceShipments: CuraleafShipmentLike[] = Array.isArray(shipments) ? shipments : [];
+      : subLines.length
+        ? subLines
+        : (multiRx ? (legacySharedPo ? overlappingPoLines : overlappingLines) : lines);
     const rxShipments: CuraleafShipmentLike[] = !rxHasPo
       ? []
       : (multiRx
@@ -655,9 +715,9 @@ export function toPortalOrder(order: PortalOrderSource) {
       dispatchStatus: rxDispatch,
       quantityMismatch: rxLines.some(line => Boolean(line.quantityMismatch)),
       purchaseOrderId: rxPurchaseOrderId,
-      placedAt: rxHasPo ? placedAt : null,
+      placedAt: rxHasPo ? (sub?.createdAt || sub?.issuedDate || placedAt) : null,
       latestShipmentAt: rxHasPo ? latestShipmentCreatedAt(rxShipments) : null,
-      goodsInAt: rxCheckedIn ? (persistedCuraleaf?.goodsInAt ?? po?.goodsInAt ?? null) : null,
+      goodsInAt: rxCheckedIn ? (sub?.goodsInAt ?? persistedCuraleaf?.goodsInAt ?? po?.goodsInAt ?? null) : null,
     };
   }
 
@@ -715,7 +775,7 @@ export function toPortalOrder(order: PortalOrderSource) {
     dispatchStatus,
     quantityMismatch: lines.some(line => line.quantityMismatch),
     lines,
-    supplierItems: po?.supplierItems || poItems.map((item: any) => ({
+    supplierItems: (Array.isArray(po?.supplierItems) ? po.supplierItems : poItems).map((item: any) => ({
       productId: item.productId ?? null,
       packsOrderedCount: Number(item.packsOrderedCount || item.count || 0),
       packsAllocatedCount: Number(item.packsAllocatedCount || 0),

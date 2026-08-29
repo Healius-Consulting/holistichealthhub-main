@@ -86,12 +86,14 @@ describe('SQL order overlay', () => {
       allocatedDispensingFeePence: 0,
       lineMedicineRevenuePence: 17000,
       placementState: 'PENDING_PLACEMENT',
+      prescriptionId: 'prescription-sql-1',
     }];
     assert.equal(latestRefund(refunds)?.id, 'newer');
     const mapped = mapPortalOrderFromSql(order, { refunds, lines });
     assert.equal(mapped.refund?.id, 'newer');
     assert.equal(mapped.refund?.status, 'completed');
     assert.equal(sqlLinesToPortal(lines)[0]?.packId, 'sql-pack');
+    assert.equal(sqlLinesToPortal(lines)[0]?.prescriptionId, 'prescription-sql-1');
     assert.equal(mapped.lineItems[0]?.packId, 'sql-pack');
     assert.equal(mapped.lineItems[0]?.quantity, 2);
   });

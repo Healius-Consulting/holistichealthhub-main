@@ -5,7 +5,6 @@ import { executeCuraleafOrderPlacement } from '../../application/integrations/cu
 import { fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
 import { quoteCheckInput, quoteGateAllowsPayment, quotePricingPolicy } from '../../application/orders/quote-gate.js';
 import { stampPaidQuoteOnSnapshot } from '../../application/orders/finance-costing.js';
-import { persistCuraleafPrescriptionIdentity } from '../../application/prescriptions/curaleaf-prescription-record.js';
 import { promotePatientAfterCuraleafPlacement } from '../../application/patient-finance/patient-finance.js';
 import { createWorldpayHostedSession } from '../../application/integrations/worldpay.service.js';
 import { createWorldpayTransactionReference } from '../../application/payments/worldpay-reference.js';
@@ -340,19 +339,6 @@ export function createPortalPaymentRouter(): Router {
           actorUid: scope.uid,
         });
         console.warn('[Manual Payment] Curaleaf automated placement note:', placementErr instanceof Error ? placementErr.message : 'Unknown error');
-      }
-
-      if (curaleafResult?.prescriptionId || curaleafResult?.purchaseOrder) {
-        await persistCuraleafPrescriptionIdentity({
-          organisationId: scope.organisationId,
-          orderId,
-          patientId: order.patientId,
-          snapshot: order.quoteSnapshot,
-          prescriptionId: curaleafResult.prescriptionId,
-          prescriberId: curaleafResult.prescriberId,
-          purchaseOrder: curaleafResult.purchaseOrder ?? null,
-          fulfilmentStatus: curaleafResult.purchaseOrder ? 'SUPPLIER_PROCESSING' : undefined,
-        });
       }
 
       await promotePatientAfterCuraleafPlacement(patientFinanceDeps, order, curaleafResult).catch(err =>

@@ -124,6 +124,8 @@ export function customerReferenceMatchesOrder(
   if (!ref) return false;
   const orderNum = String(order.orderNumber || '').trim();
   const orderId = String(order.id || '').trim();
+  const compactToken = String(orderNum || orderId).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(-10);
+  if (compactToken && new RegExp(`^[A-Z0-9]{3}-${compactToken}(?:(?:-P|-r)[1-9][0-9]*)?$`, 'i').test(ref)) return true;
   if (orderNum && (
     ref === orderNum
     || ref === `ORD-${orderNum}`
@@ -148,6 +150,8 @@ export function purchaseOrderMatchScore(
   const orderId = String(order.id || '').trim();
   const orderNum = String(order.orderNumber || '').trim();
   const poId = String(purchaseOrder.id || '').trim();
+  const compactToken = String(orderNum || orderId).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(-10);
+  if (compactToken && new RegExp(`^[A-Z0-9]{3}-${compactToken}(?:(?:-P|-r)[1-9][0-9]*)?$`, 'i').test(ref)) return 1_100;
   if (orderId && ref.startsWith(`HHH-${orderId}-`)) return 1_000;
   if (orderId && ref === `HHH-${orderId}`) return 900;
   if (orderId && ref.includes(orderId)) return 800;

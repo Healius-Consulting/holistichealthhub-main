@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   allSnapshotRxsHavePurchaseOrders,
+  compactOrderReferenceToken,
   customerReferenceForRx,
   packIdsForRx,
   pendingPlacementRxIndexes,
+  pharmacyReferencePrefix,
   rxHasPurchaseOrder,
   snapshotRxKey,
   snapshotRxList,
@@ -17,9 +19,23 @@ describe('snapshot Rx helpers', () => {
     assert.equal(snapshotRxKey({}, 2), 'rx-2');
   });
 
-  it('keeps the order number for the first prescription and suffixes the rest', () => {
-    assert.equal(customerReferenceForRx('ORD-1', 'order-id', 0), 'ORD-1');
-    assert.equal(customerReferenceForRx('ORD-1', 'order-id', 1), 'ORD-1-r1');
+  it('uses a compact pharmacy prefix and keeps each prescription reference unique', () => {
+    const organisationId = 'pharmacy-one';
+    const prefix = pharmacyReferencePrefix(organisationId);
+    assert.equal(prefix.length, 3);
+    assert.equal(pharmacyReferencePrefix(organisationId), prefix);
+    assert.notEqual(pharmacyReferencePrefix('pharmacy-two'), prefix);
+    assert.equal(compactOrderReferenceToken('ORD-MTDQOYO5-204A222B97', 'order-id'), '204A222B97');
+    assert.equal(customerReferenceForRx('ORD-MTDQOYO5-204A222B97', 'order-id', 0, organisationId), `${prefix}-204A222B97-P1`);
+    assert.equal(customerReferenceForRx('ORD-MTDQOYO5-204A222B97', 'order-id', 1, organisationId), `${prefix}-204A222B97-P2`);
+    assert.equal(customerReferenceForRx('ORD-MTDQOYO5-204A222B97', 'order-id', 2, organisationId), `${prefix}-204A222B97-P3`);
+  });
+
+  it('fails closed when a pharmacy identity is unavailable', () => {
+    assert.throws(
+      () => customerReferenceForRx('ORD-1', 'order-id', 0, ''),
+      /pharmacy organisation ID/,
+    );
   });
 
   it('reads purchase orders per prescription key', () => {

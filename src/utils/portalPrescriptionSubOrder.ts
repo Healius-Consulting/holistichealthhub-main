@@ -44,7 +44,7 @@ export function packIdsFromItems(items: Array<{ productId?: string; packId?: str
   return new Set((items ?? []).map(item => String(item.packId || item.productId || '').trim()).filter(Boolean));
 }
 
-export function fulfilmentLinesForPrescription<T extends { productId?: string; packId?: string }>(
+export function fulfilmentLinesForPrescription<T extends { productId?: string | null; packId?: string }>(
   lines: T[] | undefined,
   items: Array<{ productId?: string; packId?: string }> | undefined,
   options?: { failClosedWhenEmpty?: boolean },

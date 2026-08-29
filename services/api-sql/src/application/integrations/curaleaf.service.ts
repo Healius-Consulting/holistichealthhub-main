@@ -27,8 +27,8 @@ import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-p
 import {
   allSnapshotRxsHavePurchaseOrders,
   customerReferenceForRx,
+  curaleafPlacementTargets,
   curaleafSubOrders,
-  pendingPlacementRxIndexes,
   rxHasPurchaseOrder,
   snapshotRxKey,
   snapshotRxList,
@@ -59,6 +59,7 @@ import {
   packSizeFromProductRecord,
   prescriptionItemsFromSnapshot,
 } from '../orders/prescription-units.js';
+import { curaleafPrescriptionCreatePayload, curaleafPurchaseOrderPayload } from './curaleaf-placement-payload.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { MAX_PRESCRIPTION_UPLOAD_BYTES } from '../../providers/storage/upload-constraints.js';
 import type { IntegrationConnectionRecord, IntegrationEnvironment } from '../../repositories/ports/integration.port.js';
@@ -752,8 +753,13 @@ export async function executeCuraleafOrderPlacement(
     let working = order;
     let last: CuraleafPlacementResult = { skipped: true, reason: 'No prescriptions' };
     const orderRepo = new SqlOrderRepository();
-    for (const index of pendingPlacementRxIndexes(working.quoteSnapshot)) {
-      last = await executeCuraleafOrderPlacement(connection, { ...working, __placementRxIndex: index });
+    for (const target of curaleafPlacementTargets(
+      working.quoteSnapshot,
+      order.orderNumber,
+      order.id,
+      connection.organisationId,
+    )) {
+      last = await executeCuraleafOrderPlacement(connection, { ...working, __placementRxIndex: target.rxIndex });
       const refreshed = await orderRepo.findOrderById(order.id, connection.organisationId);
       if (refreshed) {
         working = {
@@ -792,7 +798,12 @@ export async function executeCuraleafOrderPlacement(
     };
   }
 
-  const customerReference = customerReferenceForRx(order.orderNumber, order.id, rxIndex);
+  const customerReference = customerReferenceForRx(
+    order.orderNumber,
+    order.id,
+    rxIndex,
+    connection.organisationId,
+  );
   let snapshot = (order.quoteSnapshot ?? {}) as Record<string, unknown>;
   const priorFromSub = curaleafSubOrders(snapshot)[rxKey];
   const priorCuraleaf = (priorFromSub || (rxIndex === 0 && snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
@@ -1140,16 +1151,16 @@ export async function executeCuraleafOrderPlacement(
       : `RX-${order.orderNumber || (order.id || 'ORDER').slice(0, 8)}`;
     const issueDate = typeof rxData.issueDate === 'string'
       ? rxData.issueDate
-      : new Date().toISOString().split('T')[0];
+      : new Date().toISOString().split('T')[0]!;
     try {
       const rxRes = await curaleafApiRequest<{ id: string; state?: string }>(connection, '/v1/prescriptions/', {
         method: 'POST',
-        body: JSON.stringify({
+        body: JSON.stringify(curaleafPrescriptionCreatePayload({
           serialNumber,
-          prescriberId,
+          prescriberId: prescriberId!,
           issueDate,
-          items: rxItems,
-        }),
+          items: placedLines.items,
+        })),
       });
       if (rxRes?.id && isCuraleafTerminalRejection(rxRes.state)) {
         return persistPlacementAttention({
@@ -1320,10 +1331,10 @@ export async function executeCuraleafOrderPlacement(
   try {
     purchaseOrderResult = await curaleafApiRequest(connection, '/v1/purchase-order-from-prescriptions/', {
       method: 'POST',
-      body: JSON.stringify({
+      body: JSON.stringify(curaleafPurchaseOrderPayload({
         customerReference,
-        prescriptionIds: [curaleafPrescriptionId],
-      }),
+        prescriptionId: curaleafPrescriptionId,
+      })),
     });
     console.log(`[Curaleaf] Purchase order from prescription placed: ${JSON.stringify(purchaseOrderResult)}`);
     const createdPurchaseOrderId = String(purchaseOrderResult?.id || purchaseOrderResult?.purchaseOrderId || '').trim();
