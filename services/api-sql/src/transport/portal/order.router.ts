@@ -993,10 +993,15 @@ export function createPortalOrderRouter(): Router {
         fulfilmentStatus: exception ? 'EXCEPTION' : undefined,
       });
       if (!requiresCuraleafCancel) {
+        // Retire the checkout generation before the order becomes terminal. If the
+        // order update then fails, the cancellation can be retried without leaving
+        // a live reminder-eligible payment behind.
+        await paymentRepo.cancelPendingPaymentsForOrder(orderId, scope.organisationId);
         await orderRepo.updateOrderStatus({
           id: orderId,
           organisationId: scope.organisationId,
           status: 'CANCELLED',
+          paymentStatus: 'CANCELLED',
           cancelledAt: requestedAt,
         });
         await serialRepo.endLiveForOrder(scope.organisationId, orderId, 'hh_cancelled').catch(() => undefined);

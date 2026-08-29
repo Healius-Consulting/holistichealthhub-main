@@ -4,6 +4,7 @@ export type OrderTimelineEvent = {
   label: string;
   detail: string;
   date: Date | string | null;
+  source: 'Pharmacy' | 'HHH automation' | 'Worldpay' | 'Curaleaf' | 'Dispensary';
 };
 
 function shortConsignmentId(id: string) {
@@ -85,6 +86,7 @@ export function buildPrescriptionTimelineEvents(
       label: `${rxLabel} sent to Curaleaf`,
       detail: prescription.poRef ? `PO ${prescription.poRef}` : 'Awaiting supplier reference',
       date: prescription.placedAt ?? null,
+      source: 'HHH automation',
     });
   }
 
@@ -101,6 +103,7 @@ export function buildPrescriptionTimelineEvents(
           label: totals.shipped < totals.ordered ? `${rxLabel} partial consignment dispatched` : `${rxLabel} consignment dispatched`,
           detail: `Consignment ${shortConsignmentId(shipmentId)} · ${packs || totals.shipped} pack${(packs || totals.shipped) === 1 ? '' : 's'}`,
           date: shipment?.createdAt ?? prescription.latestShipmentAt ?? null,
+          source: 'Curaleaf',
         });
       }
     } else {
@@ -108,6 +111,7 @@ export function buildPrescriptionTimelineEvents(
         label: totals.shipped < totals.ordered ? `${rxLabel} partial consignment dispatched` : `${rxLabel} consignment dispatched`,
         detail: `${totals.shipped} of ${totals.ordered} pack${totals.ordered === 1 ? '' : 's'} in transit`,
         date: prescription.latestShipmentAt ?? null,
+        source: 'Curaleaf',
       });
     }
   }
@@ -125,6 +129,7 @@ export function buildPrescriptionTimelineEvents(
           ? `Checked in by ${prescription.goodsInBy}`
           : 'Checked in at dispensary',
       date: prescription.goodsInAt ?? null,
+      source: 'Dispensary',
     });
   }
 
@@ -137,6 +142,7 @@ export function buildPrescriptionTimelineEvents(
       label: `${rxLabel} ready to collect`,
       detail: `Consignment ${shortConsignmentId(shipmentId)} · ${packs} pack${packs === 1 ? '' : 's'} · collection email queued`,
       date: prescription.readyAt ?? null,
+      source: 'Dispensary',
     });
   }
 
@@ -150,12 +156,14 @@ export function buildPrescriptionTimelineEvents(
           ? 'Dispensed and collected'
           : 'Dispensed and collected',
       date: handoutAt ?? prescription.readyAt ?? null,
+      source: 'Dispensary',
     });
   } else if (prescription.status === 'collected') {
     events.push({
       label: `${rxLabel} handed to patient`,
       detail: 'Dispensed and collected',
       date: handoutAt ?? prescription.readyAt ?? null,
+      source: 'Dispensary',
     });
   }
 
@@ -168,30 +176,34 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       label: 'Order created',
       detail: `${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'} prepared`,
       date: order.date,
+      source: 'HHH automation',
     },
   ];
 
   if (order.payment.sentAt) {
     events.push({
-      label: 'Payment requested',
-      detail: order.payment.route === 'worldpay' ? 'Worldpay payment link created' : 'Pharmacy payment selected',
+      label: order.payment.route === 'worldpay' ? 'Payment link sent' : 'Payment method set',
+      detail: order.payment.route === 'worldpay' ? 'Worldpay payment link created' : 'Pharmacy-managed payment route stored with the order',
       date: order.payment.sentAt,
+      source: 'HHH automation',
     });
   }
   if (order.payment.paidAt) {
     events.push({
-      label: 'Payment cleared',
+      label: order.payment.route === 'worldpay' ? 'Payment received' : 'Payment recorded',
       detail: Number.isFinite(order.payment.amount)
         ? `£${order.payment.amount.toFixed(2)} received`
         : 'Payment received',
       date: order.payment.paidAt,
+      source: order.payment.route === 'worldpay' ? 'Worldpay' : 'Pharmacy',
     });
   }
   if (order.curaleafApprovedAt) {
     events.push({
-      label: 'Curaleaf approved',
-      detail: 'Delivery service window started',
+      label: 'Curaleaf processing started',
+      detail: 'Purchase orders accepted; delivery estimate started',
       date: order.curaleafApprovedAt,
+      source: 'Curaleaf',
     });
   }
   for (const audit of order.auditEvents ?? []) {
@@ -199,6 +211,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       label: audit.label,
       detail: audit.reference ? `${audit.detail} · ${audit.reference}` : audit.detail,
       date: audit.occurredAt,
+      source: 'HHH automation',
     });
   }
   if (order.cancellation) {
@@ -206,6 +219,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       label: 'Cancellation requested',
       detail: order.curaleafCancellation ? 'Curaleaf cancellation workflow opened' : 'Order cancellation recorded',
       date: order.cancellation.requestedAt,
+      source: 'Pharmacy',
     });
   }
   if (order.curaleafCancellation?.contactedAt) {
@@ -213,6 +227,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       label: 'Curaleaf contacted',
       detail: `Reference ${order.curaleafCancellation.contactReference ?? 'recorded'}`,
       date: order.curaleafCancellation.contactedAt,
+      source: 'Pharmacy',
     });
   }
   if (order.curaleafCancellation?.confirmedAt) {
@@ -220,6 +235,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       label: 'Curaleaf cancellation confirmed',
       detail: `Confirmation ${order.curaleafCancellation.confirmationReference ?? 'recorded'}`,
       date: order.curaleafCancellation.confirmedAt,
+      source: 'Pharmacy',
     });
   }
 
@@ -232,6 +248,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       label: 'Medication handed out',
       detail: 'Collected by patient',
       date: order.handoutAt,
+      source: 'Dispensary',
     });
   }
 
@@ -240,11 +257,12 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
     .sort((left, right) => new Date(right.checkedAt).getTime() - new Date(left.checkedAt).getTime())[0];
   if (latestMatched) {
     events.push({
-      label: 'Payment gate matched',
+      label: 'Price and stock rechecked',
       detail: Number.isFinite(latestMatched.patientTotalPence)
-        ? `Patient total £${(latestMatched.patientTotalPence / 100).toFixed(2)} · ${latestMatched.phase.replaceAll('_', ' ').toLowerCase()}`
-        : `Payment gate ${latestMatched.phase.replaceAll('_', ' ').toLowerCase()}`,
+        ? `£${(latestMatched.patientTotalPence / 100).toFixed(2)} confirmed before Curaleaf submission`
+        : 'Order confirmed before Curaleaf submission',
       date: latestMatched.checkedAt,
+      source: 'HHH automation',
     });
   }
 

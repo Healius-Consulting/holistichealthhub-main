@@ -21,6 +21,7 @@ import {
 } from '../utils/portalPrescriptionSubOrder';
 import { formatShippingAddress } from '../utils/shippingAddress';
 import { nextDraftIdAfterDeletion, preferredDraftIndex, preferredDraftPaymentRoute } from '../utils/createOrderDraft';
+import { purchaseOrderReference } from '../utils/purchaseOrderReference';
 import { replacementPrescriptionCopy, replacementSourcePrescriptions } from '../utils/replacementPrescriptionCopy';
 import { orderRequiresCuraleafCancel, orderSupplyIncomplete } from '../utils/orderStage';
 import { PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
@@ -930,7 +931,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           items: orderItems(prescription.items),
           placed: rxHasPo,
           placedAt: rxHasPo ? (flow?.placedAt ?? curaleaf?.createdAt ?? curaleaf?.issuedDate ?? record.paidAt ?? record.createdAt) : null,
-          poRef: rxHasPo ? (curaleaf?.customerReference ?? record.curaleaf?.customerReference ?? record.orderNumber ?? record.paymentTransactionReference ?? flow?.purchaseOrderId ?? null) : null,
+          poRef: rxHasPo ? purchaseOrderReference(flow?.purchaseOrderId, curaleaf?.purchaseOrderId, rawCuraleaf?.purchaseOrderId) : null,
           status: flowStatus ?? (isPaid && !rxHasPo
             ? 'awaiting-approval'
             : portalPrescriptionStatus({ curaleaf: isPaid ? curaleaf : undefined, fulfilmentStatus: isPaid ? record.fulfilmentStatus : 'supplier_pending' })),
@@ -982,7 +983,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
         copyFileName: null,
         items: orderItems(record.lineItems.map(item => ({ packId: item.packId, formulaId: item.formulaId, quantity: item.quantity }))),
         placed: Boolean(record.curaleaf?.purchaseOrderId),
-        poRef: record.curaleaf?.customerReference ?? record.orderNumber ?? record.paymentTransactionReference ?? null,
+        poRef: purchaseOrderReference(record.curaleaf?.purchaseOrderId),
         status: rxStatus,
         invoiceRef: null,
         trackingNumber: null,

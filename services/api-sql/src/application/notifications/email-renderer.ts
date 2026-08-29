@@ -22,11 +22,18 @@ function value(payload: unknown, key: string) {
 
 function paymentBreakdown(payload: unknown) {
   const currency = value(payload, 'currency') || 'GBP';
-  const lines = [{ label: 'Medicine', value: money(value(payload, 'medicineTotalPence') || 0, currency) }];
+  const medicine = Number(value(payload, 'medicineTotalPence') || 0);
+  const amount = Number(value(payload, 'amountPence') || 0);
+  const lines = [{ label: 'Medicine', value: money(medicine, currency) }];
   const dispensing = Number(value(payload, 'dispensingFeePence') || 0);
   const delivery = Number(value(payload, 'pharmacyDeliveryPence') || 0);
   if (dispensing > 0) lines.push({ label: 'Dispensing Cost', value: money(dispensing, currency) });
   if (delivery > 0) lines.push({ label: 'Pharmacy Delivery', value: money(delivery, currency) });
+  // Legacy pricing included Curaleaf shipping in the patient total without a
+  // dedicated payload field. Show any positive remainder so the breakdown
+  // always reconciles to the amount requested.
+  const remainder = amount - medicine - dispensing - delivery;
+  if (remainder > 0) lines.push({ label: 'Delivery', value: money(remainder, currency) });
   return lines;
 }
 
@@ -141,7 +148,7 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
         subject: 'Payment needed for your order',
         preheader: 'Complete payment securely so your pharmacy can continue the order.',
         title: 'Payment needed',
-        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nPlease complete your payment${amount ? ` of ${amount}` : ''} using this secure link:\n${paymentUrl}\n\n${paymentBreakdown(payload).map(line => `${line.label}: ${line.value}`).join('\n')}\n`,
+        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nPlease complete your payment${amount ? ` of ${amount}` : ''}${orderNumber ? ` for order ${value(payload, 'orderNumber')}` : ''} using this secure link:\n${paymentUrl}\n\n${paymentBreakdown(payload).map(line => `${line.label}: ${line.value}`).join('\n')}\n`,
         paragraphs: [
           `Hi ${firstName},`,
           'Your order is ready to move forward. Complete payment below and the pharmacy can continue preparing it for you.',
@@ -149,7 +156,11 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
         highlight: amount ? { label: 'Amount due', value: amount } : undefined,
         cta: paymentUrl ? { label: 'Pay now', href: paymentUrl } : undefined,
         detailsTitle: 'Order breakdown',
-        details: [...paymentBreakdown(payload), ...pharmacyDetails],
+        details: [
+          { label: 'Order reference', value: value(payload, 'orderNumber') },
+          ...paymentBreakdown(payload),
+          ...pharmacyDetails,
+        ],
         nextSteps: [
           'Use the secure link above to complete payment.',
           'We will confirm as soon as payment is received.',

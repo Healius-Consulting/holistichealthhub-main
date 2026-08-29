@@ -96,7 +96,7 @@ test('partial handover records collected pack counts', () => {
 
 test('order timeline keeps payment and goods-in events on distinct timestamps', () => {
   const events = buildOrderTimelineEvents(partialOrder);
-  const payment = events.find(event => event.label === 'Payment cleared');
+  const payment = events.find(event => event.label === 'Payment recorded');
   const checkIn = events.find(event => event.label.includes('partially checked in'));
   assert.ok(payment);
   assert.ok(checkIn);
@@ -106,7 +106,7 @@ test('order timeline keeps payment and goods-in events on distinct timestamps', 
   );
 });
 
-test('order timeline includes only the latest successful payment-gate check', () => {
+test('order timeline translates the latest successful payment-gate check for pharmacy staff', () => {
   const events = buildOrderTimelineEvents({
     ...partialOrder,
     quoteChecks: [
@@ -115,10 +115,11 @@ test('order timeline includes only the latest successful payment-gate check', ()
       { id: 'matched-new', phase: 'PRE_PLACEMENT', status: 'MATCHED', checkedAt: '2026-08-13T09:20:00.000Z', basketFingerprint: 'c', patientTotalPence: 11_000, wholesaleTotalPence: 5_500, shippingPence: 0, stockAvailable: true },
     ],
   });
-  const matches = events.filter(event => event.label === 'Payment gate matched');
+  const matches = events.filter(event => event.label === 'Price and stock rechecked');
   assert.equal(matches.length, 1);
   assert.equal(matches[0]?.date, '2026-08-13T09:20:00.000Z');
-  assert.match(matches[0]?.detail ?? '', /£110\.00 · pre placement/);
+  assert.match(matches[0]?.detail ?? '', /£110\.00 confirmed before Curaleaf submission/);
+  assert.equal(matches[0]?.source, 'HHH automation');
 });
 
 /* ---- Placement rail ---- */

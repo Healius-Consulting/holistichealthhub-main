@@ -14,18 +14,37 @@ export type PaymentLifecycleDeps = {
   organisationRepo: OrganisationRepositoryPort;
 };
 
+export function orderBlocksPaymentLifecycle(order: {
+  status?: string | null;
+  paymentStatus?: string | null;
+  archivedAt?: string | null;
+  resolutionStatus?: string | null;
+}) {
+  const status = String(order.status || '').toUpperCase();
+  const paymentStatus = String(order.paymentStatus || '').toUpperCase();
+  return Boolean(order.archivedAt)
+    || String(order.resolutionStatus || '').toUpperCase() === 'RESOLVED'
+    || ['CANCELLED', 'COMPLETED'].includes(status)
+    || ['CANCELLED', 'PAID', 'REFUND_REQUIRED', 'REFUNDED'].includes(paymentStatus);
+}
+
 function payloadObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 export async function processPendingPaymentLifecycle(deps: PaymentLifecycleDeps, now = new Date()) {
   const payments = await deps.paymentRepo.listPendingWorldpayPayments(500);
-  const summary = { checked: payments.length, reminders: 0, reduced: 0, voided: 0, errors: 0 };
+  const summary = { checked: payments.length, reminders: 0, reduced: 0, voided: 0, retired: 0, errors: 0 };
   for (const payment of payments) {
     if (payment.status !== 'PENDING') continue;
     try {
       const order = await deps.orderRepo.findOrderById(payment.orderId, payment.organisationId);
       if (!order) continue;
+      if (orderBlocksPaymentLifecycle(order)) {
+        await deps.paymentRepo.cancelPendingPaymentsForOrder(payment.orderId, payment.organisationId);
+        summary.retired += 1;
+        continue;
+      }
       const decision = evaluatePendingPaymentLifecycle({
         payment,
         quoteSnapshot: order.quoteSnapshot,

@@ -91,8 +91,24 @@ describe('email template renderer', () => {
     assert.match(request.subject, /Payment needed/);
     assert.match(request.html, /Pay now/);
     assert.match(request.html, /https:\/\/payments\.example\/pay/);
+    assert.match(request.html, /ORD-890/);
     assert.doesNotMatch(request.html, /Dispensing Cost/);
     assert.doesNotMatch(request.html, /Pharmacy Delivery/);
+
+    const legacyRequest = renderEmailTemplate('patient_payment_request', {
+      firstName: 'Avery',
+      amountPence: 9_500,
+      medicineTotalPence: 8_500,
+      dispensingFeePence: 500,
+      pharmacyDeliveryPence: 0,
+      currency: 'GBP',
+      orderNumber: 'ORD-950',
+      paymentUrl: 'https://payments.example/pay-legacy',
+    });
+    assert.match(legacyRequest.html, /Order reference/);
+    assert.match(legacyRequest.html, /ORD-950/);
+    assert.match(legacyRequest.html, /Delivery/);
+    assert.match(legacyRequest.html, /£5\.00/);
 
     const refunded = renderEmailTemplate('patient_refunded', {
       firstName: 'Avery',

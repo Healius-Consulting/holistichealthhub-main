@@ -29,7 +29,7 @@ function shortId(value: string | number) {
 }
 
 export function businessOrderReference(order: BusinessReferenceOrder) {
-  if (order.draftId) return `Draft · ${shortId(order.draftId)}`;
+  if (order.draftId) return 'Draft';
   if (order.payment.status === 'none') return 'Draft';
   const fallback = order.backendId ? shortId(order.backendId) : shortId(order.id);
   if (!order.redoContext) return `#${order.orderNumber ?? fallback}`;

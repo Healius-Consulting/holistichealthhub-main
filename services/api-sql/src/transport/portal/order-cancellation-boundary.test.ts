@@ -12,10 +12,14 @@ test('generic cancellation rejects non-unpaid orders before any mutation', () =>
   const lookup = handler.indexOf('findOrderById');
   const guard = handler.indexOf('orderAllowsManualCancellation(order)');
   const snapshotMutation = handler.indexOf('updateQuoteSnapshot');
+  const paymentRetirement = handler.indexOf('cancelPendingPaymentsForOrder');
   const statusMutation = handler.indexOf('updateOrderStatus');
   assert.ok(lookup >= 0 && guard > lookup, 'the tenant-scoped order is loaded before policy evaluation');
   assert.ok(snapshotMutation > guard, 'snapshot mutation occurs only after the unpaid-order guard');
+  assert.ok(paymentRetirement > guard, 'pending checkout generations are retired only after the unpaid-order guard');
+  assert.ok(paymentRetirement < statusMutation, 'checkout generations are retired before the order becomes terminal');
   assert.ok(statusMutation > guard, 'status mutation occurs only after the unpaid-order guard');
+  assert.match(handler, /paymentStatus: 'CANCELLED'/);
   assert.match(handler, /PAID_ORDER_REQUIRES_RESOLUTION/);
   assert.match(handler, /stampUnpaidManualCancellation/);
   assert.doesNotMatch(handler, /action: supplierOrderCancelled[\s\S]*?'confirmed'/);

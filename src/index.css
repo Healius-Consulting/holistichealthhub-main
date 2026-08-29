@@ -13664,6 +13664,14 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .order-activity-log[open] > summary{ margin-bottom: 10px; }
 
+.order-activity-log__help{
+  max-width: 70ch;
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 @media (prefers-reduced-motion: reduce){
   .order-activity-log > summary svg{ transition: none; }
 }
@@ -14771,23 +14779,46 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-weight: 650;
 }
 .order-details-timeline {
-  margin: 6px 0 0;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  margin: 8px 0 0;
+  padding: 4px 0;
   list-style: none;
-  overflow: hidden;
 }
 .order-details-timeline li {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
 }
-.order-details-timeline li:last-child {
-  border-bottom: 0;
+.order-details-timeline li:not(:last-child)::before {
+  position: absolute;
+  top: 24px;
+  bottom: -10px;
+  left: 5px;
+  width: 2px;
+  background: var(--border);
+  content: '';
+}
+.order-details-timeline__marker {
+  position: relative;
+  z-index: 1;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border: 2px solid var(--tenant-primary);
+  border-radius: 999px;
+  background: var(--bg-surface);
+}
+.order-details-timeline__marker--curaleaf { border-color: var(--color-success); }
+.order-details-timeline__marker--worldpay { border-color: var(--tenant-primary); }
+.order-details-timeline__marker--pharmacy,
+.order-details-timeline__marker--dispensary { border-color: var(--text-secondary); }
+.order-details-timeline__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 .order-details-timeline strong {
   display: block;
@@ -14798,6 +14829,19 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   margin-top: 2px;
   color: var(--text-secondary);
   font-size: 11px;
+}
+.order-details-timeline .order-details-timeline__source {
+  display: inline-flex;
+  width: fit-content;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1.2;
 }
 .order-details-timeline__meta { text-align: right; }
 .order-details-timeline time {
@@ -14826,8 +14870,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
     justify-content: flex-start;
   }
   .order-details-prescription-card .order-details-kv dd { max-width: 100%; }
-  .order-details-timeline li { grid-template-columns: 1fr; gap: 4px; }
-  .order-details-timeline__meta { text-align: left; }
+  .order-details-timeline li { grid-template-columns: 12px minmax(0, 1fr); gap: 10px; }
+  .order-details-timeline__meta { grid-column: 2; text-align: left; }
 }
 
 .order-ledger__value {
@@ -14996,6 +15040,11 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-weight: 750;
   text-transform: uppercase;
   letter-spacing: .06em;
+}
+.order-supplier-fulfilment__po {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-transform: none;
+  overflow-wrap: anywhere;
 }
 .order-supplier-fulfilment__header strong {
   display: block;

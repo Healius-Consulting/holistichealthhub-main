@@ -289,6 +289,17 @@ function formatDate(value: Date | string | null | undefined, includeTime = false
     : { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function formatTimelineDate(value: Date | string) {
+  return new Date(value).toLocaleString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 function formatDeliveryDate(dateKey: string) {
   return new Date(`${dateKey}T12:00:00Z`).toLocaleDateString('en-GB', {
     weekday: 'short',
@@ -1478,8 +1489,25 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const cancellationClosed = ['resolved', 'refunded'].includes(cancellationResolution) || typedResolutionClosed;
   const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => prescription.placed);
   const placedCount = order.prescriptions.filter(prescription => prescription.placed).length;
+  const purchaseOrderReferences = [...new Set(order.prescriptions.flatMap(prescription => prescription.poRef ? [prescription.poRef] : []))];
   const sharesLegacyPurchaseOrder = placedCount > 1 && new Set(order.prescriptions.filter(prescription => prescription.placed && prescription.poRef).map(prescription => prescription.poRef)).size === 1;
   const paymentStatusLabel = order.payment.status === 'paid' ? 'paid' : order.payment.status === 'sent' ? 'awaiting payment' : order.payment.status === 'cancelled' ? 'cancelled' : 'unpaid';
+  const isDraftOrder = order.payment.status === 'none';
+  const hhhReference = orderReference(order).replace(/^#/, '');
+  const purchaseOrderSummary = purchaseOrderReferences.length === 1
+    ? `Curaleaf PO ${purchaseOrderReferences[0]}`
+    : purchaseOrderReferences.length > 1
+      ? `${purchaseOrderReferences.length} Curaleaf POs`
+      : null;
+  const headerReference = isDraftOrder
+    ? `Draft order · not submitted · ${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'}`
+    : [
+      purchaseOrderSummary,
+      `${order.redoContext ? 'Replacement HHH' : 'HHH'} ref ${hhhReference}`,
+      paymentStatusLabel,
+      `${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'}`,
+      order.redoContext ? `replaces #${order.redoContext.originalOrderId}` : null,
+    ].filter(Boolean).join(' · ');
   const paymentFormVisible = stage === 'awaiting-payment' && order.payment.route === 'pharmacy';
   const mayCancel = orderPaymentAllowsManualCancellation(order)
     && !order.cancellation
@@ -1530,12 +1558,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
             <span className={`order-crm-record__stage order-tone--${meta.tone}`}><Icon size={20} aria-hidden="true" /></span>
             <div className="order-crm-record__titles">
               <strong>{patient?.name ?? 'Unknown patient'}</strong>
-              <span className="order-crm-record__ref">
-                {order.redoContext ? 'Replacement' : 'Order'} {orderReference(order)}
-                {` · ${paymentStatusLabel}`}
-                {` · ${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'}`}
-                {order.redoContext ? ` · replaces #${order.redoContext.originalOrderId}` : ''}
-              </span>
+              <span className="order-crm-record__ref">{headerReference}</span>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${headerStatusTone}`}>{headerStatusLabel}</span>
@@ -2590,8 +2613,8 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
       <article className={`order-rx-card order-rx-card--unified${isCancelled ? ' order-rx-card--cancelled' : ''}`}>
         <header className="order-rx-card__header">
           <span>
-            <small>Prescription {index + 1} · {routeLabel}</small>
-            <strong>{statusLabel}</strong>
+            <small>Prescription {index + 1}</small>
+            <strong>{routeLabel} entry</strong>
           </span>
           <div className="order-rx-card__meta">
             <strong>{money(rxRevenue(prescription))}</strong>
@@ -2670,7 +2693,11 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
             <div className="order-supplier-fulfilment">
               <header className="order-supplier-fulfilment__header">
                 <div>
-                  <small>Curaleaf fulfilment</small>
+                  <small>
+                    {prescription.poRef ? (
+                      <>Curaleaf PO <span className="order-supplier-fulfilment__po">{prescription.poRef}</span></>
+                    ) : 'Curaleaf fulfilment'}
+                  </small>
                   <strong>
                     {isCancelled
                       ? 'Curaleaf cancelled this purchase order'
@@ -3041,6 +3068,7 @@ function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, c
                 <ChevronDown size={14} aria-hidden="true" />
                 Activity log
               </summary>
+              <p className="order-activity-log__help">Sources show whether a step was recorded by pharmacy staff or completed automatically. Times are exact audit timestamps.</p>
               <OrderTimeline order={order} />
             </details>
           </section>
@@ -3059,12 +3087,16 @@ function OrderTimeline({ order }: { order: PatientOrder & { handoutAt?: Date | s
     <ol className="order-details-timeline">
       {events.map((event, index) => (
         <li key={`${event.label}-${index}`}>
+          <span className={`order-details-timeline__marker order-details-timeline__marker--${event.source.toLowerCase().replaceAll(' ', '-')}`} aria-hidden="true" />
           <div className="order-details-timeline__event">
-            <strong>{event.label}</strong>
+            <span className="order-details-timeline__heading">
+              <strong>{event.label}</strong>
+              <small className="order-details-timeline__source">{event.source}</small>
+            </span>
             {event.detail && !event.detail.startsWith('PO ') ? <small>{event.detail}</small> : null}
           </div>
           <div className="order-details-timeline__meta">
-            {event.date ? <time dateTime={new Date(event.date).toISOString()}>{formatDate(event.date, true)}</time> : null}
+            {event.date ? <time dateTime={new Date(event.date).toISOString()}>{formatTimelineDate(event.date)}</time> : null}
             {event.detail?.startsWith('PO ') ? <small>{event.detail}</small> : null}
           </div>
         </li>
