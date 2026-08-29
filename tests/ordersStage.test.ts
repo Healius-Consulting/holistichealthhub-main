@@ -69,15 +69,15 @@ test('cancelled orders distinguish outstanding work from closed outcomes', () =>
 test('pharmacy cancel is local only before Curaleaf prescriber, prescription, or purchase-order work starts', () => {
   const pending = {
     payment: { status: 'paid' },
-    prescriptions: [{ curaleafPrescriptionId: 'rx-1', curaleafPrescriptionState: 'PENDING', placed: false, poRef: 'ORD-1', purchaseOrderState: null }],
+    prescriptions: [{ curaleafPrescriptionId: 'rx-1', curaleafPrescriptionState: 'PENDING', placed: false, purchaseOrderId: 'ORD-1', purchaseOrderState: null }],
   } as PatientOrder;
   const accepted = {
     payment: { status: 'paid' },
-    prescriptions: [{ curaleafPrescriptionId: 'rx-1', curaleafPrescriptionState: 'ACTIVE', placed: false, poRef: 'ORD-1' }],
+    prescriptions: [{ curaleafPrescriptionId: 'rx-1', curaleafPrescriptionState: 'ACTIVE', placed: false, purchaseOrderId: 'ORD-1' }],
   } as PatientOrder;
   const withPo = {
     payment: { status: 'paid' },
-    prescriptions: [{ curaleafPrescriptionId: 'rx-1', curaleafPrescriptionState: 'ACTIVE', placed: true, poRef: 'ORD-1', purchaseOrderState: 'CREATED' }],
+    prescriptions: [{ curaleafPrescriptionId: 'rx-1', curaleafPrescriptionState: 'ACTIVE', placed: true, purchaseOrderId: 'ORD-1', purchaseOrderState: 'CREATED' }],
   } as PatientOrder;
   assert.equal(orderRequiresCuraleafCancel(pending), true);
   assert.equal(orderRequiresCuraleafCancel(accepted), true);
@@ -94,7 +94,7 @@ test('pharmacy cancel is local only before Curaleaf prescriber, prescription, or
   assert.equal(orderAwaitingCuraleafCancel(withPo), false);
 });
 
-test('mixed ready and in-flight prescriptions do not classify the order as ready', () => {
+test('mixed ready and in-flight prescriptions prioritise collectable packs', () => {
   const order = {
     date: new Date(),
     payment: { status: 'paid' },
@@ -113,7 +113,7 @@ test('mixed ready and in-flight prescriptions do not classify the order as ready
       },
     ],
   } as PatientOrder;
-  assert.equal(orderStage(order).stage, 'dispatched');
+  assert.equal(orderStage(order).stage, 'ready');
   assert.deepEqual(orderFulfilmentHeadline(order), {
     label: 'Split fulfilment',
     mixedPrescriptions: true,
@@ -148,7 +148,7 @@ test('order header uses one stable prescription stage and reserves split deliver
   assert.equal(orderFulfilmentHeadline(complete)?.label, 'Collected');
 });
 
-test('mixed ready and unplaced prescriptions do not classify the order as ready', () => {
+test('mixed ready and unplaced prescriptions keep the collectable prescription actionable', () => {
   const order = {
     date: new Date(),
     payment: { status: 'paid' },
@@ -165,7 +165,7 @@ test('mixed ready and unplaced prescriptions do not classify the order as ready'
       },
     ],
   } as PatientOrder;
-  assert.notEqual(orderStage(order).stage, 'ready');
+  assert.equal(orderStage(order).stage, 'ready');
 });
 
 test('partial dispatch with zero check-in stays in transit despite stale ready shipment state', () => {
@@ -252,7 +252,7 @@ test('ready and already-collected prescriptions classify the remaining order as 
   assert.equal(orderStage(order).stage, 'ready');
 });
 
-test('partial check-in with supplier remainder stays in delivery not delivered', () => {
+test('partial check-in with supplier remainder is immediately ready to collect', () => {
   const order = {
     date: new Date(),
     payment: { status: 'paid' },
@@ -277,11 +277,11 @@ test('partial check-in with supplier remainder stays in delivery not delivered',
       }],
     }],
   } as PatientOrder;
-  assert.equal(orderStage(order).stage, 'dispatched');
+  assert.equal(orderStage(order).stage, 'ready');
   assert.equal(orderHasPartialPharmacyReceipt(order), true);
 });
 
-test('all ordered packs checked in but not ready classifies as delivered', () => {
+test('all checked-in packs are ready without a second pharmacy action', () => {
   const order = {
     date: new Date(),
     payment: { status: 'paid' },
@@ -305,7 +305,7 @@ test('all ordered packs checked in but not ready classifies as delivered', () =>
       }],
     }],
   } as PatientOrder;
-  assert.equal(orderStage(order).stage, 'delivered');
+  assert.equal(orderStage(order).stage, 'ready');
   assert.equal(orderHasPartialPharmacyReceipt(order), false);
 });
 

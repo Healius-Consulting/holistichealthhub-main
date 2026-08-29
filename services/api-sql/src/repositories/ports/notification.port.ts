@@ -32,5 +32,7 @@ export interface NotificationRepositoryPort {
   listPending(limit?: number): Promise<NotificationOutboxRecord[]>;
   markProcessing(id: string, attemptCount: number): Promise<void>;
   markSent(id: string, providerResponse?: unknown): Promise<void>;
+  /** Return a transient delivery failure to the queue without changing its idempotency key. */
+  markRetry?(id: string, attemptCount: number, nextAttemptAt: string, failureCode: string): Promise<void>;
   markFailed(id: string, failureCode: string): Promise<void>;
 }

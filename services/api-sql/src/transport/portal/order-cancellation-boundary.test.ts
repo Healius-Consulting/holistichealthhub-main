@@ -25,12 +25,11 @@ test('generic cancellation rejects non-unpaid orders before any mutation', () =>
   assert.doesNotMatch(handler, /action: supplierOrderCancelled[\s\S]*?'confirmed'/);
 });
 
-test('paid quote-review cancellation stays on the dedicated resolution endpoint', () => {
+test('paid quote review cannot be used as a cancellation escape hatch', () => {
   const handler = routerSource.match(/router\.post\('\/portal\/orders\/:id\/quote-review\/resolve',[\s\S]*?router\.post\('\/portal\/orders\/:id\/curaleaf-cancellation'/)?.[0];
   assert.ok(handler, 'quote-review resolution handler is present');
   assert.match(handler, /if \(!orderMoneyWasTaken\(order\)\)/);
-  assert.match(handler, /if \(input\.action === 'cancel'\)/);
-  assert.match(handler, /status: 'CANCELLED'/);
-  assert.match(handler, /status: 'recreate_required'/);
-  assert.match(handler, /options: \['replace', 'refund'\]/);
+  assert.match(handler, /action: z\.enum\(\['absorb', 'refresh'\]\)/);
+  assert.doesNotMatch(handler, /input\.action === 'cancel'/);
+  assert.doesNotMatch(handler, /decision: 'CANCEL'/);
 });

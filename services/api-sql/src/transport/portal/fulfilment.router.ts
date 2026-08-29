@@ -13,6 +13,7 @@ import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { queueCollectionReadyEmail } from '../../application/notifications/collection-ready-email.js';
+import { curaleafSubOrders, snapshotRxKey, snapshotRxList } from '../../application/prescriptions/snapshot-rx.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
@@ -39,6 +40,36 @@ const goodsReceiptSchema = z.object({
 
 function snapshotObject(value: unknown): Record<string, any> {
   return value && typeof value === 'object' && !Array.isArray(value) ? { ...value as Record<string, any> } : {};
+}
+
+export function curaleafScopeForShipment(snapshot: Record<string, any>, shipmentId: string) {
+  for (const [rxKey, value] of Object.entries(curaleafSubOrders(snapshot))) {
+    const curaleaf = snapshotObject(value);
+    const shipmentIds = [
+      ...(Array.isArray(curaleaf.shipmentIds) ? curaleaf.shipmentIds : []),
+      ...(Array.isArray(curaleaf.shipments) ? curaleaf.shipments.map((shipment: any) => shipment?.id) : []),
+    ].map(String);
+    if (shipmentIds.includes(shipmentId)) return { rxKey, curaleaf };
+  }
+  return { rxKey: null as string | null, curaleaf: snapshotObject(snapshot.curaleaf) };
+}
+
+function requestedItemsForScope(snapshot: Record<string, any>, rxKey: string | null) {
+  if (!rxKey) return snapshot.lineItems || snapshot.items || [];
+  const prescriptions = snapshotRxList(snapshot);
+  const prescription = prescriptions.find((rx, index) => snapshotRxKey(rx, index) === rxKey);
+  return prescription?.items || [];
+}
+
+function withCuraleafScope(snapshot: Record<string, any>, rxKey: string | null, curaleaf: Record<string, any>) {
+  if (!rxKey) return { ...snapshot, curaleaf };
+  return {
+    ...snapshot,
+    curaleafSubOrders: {
+      ...curaleafSubOrders(snapshot),
+      [rxKey]: curaleaf,
+    },
+  };
 }
 
 
@@ -121,14 +152,15 @@ export function createPortalFulfilmentRouter(): Router {
       if (!sqlShipment && targetOrderId) {
         const order = await orderRepo.findOrderById(targetOrderId, scope.organisationId);
         const snapshot = snapshotObject(order?.quoteSnapshot);
-        const poId = snapshot.curaleaf?.purchaseOrderId || snapshot.curaleaf?.id;
+        const shipmentScope = curaleafScopeForShipment(snapshot, supplierShipmentId);
+        const poId = shipmentScope.curaleaf.purchaseOrderId || shipmentScope.curaleaf.id;
         if (order && poId) {
           sqlShipment = await fulfilmentRepo.upsertSupplierShipment({
             organisationId: scope.organisationId,
             orderId: order.id,
             supplierPurchaseOrderId: String(poId),
             supplierShipmentId,
-            supplierCustomerReference: snapshot.curaleaf?.customerReference || order.orderNumber,
+            supplierCustomerReference: shipmentScope.curaleaf.customerReference || order.orderNumber,
           }).then(async result => (
             result.id
               ? { id: result.id, orderId: order.id, supplierPurchaseOrderId: String(poId), supplierShipmentId, supplierCustomerReference: order.orderNumber, status: 'DISPATCHED', dispatchedAt: null, createdAt: new Date().toISOString() }
@@ -175,8 +207,9 @@ export function createPortalFulfilmentRouter(): Router {
       const order = await orderRepo.findOrderById(targetOrderId, scope.organisationId);
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
       const snapshot = snapshotObject(order.quoteSnapshot);
-      const curaleaf = snapshotObject(snapshot.curaleaf);
-      const requestedItems = snapshot.lineItems || snapshot.items || [];
+      const shipmentScope = curaleafScopeForShipment(snapshot, supplierShipmentId);
+      const curaleaf = shipmentScope.curaleaf;
+      const requestedItems = requestedItemsForScope(snapshot, shipmentScope.rxKey);
       const priorLines = normalisedFulfilmentLines({
         purchaseOrder: curaleaf,
         shipments: curaleaf.shipments || [],
@@ -193,7 +226,6 @@ export function createPortalFulfilmentRouter(): Router {
         shipmentId: supplierShipmentId,
         shipmentStates: curaleaf.shipmentStates || {},
       });
-      const remainingOpen = lines.some(line => line.remaining > 0 || line.received < line.ordered);
       const anyReceived = lines.some(line => line.received > 0);
       const nextStatus = advanceFulfilmentStatus(
         order.fulfilmentStatus,
@@ -213,15 +245,15 @@ export function createPortalFulfilmentRouter(): Router {
         organisationId: scope.organisationId,
         // Stamped by the dispensary, not the supplier: the collection-email window and
         // the "verified on" line both need the moment the packs were actually booked in.
-        quoteSnapshot: { ...snapshot, curaleaf: { ...curaleaf, lines, shipmentStates, ...(anyReceived ? { goodsInAt: new Date().toISOString() } : {}) } },
-        fulfilmentStatus: remainingOpen && anyReceived
-          ? 'PARTIALLY_RECEIVED'
-          : anyReceived
-            ? advanceFulfilmentStatus(order.fulfilmentStatus, 'READY_FOR_COLLECTION')
-            : nextStatus,
+        quoteSnapshot: withCuraleafScope(snapshot, shipmentScope.rxKey, { ...curaleaf, lines, shipmentStates, ...(anyReceived ? { goodsInAt: new Date().toISOString() } : {}) }),
+        fulfilmentStatus: anyReceived
+          ? advanceFulfilmentStatus(order.fulfilmentStatus, 'READY_FOR_COLLECTION')
+          : nextStatus,
       }).catch(err => console.warn('Order status sync on shipment check-in warning:', err));
 
-      if (anyReceived) {
+      if (anyReceived && receiptItems.some(item => item.receivedQuantity > 0)) {
+        const readyPacks = receiptItems.reduce((sum, item) => sum + Math.max(0, item.receivedQuantity), 0);
+        const totalPacks = lines.reduce((sum, line) => sum + Math.max(0, Number(line.ordered || 0)), 0);
         await queueCollectionReadyEmail(
           { notificationRepo, patientRepo, organisationRepo },
           {
@@ -230,6 +262,8 @@ export function createPortalFulfilmentRouter(): Router {
             patientId: order.patientId,
             orderNumber: (order as { orderNumber?: string | number | null }).orderNumber ?? null,
             scopeKey: `shipment:${supplierShipmentId}`,
+            readyPacks,
+            totalPacks,
           },
         ).catch(err => console.warn('Ready-for-collection email warning:', err));
       }
@@ -263,7 +297,7 @@ export function createPortalFulfilmentRouter(): Router {
           const nextFulfilmentStatus = status === 'collected'
             ? (remainingOpen ? 'PARTIALLY_RECEIVED' : 'COLLECTED')
             : status === 'ready_for_collection'
-              ? (remainingOpen ? 'PARTIALLY_RECEIVED' : 'READY_FOR_COLLECTION')
+              ? 'READY_FOR_COLLECTION'
               : undefined;
           await orderRepo.updateQuoteSnapshot({
             id: order.id,

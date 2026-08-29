@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
-import { assertGoodsReceiptRecorded, goodsReceiptStatus } from './fulfilment.router.js';
+import { assertGoodsReceiptRecorded, curaleafScopeForShipment, goodsReceiptStatus } from './fulfilment.router.js';
 
 const entityIdSchema = z.string().regex(/^(?:[a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i);
 
@@ -48,6 +48,18 @@ describe('portal goods receipt validation', () => {
       items: [{ productId: 'pack-1', receivedQuantity: 1 }],
     });
     assert.equal(parsed.orderId, '93eea6883a394b1db998e43cc16acf4b');
+  });
+
+  it('uses the prescription sub-order that owns the Curaleaf shipment', () => {
+    const selected = curaleafScopeForShipment({
+      curaleaf: { purchaseOrderId: 'legacy-order-level-po', shipmentIds: [] },
+      curaleafSubOrders: {
+        'rx-a': { purchaseOrderId: 'po-a', shipments: [{ id: 'ship-a' }] },
+        'rx-b': { purchaseOrderId: 'po-b', shipments: [{ id: 'ship-b' }] },
+      },
+    }, 'ship-b');
+    assert.equal(selected.rxKey, 'rx-b');
+    assert.equal(selected.curaleaf.purchaseOrderId, 'po-b');
   });
 });
 

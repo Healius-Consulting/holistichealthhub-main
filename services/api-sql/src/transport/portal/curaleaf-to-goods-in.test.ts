@@ -146,6 +146,22 @@ describe('Curaleaf dispatch reaches the pharmacy as something it can act on', ()
     assert.equal(flow.goodsInAt, '2026-08-23T10:00:00.000Z');
   });
 
+  it('a partial check-in is ready immediately while the supplier remainder stays open', () => {
+    const partialDispatch = { ...dispatch, items: [{ ...dispatch.items[0], packCount: 1 }] };
+    const checkedIn = baseOrder('READY_FOR_COLLECTION', {
+      shipments: [partialDispatch],
+      shipmentIds: ['ship-1'],
+      shipmentStates: { 'ship-1': 'ready_for_collection' },
+      lines: [{ lineId: 'poi-1', purchaseOrderItemId: 'poi-1', productId: 'p1', ordered: 2, shipped: 1, received: 1, collected: 0, remaining: 1 }],
+      goodsInAt: '2026-08-23T10:00:00.000Z',
+    });
+    const portal = toPortalOrder(checkedIn as never);
+    const flow = Object.values(portal.prescriptionFlow ?? {})[0] as { state: string; lines: Array<{ remaining: number }> };
+    assert.equal(portal.fulfilmentStatus, 'ready_for_collection');
+    assert.equal(flow.state, 'READY_FOR_COLLECTION');
+    assert.equal(flow.lines[0]?.remaining, 1, 'ready status must not erase the unshipped remainder');
+  });
+
   it('a part-collected order stays collectable while packs remain on the shelf', () => {
     const partlyCollected = baseOrder('READY_FOR_COLLECTION', {
       shipments: [dispatch],

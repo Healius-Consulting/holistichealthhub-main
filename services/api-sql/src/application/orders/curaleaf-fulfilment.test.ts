@@ -274,7 +274,7 @@ describe('Curaleaf fulfilment mapping', () => {
     });
     assert.equal(checkedIn.lines[0]?.received, 2);
     assert.equal(checkedIn.lines[0]?.remaining, 2);
-    assert.equal(checkedIn.shipmentStates[beachWeddingShipment.id], 'received');
+    assert.equal(checkedIn.shipmentStates[beachWeddingShipment.id], 'ready_for_collection');
     assert.equal(supplierFulfilmentStatus({
       purchaseOrder: beachWeddingPo,
       shipments: [beachWeddingShipment],
@@ -362,6 +362,7 @@ describe('Curaleaf fulfilment mapping', () => {
 
     const partial = applyPharmacyHandout({
       lines,
+      shipments: [beachWeddingShipment],
       shipmentStates: { [beachWeddingShipment.id]: 'ready_for_collection' },
       shipmentId: beachWeddingShipment.id,
       partial: true,
@@ -375,6 +376,27 @@ describe('Curaleaf fulfilment mapping', () => {
       shipments: [beachWeddingShipment],
       lines: partial.lines,
     }), 'PARTIALLY_RECEIVED');
+  });
+
+  it('hands out one ready consignment at a time and is idempotent on retry', () => {
+    const first = { ...beachWeddingShipment, id: 'shipment-first', items: [{ productId: beachWeddingShipment.items[0]!.productId, packCount: 1 }] };
+    const second = { ...beachWeddingShipment, id: 'shipment-second', items: [{ productId: beachWeddingShipment.items[0]!.productId, packCount: 1 }] };
+    const twoPackPo = { ...beachWeddingPo, items: [{ ...beachWeddingPo.items[0]!, packsOrderedCount: 2, packsAllocatedCount: 2 }] };
+    const lines = normalisedFulfilmentLines({
+      purchaseOrder: twoPackPo,
+      shipments: [first, second],
+      requestedItems: [{ packId: beachWeddingShipment.items[0]!.productId, quantity: 2 }],
+      priorLines: [{ productId: beachWeddingShipment.items[0]!.productId, received: 2, collected: 0 }],
+    });
+    const states = { 'shipment-first': 'ready_for_collection', 'shipment-second': 'ready_for_collection' };
+    const firstHandout = applyPharmacyHandout({ lines, shipments: [first, second], shipmentStates: states, shipmentId: first.id, partial: true });
+    assert.equal(firstHandout.lines[0]?.collected, 1);
+    assert.equal(firstHandout.remainingOpen, true);
+    const retry = applyPharmacyHandout({ lines: firstHandout.lines, shipments: [first, second], shipmentStates: firstHandout.shipmentStates, shipmentId: first.id, partial: true });
+    assert.equal(retry.lines[0]?.collected, 1, 'retry must not collect the second consignment');
+    const final = applyPharmacyHandout({ lines: retry.lines, shipments: [first, second], shipmentStates: retry.shipmentStates, shipmentId: second.id, partial: true });
+    assert.equal(final.lines[0]?.collected, 2);
+    assert.equal(final.remainingOpen, false);
   });
 
   it('keeps FULLY_ALLOCATED as supplier allocated when no shipment has been handed to courier', () => {

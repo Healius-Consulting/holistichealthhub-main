@@ -55,7 +55,7 @@ test('lane assignment follows the documented stage mapping', () => {
     ['curaleaf-pending', 'curaleaf'],
     ['curaleaf-approved', 'curaleaf'],
     ['dispatched', 'curaleaf'],
-    ['delivered', 'goods-in'],
+    ['delivered', 'ready'],
     ['ready', 'ready'],
     ['rejected', 'needs-action'],
   ];
@@ -85,7 +85,7 @@ test('an open cancellation outranks wherever the packs are', () => {
   assert.equal(orderBoardLane(cancelling), 'needs-action');
 });
 
-test('split fulfilment gets its own lane instead of hiding inside goods-in', () => {
+test('checked-in packs move to ready even while supplier remainder stays open', () => {
   const order = {
     date: new Date(),
     payment: { status: 'paid' },
@@ -95,7 +95,7 @@ test('split fulfilment gets its own lane instead of hiding inside goods-in', () 
     }],
   } as PatientOrder;
   const resolved = orderStage(order);
-  assert.equal(orderBoardLane({ order, stage: resolved.stage }), 'split');
+  assert.equal(orderBoardLane({ order, stage: resolved.stage }), 'ready');
 });
 
 test('a split order with collectable packs stays in the handout queue', () => {

@@ -7,11 +7,8 @@ import { collectionEmailDelayUntil } from './collection-email-schedule.js';
 /**
  * Queues the patient's ready-to-collect email.
  *
- * Both the order-level and the shipment-level ready-for-collection routes go
- * through here. They used to diverge: the shipment route recorded the state but
- * never queued anything, so marking a single consignment ready told the patient
- * nothing. The idempotency key still distinguishes the two, so a consignment and
- * a whole order can each notify once.
+ * Goods-in and explicit readiness routes go through here with the same scope key.
+ * A consignment can therefore notify once even if both endpoints are called.
  */
 export async function queueCollectionReadyEmail(
   deps: {
@@ -26,6 +23,8 @@ export async function queueCollectionReadyEmail(
     orderNumber?: string | number | null;
     /** Distinguishes a consignment notice from a whole-order one. */
     scopeKey: string;
+    readyPacks?: number;
+    totalPacks?: number;
     now?: Date;
   },
 ) {
@@ -43,6 +42,10 @@ export async function queueCollectionReadyEmail(
     {
       firstName: patient.firstName || 'Patient',
       orderNumber: input.orderNumber ?? null,
+      readyPacks: input.readyPacks ?? null,
+      totalPacks: input.totalPacks ?? null,
+      partialReady: Number(input.readyPacks || 0) > 0
+        && Number(input.totalPacks || 0) > Number(input.readyPacks || 0),
       ...pharmacyEmailContext(organisation),
     },
     ['patient-ready-for-collection', input.orderId, input.scopeKey],

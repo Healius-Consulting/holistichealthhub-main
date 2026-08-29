@@ -409,7 +409,7 @@ export function updatePortalShipmentStatus(shipmentId: string, input: {
   );
 }
 
-export function handoutPortalOrder(orderId: string, input: { organisationId: string; partial?: boolean; shipmentId?: string }) {
+export function handoutPortalOrder(orderId: string, input: { organisationId: string; prescriptionId?: string; partial?: boolean; shipmentId?: string }) {
   return apiRequest<{ order: PortalOrderRecord; idempotent: boolean }>(
     `/v1/portal/orders/${encodeURIComponent(orderId)}/handout`,
     { method: 'POST', body: JSON.stringify(input) },
@@ -678,7 +678,7 @@ export function createPrescriberDirectoryRecord(input: Omit<import('./contracts'
 
 export function resolvePortalQuoteReview(orderId: string, input: {
   organisationId: string;
-  action: 'absorb' | 'cancel' | 'refresh';
+  action: 'absorb' | 'refresh';
 }) {
   return apiRequest<{ action: string; order: import('./contracts').PortalOrderRecord }>(
     `/v1/portal/orders/${encodeURIComponent(orderId)}/quote-review/resolve`,

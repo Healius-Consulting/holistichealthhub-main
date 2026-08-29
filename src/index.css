@@ -7907,20 +7907,34 @@ html.modal-open .page-container{ overflow: hidden; }
   /* The record carries two fact panels, an order list and an activity log; at 980px
      they were all squeezed into narrow columns for no reason on a desktop screen. */
   width: min(1160px, 100%);
+  max-height: calc(100dvh - 48px);
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--bg-app);
   box-shadow: 0 24px 60px rgb(2 6 12 / 28%);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .crm-dialog:focus{ outline: none; }
 
+.crm-dialog__chrome{
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  display: flex;
+  height: 0;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
 .crm-dialog__close{
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
+  width: 44px;
+  height: 44px;
+  margin: 10px 10px 0 0;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  box-shadow: 0 2px 8px rgb(2 6 12 / 12%);
+  pointer-events: auto;
 }
 
 .crm-dialog__body{
@@ -7939,8 +7953,8 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 
 @media (max-width: 680px){
-  .crm-dialog__scrim{ padding: 0; }
-  .crm-dialog{ width: 100%; min-height: 100%; border: 0; border-radius: 0; }
+  .crm-dialog__scrim{ padding: 0; overflow: hidden; }
+  .crm-dialog{ width: 100%; min-height: 100%; max-height: 100dvh; border: 0; border-radius: 0; }
 }
 
 .patient-chart__panels{
@@ -13446,11 +13460,6 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-crm-record__value > small{ color: var(--text-tertiary); font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .order-crm-record__value > strong{ color: var(--text-primary); font-size: 24px; font-weight: 650; letter-spacing: -.04em; }
 .order-crm-record__opened{ color: var(--text-secondary); font-size: 11px; font-weight: 550; }
-.order-crm-record__payment-status{
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 650;
-}
 .order-crm-legacy-po{
   margin: 0 0 12px;
   color: var(--text-secondary);
@@ -13488,6 +13497,28 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--tenant-primary) 4%, var(--bg-elevated)), var(--bg-surface));
 }
+
+.order-placement-progress{
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+.order-placement-progress .order-stage-rail{ border-bottom: 0; }
+.order-placement-progress__summary{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.order-placement-progress__summary strong{ color: var(--text-primary); }
 
 .order-stage-rail__lane + .order-stage-rail__lane{
   margin-top: 14px;
@@ -13631,6 +13662,11 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .order-stage-rail__steps li:not(:last-child)::after{
     content: none;
   }
+}
+
+@media (max-width: 620px){
+  .order-stage-rail--placement .order-stage-rail__steps li{ flex-basis: 50%; }
+  .order-placement-progress__summary{ display: grid; }
 }
 
 /* ---- Collapsible activity log ---- */
@@ -14169,7 +14205,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-fulfilment-collapsed--audit{ margin-top: 12px; background: var(--bg-surface); }
 .order-full-view-controls{ display: flex; justify-content: flex-end; padding: 14px 16px 0; }
 
-.order-handout-backdrop{ position: fixed; z-index: 120; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(13, 25, 21, .48); backdrop-filter: blur(3px); }
+.order-handout-backdrop{ position: fixed; z-index: 1500; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(13, 25, 21, .48); backdrop-filter: blur(3px); }
 .order-handout-dialog{ display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 13px; width: min(480px, 100%); padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); box-shadow: 0 24px 70px rgba(10, 22, 18, .24); }
 .order-handout-dialog__icon{ display: grid; width: 40px; height: 40px; place-items: center; border-radius: 9px; color: var(--color-success); background: color-mix(in srgb, var(--color-success) 10%, var(--bg-surface)); }
 .order-handout-dialog small{ color: var(--tenant-primary-strong); font-size: 9px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
@@ -14273,6 +14309,34 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-size: 13px;
   line-height: 1.5;
 }
+.curaleaf-call-modal__scope{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+.curaleaf-call-modal__scope button{
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.curaleaf-call-modal__scope button.is-selected{
+  border-color: var(--border);
+  background: var(--bg-surface);
+  color: var(--tenant-primary-strong);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .05);
+}
+.curaleaf-call-modal__scope button:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 1px; }
 
 .curaleaf-call-modal__phone-card {
   display: flex;
@@ -14916,6 +14980,69 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 .order-crm-prescriptions{ display: grid; gap: 14px; }
+.order-rx-switcher{
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-elevated) 55%, var(--bg-surface));
+}
+.order-rx-switcher > header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.order-rx-switcher > header > span{ display: grid; gap: 2px; min-width: 0; }
+.order-rx-switcher > header strong{ color: var(--text-primary); font-size: 12px; font-weight: 700; }
+.order-rx-switcher > header small{ color: var(--text-secondary); font-size: 10.5px; line-height: 1.35; }
+.order-rx-switcher > header label{ display: none; }
+.order-rx-switcher__tabs{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+.order-rx-switcher__tab{
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-areas: "icon label" "icon reference";
+  align-items: center;
+  gap: 1px 8px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.order-rx-switcher__tab:hover{ border-color: color-mix(in srgb, var(--tenant-primary) 35%, var(--border)); }
+.order-rx-switcher__tab.is-selected{
+  border-color: var(--tenant-primary);
+  background: color-mix(in srgb, var(--tenant-primary) 7%, var(--bg-surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tenant-primary) 18%, transparent);
+}
+.order-rx-switcher__tab:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 2px; }
+.order-rx-switcher__icon{
+  grid-area: icon;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 10%, var(--bg-surface));
+}
+.order-rx-switcher__tab > span:nth-child(2){ grid-area: label; min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+.order-rx-switcher__tab strong{ color: var(--text-primary); font-size: 11.5px; }
+.order-rx-switcher__tab small{ min-width: 0; overflow: hidden; color: var(--text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.order-rx-switcher__tab code,
+.order-rx-switcher__tab em{ grid-area: reference; min-width: 0; overflow: hidden; color: var(--text-tertiary); font-size: 9px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.order-details-kv--products{ margin-top: 12px; }
 .order-rx-pair { display: flex; flex-direction: column; gap: 12px; }
 .order-rx-card{ overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02); }
 .order-rx-card--supplier { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-surface); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02); }
@@ -14940,6 +15067,21 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   border-bottom: 1px solid var(--border);
   background: transparent;
 }
+.order-rx-placement-pending{
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--color-warning) 7%, var(--bg-surface));
+}
+.order-rx-placement-pending > span{ display: grid; gap: 2px; }
+.order-rx-placement-pending strong{ color: var(--text-primary); font-size: 11.5px; }
+.order-rx-placement-pending small{ color: var(--text-secondary); font-size: 10.5px; line-height: 1.4; }
+.order-supplier-fulfilment__po-row{ display: inline-flex; align-items: center; gap: 6px; }
+.order-supplier-fulfilment__po-row .order-ledger__copy-btn{ width: 28px; height: 28px; }
 .order-rx-card .order-ready-control .btn,
 .order-rx-card .order-goods-in__actions .btn{
   min-height: 44px;
@@ -14948,6 +15090,21 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .order-rx-card .order-stage-rail__steps li{
     flex: 0 0 50%;
   }
+}
+@media (max-width: 640px){
+  .order-rx-switcher > header{ align-items: stretch; flex-direction: column; }
+  .order-rx-switcher > header label{ display: block; }
+  .order-rx-switcher > header select{
+    width: 100%;
+    min-height: 44px;
+    padding: 0 36px 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font: inherit;
+  }
+  .order-rx-switcher__tabs{ display: none; }
 }
 .order-rx-card .order-stage-rail__lane + .order-stage-rail__lane{
   margin-top: 10px;
@@ -16001,7 +16158,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .order-filter-menu__group button{ min-height: 44px; }
   .patient-crm .order-journey-rail--premium{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .patient-crm .patient-chart-order__open,
-  .patient-crm .order-crm-record__actions .btn{ min-height: 44px; }
+  .order-crm-record__actions .btn{ min-height: 44px; }
   .order-crm-summary__tiles{ grid-template-columns: 1fr 1fr; }
   .order-crm-metric{ grid-template-columns: 28px minmax(0, 1fr); min-height: 92px; padding: 11px; }
   .order-crm-metric__icon{ width: 27px; height: 27px; }

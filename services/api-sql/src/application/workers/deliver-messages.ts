@@ -11,6 +11,13 @@ export type MessageDeliveryDeps = {
   fetchImpl?: typeof fetch;
 };
 
+const MAX_DELIVERY_ATTEMPTS = 3;
+
+export function notificationRetryAt(now: Date, attemptCount: number) {
+  const delayMinutes = 5 * (2 ** Math.max(0, attemptCount - 1));
+  return new Date(now.getTime() + delayMinutes * 60 * 1_000);
+}
+
 type ProviderConfig =
   | { kind: 'resend'; apiKey: string; from: string }
   | { kind: 'webhook'; url: string; key: string };
@@ -152,7 +159,17 @@ export async function deliverPatientMessages(deps: MessageDeliveryDeps, limit = 
       summary.failed += 1;
       const reason = error instanceof Error ? error.message : 'Unknown message delivery error';
       console.warn('Message delivery failed', { template: record.templateCode, reason: reason.slice(0, 180) });
-      await deps.notificationRepo.markFailed(record.id, reason).catch(() => undefined);
+      const attemptCount = record.attemptCount + 1;
+      if (attemptCount < MAX_DELIVERY_ATTEMPTS && deps.notificationRepo.markRetry) {
+        await deps.notificationRepo.markRetry(
+          record.id,
+          attemptCount,
+          notificationRetryAt(new Date(), attemptCount).toISOString(),
+          reason,
+        ).catch(() => undefined);
+      } else {
+        await deps.notificationRepo.markFailed(record.id, reason).catch(() => undefined);
+      }
     }
   }
   return summary;

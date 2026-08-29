@@ -142,7 +142,7 @@ export interface Prescription {
   items: LineItem[];
   placed: boolean;
   placedAt?: Date | string | null;
-  poRef: string | null;
+  purchaseOrderId: string | null;
   status: RxStatus;
   invoiceRef: string | null;
   trackingNumber: string | null;
@@ -177,6 +177,7 @@ export type UnresolvedOrderReason = 'expired' | 'rejected' | 'cancelled';
 
 export interface OrderRedoContext {
   originalOrderId: number;
+  originalPrescriptionId?: number;
   originalBackendId?: string;
   rootOrderId?: number;
   rootBackendId?: string;
@@ -623,7 +624,7 @@ export type Action =
   | { type: 'DECLINE_ONBOARDING'; subId: EligibilitySubmission['id']; note?: string; pharmacyDecisionReason: string }
   // Orders
   | { type: 'NEW_ORDER'; patientId?: string }
-  | { type: 'START_REDO_ORDER'; sourceOrderId: number }
+  | { type: 'START_REDO_ORDER'; sourceOrderId: number; prescriptionId?: number }
   | { type: 'APPLY_REDO_FROM_ORDER'; orderId: number; sourceOrderId: number }
   | { type: 'CLEAR_ORDER_REDO_CONTEXT'; orderId: number }
   | { type: 'SET_ACTIVE_ORDER'; orderId: number }
@@ -660,7 +661,6 @@ export type Action =
   | { type: 'SET_ORDER_BACKEND_ID'; orderId: number; backendId: string; orderNumber?: string }
   | { type: 'SET_ORDER_DRAFT_ID'; orderId: number; draftId: string }
   | { type: 'SYNC_ORDER_PATIENT_PRICES'; orderId: number; items: Array<{ productId: string; patientPrice: number }> }
-  | { type: 'CONFIRM_CURALEAF_SUBMISSION'; orderId: number; rxId: number; customerReference: string }
   | { type: 'ADD_ITEM_TO_RX'; orderId: number; rxId: number; item: LineItem }
   | { type: 'REMOVE_ITEM_FROM_RX'; orderId: number; rxId: number; productId: string }
   | { type: 'UPDATE_ITEM_QTY'; orderId: number; rxId: number; productId: string; qty: number }
@@ -685,9 +685,9 @@ export type Action =
   // Submission to Curaleaf.
   | { type: 'PLACE_ORDER'; orderId: number }
   | { type: 'RECORD_GOODS_RECEIPT'; orderId: number; rxId: number; lines: GoodsReceiptLine[]; note?: string }
-  | { type: 'MARK_READY_FOR_COLLECTION'; orderId: number; rxId: number }
+  | { type: 'MARK_READY_FOR_COLLECTION'; orderId: number; rxId: number; shipmentId?: string }
   | { type: 'HANDOVER_TO_PATIENT'; orderId: number; rxId: number }
-  | { type: 'HANDOUT_ORDER'; orderId: number; partial?: boolean; shipmentId?: string }
+  | { type: 'HANDOUT_ORDER'; orderId: number; rxId?: number; partial?: boolean; shipmentId?: string }
   // Toasts
   | { type: 'ADD_TOAST'; message: string; toastType?: 'success' | 'info' | 'warning' | 'error'; dedupeKey?: string }
   | { type: 'REMOVE_TOAST'; id: string }
@@ -700,7 +700,7 @@ export type Action =
 function blankRx(id: number): Prescription {
   return {
     id, entryMode: 'clinic', prescriber: '', copyFileName: null, items: [], placed: false,
-    poRef: null, status: 'draft', invoiceRef: null, trackingNumber: null, carrier: null,
+    purchaseOrderId: null, status: 'draft', invoiceRef: null, trackingNumber: null, carrier: null,
   };
 }
 
@@ -715,7 +715,7 @@ function blankOrder(id: number, patientId: string | null, organisationId: string
 function customerReferenceBelongsToOrder(reference: string | null | undefined, record: PortalOrderRecord) {
   const ref = String(reference || '').trim();
   if (!ref) return false;
-  const orderNum = String(record.paymentTransactionReference || '').trim();
+  const orderNum = String(record.orderNumber || '').trim();
   const orderId = String(record.id || '').trim();
   if (compactCustomerReferenceBelongsToOrder(ref, orderNum, orderId)) return true;
   if (orderNum && (
@@ -839,11 +839,11 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
   const isPaid = ['paid', 'refund_required', 'refunded'].includes(record.paymentStatus) || Boolean(record.paidAt) || Boolean(record.curaleaf?.purchaseOrderId);
   const prescriptions: Prescription[] = record.prescriptions?.length
     ? record.prescriptions.map((prescription, rxIndex) => {
-        const flowKey = prescription.id ?? prescription.fileId;
+        const flowKey = prescription.hhhPrescriptionId ?? prescription.clientKey ?? prescription.id ?? prescription.fileId;
         const multiRx = portalPrescriptionIsMultiRx(record);
         const rawCuraleaf = isPaid ? resolvePortalPrescriptionCuraleaf(record, prescription) : undefined;
-        const poRef = (rawCuraleaf?.customerReference || '').trim();
-        const isMatchedPO = !rawCuraleaf || !poRef || customerReferenceBelongsToOrder(poRef, record);
+        const customerReference = (rawCuraleaf?.customerReference || '').trim();
+        const isMatchedPO = !rawCuraleaf || !customerReference || customerReferenceBelongsToOrder(customerReference, record);
         const flow = isPaid && isMatchedPO ? portalPrescriptionFlow(record, prescription) : undefined;
         const rxHasPo = isPaid && isMatchedPO && Boolean(String(flow?.purchaseOrderId || rawCuraleaf?.purchaseOrderId || '').trim());
         const curaleaf = rxHasPo ? rawCuraleaf : undefined;
@@ -931,7 +931,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           items: orderItems(prescription.items),
           placed: rxHasPo,
           placedAt: rxHasPo ? (flow?.placedAt ?? curaleaf?.createdAt ?? curaleaf?.issuedDate ?? record.paidAt ?? record.createdAt) : null,
-          poRef: rxHasPo ? purchaseOrderReference(flow?.purchaseOrderId, curaleaf?.purchaseOrderId, rawCuraleaf?.purchaseOrderId) : null,
+          purchaseOrderId: rxHasPo ? purchaseOrderReference(flow?.purchaseOrderId, curaleaf?.purchaseOrderId, rawCuraleaf?.purchaseOrderId) : null,
           status: flowStatus ?? (isPaid && !rxHasPo
             ? 'awaiting-approval'
             : portalPrescriptionStatus({ curaleaf: isPaid ? curaleaf : undefined, fulfilmentStatus: isPaid ? record.fulfilmentStatus : 'supplier_pending' })),
@@ -983,7 +983,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
         copyFileName: null,
         items: orderItems(record.lineItems.map(item => ({ packId: item.packId, formulaId: item.formulaId, quantity: item.quantity }))),
         placed: Boolean(record.curaleaf?.purchaseOrderId),
-        poRef: purchaseOrderReference(record.curaleaf?.purchaseOrderId),
+        purchaseOrderId: purchaseOrderReference(record.curaleaf?.purchaseOrderId),
         status: rxStatus,
         invoiceRef: null,
         trackingNumber: null,
@@ -1012,7 +1012,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
   return {
     id: orderId,
     backendId: record.id,
-    orderNumber: record.orderNumber ?? record.paymentTransactionReference,
+    orderNumber: record.orderNumber,
     organisationId: record.organisationId,
     patientId: record.patientId,
     paymentRoute: record.paymentRoute === 'worldpay' ? 'worldpay' : 'manual',
@@ -1025,11 +1025,11 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
       status: paid ? 'paid' : cancelled ? 'cancelled' : 'sent',
       route: record.paymentRoute === 'manual' ? 'pharmacy' : 'worldpay',
       amount: record.totalPence / 100,
-      ref: record.paymentTransactionReference ?? record.worldpayPaymentId ?? record.paymentId ?? null,
+      ref: record.manualReference ?? null,
       sentAt: new Date(record.createdAt),
       paidAt: paid ? (record.paidAt ? new Date(record.paidAt) : new Date(record.updatedAt)) : null,
-      manualTender: (record as any).manualTender ?? (record.paymentRoute === 'manual' ? 'epos-card' : null),
-      manualReference: (record as any).manualReference ?? (record.paymentRoute === 'manual' ? record.paymentTransactionReference : null),
+      manualTender: record.manualTender ?? (record.paymentRoute === 'manual' ? 'epos-card' : null),
+      manualReference: record.manualReference ?? null,
       manualNotes: null,
       manualRecordedBy: null,
     },
@@ -1058,8 +1058,8 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
       originalBackendId: String(record.redoOfOrderId ?? record.redoContext.originalOrderId),
       rootOrderId: rootIndex >= 0 ? rootIndex + 1 : sourceIndex >= 0 ? sourceIndex + 1 : orderId,
       rootBackendId,
-      originalOrderNumber: sourceRecord?.orderNumber ?? sourceRecord?.paymentTransactionReference,
-      rootOrderNumber: rootRecord?.orderNumber ?? rootRecord?.paymentTransactionReference,
+      originalOrderNumber: sourceRecord?.orderNumber,
+      rootOrderNumber: rootRecord?.orderNumber,
       replacementSequence: record.redoContext.replacementSequence ?? Math.max(1, redoSequence),
       priceResolution: activeRedoPriceResolution(record.redoContext.priceResolution),
       isPaidRedo: Boolean(record.redoContext.isPaidRedo),
@@ -1072,7 +1072,7 @@ function mapPortalDraft(record: OrderDraftRecord, index: number, defaultPaymentR
   const payload = record.payload as Partial<PatientOrder> & { localOrderId?: number; prescriptions?: Prescription[] };
   const id = 1_000_000 + index;
   const prescriptions = Array.isArray(payload.prescriptions) && payload.prescriptions.length
-    ? payload.prescriptions.map((prescription, rxIndex) => ({ ...prescription, id: id * 100 + rxIndex + 1, status: 'draft' as const, placed: false, poRef: null }))
+    ? payload.prescriptions.map((prescription, rxIndex) => ({ ...prescription, id: id * 100 + rxIndex + 1, status: 'draft' as const, placed: false, purchaseOrderId: null }))
     : [blankRx(id * 100 + 1)];
   return {
     id,
@@ -1157,7 +1157,7 @@ function findOrder(state: AppState, orderId: number) {
   return state.orders.find(o => o.id === orderId);
 }
 
-function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: UnresolvedOrderReason): PatientOrder {
+function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: UnresolvedOrderReason, originalPrescriptionId?: number): PatientOrder {
   const sourceRx = replacementSourcePrescriptions(source.prescriptions)[0];
   const cancelledRemainders = (sourceRx?.items ?? []).flatMap(item => {
     const cancelledPacks = sourceRx?.fulfilmentLines?.find(line => line.productId === item.productId)?.cancelledRemainder ?? 0;
@@ -1175,6 +1175,7 @@ function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: U
     patientId: source.patientId ?? draft.patientId,
     redoContext: {
       originalOrderId: source.id,
+      originalPrescriptionId,
       originalBackendId: source.backendId,
       rootOrderId: source.redoContext?.rootOrderId ?? source.redoContext?.originalOrderId ?? source.id,
       rootBackendId: source.redoContext?.rootBackendId ?? source.redoContext?.originalBackendId ?? source.backendId,
@@ -1202,7 +1203,7 @@ function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: U
       curaleafPatientName: undefined,
       curaleafPatientDob: undefined,
       placed: false,
-      poRef: null,
+      purchaseOrderId: null,
       status: 'draft',
       invoiceRef: null,
       trackingNumber: null,
@@ -1585,7 +1586,10 @@ function reducer(state: AppState, action: Action): AppState {
       const reason = getUnresolvedReason(source);
       if (!reason) return state;
       if (!state.crm.some(patient => patient.id === source.patientId && patient.organisationId === state.currentOrganisationId && canCreateOrderForPatient(patient))) return state;
-      const existingDraft = state.orders.find(order => order.organisationId === state.currentOrganisationId && order.payment.status === 'none' && order.redoContext?.originalOrderId === source.id);
+      const existingDraft = state.orders.find(order => order.organisationId === state.currentOrganisationId
+        && order.payment.status === 'none'
+        && order.redoContext?.originalOrderId === source.id
+        && order.redoContext?.originalPrescriptionId === action.prescriptionId);
       if (existingDraft) return {
         ...state,
         activeOrderId: existingDraft.id,
@@ -1598,7 +1602,11 @@ function reducer(state: AppState, action: Action): AppState {
       const defaultRoute = preferredDraftPaymentRoute(Boolean(organisation?.worldpay.enabled), organisation?.worldpay.status ?? 'not-connected');
       const draft = blankOrder(id, source.patientId, state.currentOrganisationId, defaultRoute);
       draft.prescriptions = [blankRx(rxId)];
-      const redone = applyRedoOntoDraft(draft, source, reason);
+      const sourcePrescription = action.prescriptionId === undefined
+        ? null
+        : source.prescriptions.find(prescription => prescription.id === action.prescriptionId) ?? null;
+      const redoSource = sourcePrescription ? { ...source, prescriptions: [sourcePrescription] } : source;
+      const redone = applyRedoOntoDraft(draft, redoSource, reason, action.prescriptionId);
       return {
         ...state,
         orders: [...state.orders, redone],
@@ -1762,14 +1770,6 @@ function reducer(state: AppState, action: Action): AppState {
         catalogue: state.catalogue.map(product => prices.has(product.id) ? { ...product, retail: prices.get(product.id)! } : product),
       };
     }
-    case 'CONFIRM_CURALEAF_SUBMISSION':
-      return mapOrder(state, action.orderId, o => mapRx(o, action.rxId, r => ({
-        ...r,
-        placed: true,
-        placedAt: new Date(),
-        poRef: action.customerReference,
-        status: 'awaiting-approval',
-      })));
     case 'ADD_ITEM_TO_RX':
       return mapOrder(state, action.orderId, o => mapRx(o, action.rxId, r => ({ ...r, items: [...r.items, action.item] })));
     case 'REMOVE_ITEM_FROM_RX':
@@ -1916,7 +1916,7 @@ function reducer(state: AppState, action: Action): AppState {
           },
           curaleafCancellation: hasCuraleafOrder ? {
             status: 'contact_required',
-            purchaseOrderId: order.prescriptions.find(prescription => prescription.poRef)?.poRef ?? null,
+            purchaseOrderId: order.prescriptions.find(prescription => prescription.purchaseOrderId)?.purchaseOrderId ?? null,
             prescriptionId: order.prescriptions.find(prescription => prescription.curaleafPrescriptionId)?.curaleafPrescriptionId ?? null,
             requestedAt,
             requestedBy: state.staffSession?.name ?? 'Pharmacy staff',
@@ -2000,7 +2000,7 @@ function reducer(state: AppState, action: Action): AppState {
               placedAt: new Date(),
               // Supplier references are populated only from the Curaleaf response or
               // a later reconciliation. Never invent courier or invoice data.
-              poRef: null,
+              purchaseOrderId: null,
               status: 'awaiting-approval' as const,
               invoiceRef: null,
               trackingNumber: null,
@@ -2049,13 +2049,14 @@ function reducer(state: AppState, action: Action): AppState {
     case 'MARK_READY_FOR_COLLECTION': {
       const current = findOrder(state, action.orderId)?.prescriptions.find(rx => rx.id === action.rxId);
       if (!current || (current.status !== 'received' && current.status !== 'partially-received')) return state;
-      const remainingOpen = (current.fulfilmentLines ?? []).some(line => line.remaining > 0 || line.received < line.ordered);
       const nextState = mapOrder(state, action.orderId, o => mapRx(o, action.rxId, r => ({
         ...r,
-        status: remainingOpen ? 'partially-received' : 'ready',
+        // Goods-in is the readiness decision even when this is only one consignment.
+        // The unreceived remainder remains open in the line quantities.
+        status: 'ready',
         readyAt: new Date(),
-        shipmentStates: r.shipmentId || r.shipmentIds?.[0]
-          ? { ...(r.shipmentStates ?? {}), [(r.shipmentId || r.shipmentIds?.[0]) as string]: 'ready_for_collection' }
+        shipmentStates: action.shipmentId || r.shipmentId || r.shipmentIds?.[0]
+          ? { ...(r.shipmentStates ?? {}), [(action.shipmentId || r.shipmentId || r.shipmentIds?.[0]) as string]: 'ready_for_collection' }
           : r.shipmentStates,
       })));
       // Toast is raised once by the Orders handler that dispatches this action.
@@ -2085,11 +2086,28 @@ function reducer(state: AppState, action: Action): AppState {
         ...currentOrder,
         handoutAt: new Date(),
         prescriptions: currentOrder.prescriptions.map(prescription => {
-          const nextLines = prescription.fulfilmentLines?.map(line => ({
-            ...line,
-            collected: Math.max(line.collected, line.received),
-          }));
+          if (action.rxId !== undefined && prescription.id !== action.rxId) return prescription;
+          const selectedShipment = action.shipmentId
+            ? prescription.shipments?.find(shipment => shipment.id === action.shipmentId)
+            : undefined;
+          const selectedAlreadyCollected = action.shipmentId
+            ? prescription.shipmentStates?.[action.shipmentId] === 'collected'
+            : false;
+          const nextLines = prescription.fulfilmentLines?.map(line => {
+            if (selectedAlreadyCollected) return line;
+            if (!selectedShipment) {
+              return { ...line, collected: Math.max(line.collected, line.received) };
+            }
+            const shipmentPacks = (selectedShipment.items ?? [])
+              .filter(item => item.productId === line.productId)
+              .reduce((sum, item) => sum + Number(item.packCount || 0), 0);
+            return {
+              ...line,
+              collected: Math.min(line.received, line.collected + Math.max(0, shipmentPacks)),
+            };
+          });
           const rxRemainingOpen = (nextLines ?? []).some(line => line.remaining > 0 || line.collected < line.ordered);
+          const rxReadyPacks = (nextLines ?? []).reduce((sum, line) => sum + Math.max(0, line.received - line.collected), 0);
           const nextShipmentStates = prescription.shipmentStates
             ? Object.fromEntries(Object.entries(prescription.shipmentStates).map(([shipmentId, shipmentState]) => {
               if (action.shipmentId && shipmentId !== action.shipmentId) return [shipmentId, shipmentState];
@@ -2102,7 +2120,7 @@ function reducer(state: AppState, action: Action): AppState {
           return {
             ...prescription,
             fulfilmentLines: nextLines,
-            status: rxRemainingOpen ? 'partially-received' : 'collected',
+            status: rxReadyPacks > 0 ? 'ready' : rxRemainingOpen ? 'partially-received' : 'collected',
             shipmentStates: nextShipmentStates,
           };
         }),

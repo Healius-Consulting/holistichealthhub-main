@@ -6,7 +6,7 @@ export type { CuraleafShippingAddress } from './shippingAddress';
 export type OrderConsignment = {
   id: string;
   prescriptionIndex: number;
-  poRef: string | null;
+  purchaseOrderId: string | null;
   createdAt: string | null;
   packCount: number;
   shipmentCharge: string | null;
@@ -74,7 +74,7 @@ export function collectOrderConsignments(order: PatientOrder): OrderConsignment[
       consignments.push({
         id: shipmentId,
         prescriptionIndex,
-        poRef: prescription.poRef,
+        purchaseOrderId: prescription.purchaseOrderId,
         createdAt: (() => {
           const value = shipment?.createdAt ?? prescription.latestShipmentAt ?? prescription.placedAt ?? null;
           return value instanceof Date ? value.toISOString() : value;

@@ -42,7 +42,7 @@ export function readyPackCountForPrescription(prescription: Prescription): numbe
   const states = prescription.shipmentStates ?? {};
   const shipments = prescription.shipments ?? [];
   const readyIds = Object.entries(states)
-    .filter(([, state]) => state === 'ready_for_collection' || state === 'collected')
+    .filter(([, state]) => state === 'received' || state === 'partially_received' || state === 'ready_for_collection' || state === 'collected')
     .map(([id]) => id);
 
   if (readyIds.length && shipments.length) {
@@ -53,7 +53,7 @@ export function readyPackCountForPrescription(prescription: Prescription): numbe
   }
 
   const totals = prescriptionPackTotals(prescription);
-  if (readyIds.length || prescription.status === 'ready' || prescription.status === 'collected') {
+  if (readyIds.length || ['received', 'partially-received', 'ready', 'collected'].includes(prescription.status)) {
     return Math.max(totals.ordered, totals.collected);
   }
   return totals.collected;
@@ -84,7 +84,7 @@ export function buildPrescriptionTimelineEvents(
   if (prescription.placed) {
     events.push({
       label: `${rxLabel} sent to Curaleaf`,
-      detail: prescription.poRef ? `PO ${prescription.poRef}` : 'Awaiting supplier reference',
+      detail: prescription.purchaseOrderId ? `PO ${prescription.purchaseOrderId}` : 'Awaiting supplier reference',
       date: prescription.placedAt ?? null,
       source: 'HHH automation',
     });
@@ -345,13 +345,13 @@ export function prescriptionPlacementRoute(prescription: Pick<Prescription, 'ent
   return 'manual';
 }
 
-function pharmacyPlacementSteps(order: PatientOrder, purchaseOrderExists: boolean): OrderStageStep[] {
+function pharmacyPlacementSteps(order: PatientOrder, everyPrescriptionHasPurchaseOrder: boolean): OrderStageStep[] {
   const placement = order.curaleafPlacement;
   const route = placementRoute(order);
   const scanned = route === 'clinic_barcode';
-  const prescriberComplete = purchaseOrderExists || scanned || placement?.prescriberState === 'VERIFIED'
+  const prescriberComplete = everyPrescriptionHasPurchaseOrder || scanned || placement?.prescriberState === 'VERIFIED'
     || ['CREATING_PRESCRIPTION', 'UPLOADING_PRESCRIPTION_IMAGE', 'AWAITING_PRESCRIPTION_ACTIVATION', 'CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
-  const prescriptionComplete = purchaseOrderExists || scanned || placement?.prescriptionState === 'ACTIVE'
+  const prescriptionComplete = everyPrescriptionHasPurchaseOrder || scanned || placement?.prescriptionState === 'ACTIVE'
     || ['CREATING_PURCHASE_ORDER', 'PLACED'].includes(placement?.stage ?? '');
   const paid = order.payment.status === 'paid';
   const paymentRequested = paid || order.payment.status === 'sent';
@@ -369,8 +369,8 @@ function pharmacyPlacementSteps(order: PatientOrder, purchaseOrderExists: boolea
     step('prescription', 'Prescription',
       scanned ? 'Held by Curaleaf from the clinic QR' : prescriptionComplete ? 'Active' : placement?.prescriptionState === 'PENDING' ? 'Awaiting Curaleaf' : 'Pending',
       prescriptionComplete ? 'complete' : prescriberComplete ? 'active' : 'pending'),
-    step('purchase-order', 'PO sent', purchaseOrderExists ? 'Sent to Curaleaf' : 'Pending',
-      purchaseOrderExists ? 'complete' : prescriptionComplete && paid ? 'active' : 'pending'),
+    step('purchase-order', 'PO sent', everyPrescriptionHasPurchaseOrder ? 'All prescriptions placed' : 'Waiting for remaining prescriptions',
+      everyPrescriptionHasPurchaseOrder ? 'complete' : prescriptionComplete && paid ? 'active' : 'pending'),
   ];
 }
 
@@ -395,7 +395,7 @@ function dispensingStepsForPrescription(prescription: Prescription): OrderStageS
 
   return [
     step('ordered', 'Ordered', 'PO sent', 'complete'),
-    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf',
+    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf allocation',
       state(dispensedComplete, allocated > 0, true)),
     step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
       state(shippedComplete, totals.shipped > 0, dispensedComplete)),
@@ -406,7 +406,7 @@ function dispensingStepsForPrescription(prescription: Prescription): OrderStageS
         ? 'Patient notified'
         : readySome
           ? `${partOf(readyPacks)} ready · patient notified for those`
-          : 'Pending pharmacy checks',
+          : 'Awaiting goods-in',
       readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending'),
     step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
       state(collectedComplete, totals.collected > 0, readyComplete)),
@@ -444,7 +444,7 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
 
   return [
     step('ordered', 'Ordered', 'PO sent', 'complete'),
-    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf',
+    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf allocation',
       state(dispensedComplete, allocated > 0, true)),
     step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
       state(shippedComplete, totals.shipped > 0, dispensedComplete)),
@@ -456,56 +456,33 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
         ? 'Patient notified'
         : readySome
           ? `${partOf(readyPacks)} ready · patient notified for those`
-          : 'Pending pharmacy checks',
+          : 'Awaiting goods-in',
       readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending'),
     step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
       state(collectedComplete, totals.collected > 0, readyComplete)),
   ];
 }
 
-function prescriptionPlacementSteps(prescription: Prescription, paid: boolean): OrderStageStep[] {
-  const scanned = prescriptionPlacementRoute(prescription) === 'clinic_barcode';
-  const purchaseOrderExists = Boolean(prescription.placed || prescription.poRef);
-  const prescriberComplete = purchaseOrderExists || scanned
-    || prescription.curaleafPrescriptionState === 'ACTIVE';
-  const prescriptionComplete = purchaseOrderExists || scanned
-    || prescription.curaleafPrescriptionState === 'ACTIVE';
-  const prescriptionPending = prescription.curaleafPrescriptionState === 'PENDING';
-
-  return [
-    step('prescriber', 'Prescriber',
-      scanned ? 'Verified at clinic scan' : prescriberComplete ? 'Verified' : paid ? 'Awaiting Curaleaf' : 'Checking',
-      prescriberComplete ? 'complete' : paid ? 'active' : 'pending'),
-    step('prescription', 'Prescription',
-      scanned ? 'Held by Curaleaf from the clinic QR' : prescriptionComplete ? 'Active' : prescriptionPending ? 'Awaiting Curaleaf' : 'Pending',
-      prescriptionComplete ? 'complete' : prescriberComplete ? 'active' : 'pending'),
-    step('purchase-order', 'PO sent', purchaseOrderExists ? 'Sent to Curaleaf' : 'Pending',
-      purchaseOrderExists ? 'complete' : prescriptionComplete && paid ? 'active' : 'pending'),
-  ];
-}
-
 export interface PrescriptionStageRail {
-  /** Clinic/manual 3-step rail. Null after this Rx has a purchase order. */
-  placement: OrderStageStep[] | null;
   /** Ordered → Collected for this Rx only. Null until this Rx has a purchase order. */
   dispensing: OrderStageStep[] | null;
   route: PlacementRoute;
 }
 
-export function buildPrescriptionStageRail(order: PatientOrder, prescription: Prescription): PrescriptionStageRail {
-  const purchaseOrderExists = Boolean(prescription.placed || prescription.poRef);
-  const paid = order.payment.status === 'paid';
+export function buildPrescriptionStageRail(_order: PatientOrder, prescription: Prescription): PrescriptionStageRail {
+  const purchaseOrderExists = Boolean(prescription.purchaseOrderId);
   return {
-    placement: purchaseOrderExists ? null : prescriptionPlacementSteps(prescription, paid),
     dispensing: purchaseOrderExists ? dispensingStepsForPrescription(prescription) : null,
     route: prescriptionPlacementRoute(prescription),
   };
 }
 
 export function buildOrderStageRail(order: PatientOrder): OrderStageRail {
-  const purchaseOrderExists = order.prescriptions.some(prescription => Boolean(prescription.poRef || prescription.placed));
+  const purchaseOrderExists = order.prescriptions.some(prescription => Boolean(prescription.purchaseOrderId));
+  const everyPrescriptionHasPurchaseOrder = order.prescriptions.length > 0
+    && order.prescriptions.every(prescription => Boolean(prescription.purchaseOrderId));
   return {
-    pharmacyPlacement: pharmacyPlacementSteps(order, purchaseOrderExists),
+    pharmacyPlacement: pharmacyPlacementSteps(order, everyPrescriptionHasPurchaseOrder),
     curaleafPlacement: purchaseOrderExists ? dispensingSteps(order) : null,
     route: placementRoute(order),
   };

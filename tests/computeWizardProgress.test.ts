@@ -16,7 +16,7 @@ const blankRx = (overrides: Partial<Prescription> = {}): Prescription => ({
   copyFileName: null,
   items: [],
   placed: false,
-  poRef: null,
+  purchaseOrderId: null,
   status: 'draft',
   invoiceRef: null,
   trackingNumber: null,

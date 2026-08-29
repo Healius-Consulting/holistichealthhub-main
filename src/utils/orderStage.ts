@@ -194,6 +194,9 @@ export function prescriptionStatusLabel(prescription: OrderPrescription) {
   if (!prescription.placed && ['draft', 'awaiting-approval'].includes(prescription.status)) {
     return 'Waiting for Curaleaf';
   }
+  if (hasCheckedInPacks && totals.received > totals.collected) {
+    return totals.received < totals.ordered ? 'Part Ready to Collect' : 'Ready to Collect';
+  }
 
   return ({
     draft: 'Draft',
@@ -233,6 +236,7 @@ export function orderFulfilmentHeadline(order: PatientOrder): OrderFulfilmentHea
       'In Transit': 'In transit',
       'Part Checked In': 'Checked in',
       'Checked In': 'Checked in',
+      'Part Ready to Collect': 'Ready',
       'Ready to Collect': 'Ready',
     } as Record<string, string>)[label] ?? label;
   };
@@ -295,8 +299,13 @@ function prescriptionHasInTransitPacks(prescription: OrderPrescription) {
 
 function prescriptionReadyForCollection(prescription: OrderPrescription) {
   if (!prescriptionHasCheckedInPacks(prescription)) return false;
-  return prescription.status === 'ready'
-    || Object.values(prescription.shipmentStates ?? {}).includes('ready_for_collection');
+  // In this pharmacy workflow physical check-in is the ready decision. Keep
+  // legacy `received` records collectable too so they cannot become shelf stock
+  // stranded between two UI stages after this rule changes.
+  return ['received', 'partially-received', 'ready'].includes(prescription.status)
+    || Object.values(prescription.shipmentStates ?? {}).some(state =>
+      state === 'received' || state === 'partially_received' || state === 'ready_for_collection',
+    );
 }
 
 function prescriptionDeliveredAtPharmacy(prescription: OrderPrescription) {
@@ -431,19 +440,15 @@ export function orderStage(order: PatientOrder, now = new Date()): { stage: Orde
   const statuses = order.prescriptions.map(prescription => prescription.status);
   const remainingOpen = orderHasOpenRemainder(order);
   const hasInTransitPacks = order.prescriptions.some(prescription => prescriptionHasInTransitPacks(prescription));
-  const readyForCollection = !hasInTransitPacks
-    && order.prescriptions.some(prescription => prescriptionReadyForCollection(prescription));
+  const readyForCollection = order.prescriptions.some(prescription => prescriptionReadyForCollection(prescription));
   const deliveredAtPharmacy = !hasInTransitPacks
     && order.prescriptions.some(prescription => prescriptionDeliveredAtPharmacy(prescription));
   if (statuses.length && statuses.every(status => status === 'cancelled')) return { stage: 'cancelled', unresolvedReason };
   if (statuses.length && statuses.every(status => status === 'collected') && !remainingOpen) return { stage: 'collected', unresolvedReason };
+  // Ready packs are the pharmacy's next action even if a later consignment is
+  // still in transit. The remaining quantities stay visible as split fulfilment.
+  if (readyForCollection) return { stage: 'ready', unresolvedReason };
   if (hasInTransitPacks) return { stage: 'dispatched', unresolvedReason };
-  const prescriptionOutstanding = order.prescriptions.some(prescription => {
-    if (prescription.status === 'cancelled' || prescription.status === 'collected') return false;
-    if (prescriptionReadyForCollection(prescription)) return false;
-    return true;
-  });
-  if (readyForCollection && !prescriptionOutstanding) return { stage: 'ready', unresolvedReason };
   if (orderHasPartialPharmacyReceipt(order)) return { stage: 'dispatched', unresolvedReason };
   const usesPackProgress = order.prescriptions.some(prescriptionUsesPackProgress);
   if (deliveredAtPharmacy || (!usesPackProgress && statuses.some(status => status === 'received' || status === 'partially-received'))) {

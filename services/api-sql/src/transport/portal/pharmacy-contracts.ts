@@ -143,8 +143,8 @@ function overviewPatientLabel(patient: PatientRecord | undefined) {
   return surname ? `${surname}, ${firstInitial}` : firstInitial;
 }
 
-function overviewOrderReference(order: { id: string; orderNumber?: string | null; paymentTransactionReference?: string | null }) {
-  const number = order.orderNumber?.trim() || order.paymentTransactionReference?.trim();
+function overviewOrderReference(order: { id: string; orderNumber?: string | null }) {
+  const number = order.orderNumber?.trim();
   if (number) return `#${number}`;
   return `#${order.id.replaceAll('-', '').slice(0, 8).toUpperCase()}`;
 }
@@ -534,7 +534,7 @@ export function toPortalOrder(order: PortalOrderSource) {
       ? (snapshot.curaleafSubOrders as Record<string, any>)[rxKey]
       : null;
     const snapshotLines = Array.isArray(snapshot?.lineItems) ? snapshot.lineItems as Array<Record<string, unknown>> : [];
-    const localId = String(rx?.id ?? '');
+    const localId = String(rx?.clientKey ?? rx?.id ?? '');
     const sqlId = String(rx?.hhhPrescriptionId ?? '');
     const attributed = lineItemsWithOwnership.filter(line => (
       (sqlId && line.prescriptionId === sqlId)
@@ -569,8 +569,8 @@ export function toPortalOrder(order: PortalOrderSource) {
       items: ownItems.length ? ownItems : (!multiRx ? lineItems : []),
     };
   }) : (lineItems.length > 0 ? [{
-    id: `rx-${order.id.slice(0, 8)}`,
-    fileId: `rx-${order.id.slice(0, 8)}`,
+    clientKey: `legacy-rx-${order.id.slice(0, 8)}`,
+    fileId: '',
     curaleafPrescriptionId: prescriptionId || persistedCuraleaf?.prescriptionId || null,
     serialNumber: `RX-${order.orderNumber || order.id.slice(0, 8)}`,
     issueDate: order.submittedAt ? order.submittedAt.split('T')[0] : new Date().toISOString().split('T')[0],
@@ -703,9 +703,9 @@ export function toPortalOrder(order: PortalOrderSource) {
         : !rxHasPo
           ? (isPaid ? 'PENDING_PLACEMENT' : 'AWAITING_PAYMENT')
         : isSupplierCancelled ? 'CANCELLED_PURCHASE_ORDER'
-        : rxRemainingOpen ? 'PARTIALLY_RECEIVED'
         : rxCheckedIn && order.fulfilmentStatus === 'COLLECTED' ? 'COLLECTED'
         : rxCheckedIn && order.fulfilmentStatus === 'READY_FOR_COLLECTION' ? 'READY_FOR_COLLECTION'
+        : rxRemainingOpen ? 'PARTIALLY_RECEIVED'
         : rxCheckedIn && order.fulfilmentStatus === 'RECEIVED' ? 'RECEIVED'
         : rxCheckedIn && (order.fulfilmentStatus === 'PARTIALLY_RECEIVED' || computedFulfilment === 'PARTIALLY_RECEIVED') ? 'PARTIALLY_RECEIVED'
         : 'PLACED',
@@ -723,8 +723,8 @@ export function toPortalOrder(order: PortalOrderSource) {
 
   const portalFulfilment = isCancelledOrder
     ? 'cancelled'
-    : remainingOpenAfterGoodsIn ? 'partially_received'
     : hasCheckedInPacks && order.fulfilmentStatus === 'READY_FOR_COLLECTION' ? 'ready_for_collection'
+    : remainingOpenAfterGoodsIn ? 'partially_received'
     : hasCheckedInPacks && order.fulfilmentStatus === 'RECEIVED' ? 'received'
     : hasCheckedInPacks && (order.fulfilmentStatus === 'PARTIALLY_RECEIVED' || computedFulfilment === 'PARTIALLY_RECEIVED') ? 'partially_received'
     : computedFulfilment === 'PARTIALLY_DISPATCHED_TO_PHARMACY' ? 'partially_dispatched_to_pharmacy'
@@ -821,7 +821,6 @@ export function toPortalOrder(order: PortalOrderSource) {
             : lower(order.paymentStatus),
     fulfilmentStatus: portalFulfilment,
     status: isCancelledOrder ? 'cancelled' : supplierStillLive || (isPaid && order.status === 'SUBMITTED') ? 'processing' : lower(order.status),
-    paymentTransactionReference: order.orderNumber,
     paidAt: order.paidAt,
     curaleafApprovedAt: po?.createdAt || po?.issuedDate || undefined,
     auditEvents: Array.isArray(snapshot?.auditEvents)

@@ -13,8 +13,11 @@ import {
 } from './snapshot-rx.js';
 
 describe('snapshot Rx helpers', () => {
-  it('keys a prescription by id then fileId', () => {
+  it('keeps an explicit snapshot correlation key while retaining the canonical HHH identity separately', () => {
+    assert.equal(snapshotRxKey({ hhhPrescriptionId: 'hhh-rx', clientKey: 'client-rx', id: '12', fileId: 'file-1' }, 0), 'client-rx');
+    assert.equal(snapshotRxKey({ clientKey: 'client-rx', id: '12', fileId: 'file-1' }, 0), 'client-rx');
     assert.equal(snapshotRxKey({ id: '12' }, 0), '12');
+    assert.equal(snapshotRxKey({ hhhPrescriptionId: 'hhh-rx' }, 0), 'hhh-rx');
     assert.equal(snapshotRxKey({ fileId: 'file-1' }, 1), 'file-1');
     assert.equal(snapshotRxKey({}, 2), 'rx-2');
   });

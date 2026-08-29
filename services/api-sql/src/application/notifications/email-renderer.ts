@@ -113,6 +113,11 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
   const actionLink = safeHttpUrl(value(payload, 'actionLink'));
   const caseReference = escapeHtml(value(payload, 'caseReference'));
   const summary = escapeHtml(value(payload, 'summary'));
+  const readyPacks = Number(value(payload, 'readyPacks') || 0);
+  const totalPacks = Number(value(payload, 'totalPacks') || 0);
+  const partialReady = value(payload, 'partialReady') === 'true'
+    && readyPacks > 0
+    && totalPacks > readyPacks;
   const enquiry = enquiryDisplayFields(payload);
   const pharmacyDetails = [
     { label: 'Pharmacy', value: value(payload, 'pharmacyName') },
@@ -208,13 +213,17 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
       return render({
         kind,
         payload,
-        subject: 'Your prescription is ready to collect',
-        preheader: 'Your order is ready at the pharmacy.',
-        title: 'Ready to collect',
-        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nYour order${orderNumber ? ` ${value(payload, 'orderNumber')}` : ''} is ready to collect from ${value(payload, 'pharmacyName') || 'the pharmacy'}.\n`,
+        subject: partialReady ? 'Part of your prescription is ready to collect' : 'Your prescription is ready to collect',
+        preheader: partialReady ? `${readyPacks} of ${totalPacks} packs are ready at the pharmacy.` : 'Your order is ready at the pharmacy.',
+        title: partialReady ? 'Part ready to collect' : 'Ready to collect',
+        text: partialReady
+          ? `Hi ${value(payload, 'firstName') || 'there'},\n\n${readyPacks} of ${totalPacks} packs for order ${value(payload, 'orderNumber') || ''} are ready to collect from ${value(payload, 'pharmacyName') || 'the pharmacy'}. The remaining packs are not ready yet.\n`
+          : `Hi ${value(payload, 'firstName') || 'there'},\n\nYour order${orderNumber ? ` ${value(payload, 'orderNumber')}` : ''} is ready to collect from ${value(payload, 'pharmacyName') || 'the pharmacy'}.\n`,
         paragraphs: [
           `Hi ${firstName},`,
-          `Your prescription${orderNumber ? ` for order <strong>${orderNumber}</strong>` : ''} is ready to collect from <strong>${pharmacyName}</strong>. Please bring photo ID.`,
+          partialReady
+            ? `<strong>${readyPacks} of ${totalPacks} packs</strong>${orderNumber ? ` for order <strong>${orderNumber}</strong>` : ''} are ready to collect from <strong>${pharmacyName}</strong>. The remaining packs are not ready yet.`
+            : `Your prescription${orderNumber ? ` for order <strong>${orderNumber}</strong>` : ''} is ready to collect from <strong>${pharmacyName}</strong>. Please bring photo ID.`,
         ],
         detailsTitle: 'Collection details',
         details: pharmacyDetails,

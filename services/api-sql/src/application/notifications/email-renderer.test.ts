@@ -126,6 +126,19 @@ describe('email template renderer', () => {
     });
     assert.match(ready.subject, /ready to collect/);
     assert.match(ready.html, /North Pharmacy/);
+
+    const partialReady = renderEmailTemplate('patient_ready_for_collection', {
+      firstName: 'Avery',
+      orderNumber: 'ORD-891',
+      pharmacyName: 'North Pharmacy',
+      readyPacks: 2,
+      totalPacks: 5,
+      partialReady: true,
+    });
+    assert.match(partialReady.subject, /Part of your prescription/);
+    assert.match(partialReady.html, /2 of 5 packs/);
+    assert.match(partialReady.html, /remaining packs are not ready yet/i);
+    assert.doesNotMatch(partialReady.text, /Your order ORD-891 is ready to collect/);
   });
 
   it('renders staff signup, reset, and 2FA emails', () => {

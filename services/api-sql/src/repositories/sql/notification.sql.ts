@@ -115,6 +115,20 @@ const MARK_FAILED_GQL = `
   }
 `;
 
+const MARK_RETRY_GQL = `
+  mutation MarkNotificationRetry($id: UUID!, $attemptCount: Int!, $nextAttemptAt: Timestamp!, $failureCode: String!) {
+    notificationOutbox_update(
+      key: { id: $id }
+      data: {
+        status: PENDING
+        attemptCount: $attemptCount
+        nextAttemptAt: $nextAttemptAt
+        failureCode: $failureCode
+      }
+    )
+  }
+`;
+
 export class SqlNotificationRepository implements NotificationRepositoryPort {
   async findByIdempotencyKey(idempotencyKey: string): Promise<NotificationOutboxRecord | null> {
     const result = await dataConnect.executeGraphql<{ notificationOutboxes: NotificationOutboxRecord[] }, any>(
@@ -178,6 +192,12 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
 
   async markSent(id: string, providerResponse?: unknown): Promise<void> {
     await dataConnect.executeGraphql(MARK_SENT_GQL, { variables: { id, payload: providerResponse ?? null } });
+  }
+
+  async markRetry(id: string, attemptCount: number, nextAttemptAt: string, failureCode: string): Promise<void> {
+    await dataConnect.executeGraphql(MARK_RETRY_GQL, {
+      variables: { id, attemptCount, nextAttemptAt, failureCode: failureCode.slice(0, 180) },
+    });
   }
 
   async markFailed(id: string, failureCode: string): Promise<void> {

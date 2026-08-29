@@ -659,7 +659,7 @@ export default function CreateOrderPage() {
           } : undefined,
           lineItems,
           prescriptions: activeOrder.prescriptions.map(rx => ({
-            id: String(rx.id),
+            clientKey: String(rx.id),
             fileId: rx.fileId!,
             clinicScanId: rx.clinicScanId,
             curaleafPrescriptionId: rx.curaleafPrescriptionId,

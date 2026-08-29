@@ -336,30 +336,59 @@ export function applyPharmacyGoodsReceipt(input: {
   }));
   return {
     lines,
-    shipmentStates: { ...(input.shipmentStates ?? {}), [input.shipmentId]: 'received' },
+    // Physical goods-in is also the pharmacy's ready decision. There is no
+    // second operational button between receiving stock and telling the patient.
+    shipmentStates: { ...(input.shipmentStates ?? {}), [input.shipmentId]: 'ready_for_collection' },
   };
 }
 
 export function applyPharmacyHandout(input: {
   lines: FulfilmentLine[];
+  shipments?: CuraleafShipmentLike[];
   shipmentStates?: Record<string, string>;
   shipmentId?: string;
   partial: boolean;
 }): { lines: FulfilmentLine[]; shipmentStates: Record<string, string>; remainingOpen: boolean; allowed: boolean } {
-  const remainingOpen = input.lines.some(line => line.remaining > 0 || line.received < line.ordered);
-  if (!input.partial && remainingOpen) {
+  const supplyOpen = input.lines.some(line => line.remaining > 0 || line.received < line.ordered);
+  if (!input.partial && supplyOpen) {
     return {
       lines: input.lines,
       shipmentStates: { ...(input.shipmentStates ?? {}) },
-      remainingOpen,
+      remainingOpen: true,
       allowed: false,
     };
   }
-  const lines = input.lines.map(line => ({
-    ...line,
-    collected: Math.max(line.collected, line.received),
-  }));
   const shipmentStates = { ...(input.shipmentStates ?? {}) };
+  const selectedState = input.shipmentId ? shipmentStates[input.shipmentId] : undefined;
+  const selectedShipment = input.shipmentId
+    ? input.shipments?.find(shipment => String(shipment.id || '') === input.shipmentId)
+    : undefined;
+  const currentRemainingOpen = input.lines.some(line => line.remaining > 0 || line.collected < line.ordered);
+  if (input.shipmentId && input.shipments?.length && !selectedShipment) {
+    return { lines: input.lines, shipmentStates, remainingOpen: currentRemainingOpen, allowed: false };
+  }
+  if (input.shipmentId && selectedState && !['ready_for_collection', 'received', 'partially_received', 'collected'].includes(selectedState)) {
+    return { lines: input.lines, shipmentStates, remainingOpen: currentRemainingOpen, allowed: false };
+  }
+  const selectedAlreadyCollected = selectedState === 'collected';
+  const lines = input.lines.map(line => {
+    if (selectedAlreadyCollected) return line;
+    if (!input.shipmentId || !selectedShipment) {
+      return { ...line, collected: Math.max(line.collected, line.received) };
+    }
+    const shipmentPacks = (selectedShipment.items ?? [])
+      .filter(item => {
+        const itemPoId = String(item.purchaseOrderItemId || '');
+        return itemPoId
+          ? itemPoId === String(line.purchaseOrderItemId || '')
+          : String(item.productId || '') === line.productId;
+      })
+      .reduce((sum, item) => sum + count(item.packCount ?? item.count), 0);
+    return {
+      ...line,
+      collected: Math.min(line.received, line.collected + shipmentPacks),
+    };
+  });
   if (input.shipmentId) {
     shipmentStates[input.shipmentId] = 'collected';
   } else {
@@ -369,6 +398,7 @@ export function applyPharmacyHandout(input: {
       }
     }
   }
+  const remainingOpen = lines.some(line => line.remaining > 0 || line.collected < line.ordered);
   return { lines, shipmentStates, remainingOpen, allowed: true };
 }
 

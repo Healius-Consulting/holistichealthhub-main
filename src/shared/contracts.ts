@@ -485,6 +485,11 @@ export interface PortalOrderInput {
     wholesalePackPricePence?: number;
   }>;
   prescriptions: Array<{
+    /** Client-only correlation key used while the prescription is still being persisted. */
+    clientKey?: string;
+    /** Canonical HHH prescription UUID after persistence. */
+    hhhPrescriptionId?: string;
+    /** Legacy client key. New callers must use clientKey. */
     id?: string;
     fileId: string;
     clinicScanId?: string;
@@ -650,9 +655,6 @@ export interface PortalOrderRecord {
   paymentStatus: string;
   fulfilmentStatus: string;
   autoPlacementEnabled?: boolean;
-  paymentId?: string;
-  worldpayPaymentId?: string;
-  paymentTransactionReference?: string;
   paidAt?: string;
   manualTender?: string;
   manualReference?: string;

@@ -11,7 +11,7 @@ const tenPackPrescription: Prescription = {
   items: [{ productId: '9f2d6958-2d76-4338-9e5f-6fd383dfff36', name: 'Medication', qty: 10, cost: 68, retail: 120 }],
   placed: true,
   placedAt: '2026-08-13T09:23:29.241487Z',
-  poRef: 'HHH-a55ee7d4-6466-4e95-bf7f-88a95241e60f-383b50e0f9',
+  purchaseOrderId: 'HHH-a55ee7d4-6466-4e95-bf7f-88a95241e60f-383b50e0f9',
   status: 'partially-received',
   invoiceRef: null,
   trackingNumber: null,
@@ -129,7 +129,7 @@ const unplacedPrescription: Prescription = {
   id: 201,
   placed: false,
   placedAt: null,
-  poRef: null,
+  purchaseOrderId: null,
   status: 'draft',
   fulfilmentLines: [],
   shipments: [],
@@ -253,30 +253,29 @@ test('a fully ready order still reads as fully ready', () => {
   assert.equal(ready!.detail, 'Patient notified');
 });
 
-test('an unplaced prescription card has a 3-step placement rail and no dispensing steps', () => {
+test('an unplaced prescription card has no duplicate placement rail or dispensing steps', () => {
   const clinic = { ...unplacedPrescription, entryMode: 'clinic' as const, clinicScanId: 'scan-1', status: 'awaiting-approval' as const };
   const order = orderWith({
     payment: { ...partialOrder.payment, status: 'paid' },
     prescriptions: [clinic],
   });
   const rail = buildPrescriptionStageRail(order, clinic);
-  assert.deepEqual(rail.placement?.map(entry => entry.key), ['prescriber', 'prescription', 'purchase-order']);
   assert.equal(rail.dispensing, null);
   assert.equal(rail.route, 'clinic_barcode');
-  assert.equal(rail.placement?.some(entry => entry.key === 'payment'), false);
+  assert.deepEqual(buildOrderStageRail(order).pharmacyPlacement.map(entry => entry.key), ['payment', 'prescriber', 'prescription', 'purchase-order']);
 });
 
 test('HHH repair audit events appear in the order activity log', () => {
   const events = buildOrderTimelineEvents(orderWith({
     auditEvents: [{
       type: 'multi_rx_identity_repair',
-      label: 'HHH prescription record corrected',
-      detail: 'Prescription 1 restored; no supplier order was sent.',
+      label: 'Record link repaired',
+      detail: 'Prescription 1 restored; existing Curaleaf order unchanged; no duplicate order sent.',
       occurredAt: '2026-08-29T06:00:00.000Z',
       reference: '1DZ-816507F909-P1',
     }],
   }));
-  const repaired = events.find(event => event.label === 'HHH prescription record corrected');
+  const repaired = events.find(event => event.label === 'Record link repaired');
   assert.match(repaired?.detail ?? '', /Prescription 1 restored/);
   assert.match(repaired?.detail ?? '', /1DZ-816507F909-P1/);
 });
@@ -290,12 +289,22 @@ test('a placed sibling shows dispensing steps while an unplaced sibling does not
   });
   const pending = buildPrescriptionStageRail(order, clinic);
   const placed = buildPrescriptionStageRail(order, manualPlaced);
-  assert.ok(pending.placement);
   assert.equal(pending.dispensing, null);
   assert.equal(pending.route, 'clinic_barcode');
-  assert.equal(placed.placement, null);
   assert.deepEqual(placed.dispensing?.map(entry => entry.key), ['ordered', 'dispensed', 'in-transit', 'checked-in', 'ready', 'collected']);
   assert.equal(placed.route, 'manual');
-  const chrome = `${pending.placement?.map(step => `${step.label} ${step.detail}`).join(' ')} ${placed.dispensing?.map(step => `${step.label} ${step.detail}`).join(' ')}`;
+  const placement = buildOrderStageRail(order).pharmacyPlacement;
+  const poStep = placement.find(step => step.key === 'purchase-order');
+  assert.notEqual(poStep?.state, 'complete', 'one placed sibling must not complete the whole-order PO step');
+  const chrome = `${placement.map(step => `${step.label} ${step.detail}`).join(' ')} ${placed.dispensing?.map(step => `${step.label} ${step.detail}`).join(' ')}`;
   assert.doesNotMatch(chrome, /RX-|serial|file-2|S2/i);
+});
+
+test('zero allocation uses the agreed supplier wording', () => {
+  const zeroAllocation = {
+    ...tenPackPrescription,
+    fulfilmentLines: tenPackPrescription.fulfilmentLines?.map(line => ({ ...line, allocated: 0, shipped: 0, received: 0, collected: 0 })),
+  };
+  const rail = buildPrescriptionStageRail(partialOrder, zeroAllocation);
+  assert.equal(rail.dispensing?.find(step => step.key === 'dispensed')?.detail, 'Awaiting Curaleaf allocation');
 });

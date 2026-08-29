@@ -11,8 +11,19 @@ export function snapshotRxList(snapshot: unknown): Array<Record<string, unknown>
 }
 
 export function snapshotRxKey(rx: Record<string, unknown> | undefined, index: number): string {
+  // Snapshot sub-orders are an integration correlation map, not the canonical
+  // prescription table. Keep their explicit client correlation stable even after
+  // the normalized HHH prescription UUID is stamped on the same record.
+  const clientKey = String(rx?.clientKey ?? '').trim();
+  if (clientKey) return clientKey;
+  // Compatibility for snapshots created before clientKey and the normalised HHH
+  // prescription UUID were stamped explicitly.
   const id = String(rx?.id ?? '').trim();
   if (id) return id;
+  const hhhPrescriptionId = String(rx?.hhhPrescriptionId ?? '').trim();
+  if (hhhPrescriptionId) return hhhPrescriptionId;
+  // Old manual-upload snapshots sometimes used the attachment as identity. Never
+  // write this shape again; retain it only so historical orders remain readable.
   const fileId = String(rx?.fileId ?? '').trim();
   if (fileId) return fileId;
   return `rx-${index}`;

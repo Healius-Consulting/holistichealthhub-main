@@ -43,7 +43,7 @@ export function recordNeedsAction(record: OrderLaneInput) {
 }
 
 export function recordReadyToCollect(record: OrderLaneInput) {
-  return !recordNeedsAction(record) && record.stage === 'ready';
+  return !recordNeedsAction(record) && (record.stage === 'ready' || record.stage === 'delivered');
 }
 
 export type OrderBoardLane =
@@ -51,7 +51,6 @@ export type OrderBoardLane =
   | 'awaiting-payment'
   | 'curaleaf'
   | 'split'
-  | 'goods-in'
   | 'ready';
 
 /**
@@ -63,7 +62,6 @@ export const ORDER_BOARD_LANES: Array<{ key: OrderBoardLane; label: string; deta
   { key: 'awaiting-payment', label: 'Awaiting payment', detail: 'Payment link is with the patient' },
   { key: 'curaleaf', label: 'With Curaleaf', detail: 'Placement, prescription check, dispensing and transit' },
   { key: 'split', label: 'Split delivery', detail: 'Arriving in more than one consignment' },
-  { key: 'goods-in', label: 'Checked in', detail: 'Booked into the dispensary, not yet ready' },
   { key: 'ready', label: 'Ready to collect', detail: 'Verified and waiting for the patient' },
 ];
 
@@ -89,9 +87,8 @@ export const ORDER_BOARD_LANES: Array<{ key: OrderBoardLane; label: string; deta
 export function orderBoardLane(record: OrderLaneInput): OrderBoardLane {
   if (recordActionException(record)) return 'needs-action';
   if (record.stage === 'awaiting-payment') return 'awaiting-payment';
-  if (record.stage === 'ready') return 'ready';
+  if (record.stage === 'ready' || record.stage === 'delivered') return 'ready';
   if (orderIsSplitFulfilment(record.order)) return 'split';
-  if (record.stage === 'delivered') return 'goods-in';
   return 'curaleaf';
 }
 
@@ -130,7 +127,7 @@ const CURALEAF_SECTIONS: Partial<Record<OrderStage, OrderBoardSection>> = {
 };
 
 /**
- * `actionLabel` is the card's own resolved status (Refund due, Call Curaleaf, Quote
+ * `actionLabel` is the card's own resolved status (Refund due, Cancellation pending, Quote
  * review …). It is the natural section for the exceptions lane, where the kind of
  * follow-up is the only thing that distinguishes one card from the next.
  */

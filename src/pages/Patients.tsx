@@ -136,8 +136,8 @@ function orderNeedsResolution(order: PatientOrder) {
 
 function deriveStatus(p: UnifiedPatient): { label: string; compactLabel: string; pill: string } {
   if (p.orders.length > 0) {
-    const callCuraleaf = p.orders.find(order => orderAwaitingCuraleafCancel(order) && !order.redoneByOrderId);
-    if (callCuraleaf) return { label: 'Call Curaleaf to cancel', compactLabel: 'Call Curaleaf', pill: 'pill-red' };
+    const cancellationPending = p.orders.find(order => orderAwaitingCuraleafCancel(order) && !order.redoneByOrderId);
+    if (cancellationPending) return { label: 'Supplier cancellation pending', compactLabel: 'Cancellation pending', pill: 'pill-red' };
     const cancellationAction = p.orders.find(order => orderCancellationResolution(order) === 'needs-action' && !order.redoneByOrderId);
     if (cancellationAction?.refund?.status === 'pending_confirmation' || cancellationAction?.cancellation?.status === 'refund_required') {
       return { label: 'Refund confirmation needed', compactLabel: 'Refund due', pill: 'pill-red' };
@@ -895,7 +895,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, o
                 const refunded = !curaleafLock && order.refund?.status === 'completed';
                 const refundPending = !curaleafLock && order.refund?.status === 'pending_confirmation';
                 const paymentLabel = curaleafLock
-                  ? 'Call Curaleaf'
+                  ? 'Cancellation pending'
                   : refunded
                   ? 'Refunded'
                   : refundPending
@@ -956,7 +956,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, o
                         ? (RX_STATUS_LABELS[order.prescriptions[0].status as keyof typeof RX_STATUS_LABELS] ?? order.prescriptions[0].status)
                         : 'Not submitted';
                 const alertTitle = curaleafLock
-                  ? 'Call Curaleaf before refund or replacement'
+                  ? 'Waiting for Curaleaf cancellation'
                   : refunded
                   ? 'Patient refund recorded'
                   : order.redoneByOrderId
@@ -971,7 +971,7 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, o
                         ? 'Paid Curaleaf rejection'
                         : 'Paid prescription expired';
                 const alertDetail = curaleafLock
-                  ? 'This purchase order is still live. Call Curaleaf before a refund or replacement.'
+                  ? 'Refund and replacement stay locked until the platform observes Curaleaf’s cancelled prescription or purchase order.'
                   : order.refund
                   ? `${order.refund.method === 'worldpay_portal' ? 'Worldpay' : 'Pharmacy'} · ${money(order.refund.amountPence / 100)}`
                   : order.redoneByOrderId

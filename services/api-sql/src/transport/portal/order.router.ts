@@ -67,6 +67,7 @@ import {
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
 import { prescriptionOwnershipError } from '../../application/prescriptions/order-line-ownership.js';
+import { curaleafSubOrders, snapshotRxKey, snapshotRxList } from '../../application/prescriptions/snapshot-rx.js';
 
 const UUID_LIKE = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 
@@ -176,6 +177,9 @@ const createOrderInputSchema = z.object({
     wholesalePackPricePence: z.number().int().nonnegative().optional(),
   })).default([]),
   prescriptions: z.array(z.object({
+    clientKey: z.string().optional(),
+    hhhPrescriptionId: z.string().optional(),
+    // Compatibility for order snapshots created before clientKey was explicit.
     id: z.string().optional(),
     fileId: z.string().optional(),
     clinicScanId: z.string().optional(),
@@ -609,7 +613,7 @@ export function createPortalOrderRouter(): Router {
         const rxSqlIds = new Map<string, string>();
         const today = new Date().toISOString().slice(0, 10);
         for (const [index, rx] of input.prescriptions.entries()) {
-          const localKey = String(rx.id || index);
+          const localKey = String(rx.clientKey || rx.id || index);
           const serial = normalizeSerialNumber(rx.serialNumber);
           const issueDate = String(rx.issueDate || '').slice(0, 10) || today;
           const expiryDate = String(rx.expiryDate || '').slice(0, 10) || plusDaysIso(issueDate, 28);
@@ -654,7 +658,8 @@ export function createPortalOrderRouter(): Router {
           ...(quoteSnapshot && typeof quoteSnapshot === 'object' ? quoteSnapshot as Record<string, unknown> : {}),
           prescriptions: input.prescriptions.map((rx, index) => ({
             ...rx,
-            hhhPrescriptionId: rxSqlIds.get(String(rx.id || index)) ?? null,
+            hhhPrescriptionId: rxSqlIds.get(String(rx.clientKey || rx.id || index)) ?? null,
+            id: undefined,
           })),
         };
         await orderRepo.updateQuoteSnapshot({
@@ -1022,12 +1027,12 @@ export function createPortalOrderRouter(): Router {
       const orderId = String(req.params.id || '');
       const input = z.object({
         organisationId: z.string().optional(),
-        action: z.enum(['absorb', 'cancel', 'refresh']),
+        action: z.enum(['absorb', 'refresh']),
       }).parse(req.body);
       const order = await orderRepo.findOrderById(orderId, scope.organisationId);
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
       if (!orderMoneyWasTaken(order)) {
-        throw new HttpError(409, 'Quote-review cancellation is available only after payment.', 'PAYMENT_REQUIRED');
+        throw new HttpError(409, 'Quote-review resolution is available only after payment.', 'PAYMENT_REQUIRED');
       }
       if (curaleafCancellationBlocksPlacement(order.quoteSnapshot)) {
         throw new HttpError(409, 'This Curaleaf purchase order was cancelled.', 'CURALEAF_ORDER_CANCELLED');
@@ -1132,41 +1137,6 @@ export function createPortalOrderRouter(): Router {
         });
         const result = await persistAndMaybePlace(approved, { place: true });
         res.status(200).json({ action: 'absorb', order: toPortalOrder(result.order as any) });
-        return;
-      }
-
-      if (input.action === 'cancel') {
-        const sourceCheck = review.quoteCheckId
-          ? await paymentRepo.findQuoteCheckById(String(review.quoteCheckId), scope.organisationId)
-          : null;
-        if (sourceCheck) {
-          await paymentRepo.createQuoteCheck({
-            organisationId: scope.organisationId,
-            orderId,
-            paymentId: sourceCheck.paymentId ?? null,
-            phase: sourceCheck.phase,
-            status: 'CANCELLED',
-            baselineQuoteCheckId: sourceCheck.baselineQuoteCheckId ?? null,
-            basketFingerprint: sourceCheck.basketFingerprint,
-            quoteFingerprint: sourceCheck.quoteFingerprint,
-            patientTotalPence: Number(sourceCheck.patientTotalPence),
-            wholesaleTotalPence: Number(sourceCheck.wholesaleTotalPence),
-            shippingPence: Number(sourceCheck.shippingPence),
-            taxPence: Number(sourceCheck.taxPence),
-            rawQuote: sourceCheck.rawQuote,
-            comparison: { ...(sourceCheck.comparison && typeof sourceCheck.comparison === 'object' ? sourceCheck.comparison as Record<string, unknown> : {}), decision: 'CANCEL' },
-            decidedByUid: scope.uid,
-          });
-        }
-        const cancelled = stampQuoteReviewOnSnapshot({
-          ...snapshot,
-          resolution: { status: 'required', reason: 'quote_changed', options: ['replace', 'refund'], requestedAt: now, requestedBy: scope.uid },
-        }, {
-          ...review,
-          status: 'recreate_required',
-        });
-        const result = await persistAndMaybePlace(cancelled);
-        res.status(200).json({ action: 'cancel', resolutionRequired: true, order: toPortalOrder(result.order as any) });
         return;
       }
 
@@ -1543,6 +1513,7 @@ export function createPortalOrderRouter(): Router {
       const orderId = String(req.params.id || '');
       const input = z.object({
         organisationId: z.string().optional(),
+        prescriptionId: z.string().min(1).max(200).optional(),
         partial: z.boolean().optional(),
         shipmentId: z.string().optional(),
       }).parse(req.body || {});
@@ -1550,8 +1521,23 @@ export function createPortalOrderRouter(): Router {
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
 
       const snapshot = (order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot : {}) as Record<string, any>;
-      const curaleaf = snapshot.curaleaf && typeof snapshot.curaleaf === 'object' ? snapshot.curaleaf : {};
-      const requestedItems = snapshot.lineItems || snapshot.items || [];
+      const subOrders = curaleafSubOrders(snapshot);
+      const prescriptionEntries = snapshotRxList(snapshot).map((prescription, index) => ({
+        key: snapshotRxKey(prescription, index),
+        prescription,
+      }));
+      const selectedRx = input.prescriptionId
+        ? prescriptionEntries.find(entry => entry.key === input.prescriptionId)
+        : null;
+      const selectedRxKey = selectedRx?.key ?? null;
+      if (input.prescriptionId && Object.keys(subOrders).length > 0 && !selectedRxKey) {
+        throw new HttpError(404, 'Prescription fulfilment scope not found for this order.', 'PRESCRIPTION_NOT_FOUND');
+      }
+      const curaleafScopeKey = selectedRxKey && subOrders[selectedRxKey] ? selectedRxKey : null;
+      const curaleaf = curaleafScopeKey
+        ? subOrders[curaleafScopeKey]!
+        : snapshot.curaleaf && typeof snapshot.curaleaf === 'object' ? snapshot.curaleaf : {};
+      const requestedItems = selectedRx?.prescription.items || snapshot.lineItems || snapshot.items || [];
       const lines = normalisedFulfilmentLines({
         purchaseOrder: curaleaf,
         shipments: curaleaf.shipments || [],
@@ -1560,6 +1546,7 @@ export function createPortalOrderRouter(): Router {
       });
       const result = applyPharmacyHandout({
         lines,
+        shipments: curaleaf.shipments || [],
         shipmentStates: curaleaf.shipmentStates || {},
         shipmentId: input.shipmentId,
         partial: input.partial === true,
@@ -1572,7 +1559,7 @@ export function createPortalOrderRouter(): Router {
       }
 
       const collectedAt = new Date().toISOString();
-      const dispenseKey = input.shipmentId || (input.partial ? `partial-${collectedAt.slice(0, 10)}` : 'full');
+      const dispenseKey = [selectedRxKey || 'order', input.shipmentId || (input.partial ? `partial-${collectedAt.slice(0, 10)}` : 'full')].join(':');
       await recordCollectedDispense(patientFinanceDeps, {
         organisationId: scope.organisationId,
         patientId: order.patientId,
@@ -1582,24 +1569,36 @@ export function createPortalOrderRouter(): Router {
         collectedAt,
       });
 
-      const nextStatus = result.remainingOpen
-        ? 'PARTIALLY_RECEIVED'
-        : 'COLLECTED';
+      const nextCuraleaf = {
+        ...curaleaf,
+        lines: result.lines,
+        shipmentStates: result.shipmentStates,
+      };
+      const nextSubOrders = curaleafScopeKey
+        ? { ...subOrders, [curaleafScopeKey]: nextCuraleaf }
+        : subOrders;
+      const allScopes = Object.keys(nextSubOrders).length
+        ? Object.values(nextSubOrders)
+        : [nextCuraleaf];
+      const allLines = allScopes.flatMap(scopeValue => Array.isArray(scopeValue.lines) ? scopeValue.lines as Array<Record<string, any>> : []);
+      const allRemainingOpen = allLines.some(line => Number(line.remaining || 0) > 0 || Number(line.collected || 0) < Number(line.ordered || 0));
+      const anyReadyPacks = allLines.some(line => Number(line.received || 0) > Number(line.collected || 0));
+      const nextStatus = anyReadyPacks
+        ? 'READY_FOR_COLLECTION'
+        : allRemainingOpen
+          ? 'PARTIALLY_RECEIVED'
+          : 'COLLECTED';
       await orderRepo.updateQuoteSnapshot({
         id: orderId,
         organisationId: scope.organisationId,
         quoteSnapshot: {
           ...snapshot,
-          curaleaf: {
-            ...curaleaf,
-            lines: result.lines,
-            shipmentStates: result.shipmentStates,
-          },
+          ...(curaleafScopeKey ? { curaleafSubOrders: nextSubOrders } : { curaleaf: nextCuraleaf }),
         },
         fulfilmentStatus: nextStatus,
       });
 
-      if (!result.remainingOpen) {
+      if (!allRemainingOpen) {
         await orderRepo.updateOrderStatus({
           id: orderId,
           organisationId: scope.organisationId,
@@ -1615,7 +1614,7 @@ export function createPortalOrderRouter(): Router {
         'pharmacy_collection_completed',
         {
           orderNumber: order.orderNumber,
-          summary: result.remainingOpen ? 'Partial collection completed.' : 'Collection completed.',
+          summary: allRemainingOpen ? 'Partial collection completed.' : 'Collection completed.',
         },
         ['pharmacy-collection-completed', orderId, dispenseKey],
         { organisationId: scope.organisationId, patientId: order.patientId, orderId },
@@ -1623,7 +1622,7 @@ export function createPortalOrderRouter(): Router {
 
       res.status(200).json({
         id: orderId,
-        status: result.remainingOpen ? 'partially_collected' : 'collected',
+        status: allRemainingOpen ? 'partially_collected' : 'collected',
         collectedAt,
       });
     } catch (error) {
@@ -1636,18 +1635,33 @@ export function createPortalOrderRouter(): Router {
     try {
       const scope = assertTenantScope(req.context!);
       const orderId = String(req.params.id || '');
+      const input = z.object({ shipmentId: z.string().min(1).max(200).optional() }).parse(req.body || {});
       const order = await orderRepo.findOrderById(orderId, scope.organisationId);
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
 
       const snapshot = (order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot : {}) as Record<string, any>;
       const curaleaf = snapshot.curaleaf && typeof snapshot.curaleaf === 'object' ? snapshot.curaleaf : {};
       const lines = Array.isArray(curaleaf.lines) ? curaleaf.lines : [];
+      const readyPacks = lines.reduce((sum: number, line: any) => (
+        sum + Math.max(0, Number(line.received || 0) - Number(line.collected || 0))
+      ), 0);
+      const totalPacks = lines.reduce((sum: number, line: any) => sum + Math.max(0, Number(line.ordered || 0)), 0);
+      if (readyPacks < 1) {
+        throw new HttpError(409, 'No pharmacy-checked packs are ready for collection.', 'NO_CHECKED_IN_PACKS');
+      }
+      const shipmentIds = Array.isArray(curaleaf.shipments)
+        ? curaleaf.shipments.map((shipment: any) => String(shipment?.id || '')).filter(Boolean)
+        : [];
+      const shipmentId = input.shipmentId || (shipmentIds.length === 1 ? shipmentIds[0] : undefined);
+      const shipmentStates = shipmentId
+        ? { ...(curaleaf.shipmentStates || {}), [shipmentId]: 'ready_for_collection' }
+        : curaleaf.shipmentStates;
       const remainingOpen = lines.some((line: any) => Number(line.remaining || 0) > 0 || Number(line.received || 0) < Number(line.ordered || 0));
       await orderRepo.updateQuoteSnapshot({
         id: orderId,
         organisationId: scope.organisationId,
-        quoteSnapshot: snapshot,
-        fulfilmentStatus: remainingOpen ? 'PARTIALLY_RECEIVED' : 'READY_FOR_COLLECTION',
+        quoteSnapshot: { ...snapshot, curaleaf: { ...curaleaf, shipmentStates } },
+        fulfilmentStatus: 'READY_FOR_COLLECTION',
       });
 
       await queueCollectionReadyEmail(
@@ -1657,7 +1671,9 @@ export function createPortalOrderRouter(): Router {
           orderId,
           patientId: order.patientId,
           orderNumber: order.orderNumber,
-          scopeKey: remainingOpen ? 'partial' : 'full',
+          scopeKey: shipmentId ? `shipment:${shipmentId}` : remainingOpen ? 'partial' : 'full',
+          readyPacks,
+          totalPacks,
         },
       );
 

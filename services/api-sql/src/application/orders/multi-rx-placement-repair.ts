@@ -98,8 +98,8 @@ export function planMultiRxPlacementRepair(input: {
         ...asArray(snapshot.auditEvents).filter(event => event.type !== 'multi_rx_identity_repair'),
         {
           type: 'multi_rx_identity_repair',
-          label: 'HHH prescription record corrected',
-          detail: 'Prescription 1 restored from the verified existing Curaleaf purchase order; no supplier order was sent.',
+          label: 'Record link repaired',
+          detail: 'Prescription 1 restored; existing Curaleaf order unchanged; no duplicate order sent.',
           occurredAt: input.repairedAt ?? new Date().toISOString(),
           reference: expected.customerReference,
         },

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { curaleafDeliveryGuidance } from '@hhh/domain/delivery';
 import { collectionEmailNotice } from '@hhh/domain/collection-window';
 import {
@@ -45,7 +46,7 @@ import {
   type Prescription,
 } from '../context/AppContext';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
+import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
 import { compactPatientName } from '../utils/patientName';
 import {
   orderAwaitingSupplierShipmentProductNames,
@@ -86,7 +87,7 @@ import {
   quoteReviewIsOpen,
   type OrderBoardLane,
 } from '../utils/orderBoardLanes';
-import { buildOrderTimelineEvents, buildPrescriptionStageRail, type OrderStageStep } from '../utils/orderTimeline';
+import { buildOrderStageRail, buildOrderTimelineEvents, buildPrescriptionStageRail, type OrderStageStep } from '../utils/orderTimeline';
 import { visiblePaymentGateCheck } from '../utils/quoteGate';
 import RecordDialog from '../components/RecordDialog';
 import {
@@ -96,6 +97,12 @@ import {
   orderDeliveryDestination,
   shortConsignmentId,
 } from '../utils/orderDetailsLedger';
+import {
+  buildPrescriptionWorkItems,
+  prescriptionWorkItemIsLive,
+  prescriptionWorkItemLabel,
+  type PrescriptionWorkItem,
+} from '../utils/prescriptionWorkItems';
 type ManualPaymentForm = { tender: ManualTender; reference: string; notes: string; confirmed: boolean };
 type GoodsReceiptDraft = { quantities: Record<string, number>; batches: Record<string, string>; expiries: Record<string, string>; note: string };
 
@@ -227,10 +234,10 @@ function recordStageMeta(record: OrderRecord) {
   }
   if (resolution === 'needs-action' && orderAwaitingCuraleafCancel(record.order)) {
     return {
-      label: 'Call Curaleaf',
-      description: 'This purchase order is still live at Curaleaf. Call them and record the cancellation before a refund or replacement.',
+      label: 'Cancellation Pending',
+      description: 'This order stays with Curaleaf until their prescription or purchase-order cancellation is observed by the platform.',
       tone: 'danger',
-      icon: PhoneCall,
+      icon: Clock3,
     };
   }
   if (resolution === 'needs-action' && refundDue && !supplierActionOutstanding) {
@@ -245,12 +252,12 @@ function recordStageMeta(record: OrderRecord) {
     return {
       label: outOfStock ? 'Stock Hold' : quoteCheck?.status === 'RECONCILIATION_REQUIRED' ? 'Reconciliation' : 'Quote Review',
       description: outOfStock
-        ? 'Curaleaf reports a line out of stock. Recheck the quote or cancel this order.'
+        ? 'Curaleaf reports a line out of stock. Recheck the quote; the paid order remains held until the gate clears.'
         : delta > 0
-          ? 'Patient price increased after payment. Accept the difference or cancel this order.'
+          ? 'Patient price increased after payment. Accept the difference to continue placement.'
           : delta < 0
-            ? 'Patient price dropped after payment. Accept the difference and keep the patient payment unchanged, or cancel this order.'
-            : 'The paid quote could not be compared. Refresh to continue placement, or cancel this order.',
+            ? 'Patient price dropped after payment. Accept the difference and keep the patient payment unchanged.'
+            : 'The paid quote could not be compared. Refresh to continue placement.',
       tone: 'warning',
       icon: AlertTriangle,
     };
@@ -395,7 +402,7 @@ function searchFieldsFor(record: OrderRecord, scope: OrderSearchScope): Array<st
   const { order, patient } = record;
   const patientFields = [patient?.name, patient?.dob, patient?.email, patient?.mobile];
   const orderFields = [order.id, order.backendId, orderReference(order)];
-  const prescriptionFields = order.prescriptions.flatMap(prescription => [prescription.poRef, prescription.serialNumber]);
+  const prescriptionFields = order.prescriptions.flatMap(prescription => [prescription.purchaseOrderId, prescription.serialNumber]);
   if (scope === 'patient') return patientFields;
   if (scope === 'order') return orderFields;
   if (scope === 'prescription') return prescriptionFields;
@@ -408,6 +415,7 @@ export default function Orders() {
   const [query, setQuery] = useState('');
   const [searchScope, setSearchScope] = useState<OrderSearchScope>('all');
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [selectedPrescriptionId, setSelectedPrescriptionId] = useState<number | null>(null);
   const [manualForms, setManualForms] = useState<Record<number, ManualPaymentForm>>({});
   const [submittingOrderId, setSubmittingOrderId] = useState<number | null>(null);
   const [receiptDrafts, setReceiptDrafts] = useState<Record<number, GoodsReceiptDraft>>({});
@@ -418,13 +426,12 @@ export default function Orders() {
   const [refundReferences, setRefundReferences] = useState<Record<number, string>>({});
   const [cancelOrderId, setCancelOrderId] = useState<number | null>(null);
   const [cancelNote, setCancelNote] = useState('');
-  const [cancellationReference, setCancellationReference] = useState('');
-  const [cancellationContactNote, setCancellationContactNote] = useState('');
   const [cancellationBusyOrderId, setCancellationBusyOrderId] = useState<number | null>(null);
-  const [callCuraleafModalOrder, setCallCuraleafModalOrder] = useState<PatientOrder | null>(null);
+  const [callCuraleafModal, setCallCuraleafModal] = useState<{ order: PatientOrder; prescriptionId: number | null; scope: 'selected' | 'order' } | null>(null);
   const [chaseDeliveryModal, setChaseDeliveryModal] = useState<{ order: PatientOrder; prescription?: Prescription; shipmentId?: string } | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [handoutOrderId, setHandoutOrderId] = useState<number | null>(null);
+  const [handoutPrescriptionId, setHandoutPrescriptionId] = useState<number | null>(null);
   const [handoutPartial, setHandoutPartial] = useState(false);
   const [handoutShipmentId, setHandoutShipmentId] = useState<string | undefined>(undefined);
   const [handoutBusy, setHandoutBusy] = useState(false);
@@ -513,12 +520,14 @@ export default function Orders() {
       setActiveFilter(['resolved', 'refunded'].includes(orderCancellationResolution(targetRecord.order)) ? 'cancelled' : 'current');
       setQuery('');
       setSelectedOrderId(orderId);
+      setSelectedPrescriptionId(null);
     }
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, records, state.navigationTarget]);
 
   const closeOrderRecord = () => {
     setSelectedOrderId(null);
+    setSelectedPrescriptionId(null);
   };
 
   const selected = selectedOrderId === null ? null : filtered.find(record => record.order.id === selectedOrderId) ?? null;
@@ -526,39 +535,41 @@ export default function Orders() {
   // Counted over the same live set the board shows, with the same lane function the
   // columns use, so a tile can never disagree with the column it describes.
   const liveRecords = records.filter(record => recordMatchesFilter(record, 'current'));
-  const liveLaneCount = (lane: OrderBoardLane) => liveRecords.filter(record => orderBoardLane(record) === lane).length;
+  const liveWorkItems = liveRecords.flatMap(record => buildPrescriptionWorkItems(record)).filter(prescriptionWorkItemIsLive);
+  const filteredWorkItems = filtered.flatMap(record => buildPrescriptionWorkItems(record)).filter(prescriptionWorkItemIsLive);
+  const liveLaneCount = (lane: OrderBoardLane) => liveWorkItems.filter(item => orderBoardLane(item.record) === lane).length;
   const activeCount = liveRecords.length;
+  const activePrescriptionCount = liveWorkItems.filter(item => item.prescription).length;
 
   const filterCount = (filter: StageFilter) => records.filter(record => recordMatchesFilter(record, filter)).length;
   const cancellationNeedsAction = activeFilter === 'cancelled' ? filtered.filter(record => orderCancellationResolution(record.order) === 'needs-action') : [];
   const cancellationClosed = activeFilter === 'cancelled' ? filtered.filter(record => ['resolved', 'refunded'].includes(orderCancellationResolution(record.order))) : [];
 
-  // `orderBoardLane` assigns exactly one lane per record, so the board partitions the
-  // current view: no order can fall between buckets and vanish. Empty lanes are dropped
-  // rather than rendered as "Nothing here" placeholders eating a whole column.
+  // Payment is one order-level work item. After payment, each prescription/PO gets its
+  // own work item, so mixed orders can truthfully occupy more than one operational lane.
   const boardLanes = activeFilter === 'current'
     ? ORDER_BOARD_LANES
       .map(lane => {
-        const records = filtered
-          .filter(record => orderBoardLane(record) === lane.key)
+        const items = filteredWorkItems
+          .filter(item => orderBoardLane(item.record) === lane.key)
           .sort((left, right) => (lane.key === 'needs-action'
-            ? orderRecordPriority(left) - orderRecordPriority(right)
-            : orderLaneRank(left) - orderLaneRank(right)));
+            ? orderRecordPriority(left.record) - orderRecordPriority(right.record)
+            : orderLaneRank(left.record) - orderLaneRank(right.record)));
         // Sub-sections in the lane's own sort order. A lane with one section renders
         // flat — a heading that names the column it already sits in is noise.
-        const sections: Array<{ key: string; label: string; rank: number; records: OrderRecord[] }> = [];
-        for (const record of records) {
-          const section = orderBoardSection(record, lane.key, recordCardTag(record));
+        const sections: Array<{ key: string; label: string; rank: number; items: PrescriptionWorkItem[] }> = [];
+        for (const item of items) {
+          const section = orderBoardSection(item.record, lane.key, recordCardTag(item.record));
           const existing = sections.find(entry => entry.key === section.key);
-          if (existing) existing.records.push(record);
-          else sections.push({ ...section, records: [record] });
+          if (existing) existing.items.push(item);
+          else sections.push({ ...section, items: [item] });
         }
         // Stable by first appearance, then by the section's own rank so the actionable
         // group ("Part here to hand out") sits above the purely inbound one.
         sections.sort((left, right) => left.rank - right.rank);
-        return { ...lane, records, sections };
+        return { ...lane, items, sections };
       })
-      .filter(lane => lane.records.length > 0)
+      .filter(lane => lane.items.length > 0)
     : [];
 
   const applyCancellationResponse = (order: PatientOrder, record: Awaited<ReturnType<typeof requestPortalOrderCancellation>>) => {
@@ -610,55 +621,13 @@ export default function Orders() {
     } finally { setCancellationBusyOrderId(null); }
   };
 
-  const recordCuraleafCancellationStep = async (order: PatientOrder, action: 'contacted' | 'confirmed', referenceOverride?: string) => {
-    const reference = (referenceOverride ?? cancellationReference).trim();
-    if (cancellationBusyOrderId || reference.length < 3) return;
-    setCancellationBusyOrderId(order.id);
-    try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live' && order.backendId) {
-        const result = await recordPortalCuraleafCancellation(order.backendId, {
-          organisationId: state.currentOrganisationId,
-          action,
-          reference,
-          note: cancellationContactNote.trim() || undefined,
-        });
-        applyCancellationResponse(order, result);
-      } else if (action === 'contacted') {
-        dispatch({ type: 'RECORD_CURALEAF_CANCELLATION_CONTACT', orderId: order.id, reference, note: cancellationContactNote });
-      } else {
-        dispatch({ type: 'CONFIRM_CURALEAF_CANCELLATION', orderId: order.id, reference });
-      }
-      dispatch({ type: 'ADD_TOAST', message: action === 'contacted' ? `Curaleaf contact recorded for ${orderReference(order)}. Refund remains locked until cancellation is confirmed.` : `Curaleaf cancellation confirmed for ${orderReference(order)}. Refund due — complete it in ${order.payment.route === 'worldpay' ? 'Worldpay' : 'ePOS'} and confirm the reference.`, toastType: action === 'contacted' ? 'info' : 'warning' });
-      setCancellationReference('');
-      setCancellationContactNote('');
-      if (action === 'confirmed') setActiveFilter('cancelled');
-    } catch (error) {
-      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The Curaleaf cancellation step could not be recorded.', toastType: 'error' });
-    } finally { setCancellationBusyOrderId(null); }
-  };
-
-  const handleConfirmCuraleafCancellationDirect = async (order: PatientOrder) => {
-    await recordCuraleafCancellationStep(order, 'confirmed', 'phone_cs_confirmed');
-    setCallCuraleafModalOrder(null);
-  };
-
-  const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'cancel' | 'refresh') => {
+  const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'refresh') => {
     if (quoteReviewBusyOrderId) return;
     const trainingLocal = isLocalPortalPreview || state.workspaceMode !== 'live' || !order.backendId;
     if (trainingLocal) {
       const review = order.quoteReview;
       if (action === 'refresh') {
         dispatch({ type: 'ADD_TOAST', message: `Quote still needs review for ${orderReference(order)}.`, toastType: 'warning' });
-        return;
-      }
-      if (action === 'cancel') {
-        dispatch({
-          type: 'SET_QUOTE_REVIEW',
-          orderId: order.id,
-          quoteReview: review ? { ...review, status: 'recreate_required' } : undefined,
-          resolution: { status: 'OPEN', reason: 'CANCELLED' },
-        });
-        dispatch({ type: 'ADD_TOAST', message: `Choose a replacement or refund for ${orderReference(order)}.`, toastType: 'warning' });
         return;
       }
       dispatch({
@@ -692,7 +661,6 @@ export default function Orders() {
       });
       const messages: Record<typeof action, string> = {
         absorb: `Price change absorbed for ${orderReference(order)}. Placement will continue.`,
-        cancel: `Choose a replacement or refund for ${orderReference(order)}.`,
         refresh: result.order.quoteReview && ['required', 'awaiting_top_up', 'awaiting_refund'].includes(result.order.quoteReview.status)
           ? `Quote still needs review for ${orderReference(order)}.`
           : `Quote rechecked for ${orderReference(order)}. Placement can continue.`,
@@ -857,7 +825,7 @@ export default function Orders() {
       // Check-in is the ready-to-collect decision — there is no second button. The
       // server queues the patient email from the same goods-receipt call; this keeps
       // the training workspace, which has no server, on the identical flow.
-      if (anyReceived) dispatch({ type: 'MARK_READY_FOR_COLLECTION', orderId: order.id, rxId: prescription.id });
+      if (anyReceived) dispatch({ type: 'MARK_READY_FOR_COLLECTION', orderId: order.id, rxId: prescription.id, shipmentId: shipmentId ?? prescription.shipmentId ?? prescription.shipmentIds?.[0] });
       setReceiptDrafts(current => ({ ...current, [prescription.id]: { ...draft, quantities: Object.fromEntries(lines.map(line => [line.productId, line.quantityReceived])), note: draft.note } }));
       const notice = collectionEmailNotice(new Date());
       dispatch({
@@ -872,12 +840,15 @@ export default function Orders() {
     }
   };
 
-  const handleOrderHandout = async (order: PatientOrder, partial = false, shipmentId?: string) => {
+  const handleOrderHandout = async (order: PatientOrder, prescriptionId: number | null, partial = false, shipmentId?: string) => {
     if (handoutBusy) return;
+    const targetPrescription = prescriptionId === null ? null : order.prescriptions.find(prescription => prescription.id === prescriptionId) ?? null;
+    const prescriptionScoped = Boolean(targetPrescription && order.prescriptions.length > 1);
+    const effectivePartial = partial || prescriptionScoped;
     // Supply completeness and collection are separate questions: packs already on the
     // dispensary shelf must never look like stock the supplier still owes.
-    const supplyIncomplete = orderSupplyIncomplete(order);
-    if (!partial && supplyIncomplete) {
+    const supplyIncomplete = targetPrescription ? prescriptionSupplyIncomplete(targetPrescription) : orderSupplyIncomplete(order);
+    if (!effectivePartial && supplyIncomplete) {
       dispatch({ type: 'ADD_TOAST', message: 'Remaining packs are still awaiting dispatch. Use partial handout for arrived packs only.', toastType: 'warning' });
       return;
     }
@@ -887,18 +858,22 @@ export default function Orders() {
         if (!order.backendId) throw new Error('This order has not finished saving. Refresh and try again.');
         await handoutPortalOrder(order.backendId, {
           organisationId: state.currentOrganisationId,
-          partial,
+          partial: effectivePartial,
           shipmentId,
+          prescriptionId: targetPrescription?.backendId,
         });
       }
-      dispatch({ type: 'HANDOUT_ORDER', orderId: order.id, partial, shipmentId });
+      dispatch({ type: 'HANDOUT_ORDER', orderId: order.id, rxId: targetPrescription?.id, partial: effectivePartial, shipmentId });
       dispatch({
         type: 'ADD_TOAST',
-        message: partial ? 'Partial handout recorded. Remaining packs are still awaiting dispatch.' : 'Handout recorded. The order is now completed.',
+        message: effectivePartial
+          ? `${targetPrescription ? 'Prescription handout' : 'Partial handout'} recorded. Other active prescriptions and remaining packs stay open.`
+          : 'Handout recorded. The order is now completed.',
         toastType: 'success',
       });
       setHandoutOrderId(null);
-      if (!partial && !supplyIncomplete) setActiveFilter('completed');
+      setHandoutPrescriptionId(null);
+      if (!effectivePartial && !supplyIncomplete) setActiveFilter('completed');
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The handout could not be recorded.', toastType: 'error' });
     } finally {
@@ -936,10 +911,15 @@ export default function Orders() {
   const tiles = [
     { key: 'needs-action', label: 'Needs action', value: String(liveLaneCount('needs-action')), icon: AlertTriangle, tone: 'warning', show: liveLaneCount('needs-action') > 0 },
     { key: 'outstanding', label: 'Awaiting payment', value: money(outstandingValue), icon: CreditCard, tone: 'warning', show: liveLaneCount('awaiting-payment') > 0 },
-    { key: 'in-fulfilment', label: 'In fulfilment', value: String(liveLaneCount('curaleaf') + liveLaneCount('goods-in')), icon: Package, tone: 'primary', show: liveLaneCount('curaleaf') + liveLaneCount('goods-in') > 0 },
+    { key: 'in-fulfilment', label: 'In fulfilment', value: String(liveLaneCount('curaleaf')), icon: Package, tone: 'primary', show: liveLaneCount('curaleaf') > 0 },
     { key: 'split', label: 'Split delivery', value: String(liveLaneCount('split')), icon: Layers2, tone: 'primary', show: liveLaneCount('split') > 0 },
     { key: 'ready', label: 'Ready to collect', value: String(liveLaneCount('ready')), icon: PackageCheck, tone: 'success', show: liveLaneCount('ready') > 0 },
   ].filter(tile => tile.show);
+  const callModalPrescriptions = callCuraleafModal
+    ? callCuraleafModal.scope === 'selected' && callCuraleafModal.prescriptionId !== null
+      ? callCuraleafModal.order.prescriptions.filter(prescription => prescription.id === callCuraleafModal.prescriptionId)
+      : callCuraleafModal.order.prescriptions
+    : [];
 
   return (
     <div className="page-body order-crm">
@@ -948,6 +928,7 @@ export default function Orders() {
       <section className="order-crm-summary order-crm-summary--compact" aria-label="Order pipeline summary">
         <p className="order-crm-summary__total">
           <strong>{activeCount}</strong> live order{activeCount === 1 ? '' : 's'}
+          {activePrescriptionCount ? <span> · {activePrescriptionCount} prescription work item{activePrescriptionCount === 1 ? '' : 's'}</span> : null}
         </p>
         {tiles.length ? (
           <div className="order-crm-summary__tiles">
@@ -994,23 +975,23 @@ export default function Orders() {
         activeFilter === 'current' ? (
           <div className={`crm-lane-board crm-lane-board--count-${boardLanes.length}`}>
             {boardLanes.map(lane => (
-              <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${lane.records.length} order${lane.records.length === 1 ? '' : 's'}`}>
+              <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${lane.items.length} work item${lane.items.length === 1 ? '' : 's'}`}>
                 <header className="crm-lane__header" title={lane.detail}>
                   <span><strong>{lane.label}</strong></span>
-                  <b>{lane.records.length}</b>
+                  <b>{lane.items.length}</b>
                 </header>
                 <div className="crm-lane__rows">
                   {lane.sections.length > 1
                     ? lane.sections.map(section => (
-                      <div className="crm-lane__section" key={section.key} role="group" aria-label={`${section.label}, ${section.records.length} order${section.records.length === 1 ? '' : 's'}`}>
-                        <h3><span>{section.label}</span><b>{section.records.length}</b></h3>
-                        {section.records.map(record => (
-                          <OrderListRow key={record.order.id} record={record} selected={false} now={now} laneLabel={lane.label} sectionKey={section.key} onSelect={() => setSelectedOrderId(record.order.id)} />
+                      <div className="crm-lane__section" key={section.key} role="group" aria-label={`${section.label}, ${section.items.length} work item${section.items.length === 1 ? '' : 's'}`}>
+                        <h3><span>{section.label}</span><b>{section.items.length}</b></h3>
+                        {section.items.map(item => (
+                          <OrderListRow key={item.key} item={item} selected={selectedOrderId === item.sourceOrder.id && selectedPrescriptionId === (item.prescription?.id ?? null)} now={now} laneLabel={lane.label} sectionKey={section.key} onSelect={() => { setSelectedOrderId(item.sourceOrder.id); setSelectedPrescriptionId(item.prescription?.id ?? null); }} />
                         ))}
                       </div>
                     ))
-                    : lane.records.map(record => (
-                      <OrderListRow key={record.order.id} record={record} selected={false} now={now} laneLabel={lane.label} onSelect={() => setSelectedOrderId(record.order.id)} />
+                    : lane.items.map(item => (
+                      <OrderListRow key={item.key} item={item} selected={selectedOrderId === item.sourceOrder.id && selectedPrescriptionId === (item.prescription?.id ?? null)} now={now} laneLabel={lane.label} onSelect={() => { setSelectedOrderId(item.sourceOrder.id); setSelectedPrescriptionId(item.prescription?.id ?? null); }} />
                     ))}
                 </div>
               </section>
@@ -1032,7 +1013,7 @@ export default function Orders() {
                 </header>
                 <div className="crm-lane__rows">
                   {lane.records.map(record => (
-                    <OrderListRow key={record.order.id} record={record} selected={false} now={now} laneLabel={lane.label} onSelect={() => setSelectedOrderId(record.order.id)} />
+                    <OrderListRow key={record.order.id} item={buildPrescriptionWorkItems(record)[0]!} selected={selectedOrderId === record.order.id} now={now} laneLabel={lane.label} onSelect={() => { setSelectedOrderId(record.order.id); setSelectedPrescriptionId(null); }} />
                   ))}
                 </div>
               </section>
@@ -1046,20 +1027,26 @@ export default function Orders() {
           <OrderDetail
               key={selected.order.id}
               record={selected}
+              selectedPrescriptionId={selectedPrescriptionId}
+              onSelectPrescription={setSelectedPrescriptionId}
               now={now}
               placementConfirmation={placementConfirmation?.orderId === selected.order.id ? placementConfirmation.message : null}
               handoutBusy={handoutBusy}
-              onOpenHandout={(partial, shipmentId) => {
+              onOpenHandout={(prescription, partial, shipmentId) => {
                 setHandoutPartial(partial);
                 setHandoutShipmentId(shipmentId);
+                setHandoutPrescriptionId(prescription.id);
                 setHandoutOrderId(selected.order.id);
               }}
               manualForm={manualForms[selected.order.id] ?? DEFAULT_MANUAL_FORM}
               onManualFormChange={patch => updateManualForm(selected.order.id, patch)}
               onRecordManual={() => void handleRecordManualPayment(selected.order)}
               onRedo={() => {
-                const existingDraft = state.orders.find(order => order.organisationId === state.currentOrganisationId && order.payment.status === 'none' && order.redoContext?.originalOrderId === selected.order.id);
-                dispatch({ type: 'START_REDO_ORDER', sourceOrderId: selected.order.id });
+                const existingDraft = state.orders.find(order => order.organisationId === state.currentOrganisationId
+                  && order.payment.status === 'none'
+                  && order.redoContext?.originalOrderId === selected.order.id
+                  && order.redoContext?.originalPrescriptionId === (selectedPrescriptionId ?? undefined));
+                dispatch({ type: 'START_REDO_ORDER', sourceOrderId: selected.order.id, prescriptionId: selectedPrescriptionId ?? undefined });
                 dispatch({ type: 'ADD_TOAST', message: existingDraft ? `Opened existing replacement ${orderReference(existingDraft)}.` : `Started a replacement draft for ${orderReference(selected.order)}.`, toastType: 'info' });
               }}
               busy={submittingOrderId === selected.order.id}
@@ -1068,7 +1055,7 @@ export default function Orders() {
               onReceiptDraftChange={updateReceiptDraft}
               onSavePartial={(prescription, shipmentId) => void handleGoodsReceipt(selected.order, prescription, false, shipmentId)}
               onConfirmDelivery={(prescription, shipmentId) => void handleGoodsReceipt(selected.order, prescription, true, shipmentId)}
-              onCallCuraleaf={() => setCallCuraleafModalOrder(selected.order)}
+              onCallCuraleaf={prescription => setCallCuraleafModal({ order: selected.order, prescriptionId: prescription?.id ?? null, scope: prescription ? 'selected' : 'order' })}
               onManualPlace={prescription => void handleManualPlace(selected.order, prescription)}
               onPaymentLinkResend={() => void handlePaymentLinkResend(selected.order)}
               paymentLinkBusy={paymentLinkBusyOrderId === selected.order.id}
@@ -1081,17 +1068,11 @@ export default function Orders() {
               onQuoteReviewResolve={action => void handleQuoteReviewResolve(selected.order, action)}
               cancellationEditorOpen={cancelOrderId === selected.order.id}
               cancellationNote={cancelNote}
-              cancellationReference={cancellationReference}
-              cancellationContactNote={cancellationContactNote}
               cancellationBusy={cancellationBusyOrderId === selected.order.id}
               onOpenCancellation={() => { setCancelOrderId(selected.order.id); setCancelNote(''); }}
               onCloseCancellation={() => { setCancelOrderId(null); setCancelNote(''); }}
               onCancellationNoteChange={setCancelNote}
-              onCancellationReferenceChange={setCancellationReference}
-              onCancellationContactNoteChange={setCancellationContactNote}
               onRequestCancellation={() => void requestCancellation(selected.order)}
-              onRecordCuraleafContact={() => void recordCuraleafCancellationStep(selected.order, 'contacted')}
-              onConfirmCuraleafCancellation={() => void recordCuraleafCancellationStep(selected.order, 'confirmed')}
               onChaseDelivery={(prescription, shipmentId) => setChaseDeliveryModal({ order: selected.order, prescription, shipmentId })}
             />
         </RecordDialog>
@@ -1131,13 +1112,15 @@ export default function Orders() {
                 <span className="curaleaf-call-modal__ref-label">PO Reference</span>
                 <div className="curaleaf-call-modal__ref-value-row">
                   <code className="curaleaf-call-modal__ref-code">
-                    {chaseDeliveryModal.prescription?.poRef ?? chaseDeliveryModal.order.prescriptions.find(p => p.poRef)?.poRef ?? orderReference(chaseDeliveryModal.order)}
+                    {chaseDeliveryModal.prescription?.purchaseOrderId ?? chaseDeliveryModal.order.prescriptions.find(p => p.purchaseOrderId)?.purchaseOrderId ?? 'No Curaleaf PO created'}
                   </code>
                   <button
                     type="button"
                     className={`curaleaf-call-modal__copy-btn${copiedKey === 'chasePoRef' ? ' curaleaf-call-modal__copy-btn--copied' : ''}`}
+                    disabled={!chaseDeliveryModal.prescription?.purchaseOrderId && !chaseDeliveryModal.order.prescriptions.some(p => p.purchaseOrderId)}
                     onClick={() => {
-                      const ref = chaseDeliveryModal.prescription?.poRef ?? chaseDeliveryModal.order.prescriptions.find(p => p.poRef)?.poRef ?? orderReference(chaseDeliveryModal.order);
+                      const ref = chaseDeliveryModal.prescription?.purchaseOrderId ?? chaseDeliveryModal.order.prescriptions.find(p => p.purchaseOrderId)?.purchaseOrderId;
+                      if (!ref) return;
                       void navigator.clipboard.writeText(String(ref));
                       setCopiedKey('chasePoRef');
                       window.setTimeout(() => setCopiedKey(null), 2000);
@@ -1203,25 +1186,32 @@ export default function Orders() {
           </section>
         </div>
       ) : null}
-      {callCuraleafModalOrder ? (
-        <div className="order-handout-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setCallCuraleafModalOrder(null); }}>
+      {callCuraleafModal ? (
+        <div className="order-handout-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setCallCuraleafModal(null); }}>
           <section className="curaleaf-call-modal" role="dialog" aria-modal="true" aria-labelledby="call-curaleaf-title">
             <header className="curaleaf-call-modal__header">
               <div className="curaleaf-call-modal__header-left">
                 <span className="curaleaf-call-modal__icon-pill"><PhoneCall size={20} /></span>
                 <div className="curaleaf-call-modal__header-titles">
                   <span className="curaleaf-call-modal__eyebrow">Supplier cancellation</span>
-                  <h2 id="call-curaleaf-title" className="curaleaf-call-modal__title">Call Curaleaf to Cancel Purchase Order</h2>
+                  <h2 id="call-curaleaf-title" className="curaleaf-call-modal__title">Call Curaleaf to cancel</h2>
                 </div>
               </div>
-              <button type="button" className="curaleaf-call-modal__close" onClick={() => setCallCuraleafModalOrder(null)} aria-label="Close dialog">
+              <button type="button" className="curaleaf-call-modal__close" onClick={() => setCallCuraleafModal(null)} aria-label="Close dialog">
                 <X size={18} />
               </button>
             </header>
 
             <p className="curaleaf-call-modal__desc">
-              Contact Curaleaf Customer Services to cancel the Purchase Order on their laboratory cleanroom system. Quote the references below:
+              Contact Curaleaf Customer Services if the patient changes their mind or the pharmacy needs an active prescription or purchase order cancelled. Choose the affected scope, then quote the references below.
             </p>
+
+            {callCuraleafModal.order.prescriptions.length > 1 ? (
+              <div className="curaleaf-call-modal__scope" role="group" aria-label="Cancellation call scope">
+                <button type="button" aria-pressed={callCuraleafModal.scope === 'selected'} className={callCuraleafModal.scope === 'selected' ? 'is-selected' : ''} onClick={() => setCallCuraleafModal({ ...callCuraleafModal, scope: 'selected', prescriptionId: callCuraleafModal.prescriptionId ?? callCuraleafModal.order.prescriptions[0]?.id ?? null })}>Selected prescription</button>
+                <button type="button" aria-pressed={callCuraleafModal.scope === 'order'} className={callCuraleafModal.scope === 'order' ? 'is-selected' : ''} onClick={() => setCallCuraleafModal({ ...callCuraleafModal, scope: 'order' })}>Whole order</button>
+              </div>
+            ) : null}
 
             <div className="curaleaf-call-modal__phone-card">
               <div className="curaleaf-call-modal__phone-info">
@@ -1234,93 +1224,73 @@ export default function Orders() {
             </div>
 
             <div className="curaleaf-call-modal__refs-card">
-              <div className="curaleaf-call-modal__ref-item">
-                <span className="curaleaf-call-modal__ref-label">PO Reference</span>
-                <div className="curaleaf-call-modal__ref-value-row">
-                  <code className="curaleaf-call-modal__ref-code">
-                    {callCuraleafModalOrder.prescriptions.find(p => p.poRef)?.poRef ?? orderReference(callCuraleafModalOrder)}
-                  </code>
-                  <button
-                    type="button"
-                    className={`curaleaf-call-modal__copy-btn${copiedKey === 'poRef' ? ' curaleaf-call-modal__copy-btn--copied' : ''}`}
-                    onClick={() => {
-                      const ref = callCuraleafModalOrder.prescriptions.find(p => p.poRef)?.poRef ?? orderReference(callCuraleafModalOrder);
-                      void navigator.clipboard.writeText(String(ref));
-                      setCopiedKey('poRef');
-                      window.setTimeout(() => setCopiedKey(null), 2000);
-                    }}
-                  >
-                    {copiedKey === 'poRef' ? <Check size={11} /> : <Copy size={11} />}
-                    {copiedKey === 'poRef' ? 'Copied' : 'Copy'}
-                  </button>
+              {callModalPrescriptions.flatMap(prescription => {
+                const index = callCuraleafModal.order.prescriptions.findIndex(candidate => candidate.id === prescription.id);
+                return [
+                { key: `cancel-po-${prescription.id}`, label: `Prescription ${index + 1} PO`, value: prescription.purchaseOrderId, missing: 'No Curaleaf PO created' },
+                { key: `cancel-serial-${prescription.id}`, label: `Prescription ${index + 1} serial`, value: prescription.serialNumber, missing: 'Not recorded' },
+              ]; }).map(reference => (
+                <div className="curaleaf-call-modal__ref-item" key={reference.key}>
+                  <span className="curaleaf-call-modal__ref-label">{reference.label}</span>
+                  <div className="curaleaf-call-modal__ref-value-row">
+                    <code className="curaleaf-call-modal__ref-code">{reference.value ?? reference.missing}</code>
+                    <button
+                      type="button"
+                      className={`curaleaf-call-modal__copy-btn${copiedKey === reference.key ? ' curaleaf-call-modal__copy-btn--copied' : ''}`}
+                      disabled={!reference.value}
+                      aria-label={`Copy ${reference.label}`}
+                      onClick={() => {
+                        if (!reference.value) return;
+                        void navigator.clipboard.writeText(reference.value);
+                        setCopiedKey(reference.key);
+                        window.setTimeout(() => setCopiedKey(null), 2000);
+                      }}
+                    >
+                      {copiedKey === reference.key ? <Check size={11} /> : <Copy size={11} />}
+                      {copiedKey === reference.key ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-              <div className="curaleaf-call-modal__ref-item">
-                <span className="curaleaf-call-modal__ref-label">Prescription Serial</span>
-                <div className="curaleaf-call-modal__ref-value-row">
-                  <code className="curaleaf-call-modal__ref-code">
-                    {callCuraleafModalOrder.prescriptions.find(p => p.serialNumber)?.serialNumber ?? 'Not recorded'}
-                  </code>
-                  <button
-                    type="button"
-                    className={`curaleaf-call-modal__copy-btn${copiedKey === 'serial' ? ' curaleaf-call-modal__copy-btn--copied' : ''}`}
-                    onClick={() => {
-                      const serial = callCuraleafModalOrder.prescriptions.find(p => p.serialNumber)?.serialNumber ?? '';
-                      void navigator.clipboard.writeText(String(serial));
-                      setCopiedKey('serial');
-                      window.setTimeout(() => setCopiedKey(null), 2000);
-                    }}
-                  >
-                    {copiedKey === 'serial' ? <Check size={11} /> : <Copy size={11} />}
-                    {copiedKey === 'serial' ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-              </div>
+              ))}
             </div>
 
             <div className="curaleaf-call-modal__guidance">
               <Info size={16} />
               <span>
-                When Curaleaf cancels the purchase order after this call, the order stays paid and moves to Cancellations for refund or replacement. You can wait for the supplier update, or record their confirmation now.
+                Calling does not change this HHH order. It stays in its current stage until the platform observes Curaleaf’s cancelled prescription or purchase order. It then moves to Needs action for replacement or cancellation and refund.
               </span>
             </div>
 
             <footer className="curaleaf-call-modal__footer">
-              <button type="button" className="btn btn-secondary" onClick={() => setCallCuraleafModalOrder(null)}>Close</button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={cancellationBusyOrderId === callCuraleafModalOrder.id}
-                onClick={() => void handleConfirmCuraleafCancellationDirect(callCuraleafModalOrder)}
-              >
-                {cancellationBusyOrderId === callCuraleafModalOrder.id ? 'Recording…' : 'Curaleaf confirmed cancellation'}
-              </button>
+              <button type="button" className="btn btn-primary" onClick={() => setCallCuraleafModal(null)}>Done</button>
             </footer>
           </section>
         </div>
       ) : null}
-      {handoutOrderId && selected?.order.id === handoutOrderId ? (
-        <div className="order-handout-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !handoutBusy) { setHandoutOrderId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); } }}>
+      {handoutOrderId && selected?.order.id === handoutOrderId ? createPortal(
+        <div className="order-handout-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !handoutBusy) { setHandoutOrderId(null); setHandoutPrescriptionId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); } }}>
           <section className="order-handout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="order-handout-title" aria-describedby="order-handout-description">
             <span className="order-handout-dialog__icon"><PackageCheck size={22} /></span>
             <div>
               <small>Patient handout</small>
-              <h2 id="order-handout-title">{handoutPartial ? 'Confirm partial handout to patient' : 'Confirm medication has been handed to the patient'}</h2>
+              <h2 id="order-handout-title">{selected.order.prescriptions.length > 1 ? `Confirm prescription ${Math.max(1, selected.order.prescriptions.findIndex(prescription => prescription.id === handoutPrescriptionId) + 1)} handout` : handoutPartial ? 'Confirm partial handout to patient' : 'Confirm medication has been handed to the patient'}</h2>
               <p id="order-handout-description">
-                {handoutPartial
+                {selected.order.prescriptions.length > 1
+                  ? `This records only the selected prescription’s ready consignment for ${orderReference(selected.order)}. Other prescriptions remain in their current stages.`
+                  : handoutPartial
                   ? `This records handout of arrived packs only for ${orderReference(selected.order)}. Remaining packs are still awaiting dispatch.`
                   : `This completes ${orderReference(selected.order)} and records the handout in the audit trail.`}
               </p>
             </div>
             <footer>
-              <button type="button" className="btn btn-secondary" disabled={handoutBusy} onClick={() => { setHandoutOrderId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); }}>Cancel</button>
-              <button type="button" className="btn btn-primary" disabled={handoutBusy} onClick={() => void handleOrderHandout(selected.order, handoutPartial, handoutShipmentId)}>
-                <Check size={14} /> {handoutBusy ? 'Recording handout…' : handoutPartial ? 'Confirm partial handout' : 'Confirm handout'}
+              <button type="button" className="btn btn-secondary" disabled={handoutBusy} onClick={() => { setHandoutOrderId(null); setHandoutPrescriptionId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); }}>Cancel</button>
+              <button type="button" className="btn btn-primary" disabled={handoutBusy} onClick={() => void handleOrderHandout(selected.order, handoutPrescriptionId, handoutPartial, handoutShipmentId)}>
+                <Check size={14} /> {handoutBusy ? 'Recording handout…' : selected.order.prescriptions.length > 1 ? 'Confirm prescription handout' : handoutPartial ? 'Confirm partial handout' : 'Confirm handout'}
               </button>
             </footer>
           </section>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
@@ -1332,7 +1302,8 @@ function SummaryMetric({ label, value, icon: Icon, tone }: { label: string; valu
   return <article className={`order-crm-metric order-crm-metric--${tone}`}><span className="order-crm-metric__icon"><Icon size={15} aria-hidden="true" /></span><span><small>{label}</small><strong>{value}</strong></span></article>;
 }
 
-function OrderListRow({ record, selected, laneLabel, sectionKey, onSelect }: { record: OrderRecord; selected: boolean; now: Date; laneLabel?: string; sectionKey?: string; onSelect: () => void }) {
+function OrderListRow({ item, selected, laneLabel, sectionKey, onSelect }: { item: PrescriptionWorkItem; selected: boolean; now: Date; laneLabel?: string; sectionKey?: string; onSelect: () => void }) {
+  const { record, sourceOrder, prescription } = item;
   const meta = recordStageMeta(record);
   const Icon = meta.icon;
   const patientName = record.patient?.name ?? 'Unknown patient';
@@ -1347,26 +1318,29 @@ function OrderListRow({ record, selected, laneLabel, sectionKey, onSelect }: { r
   // the accessible name, so nothing is lost for a screen reader.
   const headingKey = sectionKey ?? orderBoardSlug(laneLabel ?? '');
   const showTag = orderBoardSlug(cardLabel) !== headingKey;
-  const rxCount = record.order.prescriptions.length;
-  const placedCount = record.order.prescriptions.filter(prescription => prescription.placed).length;
-  const mixedPlaced = rxCount > 1 && placedCount > 0 && placedCount < rxCount;
+  const rxCount = sourceOrder.prescriptions.length;
+  const placedCount = sourceOrder.prescriptions.filter(candidate => Boolean(candidate.purchaseOrderId)).length;
+  const mixedPlaced = !prescription && rxCount > 1 && placedCount > 0 && placedCount < rxCount;
+  const listReference = orderReference(sourceOrder);
+  const workLabel = prescriptionWorkItemLabel(item);
+  const workValue = prescription ? rxRevenue(prescription) : sourceOrder.payment.amount;
   return (
     <button
       type="button"
       className={`order-crm-row order-crm-row--${meta.tone}${isCancellation ? ' order-crm-row--cancelled' : ''}${selected ? ' selected' : ''}`}
       aria-pressed={selected}
-      aria-label={`${compactPatientName(patientName)}, ${cardLabel}. ${meta.description}`}
+      aria-label={`${compactPatientName(patientName)}, order ${listReference}, ${workLabel}, ${cardLabel}, ${money(workValue)}, ${formatDate(sourceOrder.date)}. ${meta.description}`}
       title={meta.description}
       onClick={onSelect}
     >
       <span className={`order-crm-row__stage order-tone--${meta.tone}`}><Icon size={15} aria-hidden="true" /></span>
-      <span className="order-crm-row__identity"><strong title={patientName}>{compactPatientName(patientName)}</strong><small>{record.order.redoContext ? 'Replacement' : 'Order'} {orderReference(record.order)} · {rxCount} Rx{mixedPlaced ? ` · ${placedCount} of ${rxCount} placed` : ''}</small></span>
+      <span className="order-crm-row__identity"><strong title={patientName}>{compactPatientName(patientName)}</strong><small>{sourceOrder.redoContext ? 'Replacement' : 'Order'} {listReference} · {workLabel}{mixedPlaced ? ` · ${placedCount} of ${rxCount} placed` : ''}</small></span>
       {showTag ? (
         <span className="order-crm-row__marks">
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{cardLabel}</span>
         </span>
       ) : null}
-      <span className="order-crm-row__position"><strong>{money(record.order.payment.amount)}</strong><small>{formatDate(record.order.date)}</small></span>
+      <span className="order-crm-row__position"><strong>{money(workValue)}</strong><small>{formatDate(sourceOrder.date)}</small></span>
     </button>
   );
 }
@@ -1434,12 +1408,14 @@ function ReplacementLineage({ order, allOrders }: { order: PatientOrder; allOrde
   );
 }
 
-function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, cancellationEditorOpen, cancellationNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onRequestCancellation, onChaseDelivery }: {
+function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onCallCuraleaf, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, cancellationEditorOpen, cancellationNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onRequestCancellation, onChaseDelivery }: {
   record: OrderRecord;
+  selectedPrescriptionId: number | null;
+  onSelectPrescription: (prescriptionId: number) => void;
   now: Date;
   placementConfirmation: string | null;
   handoutBusy: boolean;
-  onOpenHandout: (partial: boolean, shipmentId?: string) => void;
+  onOpenHandout: (prescription: Prescription, partial: boolean, shipmentId?: string) => void;
   manualForm: ManualPaymentForm;
   onManualFormChange: (patch: Partial<ManualPaymentForm>) => void;
   onRecordManual: () => void;
@@ -1450,7 +1426,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   onReceiptDraftChange: (prescription: Prescription, patch: Partial<GoodsReceiptDraft>) => void;
   onSavePartial: (prescription: Prescription, shipmentId?: string) => void;
   onConfirmDelivery: (prescription: Prescription, shipmentId?: string) => void;
-  onCallCuraleaf: () => void;
+  onCallCuraleaf: (prescription?: Prescription) => void;
   onManualPlace: (prescription: Prescription) => void;
   onPaymentLinkResend: () => void;
   paymentLinkBusy: boolean;
@@ -1460,37 +1436,42 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   onConfirmRefund: () => void;
   refundBusy: boolean;
   quoteReviewBusy: boolean;
-  onQuoteReviewResolve: (action: 'absorb' | 'cancel' | 'refresh') => void;
+  onQuoteReviewResolve: (action: 'absorb' | 'refresh') => void;
   cancellationEditorOpen: boolean;
   cancellationNote: string;
-  cancellationReference: string;
-  cancellationContactNote: string;
   cancellationBusy: boolean;
   onOpenCancellation: () => void;
   onCloseCancellation: () => void;
   onCancellationNoteChange: (note: string) => void;
-  onCancellationReferenceChange: (reference: string) => void;
-  onCancellationContactNoteChange: (note: string) => void;
   onRequestCancellation: () => void;
-  onRecordCuraleafContact: () => void;
-  onConfirmCuraleafCancellation: () => void;
   onChaseDelivery?: (prescription?: Prescription, shipmentId?: string) => void;
 }) {
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [copiedDetailKey, setCopiedDetailKey] = useState<string | null>(null);
   const { state, dispatch } = useApp();
   const { order, patient, stage } = record;
+  const prescriptionWorkItems = buildPrescriptionWorkItems(record).filter(item => item.prescription);
+  const defaultPrescriptionItem = [...prescriptionWorkItems].sort((left, right) => orderRecordPriority(left.record) - orderRecordPriority(right.record))[0] ?? null;
+  const selectedPrescriptionItem = prescriptionWorkItems.find(item => item.prescription?.id === selectedPrescriptionId) ?? defaultPrescriptionItem;
+  const selectedPrescription = selectedPrescriptionItem?.prescription ?? null;
+  const selectedPrescriptionIndex = selectedPrescriptionItem?.prescriptionIndex ?? 0;
+  const selectedDisplayOrder = selectedPrescriptionItem?.record.order ?? order;
+  const selectedStage = selectedPrescriptionItem?.record.stage ?? stage;
+  const hasUnaffectedSibling = Boolean(selectedPrescription && order.prescriptions.some(prescription =>
+    prescription.id !== selectedPrescription.id && !prescriptionIsCancelled(prescription),
+  ));
   const pharmacy = state.organisations.find(organisation => organisation.id === state.currentOrganisationId);
   const meta = recordStageMeta(record);
+  const selectedMeta = selectedPrescriptionItem ? recordStageMeta(selectedPrescriptionItem.record) : meta;
   const fulfilmentHeadline = orderFulfilmentHeadline(order);
-  const Icon = meta.icon;
+  const Icon = selectedMeta.icon;
   const cancellationResolution = orderCancellationResolution(order);
   const typedResolutionClosed = ['REPLACED', 'REFUNDED', 'SPLIT_RESOLVED'].includes(order.resolution?.status ?? '');
   const cancellationClosed = ['resolved', 'refunded'].includes(cancellationResolution) || typedResolutionClosed;
-  const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => prescription.placed);
-  const placedCount = order.prescriptions.filter(prescription => prescription.placed).length;
-  const purchaseOrderReferences = [...new Set(order.prescriptions.flatMap(prescription => prescription.poRef ? [prescription.poRef] : []))];
-  const sharesLegacyPurchaseOrder = placedCount > 1 && new Set(order.prescriptions.filter(prescription => prescription.placed && prescription.poRef).map(prescription => prescription.poRef)).size === 1;
+  const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => Boolean(prescription.purchaseOrderId));
+  const placedCount = order.prescriptions.filter(prescription => Boolean(prescription.purchaseOrderId)).length;
+  const purchaseOrderReferences = [...new Set(order.prescriptions.flatMap(prescription => prescription.purchaseOrderId ? [prescription.purchaseOrderId] : []))];
+  const sharesLegacyPurchaseOrder = placedCount > 1 && new Set(order.prescriptions.filter(prescription => prescription.placed && prescription.purchaseOrderId).map(prescription => prescription.purchaseOrderId)).size === 1;
   const paymentStatusLabel = order.payment.status === 'paid' ? 'paid' : order.payment.status === 'sent' ? 'awaiting payment' : order.payment.status === 'cancelled' ? 'cancelled' : 'unpaid';
   const isDraftOrder = order.payment.status === 'none';
   const hhhReference = orderReference(order).replace(/^#/, '');
@@ -1503,30 +1484,35 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
     ? `Draft order · not submitted · ${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'}`
     : [
       purchaseOrderSummary,
-      `${order.redoContext ? 'Replacement HHH' : 'HHH'} ref ${hhhReference}`,
+      `${order.redoContext ? 'Replacement order' : 'Order'} #${hhhReference}`,
       paymentStatusLabel,
       `${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'}`,
-      order.redoContext ? `replaces #${order.redoContext.originalOrderId}` : null,
+      order.redoContext?.originalOrderNumber ? `replaces #${order.redoContext.originalOrderNumber}` : null,
     ].filter(Boolean).join(' · ');
   const paymentFormVisible = stage === 'awaiting-payment' && order.payment.route === 'pharmacy';
   const mayCancel = orderPaymentAllowsManualCancellation(order)
     && !order.cancellation
     && !['collected', 'cancelled'].includes(stage)
     && (quoteReviewIsOpen(order) || !orderRequiresCuraleafCancel(order));
-  const hasCuraleafOrder = orderRequiresCuraleafCancel(order);
-  const supplyIncomplete = orderSupplyIncomplete(order);
-  const canFullHandout = stage === 'ready' && !supplyIncomplete && orderUncollectedReadyPacks(order) > 0;
-  const reviewOpen = quoteReviewIsOpen(order) && !supplierCancelledAfterCall(order);
-  const showSupplierCancel = order.payment.status === 'paid' && supplierCancelledAfterCall(order) && !cancellationClosed;
+  const hasCuraleafOrder = orderRequiresCuraleafCancel(selectedDisplayOrder);
+  const mayCallCuraleafToCancel = order.payment.status === 'paid'
+    && hasCuraleafOrder
+    && !cancellationClosed
+    && !supplierCancelledAfterCall(selectedDisplayOrder)
+    && !['delivered', 'ready', 'collected', 'archived', 'cancelled', 'rejected'].includes(selectedStage);
+  const supplyIncomplete = selectedPrescription ? prescriptionSupplyIncomplete(selectedPrescription) : orderSupplyIncomplete(order);
+  const canFullHandout = selectedStage === 'ready' && !supplyIncomplete && (selectedPrescription ? prescriptionUncollectedReadyPacks(selectedPrescription) : orderUncollectedReadyPacks(order)) > 0;
+  const reviewOpen = quoteReviewIsOpen(selectedDisplayOrder) && !supplierCancelledAfterCall(selectedDisplayOrder);
+  const showSupplierCancel = order.payment.status === 'paid' && supplierCancelledAfterCall(selectedDisplayOrder) && !cancellationClosed;
   const useFulfilmentHeadline = placedCount > 0 && stage !== 'awaiting-payment'
     && cancellationResolution === 'none' && !quoteReviewIsOpen(order)
     && !['rejected', 'archived', 'cancelled'].includes(stage);
   const headerStatusLabel = useFulfilmentHeadline && fulfilmentHeadline
     ? fulfilmentHeadline.label
-    : meta.label;
+    : selectedMeta.label;
   const headerStatusTone = headerStatusLabel === 'Split fulfilment' || headerStatusLabel === 'Split delivery'
     ? 'partial'
-    : meta.tone;
+    : selectedMeta.tone;
 
   const openPatientRecord = () => {
     if (!order.patientId) return;
@@ -1551,11 +1537,11 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   };
 
   return (
-    <article className={`order-crm-record order-crm-record--${meta.tone}`}>
+    <article className={`order-crm-record order-crm-record--${selectedMeta.tone}`}>
       <header className="order-crm-record__header">
         <div className="order-crm-record__hero">
           <div className="order-crm-record__identity">
-            <span className={`order-crm-record__stage order-tone--${meta.tone}`}><Icon size={20} aria-hidden="true" /></span>
+            <span className={`order-crm-record__stage order-tone--${selectedMeta.tone}`}><Icon size={20} aria-hidden="true" /></span>
             <div className="order-crm-record__titles">
               <strong>{patient?.name ?? 'Unknown patient'}</strong>
               <span className="order-crm-record__ref">{headerReference}</span>
@@ -1567,11 +1553,11 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
           <div className="order-crm-record__value">
             <small>Patient total</small>
             <strong>{money(order.payment.amount)}</strong>
-            <span className="order-crm-record__opened">Opened {formatDate(order.date)}</span>
+            <span className="order-crm-record__opened">Order created {formatDate(order.date)}</span>
           </div>
-          <span className="order-crm-record__payment-status">Payment {paymentStatusLabel}</span>
           <div className="order-crm-record__actions" role="group" aria-label="Order actions">
-            {canFullHandout ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(false)}><Check size={13} /> Handout</button> : null}
+            {canFullHandout && selectedPrescription ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(selectedPrescription, false)}><Check size={13} /> Handout</button> : null}
+            {mayCallCuraleafToCancel ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => onCallCuraleaf(selectedPrescription ?? undefined)}><PhoneCall size={13} aria-hidden="true" /> Call Curaleaf to cancel</button> : null}
             {order.patientId ? (
               <button type="button" className="btn btn-secondary btn-sm" onClick={openPatientRecord}><User size={13} aria-hidden="true" /> Open patient</button>
             ) : null}
@@ -1583,10 +1569,10 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
       <QuoteCheckpointSummary order={order} />
 
       {placementConfirmation ? <div className="order-placement-confirmation"><CheckCircle2 size={17} /><span><strong>Order placed with Curaleaf</strong><small>{placementConfirmation}</small></span></div> : null}
-      {stage === 'awaiting-payment' || (stage === 'paid' && !allPlaced) ? (
+      {selectedStage === 'awaiting-payment' || (selectedStage === 'paid' && !selectedDisplayOrder.prescriptions.every(prescription => Boolean(prescription.purchaseOrderId))) ? (
         <PrePlacementDeliveryGuidance now={now} />
-      ) : !['collected', 'cancelled', 'rejected', 'archived'].includes(stage) ? (
-        <FulfilmentDeliveryStatus order={order} now={now} />
+      ) : !['collected', 'cancelled', 'rejected', 'archived'].includes(selectedStage) ? (
+        <FulfilmentDeliveryStatus order={selectedDisplayOrder} now={now} />
       ) : null}
 
       {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : null}
@@ -1594,6 +1580,14 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
       <ExpiryCountdown order={order} now={now} />
       <ReplacementLineage order={order} allOrders={state.orders} />
       <PlacementStatusPanel order={order} />
+
+      {order.prescriptions.length > 1 ? (
+        <PrescriptionSwitcher
+          items={prescriptionWorkItems}
+          selectedPrescriptionId={selectedPrescription?.id ?? null}
+          onSelect={onSelectPrescription}
+        />
+      ) : null}
 
       {!cancellationClosed && cancellationEditorOpen && mayCancel ? (
         <OrderCancellationPanel
@@ -1609,26 +1603,27 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
         />
       ) : null}
 
-      {(stage === 'rejected' || stage === 'archived') ? (
-        <div className={`order-crm-alert order-crm-alert--${stage === 'rejected' ? 'danger' : 'neutral'}`}>
-          {stage === 'rejected' ? <ShieldAlert size={17} /> : <Archive size={17} />}
-          <span><strong>{stage === 'rejected' ? 'Curaleaf exception requires attention' : 'Prescription cycle archived'}</strong><small>{stage === 'rejected' ? 'Review the supplier response, then recreate the order against a valid prescription.' : 'This order passed its prescription-cycle deadline and is retained for the audit trail.'}</small></span>
+      {(selectedStage === 'rejected' || selectedStage === 'archived') ? (
+        <div className={`order-crm-alert order-crm-alert--${selectedStage === 'rejected' ? 'danger' : 'neutral'}`}>
+          {selectedStage === 'rejected' ? <ShieldAlert size={17} /> : <Archive size={17} />}
+          <span><strong>{selectedStage === 'rejected' ? 'Selected prescription requires attention' : 'Selected prescription cycle archived'}</strong><small>{selectedStage === 'rejected' ? 'Review the supplier response, then recreate this prescription against a valid script.' : 'This prescription passed its cycle deadline and is retained for the audit trail.'}</small></span>
         </div>
       ) : null}
 
       {reviewOpen ? (
         <QuoteReviewPanel
-          order={order}
+          order={selectedDisplayOrder}
           busy={quoteReviewBusy || refundBusy || cancellationBusy}
           onResolve={onQuoteReviewResolve}
         />
       ) : null}
 
-      {((order.payment.status === 'paid' || Boolean(order.refund)) && !reviewOpen && !cancellationClosed && (stage === 'rejected' || stage === 'archived' || stage === 'cancelled' || Boolean(order.cancellation) || order.prescriptions.some(rx => rx.purchaseOrderState === 'CANCELLED' || rx.status === 'cancelled'))) ? (
+      {((order.payment.status === 'paid' || Boolean(selectedDisplayOrder.refund)) && !reviewOpen && !cancellationClosed && (selectedStage === 'rejected' || selectedStage === 'archived' || selectedStage === 'cancelled' || Boolean(selectedDisplayOrder.cancellation) || selectedDisplayOrder.prescriptions.some(rx => rx.purchaseOrderState === 'CANCELLED' || rx.status === 'cancelled'))) ? (
         <PaidExceptionResolution
-          order={order}
+          order={selectedDisplayOrder}
           canReplace={!hasCuraleafOrder}
           lockedByCuraleaf={hasCuraleafOrder}
+          partialPrescription={hasUnaffectedSibling}
           busy={refundBusy}
           refundReference={refundReference}
           onRefundReferenceChange={onRefundReferenceChange}
@@ -1641,29 +1636,30 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
       <div className="order-crm-record__body">
         <section className="order-crm-main">
           <div className="order-crm-section-heading"><span><small>Prescription fulfilment</small><strong>{order.prescriptions.length} prescription{order.prescriptions.length === 1 ? '' : 's'}</strong></span><FileText size={16} /></div>
+          <OrderPlacementRail order={order} />
           {sharesLegacyPurchaseOrder ? (
             <p className="order-crm-legacy-po" role="note">One Curaleaf purchase order covers more than one prescription on this order.</p>
           ) : null}
-          <div className="order-crm-prescriptions">
-            {order.prescriptions.map((prescription, index) => <PrescriptionCard
-              key={prescription.id}
+          <div className="order-crm-prescriptions" aria-live="polite">
+            {selectedPrescription ? <PrescriptionCard
+              key={selectedPrescription.id}
               order={order}
-              prescription={prescription}
-              index={index}
-              receiptDraft={receiptDrafts[prescription.id] ?? {
-                quantities: Object.fromEntries(prescription.items.map(item => [item.productId, prescription.receivedItems?.find(received => received.productId === item.productId)?.quantityReceived ?? item.qty])),
-                batches: Object.fromEntries(prescription.items.map(item => [item.productId, ''])),
-                expiries: Object.fromEntries(prescription.items.map(item => [item.productId, ''])),
-                note: prescription.goodsInNote ?? '',
+              prescription={selectedPrescription}
+              index={selectedPrescriptionIndex}
+              receiptDraft={receiptDrafts[selectedPrescription.id] ?? {
+                quantities: Object.fromEntries(selectedPrescription.items.map(item => [item.productId, selectedPrescription.receivedItems?.find(received => received.productId === item.productId)?.quantityReceived ?? item.qty])),
+                batches: Object.fromEntries(selectedPrescription.items.map(item => [item.productId, ''])),
+                expiries: Object.fromEntries(selectedPrescription.items.map(item => [item.productId, ''])),
+                note: selectedPrescription.goodsInNote ?? '',
               }}
-              busy={fulfilmentBusyRxId === prescription.id}
-              onReceiptDraftChange={patch => onReceiptDraftChange(prescription, patch)}
-              onSavePartial={shipmentId => onSavePartial(prescription, shipmentId)}
-              onConfirmDelivery={shipmentId => onConfirmDelivery(prescription, shipmentId)}
-              onManualPlace={() => onManualPlace(prescription)}
+              busy={fulfilmentBusyRxId === selectedPrescription.id}
+              onReceiptDraftChange={patch => onReceiptDraftChange(selectedPrescription, patch)}
+              onSavePartial={shipmentId => onSavePartial(selectedPrescription, shipmentId)}
+              onConfirmDelivery={shipmentId => onConfirmDelivery(selectedPrescription, shipmentId)}
+              onManualPlace={() => onManualPlace(selectedPrescription)}
               onChaseCuraleaf={onChaseDelivery}
-              onOpenHandout={onOpenHandout}
-            />)}
+              onOpenHandout={(partial, shipmentId) => onOpenHandout(selectedPrescription, partial, shipmentId)}
+            /> : null}
           </div>
 
           {stage === 'paid' && !allPlaced && !busy && !reviewOpen && !showSupplierCancel ? (
@@ -1694,6 +1690,8 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
 
           <OrderDetailsDrawer
             order={order}
+            selectedPrescription={selectedPrescription}
+            selectedPrescriptionIndex={selectedPrescriptionIndex}
             pharmacyName={pharmacy?.tradingName || pharmacy?.name || null}
             showOrderDetails={showOrderDetails}
             onToggle={() => setShowOrderDetails(prev => !prev)}
@@ -1825,6 +1823,7 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
   const guidance = deliveryGuidanceForOrder(order);
   if (!guidance) return null;
   const range = deliveryRange(guidance);
+  const serviceWindow = guidance.scenario === 'DT-1' ? '1–2 working days' : '2–4 working days';
   const splitSnapshot = orderSplitPackSnapshot(order);
   const splitStats = splitPackStatItems(splitSnapshot);
   const awaitingSupplier = orderAwaitingSupplierShipmentProductNames(order);
@@ -1880,7 +1879,7 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
               {packsWaiting} pack{packsWaiting === 1 ? '' : 's'} checked in and awaiting collection
             </strong>
             <p className="order-delivery-banner__desc">
-              Complete pharmacy verification, then hand out the arrived consignment to the patient.
+              The goods-in check is complete and the patient notification is queued. Hand out only the ready packs when the patient arrives.
             </p>
           </div>
         </div>
@@ -2005,7 +2004,7 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
               <span>Curaleaf Dispensing Complete</span>
             </div>
             <strong className="order-delivery-banner__title">
-              Expected delivery {range} (1–2 working days)
+              Expected delivery {range} ({serviceWindow})
             </strong>
             <p className="order-delivery-banner__desc">
               All {totalOrdered} packs allocated and verified by Curaleaf. Packed and awaiting courier handover.
@@ -2051,10 +2050,10 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
             <span>Estimated Delivery · Subject to Change</span>
           </div>
           <strong className="order-delivery-banner__title">
-            Expected delivery {range} (1–2 working days)
+            Expected delivery {range} ({serviceWindow})
           </strong>
           <p className="order-delivery-banner__desc">
-            Order placed with Curaleaf. Standard 1–2 working day dispatch applies; dates update live once Curaleaf dispensing begins.
+            Order placed with Curaleaf. The {serviceWindow} estimate is based on the real placement time; dates update when Curaleaf dispatches.
           </p>
         </div>
       </div>
@@ -2148,7 +2147,7 @@ function PlacementStatusPanel({ order }: { order: PatientOrder }) {
 function QuoteReviewPanel({ order, busy, onResolve }: {
   order: PatientOrder;
   busy: boolean;
-  onResolve: (action: 'absorb' | 'cancel' | 'refresh') => void;
+  onResolve: (action: 'absorb' | 'refresh') => void;
 }) {
   const review = order.quoteReview;
   const quoteCheck = order.activeQuoteCheck;
@@ -2166,12 +2165,12 @@ function QuoteReviewPanel({ order, busy, onResolve }: {
         ? delta > 0 ? 'Patient price increased after payment' : 'Patient price dropped after payment'
         : 'Supplier cost changed after payment';
   const detail = outOfStock
-    ? 'Placement is held. Recheck after Curaleaf restocks, or cancel this order to replace it or complete a refund.'
+    ? 'Placement is held. Recheck after Curaleaf restocks; the verified payment remains attached to this order.'
     : missingBaseline
-      ? 'The quote attached to payment cannot be proved. Recheck keeps placement held for reconciliation; cancellation can move to replacement or refund.'
+      ? 'The quote attached to payment cannot be proved. Recheck keeps placement held until reconciliation succeeds.'
       : delta !== 0
-        ? `Accept the ${money(Math.abs(delta) / 100)} ${delta > 0 ? 'increase' : 'decrease'} and keep the patient payment unchanged, or cancel this order.`
-        : 'The supplier cost changed. Accept the difference and keep the patient payment unchanged, or cancel this order.';
+        ? `Accept the ${money(Math.abs(delta) / 100)} ${delta > 0 ? 'increase' : 'decrease'} and keep the patient payment unchanged.`
+        : 'The supplier cost changed. Accept the difference and keep the patient payment unchanged.';
   return (
     <section className="quote-review-panel" aria-labelledby="quote-review-title">
       <header className="quote-review-panel__header">
@@ -2202,9 +2201,6 @@ function QuoteReviewPanel({ order, busy, onResolve }: {
             Accept
           </button>
         )}
-        <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => onResolve('cancel')}>
-          <XCircle size={13} /> Cancel order
-        </button>
       </div>
     </section>
   );
@@ -2279,10 +2275,11 @@ function OrderCancellationPanel({ order, editorOpen, note, busy, onClose, onNote
   );
 }
 
-function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, refundReference, onRefundReferenceChange, onReplace, onRequestRefund, onConfirmRefund }: {
+function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, partialPrescription, busy, refundReference, onRefundReferenceChange, onReplace, onRequestRefund, onConfirmRefund }: {
   order: PatientOrder;
   canReplace: boolean;
   lockedByCuraleaf?: boolean;
+  partialPrescription?: boolean;
   busy: boolean;
   refundReference: string;
   onRefundReferenceChange: (value: string) => void;
@@ -2296,15 +2293,16 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
     <section className={`order-resolution${order.refund?.status === 'completed' ? ' order-resolution--complete' : ''}`}>
       <header>
         <span><small>Paid-order resolution</small><strong>{
-          lockedByCuraleaf ? 'Call Curaleaf before refund or replacement'
+          lockedByCuraleaf ? 'Waiting for Curaleaf cancellation'
             : order.refund?.status === 'completed' ? 'Refund completed'
             : order.refund?.status === 'verifying' ? 'Refund reference is being verified'
             : order.refund?.status === 'reconciliation_required' ? 'Refund needs reconciliation'
             : order.refund ? 'Refund due'
-            : canReplace ? 'Choose replacement or refund'
+            : partialPrescription ? 'Resolve cancelled prescription'
+            : canReplace ? 'Choose replacement or cancel'
             : 'Refund due'
         }</strong></span>
-        <span className="order-resolution__amount"><small>Patient paid</small><strong>{money(order.payment.amount)}</strong></span>
+        <span className="order-resolution__amount"><small>Order payment</small><strong>{money(order.payment.amount)}</strong></span>
       </header>
       <div className="order-resolution__reference">
         <CreditCard size={15} />
@@ -2313,13 +2311,25 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
       </div>
       {lockedByCuraleaf ? (
         <div className="order-resolution__choices">
-          <small>This purchase order is still live at Curaleaf. Record their cancellation before creating a replacement or preparing the patient refund in {method}.</small>
+          <small>This order remains active until the platform observes Curaleaf’s cancelled prescription or purchase order. Refund and replacement stay locked until that supplier event arrives.</small>
         </div>
       ) : !order.refund ? (
         <div className="order-resolution__choices">
           {canReplace ? <button type="button" className="btn btn-primary btn-sm" onClick={onReplace}><RefreshCw size={13} /> Replace using paid balance</button> : null}
-          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onRequestRefund}><Banknote size={13} /> Refund payment</button>
-          <small>A replacement keeps the verified payment allocated to the new order. A refund is completed in {method} and requires its external reference before this order can be archived.</small>
+          {partialPrescription ? (
+            <div className="order-resolution__locked" role="status">
+              <ShieldAlert size={16} />
+              <span>
+                <strong>Partial refund needs a prescription allocation</strong>
+                <small>This prescription can be replaced now. Cancelling it is held for finance reconciliation because the settled payment also covers an active sibling prescription; HHH will not submit a whole-order refund.</small>
+              </span>
+            </div>
+          ) : (
+            <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onRequestRefund}><XCircle size={13} /> Cancel order</button>
+          )}
+          <small>{partialPrescription
+            ? 'The unaffected prescription keeps its own PO and continues through fulfilment.'
+            : `A replacement keeps the verified payment allocated to the new order. Cancelling opens the ${method} refund gate and the order remains actionable until its external refund reference is verified.`}</small>
         </div>
       ) : order.refund.status === 'pending_confirmation' ? (
         <div className="order-resolution__confirm">
@@ -2338,54 +2348,60 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, busy, re
   );
 }
 
-/**
- * Per-prescription rail. Payment stays on the order record; this card only
- * shows clinic placement until its own purchase order exists, then dispensing.
- */
+function StageRailLane({ label, note, steps }: { label: string; note?: string | null; steps: OrderStageStep[] }) {
+  return (
+    <section className="order-stage-rail__lane" aria-label={`${label} progress`}>
+      <p className="order-stage-rail__lane-label">
+        {label}
+        {note ? <span className="order-stage-rail__route">{note}</span> : null}
+      </p>
+      <ol className="order-stage-rail__steps">
+        {steps.map((entry, index) => (
+          <li key={entry.key} className={`is-${entry.state}`} aria-current={entry.state === 'active' ? 'step' : undefined}>
+            <span className="order-stage-rail__marker" aria-hidden="true">
+              {entry.state === 'complete' ? <Check size={11} /> : index + 1}
+            </span>
+            <span className="order-stage-rail__copy">
+              <strong>{entry.label}</strong>
+              <small>{entry.detail}</small>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/** Payment is deliberately represented once, at order level. */
+function OrderPlacementRail({ order }: { order: PatientOrder }) {
+  const rail = buildOrderStageRail(order);
+  const placed = order.prescriptions.filter(prescription => Boolean(prescription.purchaseOrderId)).length;
+  return (
+    <section className="order-placement-progress" aria-label="Pharmacy placement">
+      <div className="order-stage-rail order-stage-rail--placement">
+        <StageRailLane
+          label="Pharmacy placement"
+          note={rail.route === 'clinic_barcode' ? 'Clinic QR' : 'Manual entry'}
+          steps={rail.pharmacyPlacement}
+        />
+      </div>
+      {order.prescriptions.length > 1 ? (
+        <p className="order-placement-progress__summary">
+          <strong>{placed} of {order.prescriptions.length} prescriptions placed</strong>
+          <span>{placed === order.prescriptions.length ? 'Every prescription has its own Curaleaf PO.' : 'Placed prescriptions continue below; the remainder stay in placement.'}</span>
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+/** A six-step rail exists only after this prescription has a real Curaleaf PO. */
 function PrescriptionStageRail({ order, prescription }: { order: PatientOrder; prescription: Prescription }) {
   const rail = buildPrescriptionStageRail(order, prescription);
-  const lanes: Array<{ key: string; label: string; note: string | null; steps: OrderStageStep[] }> = [
-    ...(rail.placement
-      ? [{
-        key: 'prescription-placement',
-        label: rail.route === 'clinic_barcode' ? 'Clinic placement' : 'Manual placement',
-        note: rail.route === 'clinic_barcode' ? 'Clinic QR' : 'Manual entry',
-        steps: rail.placement,
-      }]
-      : []),
-    ...(rail.dispensing
-      ? [{
-        key: 'prescription-dispensing',
-        label: 'Curaleaf dispensing',
-        note: null,
-        steps: rail.dispensing,
-      }]
-      : []),
-  ];
-  if (!lanes.length) return null;
+  if (!rail.dispensing) return null;
   return (
     <div className="order-stage-rail">
-      {lanes.map(lane => (
-        <section className="order-stage-rail__lane" key={lane.key} aria-label={`${lane.label} progress`}>
-          <p className="order-stage-rail__lane-label">
-            {lane.label}
-            {lane.note ? <span className="order-stage-rail__route">{lane.note}</span> : null}
-          </p>
-          <ol className="order-stage-rail__steps">
-            {lane.steps.map((entry, index) => (
-              <li key={entry.key} className={`is-${entry.state}`} aria-current={entry.state === 'active' ? 'step' : undefined}>
-                <span className="order-stage-rail__marker" aria-hidden="true">
-                  {entry.state === 'complete' ? <Check size={11} /> : index + 1}
-                </span>
-                <span className="order-stage-rail__copy">
-                  <strong>{entry.label}</strong>
-                  <small>{entry.detail}</small>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      ))}
+      <StageRailLane label="Prescription fulfilment" steps={rail.dispensing} />
     </div>
   );
 }
@@ -2449,6 +2465,72 @@ function aggregateFulfilmentProgress(lines: FulfilmentDisplayLine[]): Fulfilment
   };
 }
 
+function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
+  items: PrescriptionWorkItem[];
+  selectedPrescriptionId: number | null;
+  onSelect: (prescriptionId: number) => void;
+}) {
+  const statusCounts = items.reduce<Record<string, number>>((counts, item) => {
+    const label = recordCardTag(item.record);
+    counts[label] = (counts[label] ?? 0) + 1;
+    return counts;
+  }, {});
+  const summary = Object.entries(statusCounts).map(([label, count]) => `${count} ${label.toLowerCase()}`).join(' · ');
+
+  const moveSelection = (currentIndex: number, direction: number) => {
+    const next = items[(currentIndex + direction + items.length) % items.length]?.prescription;
+    if (next) onSelect(next.id);
+  };
+
+  return (
+    <section className="order-rx-switcher" aria-label="Choose prescription">
+      <header>
+        <span><strong>{items.length} prescriptions</strong><small>{summary}</small></span>
+        <label>
+          <span className="sr-only">Selected prescription</span>
+          <select value={selectedPrescriptionId ?? ''} onChange={event => onSelect(Number(event.target.value))}>
+            {items.map(item => item.prescription ? (
+              <option value={item.prescription.id} key={item.key}>{prescriptionWorkItemLabel(item)} · {recordCardTag(item.record)}</option>
+            ) : null)}
+          </select>
+        </label>
+      </header>
+      <div className="order-rx-switcher__tabs" role="tablist" aria-label="Prescriptions in this order">
+        {items.map((item, index) => {
+          const prescription = item.prescription;
+          if (!prescription) return null;
+          const selected = prescription.id === selectedPrescriptionId;
+          const meta = recordStageMeta(item.record);
+          const Icon = meta.icon;
+          return (
+            <button
+              type="button"
+              role="tab"
+              id={`order-rx-tab-${prescription.id}`}
+              aria-selected={selected}
+              aria-controls={`order-rx-panel-${prescription.id}`}
+              tabIndex={selected ? 0 : -1}
+              className={`order-rx-switcher__tab order-tone--${meta.tone}${selected ? ' is-selected' : ''}`}
+              key={item.key}
+              onClick={() => onSelect(prescription.id)}
+              onKeyDown={event => {
+                if (event.key === 'ArrowRight') { event.preventDefault(); moveSelection(index, 1); }
+                if (event.key === 'ArrowLeft') { event.preventDefault(); moveSelection(index, -1); }
+                if (event.key === 'Home') { event.preventDefault(); items[0]?.prescription && onSelect(items[0].prescription.id); }
+                if (event.key === 'End') { event.preventDefault(); items.at(-1)?.prescription && onSelect(items.at(-1)!.prescription!.id); }
+              }}
+            >
+              <span className="order-rx-switcher__icon"><Icon size={14} aria-hidden="true" /></span>
+              <span><strong>{`Rx ${index + 1}`}</strong><small>{recordCardTag(item.record)}</small></span>
+              {prescription.purchaseOrderId ? <code title={prescription.purchaseOrderId}>{prescription.purchaseOrderId}</code> : <em>No PO</em>}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChange, onConfirmDelivery, onManualPlace, onChaseCuraleaf, onOpenHandout }: {
   order: PatientOrder;
   prescription: Prescription;
@@ -2465,6 +2547,7 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
   const { state } = useApp();
   const shipmentIds = useMemo(() => prescription.shipmentIds?.length ? prescription.shipmentIds : prescription.shipmentId ? [prescription.shipmentId] : [], [prescription.shipmentId, prescription.shipmentIds]);
   const [selectedShipmentId, setSelectedShipmentId] = useState(shipmentIds.find(id => prescription.shipmentStates?.[id] !== 'collected') ?? shipmentIds[0] ?? '');
+  const [poCopied, setPoCopied] = useState(false);
   useEffect(() => {
     if (!selectedShipmentId || !shipmentIds.includes(selectedShipmentId)) setSelectedShipmentId(shipmentIds.find(id => prescription.shipmentStates?.[id] !== 'collected') ?? shipmentIds[0] ?? '');
   }, [prescription.shipmentStates, selectedShipmentId, shipmentIds]);
@@ -2538,10 +2621,6 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
     && !supplyIncomplete
     && uncollectedReadyPacks > 0;
   const collectionControl = isReady && !supplyIncomplete;
-  const deliveryGuidanceSource = prescription.latestShipmentAt ?? prescription.placedAt;
-  const deliveryGuidance = deliveryGuidanceSource
-    ? curaleafDeliveryGuidance(deliveryGuidanceSource)
-    : null;
   const totalOrderedPacks = prescription.items.reduce((s, i) => s + i.qty, 0);
   const totalDispatchedPacks = prescription.items.reduce((s, i) => {
     const line = prescription.fulfilmentLines?.find(l => l.productId === i.productId);
@@ -2602,14 +2681,14 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
     };
   });
 
-  const placed = Boolean(prescription.placed);
+  const placed = Boolean(prescription.purchaseOrderId);
   const routeLabel = prescription.entryMode === 'clinic' || prescription.clinicScanId ? 'Clinic' : 'Manual';
   const totalAwaitingDispatchPacks = displayLines.reduce((sum, line) => sum + line.awaitingDispatchPacks, 0);
   const arrivingPacks = totalConsignmentPacks || totalDispatchedPacks;
   const combinedProgress = aggregateFulfilmentProgress(displayLines);
 
   return (
-    <div className="order-rx-pair">
+    <div className="order-rx-pair" role="tabpanel" id={`order-rx-panel-${prescription.id}`} aria-label={`Prescription ${index + 1} fulfilment`}>
       <article className={`order-rx-card order-rx-card--unified${isCancelled ? ' order-rx-card--cancelled' : ''}`}>
         <header className="order-rx-card__header">
           <span>
@@ -2622,6 +2701,12 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
           </div>
         </header>
         <PrescriptionStageRail order={order} prescription={prescription} />
+        {!prescription.purchaseOrderId ? (
+          <p className="order-rx-placement-pending" role="status">
+            <Clock3 size={15} aria-hidden="true" />
+            <span><strong>No Curaleaf PO created yet</strong><small>This prescription remains in the order-level Pharmacy placement stage above.</small></span>
+          </p>
+        ) : null}
         {prescription.manualPlaceRequired ? (
           <div className="order-ready-control">
             <span>
@@ -2645,7 +2730,7 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
                 <small>
                   {line.orderedPacks} pack{line.orderedPacks === 1 ? '' : 's'}
                   {line.item.retail ? ` · ${money(lineRevenue(line.item))}` : ''}
-                  {placed ? ` · ${line.allocatedPacks} allocated · ${line.inTransitPacks} in transit · ${line.receivedPacks} checked in` : ''}
+                  {placed ? ` · ${line.allocatedPacks > 0 ? `${line.allocatedPacks} allocated` : 'Awaiting Curaleaf allocation'} · ${line.inTransitPacks} in transit · ${line.receivedPacks} checked in` : ''}
                 </small>
                 {line.quantityMismatch ? (
                   <span className="mismatch-tag">PO reports {line.supplierReportedOrdered} pk (mismatch)</span>
@@ -2694,8 +2779,23 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
               <header className="order-supplier-fulfilment__header">
                 <div>
                   <small>
-                    {prescription.poRef ? (
-                      <>Curaleaf PO <span className="order-supplier-fulfilment__po">{prescription.poRef}</span></>
+                    {prescription.purchaseOrderId ? (
+                      <span className="order-supplier-fulfilment__po-row">
+                        Curaleaf PO <span className="order-supplier-fulfilment__po">{prescription.purchaseOrderId}</span>
+                        <button
+                          type="button"
+                          className="order-ledger__copy-btn"
+                          aria-label={`Copy Curaleaf PO for prescription ${index + 1}`}
+                          title="Copy Curaleaf PO"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(prescription.purchaseOrderId || '');
+                            setPoCopied(true);
+                            window.setTimeout(() => setPoCopied(false), 2000);
+                          }}
+                        >
+                          {poCopied ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
+                        </button>
+                      </span>
                     ) : 'Curaleaf fulfilment'}
                   </small>
                   <strong>
@@ -2722,11 +2822,6 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
                                       : 'Curaleaf purchase order active'}
                   </strong>
                 </div>
-                {!isCancelled && deliveryGuidance ? (
-                  <span className="order-delivery-estimate-badge">
-                    <Truck size={12} /> {deliveryRange(deliveryGuidance)}
-                  </span>
-                ) : null}
               </header>
               {isCancelled ? (
                 <div className="order-supplier-fulfilment__body">
@@ -2919,8 +3014,10 @@ function LedgerValue({ children, mono = false, muted = false, title }: {
   );
 }
 
-function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, copiedDetailKey, onCopy, resolveProductName }: {
+function OrderDetailsDrawer({ order, selectedPrescription, selectedPrescriptionIndex, pharmacyName, showOrderDetails, onToggle, copiedDetailKey, onCopy, resolveProductName }: {
   order: PatientOrder;
+  selectedPrescription: Prescription | null;
+  selectedPrescriptionIndex: number;
   pharmacyName: string | null;
   showOrderDetails: boolean;
   onToggle: () => void;
@@ -2928,10 +3025,16 @@ function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, c
   onCopy: (key: string, text: string) => void;
   resolveProductName: (item: { name?: string; productId: string; formulaId?: string }) => string;
 }) {
-  const consignments = collectOrderConsignments(order);
-  const courierLabel = orderCourierLabel(order);
-  const deliveryDestination = orderDeliveryDestination(order, pharmacyName);
+  const detailOrder = selectedPrescription ? { ...order, prescriptions: [selectedPrescription] } : order;
+  const consignments = collectOrderConsignments(detailOrder);
+  const courierLabel = orderCourierLabel(detailOrder);
+  const deliveryDestination = orderDeliveryDestination(detailOrder, pharmacyName);
   const paymentReference = order.payment.manualReference ?? order.payment.ref ?? null;
+  const registration = selectedPrescription?.prescriberGmcNumber
+    ? `GMC ${selectedPrescription.prescriberGmcNumber}`
+    : selectedPrescription?.prescriberGphcNumber
+      ? `GPhC ${selectedPrescription.prescriberGphcNumber}`
+      : null;
 
   return (
     <div className="order-details-drawer">
@@ -2948,56 +3051,61 @@ function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, c
 
       {showOrderDetails ? (
         <div id="order-details-drawer-content" className="order-details-drawer__content">
-          <section className="order-details-block order-details-block--prescriptions">
-            <h3>Curaleaf prescriptions</h3>
+          {selectedPrescription ? <section className="order-details-block order-details-block--prescriptions">
+            <h3>{`Prescription ${selectedPrescriptionIndex + 1} details`}</h3>
             <div className="order-details-prescription-grid">
-              {order.prescriptions.map((rx, rxIdx) => {
-                const registration = rx.prescriberGmcNumber
-                  ? `GMC ${rx.prescriberGmcNumber}`
-                  : rx.prescriberGphcNumber
-                    ? `GPhC ${rx.prescriberGphcNumber}`
-                    : null;
-                return (
-                  <article className="order-details-prescription-card" key={rx.id}>
-                    <h4>{`Prescription ${rxIdx + 1}`}</h4>
+                  <article className="order-details-prescription-card" key={selectedPrescription.id}>
+                    <h4>{prescriptionStatusLabel(selectedPrescription)}</h4>
                     <dl className="order-details-kv">
                       <div>
-                        <dt>PO</dt>
+                        <dt>Curaleaf PO</dt>
                         <dd className="order-details-value">
-                          <LedgerValue mono>{rx.poRef ?? 'Pending'}</LedgerValue>
-                          {rx.poRef ? <LedgerCopyButton detailKey={`po_${rx.id}`} copyKey={`po_${rx.id}`} value={rx.poRef} label="PO reference" copiedDetailKey={copiedDetailKey} onCopy={onCopy} /> : null}
+                          <LedgerValue mono>{selectedPrescription.purchaseOrderId ?? 'No Curaleaf PO created yet'}</LedgerValue>
+                          {selectedPrescription.purchaseOrderId ? <LedgerCopyButton detailKey={`po_${selectedPrescription.id}`} copyKey={`po_${selectedPrescription.id}`} value={selectedPrescription.purchaseOrderId} label="PO reference" copiedDetailKey={copiedDetailKey} onCopy={onCopy} /> : null}
                         </dd>
                       </div>
-                      {rx.serialNumber ? (
+                      {selectedPrescription.serialNumber ? (
                         <div>
-                          <dt>Serial</dt>
+                          <dt>Prescription serial</dt>
                           <dd className="order-details-value">
-                            <LedgerValue mono>{rx.serialNumber}</LedgerValue>
-                            <LedgerCopyButton detailKey={`serial_${rx.id}`} copyKey={`serial_${rx.id}`} value={rx.serialNumber} label="serial number" copiedDetailKey={copiedDetailKey} onCopy={onCopy} />
+                            <LedgerValue mono>{selectedPrescription.serialNumber}</LedgerValue>
+                            <LedgerCopyButton detailKey={`serial_${selectedPrescription.id}`} copyKey={`serial_${selectedPrescription.id}`} value={selectedPrescription.serialNumber} label="serial number" copiedDetailKey={copiedDetailKey} onCopy={onCopy} />
                           </dd>
                         </div>
                       ) : null}
-                      {rx.curaleafPrescriptionId ? (
+                      {selectedPrescription.curaleafPrescriptionId ? (
                         <div>
-                          <dt>Rx ID</dt>
+                          <dt>Curaleaf prescription</dt>
                           <dd className="order-details-value">
-                            <LedgerValue mono>{rx.curaleafPrescriptionId}</LedgerValue>
-                            <LedgerCopyButton detailKey={`rx_${rx.id}`} copyKey={`rx_${rx.id}`} value={rx.curaleafPrescriptionId} label={`Prescription ${rxIdx + 1} Rx ID`} copiedDetailKey={copiedDetailKey} onCopy={onCopy} />
+                            <LedgerValue mono>{selectedPrescription.curaleafPrescriptionId}</LedgerValue>
+                            <LedgerCopyButton detailKey={`rx_${selectedPrescription.id}`} copyKey={`rx_${selectedPrescription.id}`} value={selectedPrescription.curaleafPrescriptionId} label={`Prescription ${selectedPrescriptionIndex + 1} Rx ID`} copiedDetailKey={copiedDetailKey} onCopy={onCopy} />
                           </dd>
                         </div>
                       ) : null}
-                      {rx.prescriber || registration ? (
+                      {selectedPrescription.prescriber || registration ? (
                         <div>
                           <dt>Prescriber</dt>
-                          <dd><LedgerValue>{[rx.prescriber, registration].filter(Boolean).join(' · ')}</LedgerValue></dd>
+                          <dd><LedgerValue>{[selectedPrescription.prescriber, registration].filter(Boolean).join(' · ')}</LedgerValue></dd>
                         </div>
                       ) : null}
+                      {selectedPrescription.issueDate ? <div><dt>Issued</dt><dd><LedgerValue>{formatDate(selectedPrescription.issueDate)}</LedgerValue></dd></div> : null}
+                      {selectedPrescription.expiryDate ? <div><dt>Expires</dt><dd><LedgerValue>{formatDate(selectedPrescription.expiryDate)}</LedgerValue></dd></div> : null}
                     </dl>
                   </article>
-                );
-              })}
             </div>
-          </section>
+            <dl className="order-details-kv order-details-kv--products">
+              {selectedPrescription.items.map((item, itemIdx) => (
+                <div key={`${selectedPrescription.id}-${item.productId}-${itemIdx}`}>
+                  <dt className="order-details-product">
+                    <span className="order-details-product-name" title={resolveProductName(item)}>{resolveProductName(item)}</span>
+                    <span className="order-details-qty">{item.qty} × {money(item.retail)}</span>
+                  </dt>
+                  <dd><LedgerValue>{money(item.retail * item.qty)}</LedgerValue></dd>
+                </div>
+              ))}
+              <div className="order-details-total"><dt>Prescription subtotal</dt><dd><LedgerValue>{money(rxRevenue(selectedPrescription))}</LedgerValue></dd></div>
+            </dl>
+          </section> : null}
 
           {consignments.length ? (
             <section className="order-details-block">
@@ -3009,7 +3117,7 @@ function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, c
                 {consignments.map((consignment, index) => (
                   <li key={consignment.id}>
                     <span>
-                      <strong>{consignments.length > 1 ? `Shipment ${index + 1}` : 'Shipment'}</strong>
+                      <strong>{consignments.length > 1 ? `Consignment ${index + 1}` : 'Consignment'}</strong>
                       {' · '}
                       {consignment.statusLabel}
                       {consignment.packCount ? ` · ${consignment.packCount} pack${consignment.packCount === 1 ? '' : 's'}` : ''}
@@ -3025,17 +3133,9 @@ function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, c
           ) : null}
 
           <section className="order-details-block">
-            <h3>{order.payment.status === 'paid' ? 'Payment' : 'Amount due'}</h3>
+            <h3>{order.payment.status === 'paid' ? 'Order payment' : 'Order amount due'}</h3>
             <dl className="order-details-kv">
-              {order.prescriptions.flatMap(rx => rx.items.map((item, itemIdx) => (
-                <div key={`${rx.id}-${item.productId}-${itemIdx}`}>
-                  <dt className="order-details-product">
-                    <span className="order-details-product-name" title={resolveProductName(item)}>{resolveProductName(item)}</span>
-                    <span className="order-details-qty">{item.qty} × {money(item.retail)}</span>
-                  </dt>
-                  <dd><LedgerValue>{money(item.retail * item.qty)}</LedgerValue></dd>
-                </div>
-              )))}
+              <div><dt>Prescription total</dt><dd><LedgerValue>{money(order.prescriptions.reduce((sum, rx) => sum + rxRevenue(rx), 0))}</LedgerValue></dd></div>
               {order.dispensingFee ? (
                 <div>
                   <dt>Dispensing fee</dt>
@@ -3057,7 +3157,7 @@ function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, c
               {[
                 order.payment.route === 'worldpay' ? 'Worldpay' : 'Pharmacy managed',
                 order.payment.paidAt ? `Paid ${formatDate(order.payment.paidAt, true)}` : order.payment.sentAt ? `Requested ${formatDate(order.payment.sentAt, true)}` : null,
-                paymentReference && !order.prescriptions.some(rx => rx.poRef === paymentReference) ? `Ref ${paymentReference}` : null,
+                paymentReference && !order.prescriptions.some(rx => rx.purchaseOrderId === paymentReference) ? `Ref ${paymentReference}` : null,
               ].filter(Boolean).join(' · ')}
             </p>
           </section>

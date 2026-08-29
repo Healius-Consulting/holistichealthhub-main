@@ -72,14 +72,14 @@ export default function CommandPalette({ commands: suppliedCommands, contextLabe
       .filter(order => order.organisationId === organisationId && order.prescriptions.length)
       .filter(order => {
         const patient = state.crm.find(item => item.id === order.patientId && item.organisationId === organisationId);
-        return `order ${order.id} ${patient?.name ?? ''} ${patient?.email ?? ''} ${patient?.mobile ?? ''} ${order.prescriptions.map(rx => rx.poRef ?? '').join(' ')}`.toLowerCase().includes(needle);
+        return `order ${order.id} ${patient?.name ?? ''} ${patient?.email ?? ''} ${patient?.mobile ?? ''} ${order.prescriptions.map(rx => rx.purchaseOrderId ?? '').join(' ')}`.toLowerCase().includes(needle);
       })
       .map((order): CommandDefinition => {
         const patient = state.crm.find(item => item.id === order.patientId && item.organisationId === organisationId);
         return {
           label: `Order #${order.id}`,
           detail: `${patient?.name ?? 'Unassigned patient'} · ${order.prescriptions.length} prescription${order.prescriptions.length === 1 ? '' : 's'}`,
-          keywords: `${patient?.email ?? ''} ${patient?.mobile ?? ''} ${order.prescriptions.map(rx => rx.poRef ?? '').join(' ')}`,
+          keywords: `${patient?.email ?? ''} ${patient?.mobile ?? ''} ${order.prescriptions.map(rx => rx.purchaseOrderId ?? '').join(' ')}`,
           group: 'Orders',
           searchOnly: true,
           icon: <ReceiptText size={16} />,

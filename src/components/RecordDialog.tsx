@@ -27,10 +27,30 @@ export default function RecordDialog({ label, onClose, children }: {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
       const scrims = document.querySelectorAll('.crm-dialog__scrim');
       if (scrims.length && scrims[scrims.length - 1] !== scrimRef.current) return;
-      onCloseRef.current();
+      if (event.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [])].filter(element => element.getClientRects().length > 0);
+      if (!focusable.length) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     const previous = document.activeElement as HTMLElement | null;
@@ -53,9 +73,11 @@ export default function RecordDialog({ label, onClose, children }: {
       onClick={event => { if (event.target === event.currentTarget) onCloseRef.current(); }}
     >
       <div className="crm-dialog" role="dialog" aria-modal="true" aria-label={label} ref={dialogRef} tabIndex={-1}>
-        <button type="button" className="crm-dialog__close icon-button" aria-label="Close record" onClick={() => onCloseRef.current()}>
-          <X size={16} aria-hidden="true" />
-        </button>
+        <div className="crm-dialog__chrome">
+          <button type="button" className="crm-dialog__close icon-button" aria-label="Close record" onClick={() => onCloseRef.current()}>
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
         <div className="crm-dialog__body">{children}</div>
       </div>
     </div>,

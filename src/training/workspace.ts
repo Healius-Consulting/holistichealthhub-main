@@ -162,6 +162,27 @@ export function trainingWorkspace(organisationId: string): {
     person('kai', 'Kai Bell', '00000 000 022', '1971-03-18', 'XX0 0XX', 'MS', 'HHH approved'),
     person('skyler', 'Skyler Dean', '00000 000 023', '1995-05-06', 'XX0 0YY', 'Anxiety', 'HHH approved'),
     person('peyton', 'Peyton Moss', '00000 000 024', '1980-09-29', 'XX0 0ZZ', 'Chronic pain', 'HHH approved'),
+    person('alex', 'Alex Mercer', '00000 000 025', '1987-02-14', 'XX1 0AA', 'Chronic pain', 'HHH approved'),
+    person('bailey', 'Bailey Stone', '00000 000 026', '1992-07-19', 'XX1 0BB', 'Anxiety', 'HHH approved'),
+    person('charlie', 'Charlie Rivers', '00000 000 027', '1979-10-11', 'XX1 0CC', 'Insomnia', 'HHH approved'),
+    person('devon', 'Devon Ellis', '00000 000 028', '1984-04-25', 'XX1 0DD', 'MS', 'HHH approved'),
+    person('emery', 'Emery Clarke', '00000 000 029', '1996-01-17', 'XX1 0EE', 'Chronic pain', 'HHH approved'),
+    person('frankie', 'Frankie Wood', '00000 000 030', '1973-08-08', 'XX1 0FF', 'Anxiety', 'HHH approved'),
+    person('grey', 'Grey Morgan', '00000 000 031', '1981-12-03', 'XX1 0GG', 'Insomnia', 'HHH approved'),
+    person('hayden', 'Hayden James', '00000 000 032', '1990-05-22', 'XX1 0HH', 'Chronic pain', 'HHH approved'),
+    person('jordan', 'Jordan Wells', '00000 000 033', '1976-06-16', 'XX1 0JJ', 'MS', 'HHH approved'),
+    person('kendall', 'Kendall Price', '00000 000 034', '1988-09-12', 'XX1 0KK', 'Anxiety', 'HHH approved'),
+    person('logan', 'Logan Brooks', '00000 000 035', '1983-11-29', 'XX1 0LL', 'Chronic pain', 'HHH approved'),
+    person('micah', 'Micah Ford', '00000 000 036', '1991-03-07', 'XX1 0MM', 'Insomnia', 'HHH approved'),
+    person('noel', 'Noel Adams', '00000 000 037', '1978-07-31', 'XX1 0NN', 'MS', 'HHH approved'),
+    person('oakley', 'Oakley Reed', '00000 000 038', '1986-10-20', 'XX1 0PP', 'Chronic pain', 'HHH approved'),
+    person('parker', 'Parker Lane', '00000 000 039', '1994-05-18', 'XX1 0QQ', 'Anxiety', 'HHH approved'),
+    person('remy', 'Remy Shaw', '00000 000 040', '1975-01-09', 'XX1 0RR', 'Insomnia', 'HHH approved'),
+    person('sam', 'Sam Harper', '00000 000 041', '1989-08-27', 'XX1 0SS', 'Chronic pain', 'HHH approved'),
+    person('teagan', 'Teagan Cole', '00000 000 042', '1982-02-23', 'XX1 0TT', 'MS', 'HHH approved'),
+    person('winter', 'Winter Blake', '00000 000 043', '1993-12-13', 'XX1 0UU', 'Anxiety', 'HHH approved'),
+    person('yarrow', 'Yarrow Bell', '00000 000 044', '1985-06-06', 'XX1 0VV', 'Chronic pain', 'HHH approved'),
+    person('zion', 'Zion Cooper', '00000 000 045', '1980-08-14', 'XX1 0WW', 'Chronic pain', 'HHH approved'),
   ];
 
   const clinicRx = (id: number, status: Prescription['status'], extras: Partial<Prescription> = {}): Prescription => ({
@@ -181,7 +202,7 @@ export function trainingWorkspace(organisationId: string): {
     copyFileName: 'training-clinic-copy.pdf',
     items: [pack],
     placed: false,
-    poRef: null,
+    purchaseOrderId: null,
     status,
     invoiceRef: null,
     trackingNumber: null,
@@ -213,9 +234,22 @@ export function trainingWorkspace(organisationId: string): {
     manualNotes: notes,
     manualRecordedBy: 'Training workspace',
   });
+  const awaitingPayment = (id: number, days: number, notes: string, total: number = amount): PatientOrder['payment'] => ({
+    status: 'sent',
+    route: 'pharmacy',
+    amount: total,
+    ref: `TILL-TRAINING-${id}`,
+    sentAt: daysAgo(days),
+    paidAt: null,
+    manualTender: 'epos-card',
+    manualReference: `TILL-TRAINING-${id}`,
+    manualNotes: notes,
+    manualRecordedBy: 'Training workspace',
+  });
   const orderShell = (id: number, slug: string, days: number, payment: PatientOrder['payment'], prescriptions: Prescription[], extras: Partial<PatientOrder> = {}): PatientOrder => ({
     id,
     backendId: `training-order-${id}`,
+    orderNumber: `TRAINING-${id}`,
     organisationId,
     patientId: bySlug[slug].id,
     date: daysAgo(days),
@@ -262,12 +296,55 @@ export function trainingWorkspace(organisationId: string): {
   const cancelledRx = (id: number, slug: string, extras: Partial<Prescription> = {}) => namedRx(id, slug, 'cancelled', {
     placed: true,
     placedAt: daysAgo(6),
-    poRef: `PO-TRAINING-${id}`,
+    purchaseOrderId: `PO-TRAINING-${id}`,
     purchaseOrderState: 'CANCELLED',
     curaleafPrescriptionId: undefined,
     curaleafPrescriptionState: 'CANCELLED',
     ...extras,
   });
+  const progressedRx = (
+    id: number,
+    slug: string,
+    status: Prescription['status'],
+    progress: { ordered?: number; allocated?: number; shipped?: number; received?: number; collected?: number },
+    extras: Partial<Prescription> = {},
+  ) => {
+    const ordered = progress.ordered ?? 1;
+    const allocated = progress.allocated ?? ordered;
+    const shipped = progress.shipped ?? 0;
+    const received = progress.received ?? 0;
+    const collected = progress.collected ?? 0;
+    const progressItem: LineItem = ordered === 1 ? pack : {
+      ...pack,
+      qty: ordered,
+      unitsNeededCount: TRAINING_PRODUCT.packSize * ordered,
+      cost: TRAINING_PRODUCT.cost * ordered,
+      retail: TRAINING_PRODUCT.retail * ordered,
+    };
+    return namedRx(id, slug, status, {
+      items: [progressItem],
+      placed: true,
+      placedAt: daysAgo(4),
+      purchaseOrderId: `PO-TRAINING-${id}`,
+      purchaseOrderState: allocated >= ordered ? 'FULLY_ALLOCATED' : allocated > 0 ? 'PROCESSING' : 'CREATED',
+      dispatchStatus: shipped === 0 ? 'not_dispatched' : shipped < ordered ? 'partial' : 'complete',
+      trackingNumber: shipped > 0 ? `TRN-${id}` : null,
+      carrier: shipped > 0 ? 'Training courier' : null,
+      receivedItems: received > 0 ? [{ productId: TRAINING_PRODUCT.id, quantityReceived: received }] : undefined,
+      goodsInAt: received > 0 ? daysAgo(1) : undefined,
+      goodsInBy: received > 0 ? 'Training workspace' : undefined,
+      readyAt: status === 'ready' || status === 'collected' ? daysAgo(1) : undefined,
+      fulfilmentLines: [line({
+        ordered,
+        allocated,
+        shipped,
+        received,
+        collected,
+        remaining: Math.max(0, ordered - Math.max(allocated, shipped)),
+      })],
+      ...extras,
+    });
+  };
   const replacement = (
     id: number,
     sourceId: number,
@@ -282,8 +359,10 @@ export function trainingWorkspace(organisationId: string): {
       redoContext: {
         originalOrderId: sourceId,
         originalBackendId: `training-order-${sourceId}`,
+        originalOrderNumber: `TRAINING-${sourceId}`,
         rootOrderId: sourceId,
         rootBackendId: `training-order-${sourceId}`,
+        rootOrderNumber: `TRAINING-${sourceId}`,
         replacementSequence: 1,
         isPaidRedo: false,
         reason: 'cancelled',
@@ -298,6 +377,7 @@ export function trainingWorkspace(organisationId: string): {
     {
       id: 101,
       backendId: 'training-order-101',
+      orderNumber: 'TRAINING-101',
       organisationId,
       patientId: patients[1].id,
       date: daysAgo(1),
@@ -325,6 +405,7 @@ export function trainingWorkspace(organisationId: string): {
     {
       id: 102,
       backendId: 'training-order-102',
+      orderNumber: 'TRAINING-102',
       organisationId,
       patientId: patients[2].id,
       date: daysAgo(2),
@@ -353,6 +434,7 @@ export function trainingWorkspace(organisationId: string): {
     {
       id: 103,
       backendId: 'training-order-103',
+      orderNumber: 'TRAINING-103',
       organisationId,
       patientId: patients[3].id,
       date: daysAgo(5),
@@ -377,7 +459,7 @@ export function trainingWorkspace(organisationId: string): {
         curaleafPatientDob: patients[3].dob,
         placed: true,
         placedAt: daysAgo(4),
-        poRef: 'PO-TRAINING-103',
+        purchaseOrderId: 'PO-TRAINING-103',
         purchaseOrderState: 'PROCESSING',
         dispatchStatus: 'complete',
         trackingNumber: 'TRN-103',
@@ -402,6 +484,7 @@ export function trainingWorkspace(organisationId: string): {
     {
       id: 104,
       backendId: 'training-order-104',
+      orderNumber: 'TRAINING-104',
       organisationId,
       patientId: patients[4].id,
       date: daysAgo(8),
@@ -426,7 +509,7 @@ export function trainingWorkspace(organisationId: string): {
         curaleafPatientDob: patients[4].dob,
         placed: true,
         placedAt: daysAgo(7),
-        poRef: 'PO-TRAINING-104',
+        purchaseOrderId: 'PO-TRAINING-104',
         purchaseOrderState: 'FULLY_ALLOCATED',
         dispatchStatus: 'complete',
         trackingNumber: 'TRN-104',
@@ -455,6 +538,7 @@ export function trainingWorkspace(organisationId: string): {
     {
       id: 105,
       backendId: 'training-order-105',
+      orderNumber: 'TRAINING-105',
       organisationId,
       patientId: patients[5].id,
       date: daysAgo(14),
@@ -479,7 +563,7 @@ export function trainingWorkspace(organisationId: string): {
         curaleafPatientDob: patients[5].dob,
         placed: true,
         placedAt: daysAgo(13),
-        poRef: 'PO-TRAINING-105',
+        purchaseOrderId: 'PO-TRAINING-105',
         purchaseOrderState: 'FULLY_ALLOCATED',
         dispatchStatus: 'complete',
         trackingNumber: 'TRN-105',
@@ -509,7 +593,7 @@ export function trainingWorkspace(organisationId: string): {
       items: [twoPacks],
       placed: true,
       placedAt: daysAgo(3),
-      poRef: 'PO-TRAINING-111',
+      purchaseOrderId: 'PO-TRAINING-111',
       purchaseOrderState: 'PROCESSING',
       dispatchStatus: 'not_dispatched',
       fulfilmentLines: [line({ ordered: 2, allocated: 1, shipped: 0, received: 0, collected: 0 })],
@@ -518,7 +602,7 @@ export function trainingWorkspace(organisationId: string): {
       items: [twoPacks],
       placed: true,
       placedAt: daysAgo(4),
-      poRef: 'PO-TRAINING-112',
+      purchaseOrderId: 'PO-TRAINING-112',
       purchaseOrderState: 'PROCESSING',
       dispatchStatus: 'partial',
       trackingNumber: 'TRN-112A',
@@ -529,7 +613,7 @@ export function trainingWorkspace(organisationId: string): {
       items: [twoPacks],
       placed: true,
       placedAt: daysAgo(5),
-      poRef: 'PO-TRAINING-113',
+      purchaseOrderId: 'PO-TRAINING-113',
       purchaseOrderState: 'FULLY_ALLOCATED',
       dispatchStatus: 'complete',
       trackingNumber: 'TRN-113A',
@@ -543,7 +627,7 @@ export function trainingWorkspace(organisationId: string): {
       items: [twoPacks],
       placed: true,
       placedAt: daysAgo(6),
-      poRef: 'PO-TRAINING-114',
+      purchaseOrderId: 'PO-TRAINING-114',
       purchaseOrderState: 'PROCESSING',
       dispatchStatus: 'partial',
       trackingNumber: 'TRN-114A',
@@ -557,7 +641,7 @@ export function trainingWorkspace(organisationId: string): {
       items: [twoPacks],
       placed: true,
       placedAt: daysAgo(8),
-      poRef: 'PO-TRAINING-115',
+      purchaseOrderId: 'PO-TRAINING-115',
       purchaseOrderState: 'FULLY_ALLOCATED',
       dispatchStatus: 'complete',
       trackingNumber: 'TRN-115',
@@ -701,28 +785,16 @@ export function trainingWorkspace(organisationId: string): {
     replacement(136, 135, 'robin', 4, paid(136, 4, 'Training example — paid carry-over at the original price. No top-up or refund.'), {
       redoContext: { originalOrderId: 135, isPaidRedo: true, reason: 'cancelled' },
     }),
-    orderShell(141, 'finley', 3, paid(141, 3, 'Training example — cancellation started. Call Curaleaf before refunding or replacing.'), [namedRx(1411, 'finley', 'processing', {
-      placed: true,
-      placedAt: daysAgo(3),
-      poRef: 'PO-TRAINING-141',
-      purchaseOrderState: 'CREATED',
-      curaleafPrescriptionState: 'ACTIVE',
-    })], {
+    orderShell(141, 'finley', 3, paid(141, 3, 'Training example — Curaleaf cancelled the purchase order; choose refund or replacement.'), [cancelledRx(1411, 'finley')], {
       lifecycleStatus: 'cancelled',
       unresolvedReason: 'cancelled',
       cancellation: {
-        status: 'curaleaf_contact_required',
-        reason: 'patient_request',
-        note: 'Training example — HHH cancelled locally. Curaleaf still has a live purchase order.',
+        status: 'cancelled',
+        reason: 'other',
+        note: 'Training example — Curaleaf cancellation observed from the purchase-order event feed.',
         requestedAt: daysAgo(1).toISOString(),
-        requestedBy: 'Training workspace',
+        requestedBy: 'Curaleaf event sync',
         paymentLinkStatus: 'not_applicable',
-      },
-      curaleafCancellation: {
-        status: 'contact_required',
-        purchaseOrderId: 'PO-TRAINING-141',
-        requestedAt: daysAgo(1).toISOString(),
-        requestedBy: 'Training workspace',
       },
     }),
     orderShell(142, 'kai', 40, paid(142, 40, 'Training example — 28-day CD expiry. Archive and replace if the patient still needs the medication.'), [namedRx(1421, 'kai', 'awaiting-approval')], {
@@ -769,18 +841,178 @@ export function trainingWorkspace(organisationId: string): {
         requestedBy: 'Training workspace',
       },
     }),
+    // Multi-prescription matrix: each order exercises a distinct board lane or
+    // subsection without combining states that the real lane classifier forbids.
+    orderShell(151, 'alex', 1, paid(151, 1, 'Training example — two prescriptions; the paid basket is held for a price review.', splitAmount), [
+      namedRx(1511, 'alex', 'awaiting-approval'),
+      namedRx(1512, 'alex', 'awaiting-approval'),
+    ], {
+      quoteReview: review('required', 'patient_price_changed', [{
+        category: 'patient_price',
+        field: 'patientPackPrice',
+        packId: TRAINING_PRODUCT.id,
+        previous: '8500',
+        latest: '9500',
+      }], quote('95.00', '42.00'), { patientDeltaPence: 1000 }),
+    }),
+    orderShell(152, 'bailey', 1, awaitingPayment(152, 1, 'Training example — two prescriptions awaiting one order-level payment.', splitAmount), [
+      namedRx(1521, 'bailey', 'draft'),
+      namedRx(1522, 'bailey', 'draft'),
+    ]),
+    orderShell(153, 'charlie', 1, paid(153, 1, 'Training example — two paid prescriptions ready to send to Curaleaf.', splitAmount), [
+      namedRx(1531, 'charlie', 'draft'),
+      namedRx(1532, 'charlie', 'draft'),
+    ]),
+    orderShell(154, 'devon', 2, paid(154, 2, 'Training example — one prescription has a PO while its sibling is still in prescription check.', splitAmount), [
+      namedRx(1541, 'devon', 'awaiting-approval'),
+      progressedRx(1542, 'devon', 'processing', { allocated: 0 }),
+    ]),
+    orderShell(155, 'emery', 3, paid(155, 3, 'Training example — two prescriptions being prepared at slightly different supplier stages.', splitAmount), [
+      progressedRx(1551, 'emery', 'processing', { allocated: 1 }),
+      progressedRx(1552, 'emery', 'approved', { allocated: 1 }),
+    ]),
+    orderShell(156, 'frankie', 4, paid(156, 4, 'Training example — both prescriptions are fully dispatched in the same fulfilment stage.', splitAmount), [
+      progressedRx(1561, 'frankie', 'dispatched', { shipped: 1 }),
+      progressedRx(1562, 'frankie', 'dispatched', { shipped: 1 }),
+    ]),
+    orderShell(157, 'grey', 4, paid(157, 4, 'Training example — first prescription is in transit; the second remains at Curaleaf.', splitAmount), [
+      progressedRx(1571, 'grey', 'dispatched', { shipped: 1 }),
+      progressedRx(1572, 'grey', 'processing', { allocated: 1 }),
+    ]),
+    orderShell(158, 'hayden', 5, paid(158, 5, 'Training example — one prescription is checked in while the second is still in transit.', splitAmount), [
+      progressedRx(1581, 'hayden', 'ready', { shipped: 1, received: 1 }),
+      progressedRx(1582, 'hayden', 'dispatched', { shipped: 1 }),
+    ]),
+    orderShell(159, 'jordan', 6, paid(159, 6, 'Training example — one prescription was collected; the second is still being prepared.', splitAmount), [
+      progressedRx(1591, 'jordan', 'collected', { shipped: 1, received: 1, collected: 1 }),
+      progressedRx(1592, 'jordan', 'processing', { allocated: 1 }),
+    ]),
+    orderShell(160, 'kendall', 6, paid(160, 6, 'Training example — one prescription passed pharmacy checks while the other is still in goods-in.', splitAmount), [
+      progressedRx(1601, 'kendall', 'ready', { shipped: 1, received: 1 }),
+      progressedRx(1602, 'kendall', 'ready', { shipped: 1, received: 1 }),
+    ]),
+    orderShell(161, 'logan', 7, paid(161, 7, 'Training example — one prescription is ready and one has already been collected.', splitAmount), [
+      progressedRx(1611, 'logan', 'ready', { shipped: 1, received: 1 }),
+      progressedRx(1612, 'logan', 'collected', { shipped: 1, received: 1, collected: 1 }),
+    ]),
+    orderShell(162, 'micah', 12, paid(162, 12, 'Training example — both prescriptions completed and collected.', splitAmount), [
+      progressedRx(1621, 'micah', 'collected', { shipped: 1, received: 1, collected: 1 }),
+      progressedRx(1622, 'micah', 'collected', { shipped: 1, received: 1, collected: 1 }),
+    ]),
+    orderShell(163, 'noel', 40, paid(163, 40, 'Training example — two-prescription order archived after the 28-day cycle expired.', splitAmount), [
+      namedRx(1631, 'noel', 'awaiting-approval'),
+      namedRx(1632, 'noel', 'awaiting-approval'),
+    ], {
+      lifecycleStatus: 'archived',
+      isExpired: true,
+      unresolvedReason: 'expired',
+      redoEligible: true,
+      cycleExpiresAt: daysAgo(12).toISOString(),
+    }),
+    orderShell(164, 'oakley', 4, paid(164, 4, 'Training example — a two-prescription order rejected by the supplier and ready to recreate.', splitAmount), [
+      namedRx(1641, 'oakley', 'awaiting-approval'),
+      namedRx(1642, 'oakley', 'awaiting-approval'),
+    ], {
+      unresolvedReason: 'rejected',
+      redoEligible: true,
+      quoteReview: review('recreate_required', 'out_of_stock', [{
+        category: 'stock', field: 'inStock', packId: TRAINING_PRODUCT.id, previous: true, latest: false,
+      }], quote('85.00', '42.00', false)),
+    }),
+    orderShell(165, 'parker', 3, paid(165, 3, 'Training example — Curaleaf cancelled both purchase orders; resolve the paid order.', splitAmount), [
+      cancelledRx(1651, 'parker'),
+      cancelledRx(1652, 'parker'),
+    ], {
+      lifecycleStatus: 'cancelled',
+      unresolvedReason: 'cancelled',
+      cancellation: {
+        status: 'cancelled',
+        reason: 'other',
+        note: 'Training example — both supplier cancellations observed from Curaleaf events.',
+        requestedAt: daysAgo(1).toISOString(),
+        requestedBy: 'Curaleaf event sync',
+        paymentLinkStatus: 'not_applicable',
+      },
+    }),
+    orderShell(166, 'remy', 3, paid(166, 3, 'Training example — both supplier orders are cancelled but the patient refund is outstanding.', splitAmount), [
+      cancelledRx(1661, 'remy'),
+      cancelledRx(1662, 'remy'),
+    ], {
+      lifecycleStatus: 'cancelled',
+      unresolvedReason: 'cancelled',
+      cancellation: {
+        status: 'refund_required',
+        reason: 'patient_request',
+        note: 'Training example — multi-prescription refund still needs ePOS confirmation.',
+        requestedAt: daysAgo(1).toISOString(),
+        requestedBy: 'Training workspace',
+        paymentLinkStatus: 'not_applicable',
+      },
+      refund: {
+        id: 'training-refund-166',
+        status: 'pending_confirmation',
+        amountPence: Math.round(splitAmount * 100),
+        method: 'pharmacy_manual',
+        paymentReference: 'TILL-TRAINING-166',
+        reason: 'patient_cancelled',
+        resolution: 'cancel',
+        requestedAt: daysAgo(1).toISOString(),
+        requestedBy: 'Training workspace',
+      },
+    }),
+    orderShell(167, 'sam', 2, paid(167, 2, 'Training example — a line in this two-prescription basket is out of stock.', splitAmount), [
+      namedRx(1671, 'sam', 'awaiting-approval'),
+      namedRx(1672, 'sam', 'awaiting-approval'),
+    ], {
+      quoteReview: review('required', 'out_of_stock', [{
+        category: 'stock', field: 'inStock', packId: TRAINING_PRODUCT.id, previous: true, latest: false,
+      }], quote('85.00', '42.00', false)),
+    }),
+    orderShell(168, 'teagan', 2, paid(168, 2, 'Training example — paid quote evidence cannot be reconciled automatically.'), [
+      namedRx(1681, 'teagan', 'awaiting-approval'),
+    ], {
+      activeQuoteCheck: {
+        id: 'training-quote-168', phase: 'POST_PAYMENT', status: 'RECONCILIATION_REQUIRED', checkedAt: daysAgo(1).toISOString(),
+        basketFingerprint: 'training-168', patientTotalPence: 8500, wholesaleTotalPence: 4200, shippingPence: 0, stockAvailable: true,
+      },
+    }),
+    orderShell(169, 'winter', 2, paid(169, 2, 'Training example — a two-prescription paid basket needs quote reconciliation.', splitAmount), [
+      namedRx(1691, 'winter', 'awaiting-approval'),
+      namedRx(1692, 'winter', 'awaiting-approval'),
+    ], {
+      activeQuoteCheck: {
+        id: 'training-quote-169', phase: 'POST_PAYMENT', status: 'RECONCILIATION_REQUIRED', checkedAt: daysAgo(1).toISOString(),
+        basketFingerprint: 'training-169', patientTotalPence: 17000, wholesaleTotalPence: 8400, shippingPence: 0, stockAvailable: true,
+      },
+    }),
+    orderShell(170, 'yarrow', 6, paid(170, 6, 'Training example — a single prescription checked into the dispensary and awaiting pharmacy checks.'), [
+      progressedRx(1701, 'yarrow', 'ready', { shipped: 1, received: 1 }),
+    ]),
+    orderShell(171, 'zion', 3, paid(171, 3, 'Training example — Curaleaf cancelled one prescription while its sibling purchase order remains in transit.', splitAmount), [
+      cancelledRx(1711, 'zion'),
+      progressedRx(1712, 'zion', 'dispatched', { shipped: 1 }),
+    ], {
+      lifecycleStatus: 'cancelled',
+      unresolvedReason: 'cancelled',
+      cancellation: {
+        status: 'cancelled',
+        reason: 'other',
+        note: 'Training example — cancellation belongs only to prescription 1; prescription 2 remains active.',
+        requestedAt: daysAgo(1).toISOString(),
+        requestedBy: 'Curaleaf event sync',
+        paymentLinkStatus: 'not_applicable',
+      },
+    }),
   ];
 
-  const drillOrderIds = new Set([100, 101, 102, 112, 104, 105, 121, 131, 132]);
-  const drillOrders = orders.filter(order => drillOrderIds.has(order.id));
-  const referencedPatientIds = new Set(drillOrders.map(order => order.patientId).filter((id): id is string => Boolean(id)));
-  const drillPatients = patients.filter(patient => referencedPatientIds.has(patient.id));
-  const nextRx = Math.max(...drillOrders.flatMap(order => order.prescriptions.map(rx => rx.id)), 0) + 1;
-  const nextOrder = Math.max(...drillOrders.map(order => order.id), 0) + 1;
+  const referencedPatientIds = new Set(orders.map(order => order.patientId).filter((id): id is string => Boolean(id)));
+  const trainingPatients = patients.filter(patient => referencedPatientIds.has(patient.id));
+  const nextRx = Math.max(...orders.flatMap(order => order.prescriptions.map(rx => rx.id)), 0) + 1;
+  const nextOrder = Math.max(...orders.map(order => order.id), 0) + 1;
 
   return {
-    crm: drillPatients,
-    orders: drillOrders,
+    crm: trainingPatients,
+    orders,
     nextIds: { patient: 2000, rx: nextRx, order: nextOrder, submission: 5, invoice: 4072 },
   };
 }
