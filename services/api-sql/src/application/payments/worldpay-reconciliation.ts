@@ -3,7 +3,7 @@ import type { IntegrationRepositoryPort } from '../../repositories/ports/integra
 import type { OrderRepositoryPort } from '../../repositories/ports/order.port.js';
 import type { PaymentRecord, PaymentRepositoryPort } from '../../repositories/ports/payment.port.js';
 import { worldpayIdentityMatches, worldpayStatusToSql, type WorldpayPaymentStatus } from './worldpay-query.js';
-import { settlePaidWorldpayPayment, type WorldpaySettlementDeps } from './worldpay-settlement.js';
+import { placePaidWorldpayOrdersStillOpen, placeWorldpayOrderAfterPaidResponse, shouldPlaceWorldpayOrderAfterReconcile, settlePaidWorldpayPayment, type WorldpaySettlementDeps } from './worldpay-settlement.js';
 import { sha256 } from '../../security/session-utils.js';
 
 const PAYMENT_QUERY_LAG_GRACE_MS = 2 * 60 * 1_000;
@@ -182,8 +182,14 @@ export async function reconcilePendingWorldpayPayments(
   const summary = { checked: candidates.length, reconciled: 0, pending: 0, attention: 0, errors: 0 };
   for (const payment of candidates) {
     try {
+      const previousStatus = payment.status;
       const outcome = await reconcileWorldpayPaymentRecord(payment, deps);
-      if (outcome.state === 'reconciled') summary.reconciled += 1;
+      if (outcome.state === 'reconciled') {
+        summary.reconciled += 1;
+        if (shouldPlaceWorldpayOrderAfterReconcile(previousStatus, outcome.paymentStatus)) {
+          await placeWorldpayOrderAfterPaidResponse('PENDING', { ...payment, status: 'PAID' }, deps);
+        }
+      }
       else if (outcome.state === 'verification_pending') summary.pending += 1;
       else summary.attention += 1;
     } catch (error) {
@@ -194,5 +200,11 @@ export async function reconcilePendingWorldpayPayments(
       });
     }
   }
-  return summary;
+  const placement = await placePaidWorldpayOrdersStillOpen(deps).catch(error => {
+    console.error('Worldpay paid-order placement sweep failed', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return { checked: 0, placed: 0, skipped: 0, errors: 1 };
+  });
+  return { ...summary, placement };
 }

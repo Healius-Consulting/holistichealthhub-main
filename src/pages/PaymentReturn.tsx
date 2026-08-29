@@ -1,7 +1,12 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock, XCircle, RefreshCw, ShieldCheck, ArrowRight, Package, FileCheck } from 'lucide-react';
 import HhhBrandMark from '../components/HhhBrandMark';
 import { getPublicPaymentStatus, type PublicPaymentStatusResponse } from '../shared/api';
+import {
+  paymentReturnNextGapMs,
+  paymentReturnShouldKeepPolling,
+  paymentReturnWaitCopy,
+} from '../utils/paymentReturnPoll';
 
 export type PaymentReturnStatus = 'complete' | 'cancelled';
 
@@ -11,90 +16,64 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
   const isDirectCancelled = status === 'cancelled';
   const [clearanceState, setClearanceState] = useState<ClearanceState>(isDirectCancelled ? 'declined' : 'checking');
   const [paymentData, setPaymentData] = useState<PublicPaymentStatusResponse | null>(null);
-  const [pollCount, setPollCount] = useState(0);
-  const [statusMessage, setStatusMessage] = useState('Connecting to Worldpay & your pharmacy…');
-  
-  // Extract reference parameters from query string
+  const [statusMessage, setStatusMessage] = useState(paymentReturnWaitCopy(0));
+  const [retryNonce, setRetryNonce] = useState(0);
+
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const reference = urlParams.get('ref') || urlParams.get('transactionReference') || urlParams.get('orderCode') || urlParams.get('receipt') || urlParams.get('order') || urlParams.get('paid') || '';
-  const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Progressive wait status copy
-  useEffect(() => {
-    if (clearanceState !== 'checking') return;
-
-    if (pollCount === 0) {
-      setStatusMessage('Contacting payment gateway…');
-    } else if (pollCount === 1) {
-      setStatusMessage('Verifying payment clearance with your bank…');
-    } else if (pollCount === 2) {
-      setStatusMessage('Syncing authorization with your pharmacy…');
-    } else if (pollCount >= 3) {
-      setStatusMessage('Finalising prescription order records…');
-    }
-  }, [pollCount, clearanceState]);
-
-  // Polling function
-  const checkStatus = async () => {
-    if (!reference) {
-      setClearanceState(status === 'complete' ? 'timeout' : 'declined');
-      return;
-    }
-
-    try {
-      const res = await getPublicPaymentStatus({
-        ref: reference,
-        receipt: reference,
-        success: status === 'complete',
-      });
-
-      if (res.status === 'paid') {
-        setPaymentData(res);
-        // Small 1.2s delay for satisfying spinner transition
-        setTimeout(() => setClearanceState('cleared'), 1200);
-        return;
-      } else if (res.status === 'failed' || res.status === 'cancelled') {
-        setPaymentData(res);
-        setClearanceState('declined');
-        return;
-      }
-
-      // If still pending, poll a couple times
-      setPollCount(count => {
-        if (count >= 3) {
-          setClearanceState('timeout');
-          return count;
-        }
-        return count + 1;
-      });
-    } catch {
-      setPollCount(count => {
-        if (count >= 2) setClearanceState('timeout');
-        return count + 1;
-      });
-    }
-  };
 
   useEffect(() => {
     if (isDirectCancelled) {
       setClearanceState('declined');
       return;
     }
+    if (!reference) {
+      setClearanceState('timeout');
+      return;
+    }
 
-    // Initial check
-    void checkStatus();
+    let cancelled = false;
+    const startedAt = Date.now();
+    setClearanceState('checking');
+    setStatusMessage(paymentReturnWaitCopy(0));
 
-    // Setup poll interval
-    pollTimerRef.current = setInterval(() => {
-      if (clearanceState === 'checking') {
-        void checkStatus();
+    const run = async () => {
+      while (!cancelled && paymentReturnShouldKeepPolling(Date.now() - startedAt)) {
+        try {
+          const res = await getPublicPaymentStatus({
+            ref: reference,
+            receipt: reference,
+            success: status === 'complete',
+          });
+          if (cancelled) return;
+          if (res.status === 'paid') {
+            setPaymentData(res);
+            setClearanceState('cleared');
+            return;
+          }
+          if (res.status === 'failed' || res.status === 'cancelled') {
+            setPaymentData(res);
+            setClearanceState('declined');
+            return;
+          }
+        } catch {
+          if (cancelled) return;
+        }
+
+        const elapsed = Date.now() - startedAt;
+        setStatusMessage(paymentReturnWaitCopy(elapsed));
+        const gap = paymentReturnNextGapMs(elapsed);
+        if (!gap) break;
+        await new Promise(resolve => setTimeout(resolve, gap));
       }
-    }, 2200);
-
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      if (!cancelled) setClearanceState('timeout');
     };
-  }, [reference, isDirectCancelled, clearanceState]);
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [reference, isDirectCancelled, status, retryNonce]);
 
   useEffect(() => {
     if (clearanceState === 'cleared') {
@@ -140,7 +119,7 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
             </div>
             <h2>Payment Confirmed</h2>
             <p className="payment-return-summary">
-              Thank you. Your payment has cleared and your prescription has been placed with your pharmacy for dispensing.
+              Thank you. Your payment has cleared. Your pharmacy will prepare the prescription for dispensing.
             </p>
 
             <div className="payment-return-receipt-card">
@@ -180,7 +159,7 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
                   <div className="lifecycle-step-marker"><CheckCircle2 size={14} /></div>
                   <div className="lifecycle-step-body">
                     <strong>Payment Cleared</strong>
-                    <small>Authorized via secure Worldpay gateway.</small>
+                    <small>Confirmed with Worldpay.</small>
                   </div>
                 </li>
                 <li className="lifecycle-step lifecycle-step--active">
@@ -214,7 +193,7 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
             <h2>{clearanceState === 'timeout' ? 'Payment status pending' : 'Payment not completed'}</h2>
             <p className="payment-return-summary">
               {clearanceState === 'timeout'
-                ? 'We could not confirm payment clearance immediately. If funds were debited, your order will update shortly.'
+                ? 'We could not confirm payment clearance yet. If you were charged, your order will update shortly.'
                 : 'No funds have been debited. Your prescription order remains saved with your pharmacy.'}
             </p>
 
@@ -239,8 +218,8 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
                 className="btn btn-primary payment-retry-btn"
                 onClick={() => {
                   setClearanceState('checking');
-                  setPollCount(0);
-                  void checkStatus();
+                  setStatusMessage(paymentReturnWaitCopy(0));
+                  setRetryNonce(value => value + 1);
                 }}
               >
                 <RefreshCw size={14} /> Check status again
@@ -256,4 +235,3 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
     </main>
   );
 }
-

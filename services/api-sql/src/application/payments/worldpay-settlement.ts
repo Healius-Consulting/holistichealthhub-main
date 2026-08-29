@@ -1,12 +1,14 @@
 import { executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../integrations/curaleaf.service.js';
 import { curaleafCancellationBlocksPlacement } from '../orders/quote-review.js';
 import { quoteCheckInput, quotePricingPolicy } from '../orders/quote-gate.js';
+import { existingCuraleafPurchaseOrder } from '../orders/curaleaf-fulfilment.js';
+import { pendingPlacementRxIndexes, snapshotRxList } from '../prescriptions/snapshot-rx.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import { promotePatientAfterCuraleafPlacement } from '../patient-finance/patient-finance.js';
 import type { PatientFinanceDeps } from '../patient-finance/patient-finance.js';
 import type { IntegrationRepositoryPort } from '../../repositories/ports/integration.port.js';
 import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../notifications/email-outbox.js';
-import type { OrderRepositoryPort } from '../../repositories/ports/order.port.js';
+import type { OrderRecord, OrderRepositoryPort } from '../../repositories/ports/order.port.js';
 import type { PaymentRecord, PaymentRepositoryPort } from '../../repositories/ports/payment.port.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { IdentityRepositoryPort } from '../../repositories/ports/identity.port.js';
@@ -56,13 +58,68 @@ export async function settlePaidWorldpayPayment(
     console.warn('[Worldpay] settlement notification note:', error);
   });
 
+  return { payment: settled, settled: true as const, reason: 'paid' as const };
+}
+
+export function shouldPlaceWorldpayOrderAfterReconcile(previousStatus: string, paymentStatus: string | undefined) {
+  return previousStatus === 'PENDING' && paymentStatus === 'PAID';
+}
+
+export function paidWorldpayOrderNeedsPlacement(order: Pick<OrderRecord, 'paymentRoute' | 'paymentStatus' | 'paidAt' | 'quoteSnapshot' | 'id' | 'orderNumber'>) {
+  if (String(order.paymentRoute || '').toUpperCase() !== 'WORLDPAY') return false;
+  if (String(order.paymentStatus || '').toUpperCase() !== 'PAID' && !order.paidAt) return false;
+  const prescriptions = snapshotRxList(order.quoteSnapshot);
+  if (prescriptions.length > 0) return pendingPlacementRxIndexes(order.quoteSnapshot).length > 0;
+  return !existingCuraleafPurchaseOrder(order);
+}
+
+export async function placeWorldpayOrderAfterPaidResponse(
+  previousStatus: string,
+  payment: PaymentRecord,
+  deps: WorldpaySettlementDeps,
+) {
+  if (!shouldPlaceWorldpayOrderAfterReconcile(previousStatus, payment.status)) return;
   try {
-    await placeOrderAfterWorldpaySettlement(settled, deps);
+    await placeOrderAfterWorldpaySettlement(payment, deps);
   } catch (error) {
     console.warn('[Worldpay] Curaleaf placement after settlement note:', error);
   }
+}
 
-  return { payment: settled, settled: true as const, reason: 'paid' as const };
+const RECENT_PAID_PLACEMENT_WINDOW_MS = 30 * 60 * 1_000;
+
+export async function placePaidWorldpayOrdersStillOpen(
+  deps: WorldpaySettlementDeps,
+  now = Date.now(),
+  limit = 20,
+) {
+  const orders = await deps.orderRepo.listPaidOpenOrders(200);
+  const cutoff = now - RECENT_PAID_PLACEMENT_WINDOW_MS;
+  const summary = { checked: 0, placed: 0, skipped: 0, errors: 0 };
+  for (const order of orders) {
+    if (!paidWorldpayOrderNeedsPlacement(order)) continue;
+    const paidAt = Date.parse(String(order.paidAt ?? ''));
+    if (Number.isFinite(paidAt) && paidAt < cutoff) continue;
+    summary.checked += 1;
+    if (summary.checked > limit) break;
+    try {
+      const payments = await deps.paymentRepo.listPaymentsByOrderId(order.id, order.organisationId);
+      const payment = payments.find(row => row.route === 'WORLDPAY' && row.status === 'PAID') ?? null;
+      if (!payment) {
+        summary.skipped += 1;
+        continue;
+      }
+      await placeOrderAfterWorldpaySettlement(payment, deps);
+      summary.placed += 1;
+    } catch (error) {
+      summary.errors += 1;
+      console.warn('[Worldpay] Paid-order Curaleaf placement retry failed', {
+        orderId: order.id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+  return summary;
 }
 
 async function queueSettlementEmails(payment: PaymentRecord, deps: WorldpaySettlementDeps) {
@@ -116,6 +173,14 @@ export async function placeOrderAfterWorldpaySettlement(
 ) {
   const order = await deps.orderRepo.findOrderById(payment.orderId, payment.organisationId);
   if (!order) return null;
+  if (!paidWorldpayOrderNeedsPlacement({
+    ...order,
+    paymentRoute: 'WORLDPAY',
+    paymentStatus: 'PAID',
+    paidAt: order.paidAt ?? new Date().toISOString(),
+  })) {
+    return null;
+  }
 
   const snapshot = (order.quoteSnapshot && typeof order.quoteSnapshot === 'object' ? order.quoteSnapshot : {}) as Record<string, any>;
   if (curaleafCancellationBlocksPlacement(order.quoteSnapshot)

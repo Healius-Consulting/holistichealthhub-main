@@ -124,11 +124,14 @@ async function performApiRequest<T>(path: string, init?: RequestInit): Promise<T
   return response.json() as Promise<T>;
 }
 
-async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const method = (init?.method || 'GET').toUpperCase();
-  if (method !== 'GET') {
-    invalidateResponseCache();
-    return performApiRequest<T>(path, init);
+type ApiRequestInit = RequestInit & { skipGetCache?: boolean };
+
+async function apiRequest<T>(path: string, init?: ApiRequestInit): Promise<T> {
+  const { skipGetCache, ...fetchInit } = init ?? {};
+  const method = (fetchInit.method || 'GET').toUpperCase();
+  if (method !== 'GET' || skipGetCache) {
+    if (method !== 'GET') invalidateResponseCache();
+    return performApiRequest<T>(path, fetchInit);
   }
 
   const cached = responseCache.get(path);
@@ -139,7 +142,7 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const existing = inFlightGets.get(path);
   if (existing?.generation === generation) return existing.request as Promise<T>;
 
-  const request = performApiRequest<T>(path, init)
+  const request = performApiRequest<T>(path, fetchInit)
     .then(value => {
       if (cacheGeneration === generation) {
         responseCache.set(path, { value, expiresAt: Date.now() + GET_CACHE_TTL_MS });
@@ -547,7 +550,7 @@ export function getPublicPaymentStatus(params: { ref?: string; receipt?: string;
   if (params.receipt) query.set('receipt', params.receipt);
   if (params.order) query.set('order', params.order);
   if (params.success) query.set('success', 'true');
-  return apiRequest<PublicPaymentStatusResponse>(`/v1/public/payments/status?${query.toString()}`);
+  return apiRequest<PublicPaymentStatusResponse>(`/v1/public/payments/status?${query.toString()}`, { skipGetCache: true });
 }
 
 export function getPublicPaymentReceipt(token: string) {
