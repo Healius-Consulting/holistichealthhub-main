@@ -154,6 +154,13 @@
   background: var(--bg-elevated);
 }
 
+.pharmacy-settings-curaleaf__facts{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  min-width: 0;
+}
+
 .pharmacy-settings-curaleaf__id{
   display: grid;
   gap: 2px;

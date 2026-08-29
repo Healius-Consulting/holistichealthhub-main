@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { HttpError } from '../../domain/common/errors.js';
+import { curaleafCataloguePackIsUnsafe, curaleafCatalogueRecordIsUnsafe } from '../../domain/curaleaf-catalogue-label.js';
 import { curaleafMoneyPence } from '../../domain/integrations/curaleaf-money.js';
 
 export const CURALEAF_PRESCRIPTION_STATES = ['ACTIVE', 'FULFILLED', 'EXPIRED', 'CANCELLED', 'PENDING'] as const;
@@ -182,10 +183,21 @@ export function parseClinicPrescriber(body: unknown) {
   };
 }
 
+export const CLINIC_SCAN_PACK_UNAVAILABLE = 'Curaleaf has not supplied an active pack that can be matched for this prescription. Contact your HHH administrator.';
+
 export function matchClinicPrescriptionPacks(lines: ClinicScanLine[], products: ClinicScanProduct[]): ClinicScanMatchedItem[] {
   return lines.map(line => {
+    if (curaleafCatalogueRecordIsUnsafe({ formulaName: line.formulaName, formulaUnit: line.unit })) {
+      throw new HttpError(409, CLINIC_SCAN_PACK_UNAVAILABLE, 'CURALEAF_PACK_MATCH_UNAVAILABLE');
+    }
     const candidates = products
-      .filter(product => product.state === 'ACTIVE' && product.formulaId === line.formulaId && product.quantity > 0 && line.unitsNeededCount % product.quantity === 0)
+      .filter(product => (
+        product.state === 'ACTIVE'
+        && product.formulaId === line.formulaId
+        && product.quantity > 0
+        && line.unitsNeededCount % product.quantity === 0
+        && !curaleafCataloguePackIsUnsafe(product)
+      ))
       .map(product => ({
         product,
         packQuantity: line.unitsNeededCount / product.quantity,
@@ -224,7 +236,7 @@ export function asClinicScanProducts(records: unknown[]): ClinicScanProduct[] {
       || typeof product.quantity !== 'number'
       || typeof product.state !== 'string'
     ) return [];
-    return [{
+    const pack = {
       id: product.id,
       formulaId: product.formulaId,
       formulaName: typeof product.formulaName === 'string' ? product.formulaName : undefined,
@@ -232,6 +244,7 @@ export function asClinicScanProducts(records: unknown[]): ClinicScanProduct[] {
       patientPackPrice: product.patientPackPrice,
       quantity: product.quantity,
       state: product.state,
-    }];
+    };
+    return curaleafCataloguePackIsUnsafe(pack) ? [] : [pack];
   });
 }

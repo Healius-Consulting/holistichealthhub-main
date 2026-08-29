@@ -71,6 +71,21 @@ describe('clinic QR scan mapping', () => {
     assert.equal(prescription.items[0]?.formulaId, 'f1');
   });
 
+  it('returns a generic 409 when a formula name is unsafe', () => {
+    assert.throws(
+      () => matchClinicPrescriptionPacks(
+        [{ formulaId: 'f1', formulaName: '<script>alert(1)</script>', unit: 'g', unitsNeededCount: 10, unitsAssignedCount: 0 }],
+        [{ id: 'p1', formulaId: 'f1', patientPackPrice: '40.00', quantity: 10, state: 'ACTIVE' }],
+      ),
+      (error: unknown) => {
+        assert.equal((error as { statusCode?: number }).statusCode, 409);
+        assert.equal((error as Error).message, 'Curaleaf has not supplied an active pack that can be matched for this prescription. Contact your HHH administrator.');
+        assert.equal((error as Error).message.includes('<script>'), false);
+        return true;
+      },
+    );
+  });
+
   it('ignores catalogue rows that are not usable packs', () => {
     assert.deepEqual(asClinicScanProducts([{ id: 'p1' }, {
       id: 'p2',

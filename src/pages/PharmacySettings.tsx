@@ -21,6 +21,7 @@ import { useApp } from '../context/AppContext';
 import { brandSwatchStyle } from '../utils/tenantTheme';
 import { ApiRequestError, getCuraleafConnectionStatus, getReferralLink, isApiConfigured, refreshCuraleafConnection, updatePaymentSettings, updatePharmacyProfile } from '../shared/api';
 import type { CuraleafConnectionStatus } from '../shared/contracts';
+import { curaleafCatalogueEstateLabel } from '../utils/catalogueEstate';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
@@ -312,9 +313,15 @@ export default function PharmacySettings() {
           <section className="pharmacy-settings-section">
             <header><h3><Tags size={16} aria-hidden="true" /> Curaleaf</h3></header>
             <div className="pharmacy-settings-curaleaf">
-              <div className="pharmacy-settings-curaleaf__id">
-                <span>Customer ID</span>
-                <strong>{curaleafStatus?.customerId ?? 'Not assigned'}</strong>
+              <div className="pharmacy-settings-curaleaf__facts">
+                <div className="pharmacy-settings-curaleaf__id">
+                  <span>Customer ID</span>
+                  <strong>{curaleafStatus?.customerId ?? 'Not assigned'}</strong>
+                </div>
+                <div className="pharmacy-settings-curaleaf__id">
+                  <span>Estate</span>
+                  <strong>{curaleafStatus ? curaleafCatalogueEstateLabel(curaleafStatus.environment) : 'Not yet checked'}</strong>
+                </div>
               </div>
               <button type="button" className="btn btn-secondary" disabled={curaleafRefreshing} onClick={() => void refreshCuraleaf()}>
                 <RefreshCw size={14} aria-hidden="true" /> {curaleafRefreshing ? 'Refreshing…' : 'Refresh'}

@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight, CircleDollarSign, Package, RefreshCw, Search
 import ProviderStatusNotice from '../components/ProviderStatusNotice';
 import MedicineLabel from '../components/MedicineLabel';
 import { WHOLESALE_LABEL, money, TYPE_LABELS, useApp } from '../context/AppContext';
+import { isCuraleafTestCatalogue } from '../utils/catalogueEstate';
+import { catalogueStockLabel, catalogueStockStatus, catalogueStockToneClass } from '../utils/catalogueStock';
 
 const TYPE_FILTERS = ['All', 'oil', 'flos', 'capsule', 'lozenge', 'vape', 'other'] as const;
 const PAGE_SIZE = 25;
@@ -26,7 +28,7 @@ export default function FormularyPricing() {
   const rangeEnd = Math.min(rangeStart + PAGE_SIZE, products.length);
   const pageProducts = products.slice(rangeStart, rangeEnd);
 
-  const activeCount = state.catalogue.filter(product => product.supplierState === 'ACTIVE').length;
+  const inStockCount = state.catalogue.filter(product => catalogueStockStatus(product) === 'in').length;
   const pricedCount = state.catalogue.filter(product => product.retail > 0).length;
   const updatedAt = state.catalogueUpdatedAt
     ? new Date(state.catalogueUpdatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
@@ -68,7 +70,7 @@ export default function FormularyPricing() {
         </div>
         <dl className="pricing-position" aria-label="Curaleaf catalogue position">
           <div><dt>Products</dt><dd>{state.catalogue.length}</dd></div>
-          <div><dt>Active</dt><dd>{activeCount}</dd></div>
+          <div><dt>In stock</dt><dd>{inStockCount}</dd></div>
           <div><dt>Recommended patient prices</dt><dd>{pricedCount}</dd></div>
         </dl>
       </section>
@@ -86,6 +88,12 @@ export default function FormularyPricing() {
           title="Catalogue has not loaded"
           detail="Try again now. If it remains unavailable, contact your HHH administrator; pharmacy staff do not need to change any connection settings."
           action={retryAction}
+        />
+      ) : isCuraleafTestCatalogue(state.catalogueSource, state.catalogueEnvironment) ? (
+        <ProviderStatusNotice
+          state="waiting"
+          title="Curaleaf test catalogue"
+          detail="Prices and stock are from the sandbox estate."
         />
       ) : null}
 
@@ -122,7 +130,7 @@ export default function FormularyPricing() {
           <div className="pricing-table__head" role="row">
             <span role="columnheader">Product</span>
             <span role="columnheader">Pack</span>
-            <span role="columnheader">Product state</span>
+            <span role="columnheader">Stock Status</span>
             <span role="columnheader">Recommended patient price</span>
             <span role="columnheader">{WHOLESALE_LABEL}</span>
           </div>
@@ -131,7 +139,9 @@ export default function FormularyPricing() {
               <Search size={20} />
               <span><strong>No products match</strong><small>Change the search or product type.</small></span>
             </div>
-          ) : pageProducts.map((product, index) => (
+          ) : pageProducts.map((product, index) => {
+            const stock = catalogueStockStatus(product);
+            return (
             <div className="pricing-row pricing-row--readonly" role="row" key={product.id} style={{ '--stagger-index': index } as CSSProperties}>
               <span className="pricing-product" role="cell">
                 <MedicineLabel name={product.name} />
@@ -141,8 +151,8 @@ export default function FormularyPricing() {
                 <Package size={14} aria-hidden="true" />
                 <strong>{product.packSize ?? '—'} {product.unit ?? 'units'}</strong>
               </span>
-              <span className={`pricing-stock ${product.supplierState === 'ACTIVE' ? 'stock-in' : 'stock-out'}`} role="cell">
-                <i aria-hidden="true" />{product.supplierState === 'ACTIVE' ? 'Active' : 'Unavailable'}
+              <span className={`pricing-stock ${catalogueStockToneClass(stock)}`} role="cell">
+                <i aria-hidden="true" />{catalogueStockLabel(stock)}
               </span>
               <span className="pricing-patient-price" role="cell">
                 <CircleDollarSign size={14} aria-hidden="true" />
@@ -152,7 +162,9 @@ export default function FormularyPricing() {
                 <strong>{product.cost && product.cost > 0 ? money(product.cost) : 'Confirmed by quote'}</strong>
               </span>
             </div>
-          ))}
+            );
+          })
+        }
         </div>
         {products.length > PAGE_SIZE ? (
           <nav className="pricing-pagination" aria-label="Catalogue pages">

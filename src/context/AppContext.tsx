@@ -1,12 +1,15 @@
 import { createContext, useContext, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
 import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, getWorldpayConnectionStatus, isApiConfigured } from '../shared/api';
-import type { CuraleafCancellationState, CuraleafCatalogue, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
+import type { CuraleafCancellationState, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
 import { activeRedoPriceResolution } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
 import { ORGANISATIONS, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace } from '../training/workspace';
+import { parseCatalogueCache, serialiseCatalogueCache, shouldDiscardCatalogueCache } from '../utils/catalogueCache';
+import { curaleafCatalogueEstate, type CuraleafCatalogueEstate } from '../utils/catalogueEstate';
 import { CATALOGUE_TTL_MS, catalogueIsStale } from '../utils/catalogueFreshness';
+import { mapCuraleafCatalogue } from '../utils/mapCuraleafCatalogue';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
 import { formatShippingAddress } from '../utils/shippingAddress';
@@ -422,6 +425,8 @@ export interface AppState {
   navigationTarget: NavigationTarget;
   catalogue: CatalogueItem[];
   catalogueSource: 'curaleaf' | 'training' | 'unavailable';
+  /** Curaleaf key estate. Unknown is stored as test so production is never implied. */
+  catalogueEnvironment: CuraleafCatalogueEstate;
   catalogueLoading: boolean;
   catalogueError: string | null;
   catalogueUpdatedAt: string | null;
@@ -508,72 +513,35 @@ export const TYPE_LABELS: Record<string, string> = {
   flos: 'Flower (Flos)', oil: 'Oil', capsule: 'Capsule', lozenge: 'Lozenge / Pastille', vape: 'Vape', other: 'Other',
 };
 
-function catalogueType(form: string | undefined): CatalogueItem['type'] {
-  if (form === 'FLOS' || form === 'GRANULATE' || form === 'SHAKE' || form === 'PRE_ROLL') return 'flos';
-  if (form === 'OIL' || form === 'ORAL_DROPS' || form === 'ORAL_SPRAY') return 'oil';
-  if (form === 'CAPSULE') return 'capsule';
-  if (form === 'LOZENGE' || form === 'PASTILLE') return 'lozenge';
-  if (form === 'VAPE_CARTRIDGE' || form === 'DEVICE') return 'vape';
-  return 'other';
-}
+const EMPTY_CATALOGUE_CACHE = { items: [] as CatalogueItem[], updatedAt: null as string | null, environment: 'test' as const };
 
-function mapCuraleafCatalogue(catalogue: CuraleafCatalogue): CatalogueItem[] {
-  const formulaById = new Map(catalogue.formulas.map(formula => [formula.id, formula]));
-  return catalogue.products
-    .filter(product => {
-      const name = product.formulaName || formulaById.get(product.formulaId)?.printedName || '';
-      return !/(?:BPTEST|onerror\s*=|<(?:script|img|a|b)\b)/i.test(name);
-    })
-    .map(product => {
-      const formula = formulaById.get(product.formulaId);
-      const packSize = Math.max(0, Number(product.quantity) || 0);
-      const patientPackPrice = Math.max(0, Number(product.patientPackPrice) || 0);
-      const wholesalePackPrice = product.wholesalePackPrice ? Math.max(0, Number(product.wholesalePackPrice) || 0) : null;
-      const availability = product.quoteBankStockStatus === 'out_of_stock' || product.quoteBankInStock === false
-        ? 'out' as const
-        : product.quoteBankStockStatus === 'low_stock'
-          ? 'low' as const
-          : product.quoteBankStockStatus === 'in_stock' || product.quoteBankInStock === true
-            ? 'in' as const
-            : 'unknown' as const;
-      return {
-        id: product.id,
-        formulaId: product.formulaId,
-        name: product.formulaName || formula?.printedName || product.id,
-        cost: wholesalePackPrice,
-        retail: patientPackPrice,
-        availability,
-        type: catalogueType(formula?.formulaForm),
-        unit: product.formulaUnit || formula?.unit,
-        packSize,
-        source: 'curaleaf' as const,
-        supplierState: product.state,
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function loadCachedCatalogue(orgId?: string): { items: CatalogueItem[]; updatedAt: string | null } {
+function loadCachedCatalogue(orgId?: string) {
   try {
-    if (typeof window === 'undefined') return { items: [], updatedAt: null };
+    if (typeof window === 'undefined') return EMPTY_CATALOGUE_CACHE;
     const key = orgId ? `hhh_catalogue_cache_${orgId}` : 'hhh_catalogue_cache';
     const raw = window.localStorage.getItem(key) || window.localStorage.getItem('hhh_catalogue_cache');
-    if (!raw) return { items: [], updatedAt: null };
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed.items) && parsed.items.length > 0) {
-      return { items: parsed.items, updatedAt: parsed.updatedAt ?? null };
-    }
+    return parseCatalogueCache(raw) ?? EMPTY_CATALOGUE_CACHE;
   } catch {
-    // ignore
+    return EMPTY_CATALOGUE_CACHE;
   }
-  return { items: [], updatedAt: null };
 }
 
-function saveCachedCatalogue(items: CatalogueItem[], updatedAt: string | null, orgId?: string) {
+function saveCachedCatalogue(
+  items: CatalogueItem[],
+  updatedAt: string | null,
+  orgId: string | undefined,
+  environment: CuraleafCatalogueEstate,
+) {
   try {
-    if (typeof window === 'undefined' || !items.length) return;
-    const payload = JSON.stringify({ items, updatedAt, timestamp: Date.now() });
-    if (orgId) window.localStorage.setItem(`hhh_catalogue_cache_${orgId}`, payload);
+    if (typeof window === 'undefined') return;
+    const orgKey = orgId ? `hhh_catalogue_cache_${orgId}` : null;
+    if (!items.length) {
+      if (orgKey) window.localStorage.removeItem(orgKey);
+      window.localStorage.removeItem('hhh_catalogue_cache');
+      return;
+    }
+    const payload = serialiseCatalogueCache(items, updatedAt, environment);
+    if (orgKey) window.localStorage.setItem(orgKey, payload);
     window.localStorage.setItem('hhh_catalogue_cache', payload);
   } catch (e) {
     console.warn('Catalogue caching warning:', e);
@@ -630,7 +598,7 @@ export type Action =
   | { type: 'SET_CATALOGUE_LOADING' }
   | { type: 'SET_CATALOGUE_IDLE' }
   | { type: 'REQUEST_CATALOGUE_REFRESH' }
-  | { type: 'SET_CATALOGUE'; catalogue: CatalogueItem[]; updatedAt: string }
+  | { type: 'SET_CATALOGUE'; catalogue: CatalogueItem[]; updatedAt: string; environment: CuraleafCatalogueEstate }
   | { type: 'SET_CATALOGUE_ERROR'; message: string }
   | { type: 'APPLY_CURALEAF_QUOTE'; items: Array<{ productId: string; wholesalePrice: number; patientPrice: number; inStock: boolean; stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' }> }
   | { type: 'SYNC_PATIENT_DIRECTORY'; organisationId: string; patients: CRMPatient[]; enquiries: PendingEnquiry[] }
@@ -1116,6 +1084,7 @@ const initialState: AppState = {
   navigationTarget: null,
   catalogue: initialCachedCatalogue.items,
   catalogueSource: initialCachedCatalogue.items.length ? 'curaleaf' : 'unavailable',
+  catalogueEnvironment: initialCachedCatalogue.environment,
   catalogueLoading: initialCachedCatalogue.items.length ? false : isApiConfigured,
   catalogueError: null,
   catalogueUpdatedAt: initialCachedCatalogue.updatedAt,
@@ -1251,12 +1220,13 @@ function reducer(state: AppState, action: Action): AppState {
           }),
         })),
       }));
-      saveCachedCatalogue(action.catalogue, action.updatedAt, state.currentOrganisationId);
+      saveCachedCatalogue(action.catalogue, action.updatedAt, state.currentOrganisationId, action.environment);
       return {
         ...state,
         orders: enrichedOrders,
         catalogue: action.catalogue,
         catalogueSource: 'curaleaf',
+        catalogueEnvironment: action.environment,
         catalogueLoading: false,
         catalogueError: null,
         catalogueUpdatedAt: action.updatedAt,
@@ -1288,7 +1258,7 @@ function reducer(state: AppState, action: Action): AppState {
           availability: !item.inStock || item.stockStatus === 'out_of_stock' ? 'out' : item.stockStatus === 'low_stock' ? 'low' : 'in',
         } as CatalogueItem : product;
       });
-      saveCachedCatalogue(quotedCatalogue, state.catalogueUpdatedAt, state.currentOrganisationId);
+      saveCachedCatalogue(quotedCatalogue, state.catalogueUpdatedAt, state.currentOrganisationId, state.catalogueEnvironment);
       return {
         ...state,
         catalogue: quotedCatalogue,
@@ -1401,6 +1371,7 @@ function reducer(state: AppState, action: Action): AppState {
         navigationTarget: null,
         catalogue: action.mode === 'live' && state.catalogueSource === 'curaleaf' ? state.catalogue : [],
         catalogueSource: action.mode === 'live' && state.catalogueSource === 'curaleaf' ? 'curaleaf' : 'unavailable',
+        catalogueEnvironment: action.mode === 'live' && state.catalogueSource === 'curaleaf' ? state.catalogueEnvironment : 'test',
         crm: [],
         submissions: [],
         orders: [],
@@ -1425,6 +1396,7 @@ function reducer(state: AppState, action: Action): AppState {
         navigationTarget: null,
         catalogue: state.catalogueSource === 'curaleaf' ? state.catalogue : [],
         catalogueSource: state.catalogueSource === 'curaleaf' ? 'curaleaf' : 'unavailable',
+        catalogueEnvironment: state.catalogueSource === 'curaleaf' ? state.catalogueEnvironment : 'test',
         crm: [],
         submissions: [],
         orders: [],
@@ -2185,7 +2157,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ? getDevCuraleafCatalogue()
         : getCuraleafCatalogue(state.currentOrganisationId, reason === 'forced' ? catalogueRefreshNonce : undefined);
       request.then(catalogue => {
-        if (!cancelled) dispatch({ type: 'SET_CATALOGUE', catalogue: mapCuraleafCatalogue(catalogue), updatedAt: catalogue.fetchedAt });
+        if (cancelled) return;
+        const environment = curaleafCatalogueEstate(catalogue.environment);
+        if (shouldDiscardCatalogueCache(state.catalogueEnvironment, environment) && typeof window !== 'undefined') {
+          window.localStorage.removeItem(`hhh_catalogue_cache_${state.currentOrganisationId}`);
+          window.localStorage.removeItem('hhh_catalogue_cache');
+        }
+        dispatch({
+          type: 'SET_CATALOGUE',
+          catalogue: mapCuraleafCatalogue(catalogue),
+          updatedAt: catalogue.fetchedAt,
+          environment,
+        });
       }).catch(error => {
         if (cancelled) return;
         // A failed background revalidation must not throw away a usable cached

@@ -1,4 +1,5 @@
 import type { CatalogueItem } from '../../context/AppContext';
+import { catalogueStockLabel, catalogueStockStatus } from '../../utils/catalogueStock';
 
 export function basketItemIssue(input: {
   productId: string;
@@ -8,20 +9,20 @@ export function basketItemIssue(input: {
   quoteError: boolean;
 }): { tone: 'blocked' | 'warning'; label: string } | null {
   const { catalogue, unavailableProductIds, productId, cost, quoteError } = input;
-  if (unavailableProductIds.includes(productId) || catalogue?.availability === 'out') {
-    return { tone: 'blocked', label: 'Out of stock' };
+  if (catalogue && catalogueStockStatus(catalogue) === 'discontinued') {
+    return { tone: 'blocked', label: catalogueStockLabel('discontinued') };
   }
-  if (catalogue?.supplierState && catalogue.supplierState !== 'ACTIVE') {
-    return { tone: 'blocked', label: 'Unavailable' };
+  if (unavailableProductIds.includes(productId) || catalogue?.availability === 'out') {
+    return { tone: 'blocked', label: catalogueStockLabel('out') };
   }
   if (cost === null && quoteError) {
     return { tone: 'blocked', label: 'Quote needs attention' };
   }
   if (catalogue?.availability === 'low') {
-    return { tone: 'warning', label: 'Low stock' };
+    return { tone: 'warning', label: catalogueStockLabel('low') };
   }
   if (catalogue?.availability === 'unknown' && cost !== null) {
-    return { tone: 'warning', label: 'Stock check required' };
+    return { tone: 'warning', label: catalogueStockLabel('unknown') };
   }
   return null;
 }

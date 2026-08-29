@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { curaleafMoneyPence, penceToCuraleafMoney } from '../../domain/integrations/curaleaf-money.js';
+import { curaleafCataloguePackIsUnsafe } from '../../domain/curaleaf-catalogue-label.js';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
 import type {
   CuraleafQuoteBankEntryRecord,
@@ -150,8 +151,18 @@ export async function refreshCuraleafQuoteBankDaily(
 ) {
   const catalogue = await fetchCuraleafCatalogue(connection);
   const products = catalogue.products as Array<Record<string, unknown>>;
+  const formulas = (catalogue.formulas ?? []) as Array<Record<string, unknown>>;
+  const formulaById = new Map(
+    formulas
+      .filter(formula => typeof formula.id === 'string')
+      .map(formula => [String(formula.id), formula]),
+  );
   const activePacks = products
-    .filter(product => String(product.state ?? '') === 'ACTIVE' && typeof product.id === 'string')
+    .filter(product => {
+      if (String(product.state ?? '') !== 'ACTIVE' || typeof product.id !== 'string') return false;
+      const formula = typeof product.formulaId === 'string' ? formulaById.get(product.formulaId) : undefined;
+      return !curaleafCataloguePackIsUnsafe(product, formula);
+    })
     .map(product => ({
       packId: String(product.id),
       formulaId: typeof product.formulaId === 'string' ? product.formulaId : null,

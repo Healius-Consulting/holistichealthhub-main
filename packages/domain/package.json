@@ -23,6 +23,10 @@
     "./collection-window": {
       "types": "./collection-window.d.ts",
       "default": "./collection-window.js"
+    },
+    "./curaleaf-catalogue-label": {
+      "types": "./curaleaf-catalogue-label.d.ts",
+      "default": "./curaleaf-catalogue-label.js"
     }
   }
 }

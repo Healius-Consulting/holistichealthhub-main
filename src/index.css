@@ -5296,6 +5296,10 @@ html[data-reduced-motion='true'] .pendulum-text[data-overflow='true'] .pendulum-
 
 .pricing-stock.stock-in i{ background: var(--color-success); }
 
+.pricing-stock.stock-low i{ background: var(--color-warning); }
+
+.pricing-stock.stock-unknown i{ background: var(--text-tertiary); }
+
 .pricing-stock.stock-out i{ background: var(--color-danger); }
 
 .pricing-cost small, .pricing-cost strong{ display: block; }

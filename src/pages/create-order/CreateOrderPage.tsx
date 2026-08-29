@@ -1105,9 +1105,11 @@ export default function CreateOrderPage() {
               {wizard.focusedStep === 3 && selectedRx && rxDispatch ? (
                 <Step3FormularyPanel
                   selectedRx={selectedRx}
-                            catalogue={state.catalogue}
+                  catalogue={state.catalogue}
                   catalogueLoading={state.catalogueLoading}
                   catalogueError={state.catalogueError}
+                  catalogueSource={state.catalogueSource}
+                  catalogueEnvironment={state.catalogueEnvironment}
                   onRetryCatalogue={() => dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' })}
                   editingClinicFormulary={editingClinicFormularyRxId === selectedRx?.id}
                   onToggleEditFormulary={() => setEditingClinicFormularyRxId(selectedRx?.id ?? null)}

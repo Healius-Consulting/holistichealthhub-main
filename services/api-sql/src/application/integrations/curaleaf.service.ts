@@ -1,6 +1,7 @@
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { config } from '../../bootstrap/config.js';
 import { HttpError } from '../../domain/common/errors.js';
+import { stripUnsafeCuraleafCatalogue } from '../../domain/curaleaf-catalogue-label.js';
 import {
   SCAN_PRESCRIPTION_ID_META,
   SCAN_STATUS_META,
@@ -350,13 +351,14 @@ export async function fetchCuraleafCatalogue(connection: IntegrationConnectionRe
   const formulas = await listAll('/v1/formulas/', 'formulas', credential, connection.environment);
   await new Promise(resolve => setTimeout(resolve, 1_050));
   const products = await listAll('/v1/products/', 'products', credential, connection.environment);
+  const safe = stripUnsafeCuraleafCatalogue(formulas.records, products.records);
   return {
     environment: curaleafEnvironmentLabel(connection.environment),
     fetchedAt: new Date().toISOString(),
-    formulas: formulas.records,
-    products: products.records,
-    formulaTotal: formulas.totalRecordCount,
-    productTotal: products.totalRecordCount,
+    formulas: safe.formulas,
+    products: safe.products,
+    formulaTotal: safe.formulas.length,
+    productTotal: safe.products.length,
   };
 }
 

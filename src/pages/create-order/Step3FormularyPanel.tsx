@@ -3,12 +3,16 @@ import ManualPrescriptionEditor from '../../components/ManualPrescriptionEditor'
 import MedicineLabel from '../../components/MedicineLabel';
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
 import type { CatalogueItem, LineItem, Prescription } from '../../context/AppContext';
+import { isCuraleafTestCatalogue } from '../../utils/catalogueEstate';
+import { catalogueStockLabel, catalogueStockPillClass, catalogueStockStatus } from '../../utils/catalogueStock';
 
 type Step3FormularyPanelProps = {
   selectedRx: Prescription | null;
   catalogue: CatalogueItem[];
   catalogueLoading: boolean;
   catalogueError: string | null;
+  catalogueSource?: 'curaleaf' | 'training' | 'unavailable';
+  catalogueEnvironment?: string;
   onRetryCatalogue: () => void;
   editingClinicFormulary: boolean;
   onToggleEditFormulary: () => void;
@@ -27,6 +31,8 @@ export default function Step3FormularyPanel({
   catalogue,
   catalogueLoading,
   catalogueError,
+  catalogueSource,
+  catalogueEnvironment,
   onRetryCatalogue,
   editingClinicFormulary,
   onToggleEditFormulary,
@@ -84,6 +90,13 @@ export default function Step3FormularyPanel({
           )}
         />
       ) : null}
+      {isCuraleafTestCatalogue(catalogueSource, catalogueEnvironment) ? (
+        <ProviderStatusNotice
+          state="waiting"
+          title="Curaleaf test catalogue"
+          detail="Prices and stock are from the sandbox estate."
+        />
+      ) : null}
       {/* An empty catalogue with no error is its own dead end — medicines cannot be
           added and nothing on screen says why — so it gets the same way out. */}
       {!catalogueLoading && !catalogueError && catalogue.length === 0 ? (
@@ -122,14 +135,13 @@ export default function Step3FormularyPanel({
             <div className="rx-item-stack">
               {selectedRx.items.map((item, index) => {
                 const product = catalogue.find(candidate => candidate.id === item.productId);
-                const stockLabel = product?.availability === 'out' ? 'Out of stock' : product?.availability === 'low' ? 'Low stock' : product?.availability === 'in' ? 'In stock' : 'Stock check required';
-                const stockPill = product?.availability === 'out' ? 'pill-red' : product?.availability === 'in' ? 'pill-green' : 'pill-amber';
+                const stock = product ? catalogueStockStatus(product) : 'unknown';
                 return (
                   <article className="rx-prescribed-item" key={item.productId}>
                     <header className="rx-prescribed-item__header">
                       <span className="rx-prescribed-item__index">Medicine {String(index + 1).padStart(2, '0')}</span>
                       <span className="rx-prescribed-item__identity"><MedicineLabel name={item.name} /><small>Matched from the Curaleaf prescription · {item.qty} {item.qty === 1 ? 'pack' : 'packs'} · {item.unitsNeededCount ?? '—'} {product?.unit ?? 'units'}</small></span>
-                      <span className={`pill ${stockPill}`}>{stockLabel}</span>
+                      <span className={`pill ${catalogueStockPillClass(stock)}`}>{catalogueStockLabel(stock)}</span>
                     </header>
                   </article>
                 );
