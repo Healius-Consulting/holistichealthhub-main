@@ -265,6 +265,21 @@ test('an unplaced prescription card has a 3-step placement rail and no dispensin
   assert.equal(rail.placement?.some(entry => entry.key === 'payment'), false);
 });
 
+test('HHH repair audit events appear in the order activity log', () => {
+  const events = buildOrderTimelineEvents(orderWith({
+    auditEvents: [{
+      type: 'multi_rx_identity_repair',
+      label: 'HHH prescription record corrected',
+      detail: 'Prescription 1 restored; no supplier order was sent.',
+      occurredAt: '2026-08-29T06:00:00.000Z',
+      reference: '1DZ-816507F909-P1',
+    }],
+  }));
+  const repaired = events.find(event => event.label === 'HHH prescription record corrected');
+  assert.match(repaired?.detail ?? '', /Prescription 1 restored/);
+  assert.match(repaired?.detail ?? '', /1DZ-816507F909-P1/);
+});
+
 test('a placed sibling shows dispensing steps while an unplaced sibling does not', () => {
   const clinic = { ...unplacedPrescription, id: 201, entryMode: 'clinic' as const, clinicScanId: 'scan-1', status: 'awaiting-approval' as const };
   const manualPlaced = { ...tenPackPrescription, id: 202, entryMode: 'manual' as const };
@@ -283,4 +298,3 @@ test('a placed sibling shows dispensing steps while an unplaced sibling does not
   const chrome = `${pending.placement?.map(step => `${step.label} ${step.detail}`).join(' ')} ${placed.dispensing?.map(step => `${step.label} ${step.detail}`).join(' ')}`;
   assert.doesNotMatch(chrome, /RX-|serial|file-2|S2/i);
 });
-

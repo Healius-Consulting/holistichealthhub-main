@@ -7911,6 +7911,7 @@ html.modal-open .page-container{ overflow: hidden; }
   border-radius: 14px;
   background: var(--bg-app);
   box-shadow: 0 24px 60px rgb(2 6 12 / 28%);
+  overflow: hidden;
 }
 
 .crm-dialog:focus{ outline: none; }
@@ -7923,12 +7924,13 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 
 .crm-dialog__body{
-  padding: 10px;
+  padding: 0;
 }
 
 .crm-dialog .order-crm-record{
   border: 0;
-  background: transparent;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--order-accent) 4%, var(--bg-surface));
 }
 
 /* Keep the stage pill clear of the floating close button. */
@@ -13410,7 +13412,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   padding: 20px 22px 18px;
   border-bottom: 1px solid color-mix(in srgb, var(--order-accent) 28%, var(--border));
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--order-accent) 10%, var(--bg-surface)), var(--bg-surface));
+    linear-gradient(180deg, color-mix(in srgb, var(--order-accent) 10%, var(--bg-surface)), color-mix(in srgb, var(--order-accent) 4%, var(--bg-surface)));
 }
 .order-crm-record--danger .order-journey-rail,
 .order-crm-record--danger .order-journey-rail--premium{
@@ -14529,7 +14531,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-resolution--complete > header{ background: color-mix(in srgb, var(--color-success) 6%, var(--bg-surface)); }
 
 .order-crm-record__body{ display: block; }
-.order-crm-main{ min-width: 0; padding: 18px; background: color-mix(in srgb, var(--order-accent) 4%, var(--bg-surface)); }
+.order-crm-main{ min-width: 0; padding: 18px; background: transparent; }
 .order-crm-main--cancelled{
   background: color-mix(in srgb, var(--color-danger) 4%, var(--bg-surface));
 }
@@ -14631,20 +14633,9 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   color: var(--text-primary);
 }
 .order-details-drawer__content {
-  padding: 6px 18px 16px;
+  padding: 6px 18px 14px;
   border-top: 1px solid var(--border);
   background: var(--bg-surface);
-}
-.order-details-pair {
-  display: grid;
-  grid-template-columns: 1fr;
-  border-bottom: 1px solid var(--border);
-}
-.order-details-pair .order-details-block {
-  border-bottom: 0;
-}
-.order-details-pair .order-details-block:first-child {
-  border-bottom: 1px solid var(--border);
 }
 .order-details-block {
   padding: 14px 0 16px;
@@ -14662,11 +14653,40 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   letter-spacing: .05em;
   text-transform: uppercase;
 }
-.order-details-group {
-  margin: 0 0 6px;
+.order-details-prescription-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.order-details-prescription-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-elevated) 45%, var(--bg-surface));
+}
+.order-details-prescription-card h4 {
+  margin: 0 0 10px;
   color: var(--tenant-primary-strong);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 700;
+}
+.order-details-prescription-card .order-details-kv > div {
+  align-items: flex-start;
+  gap: 8px;
+}
+.order-details-prescription-card .order-details-kv dd {
+  max-width: 72%;
+}
+.order-details-prescription-card .order-details-value,
+.order-details-prescription-card .order-ledger__value {
+  min-width: 0;
+}
+.order-details-prescription-card .order-ledger__value {
+  overflow-wrap: anywhere;
+}
+.order-details-prescription-card .order-ledger__copy-btn {
+  flex: 0 0 auto;
 }
 .order-details-kv {
   margin: 0;
@@ -14751,30 +14771,37 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-weight: 650;
 }
 .order-details-timeline {
-  padding-inline: 2px;
+  margin: 6px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  list-style: none;
+  overflow: hidden;
 }
 .order-details-timeline li {
-  min-height: 0;
-  padding-bottom: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
 }
 .order-details-timeline li:last-child {
-  padding-bottom: 0;
-}
-.order-details-timeline li > span::after {
-  height: calc(100% + 3px);
+  border-bottom: 0;
 }
 .order-details-timeline strong {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 10px;
+  display: block;
   font-size: 12px;
 }
 .order-details-timeline small {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
   font-size: 11px;
 }
+.order-details-timeline__meta { text-align: right; }
 .order-details-timeline time {
-  display: inline;
+  display: block;
   margin: 0;
   color: var(--text-tertiary);
   font-size: 11px;
@@ -14782,16 +14809,11 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   text-transform: none;
   letter-spacing: 0;
 }
-@media (min-width: 900px) {
-  .order-details-pair {
-    grid-template-columns: 1fr 1fr;
-    gap: 0 32px;
-  }
-  .order-details-pair .order-details-block:first-child {
-    border-bottom: 0;
-  }
+@media (max-width: 899px) {
+  .order-details-prescription-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 639px) {
+  .order-details-prescription-grid { grid-template-columns: 1fr; }
   .order-details-kv > div,
   .order-details-consignments li {
     flex-direction: column;
@@ -14803,6 +14825,9 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
     text-align: left;
     justify-content: flex-start;
   }
+  .order-details-prescription-card .order-details-kv dd { max-width: 100%; }
+  .order-details-timeline li { grid-template-columns: 1fr; gap: 4px; }
+  .order-details-timeline__meta { text-align: left; }
 }
 
 .order-ledger__value {

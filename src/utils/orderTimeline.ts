@@ -194,6 +194,13 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       date: order.curaleafApprovedAt,
     });
   }
+  for (const audit of order.auditEvents ?? []) {
+    events.push({
+      label: audit.label,
+      detail: audit.reference ? `${audit.detail} · ${audit.reference}` : audit.detail,
+      date: audit.occurredAt,
+    });
+  }
   if (order.cancellation) {
     events.push({
       label: 'Cancellation requested',

@@ -121,4 +121,17 @@ describe('stampCuraleafPrescriptionOnSnapshot', () => {
       3: { prescriptionId: 'curaleaf-rx-3', purchaseOrderId: 'po-3', customerReference: 'ORD-MTDQOYO5-204A222B97-r2' },
     });
   });
+
+  it('refuses to guess Prescription 1 when a multi-prescription update has no key', () => {
+    assert.throws(() => stampCuraleafPrescriptionOnSnapshot({
+      prescriptions: [
+        { id: '1', serialNumber: 'PT1', items: [{ productId: 'same-pack' }] },
+        { id: '2', serialNumber: 'PT2', items: [{ productId: 'different-pack' }] },
+        { id: '3', serialNumber: 'PT3', items: [{ productId: 'same-pack' }] },
+      ],
+    }, {
+      prescriptionId: 'curaleaf-rx-3',
+      purchaseOrder: { id: 'po-3' },
+    }), /explicit prescription key/i);
+  });
 });

@@ -47,7 +47,6 @@ import {
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalCuraleafCancellation, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
 import { compactPatientName } from '../utils/patientName';
-import { formatPatientDob } from '../utils/patientDob';
 import {
   orderAwaitingSupplierShipmentProductNames,
   orderCancellationResolution,
@@ -1512,19 +1511,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
     return cat?.name ?? item.name ?? 'Curaleaf medication';
   };
 
-  const rawPatientAddress = patient?.address ?? '';
-  const patientAddressParts = rawPatientAddress.split(',').map(s => s.trim()).filter(Boolean);
-  const patientPostcode = patient?.postcode
-    || (patientAddressParts.length > 0 && /^[A-Z0-9]{2,4}\s?[A-Z0-9]{3}$/i.test(patientAddressParts[patientAddressParts.length - 1]) ? patientAddressParts[patientAddressParts.length - 1] : null)
-    || (rawPatientAddress.match(/[A-Z]{1,2}[0-9][A-Z0-9]?\s?[0-9][A-Z]{2}/i)?.[0])
-    || (patientAddressParts.length > 1 ? patientAddressParts[patientAddressParts.length - 1] : null);
-
-  const cleanStreetAddress = rawPatientAddress
-    ? (patientPostcode && rawPatientAddress.endsWith(patientPostcode)
-        ? rawPatientAddress.slice(0, -patientPostcode.length).replace(/,\s*$/, '').trim()
-        : rawPatientAddress)
-    : 'Not recorded';
-
   return (
     <article className={`order-crm-record order-crm-record--${meta.tone}`}>
       <header className="order-crm-record__header">
@@ -1674,9 +1660,6 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
 
           <OrderDetailsDrawer
             order={order}
-            patient={patient}
-            cleanStreetAddress={cleanStreetAddress}
-            patientPostcode={patientPostcode}
             pharmacyName={pharmacy?.tradingName || pharmacy?.name || null}
             showOrderDetails={showOrderDetails}
             onToggle={() => setShowOrderDetails(prev => !prev)}
@@ -2881,11 +2864,8 @@ function LedgerValue({ children, mono = false, muted = false, title }: {
   );
 }
 
-function OrderDetailsDrawer({ order, patient, cleanStreetAddress, patientPostcode, pharmacyName, showOrderDetails, onToggle, copiedDetailKey, onCopy, resolveProductName }: {
+function OrderDetailsDrawer({ order, pharmacyName, showOrderDetails, onToggle, copiedDetailKey, onCopy, resolveProductName }: {
   order: PatientOrder;
-  patient: CRMPatient | null | undefined;
-  cleanStreetAddress: string;
-  patientPostcode: string | null;
   pharmacyName: string | null;
   showOrderDetails: boolean;
   onToggle: () => void;
@@ -2913,9 +2893,9 @@ function OrderDetailsDrawer({ order, patient, cleanStreetAddress, patientPostcod
 
       {showOrderDetails ? (
         <div id="order-details-drawer-content" className="order-details-drawer__content">
-          <div className="order-details-pair">
-            <section className="order-details-block">
-              <h3>Curaleaf</h3>
+          <section className="order-details-block order-details-block--prescriptions">
+            <h3>Curaleaf prescriptions</h3>
+            <div className="order-details-prescription-grid">
               {order.prescriptions.map((rx, rxIdx) => {
                 const registration = rx.prescriberGmcNumber
                   ? `GMC ${rx.prescriberGmcNumber}`
@@ -2923,8 +2903,8 @@ function OrderDetailsDrawer({ order, patient, cleanStreetAddress, patientPostcod
                     ? `GPhC ${rx.prescriberGphcNumber}`
                     : null;
                 return (
-                  <div key={rx.id}>
-                    {order.prescriptions.length > 1 ? <p className="order-details-group">{`Prescription ${rxIdx + 1}`}</p> : null}
+                  <article className="order-details-prescription-card" key={rx.id}>
+                    <h4>{`Prescription ${rxIdx + 1}`}</h4>
                     <dl className="order-details-kv">
                       <div>
                         <dt>PO</dt>
@@ -2945,7 +2925,10 @@ function OrderDetailsDrawer({ order, patient, cleanStreetAddress, patientPostcod
                       {rx.curaleafPrescriptionId ? (
                         <div>
                           <dt>Rx ID</dt>
-                          <dd><LedgerValue mono>{rx.curaleafPrescriptionId}</LedgerValue></dd>
+                          <dd className="order-details-value">
+                            <LedgerValue mono>{rx.curaleafPrescriptionId}</LedgerValue>
+                            <LedgerCopyButton detailKey={`rx_${rx.id}`} copyKey={`rx_${rx.id}`} value={rx.curaleafPrescriptionId} label={`Prescription ${rxIdx + 1} Rx ID`} copiedDetailKey={copiedDetailKey} onCopy={onCopy} />
+                          </dd>
                         </div>
                       ) : null}
                       {rx.prescriber || registration ? (
@@ -2955,44 +2938,11 @@ function OrderDetailsDrawer({ order, patient, cleanStreetAddress, patientPostcod
                         </div>
                       ) : null}
                     </dl>
-                  </div>
+                  </article>
                 );
               })}
-            </section>
-
-            <section className="order-details-block">
-              <h3>Patient</h3>
-              <dl className="order-details-kv">
-                {patient?.email ? (
-                  <div>
-                    <dt>Email</dt>
-                    <dd><LedgerValue>{patient.email}</LedgerValue></dd>
-                  </div>
-                ) : null}
-                {patient?.mobile ? (
-                  <div>
-                    <dt>Mobile</dt>
-                    <dd><LedgerValue>{patient.mobile}</LedgerValue></dd>
-                  </div>
-                ) : null}
-                {patient?.dob ? (
-                  <div>
-                    <dt>DOB</dt>
-                    <dd><LedgerValue>{formatPatientDob(patient.dob)}</LedgerValue></dd>
-                  </div>
-                ) : null}
-                {cleanStreetAddress || patientPostcode ? (
-                  <div>
-                    <dt>Address</dt>
-                    <dd><LedgerValue>{[cleanStreetAddress, patientPostcode].filter(Boolean).join(', ')}</LedgerValue></dd>
-                  </div>
-                ) : null}
-              </dl>
-              {!patient?.email && !patient?.mobile && !patient?.dob && !cleanStreetAddress && !patientPostcode ? (
-                <p className="order-details-empty">No contact details on this record.</p>
-              ) : null}
-            </section>
-          </div>
+            </div>
+          </section>
 
           {consignments.length ? (
             <section className="order-details-block">
@@ -3078,21 +3028,16 @@ function OrderTimeline({ order }: { order: PatientOrder & { handoutAt?: Date | s
     return <p className="order-ledger__empty">No activity recorded yet.</p>;
   }
   return (
-    <ol className="order-crm-timeline order-details-timeline">
+    <ol className="order-details-timeline">
       {events.map((event, index) => (
         <li key={`${event.label}-${index}`}>
-          <span aria-hidden="true" />
-          <div>
-            <strong>
-              {event.label}
-              {event.date ? (
-                <>
-                  {' '}
-                  <time dateTime={new Date(event.date).toISOString()}>{formatDate(event.date, true)}</time>
-                </>
-              ) : null}
-            </strong>
-            {event.detail ? <small>{event.detail}</small> : null}
+          <div className="order-details-timeline__event">
+            <strong>{event.label}</strong>
+            {event.detail && !event.detail.startsWith('PO ') ? <small>{event.detail}</small> : null}
+          </div>
+          <div className="order-details-timeline__meta">
+            {event.date ? <time dateTime={new Date(event.date).toISOString()}>{formatDate(event.date, true)}</time> : null}
+            {event.detail?.startsWith('PO ') ? <small>{event.detail}</small> : null}
           </div>
         </li>
       ))}

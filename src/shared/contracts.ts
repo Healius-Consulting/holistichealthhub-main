@@ -660,6 +660,7 @@ export interface PortalOrderRecord {
   cancellation?: OrderCancellationState;
   curaleafCancellation?: CuraleafCancellationState;
   curaleafApprovedAt?: string;
+  auditEvents?: Array<{ type: string; label: string; detail: string; occurredAt: string; reference?: string | null }>;
   status?: 'open' | 'archived' | 'rejected' | string;
   isExpired?: boolean;
   archivedAt?: string;

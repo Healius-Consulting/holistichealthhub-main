@@ -218,6 +218,7 @@ export interface PatientOrder {
   };
   prescriptions: Prescription[];
   curaleafApprovedAt?: Date | string | null;
+  auditEvents?: PortalOrderRecord['auditEvents'];
   refund?: OrderRefundState;
   cancellation?: OrderCancellationState;
   curaleafCancellation?: CuraleafCancellationState;
@@ -1033,6 +1034,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
     },
     prescriptions,
     curaleafApprovedAt: record.curaleafApprovedAt ?? null,
+    auditEvents: record.auditEvents,
     refund: record.refund,
     cancellation: record.cancellation,
     curaleafCancellation: record.curaleafCancellation,

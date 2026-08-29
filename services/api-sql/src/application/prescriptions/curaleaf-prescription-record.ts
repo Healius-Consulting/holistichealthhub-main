@@ -109,6 +109,9 @@ export function stampCuraleafPrescriptionOnSnapshot(
       : input.now ?? new Date().toISOString())
     : null;
   const rxList = snapshotRxList(root);
+  if (rxList.length > 1 && !input.rxKey?.trim()) {
+    throw new Error('Multi-prescription Curaleaf identity updates require an explicit prescription key.');
+  }
   const rxKey = input.rxKey?.trim() || (rxList[0] ? snapshotRxKey(rxList[0], 0) : 'rx-0');
   const prescriptions = rxList.length > 0 ? rxList.map((rx, index) => {
     const key = snapshotRxKey(rx, index);

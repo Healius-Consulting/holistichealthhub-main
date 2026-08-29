@@ -33,6 +33,7 @@
     "build:api": "npm run build --workspace @hhh/api",
     "repair:legacy-qr": "node scripts/register-legacy-referral-aliases.mjs",
     "repair:curaleaf-false-rejection": "tsx scripts/repair-curaleaf-false-rejection.ts",
+    "repair:multi-rx-placement": "tsx scripts/repair-multi-rx-placement.ts",
     "migrate:primary-allocation-holding": "node scripts/migrate-primary-allocation-holding.mjs",
     "migrate:supplier-shipment-rows": "tsx scripts/backfill-supplier-shipment-rows.ts",
     "build:all": "npm run build --workspace @hhh/ui && npm run build:vercel:public && npm run build:vercel:portal && npm run build:api",

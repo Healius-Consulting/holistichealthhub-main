@@ -824,6 +824,9 @@ export function toPortalOrder(order: PortalOrderSource) {
     paymentTransactionReference: order.orderNumber,
     paidAt: order.paidAt,
     curaleafApprovedAt: po?.createdAt || po?.issuedDate || undefined,
+    auditEvents: Array.isArray(snapshot?.auditEvents)
+      ? snapshot.auditEvents.filter((event: unknown) => event && typeof event === 'object')
+      : undefined,
     autoPlacementEnabled: true,
     curaleaf,
     curaleafSubOrders: snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
