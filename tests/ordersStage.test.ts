@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderPaymentAllowsManualCancellation, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, unpaidCancellationConfirmation, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
+import { hasDispatchedRemainder, orderAwaitingSupplierShipmentProductNames, orderAwaitingCuraleafCancel, orderCancellationResolution, orderFulfilmentHeadline, orderHasInTransitPacks, orderHasPartialCollection, orderHasPartialCuraleafDispense, orderHasPartialPharmacyReceipt, orderHasUncollectedReceivedPacks, orderIsSplitFulfilment, orderPaymentAllowsManualCancellation, orderRequiresCuraleafCancel, orderSplitPackSnapshot, orderStage, prescriptionStatusChipTone, prescriptionStatusLabel, stageMatchesFilter, unpaidCancellationConfirmation, type OrderStage, type StageFilter } from '../src/utils/orderStage.ts';
 import type { PatientOrder } from '../src/context/AppContext.tsx';
 
 const taxonomy: Array<[OrderStage, StageFilter]> = [
@@ -100,6 +100,10 @@ test('mixed ready and in-flight prescriptions do not classify the order as ready
     payment: { status: 'paid' },
     prescriptions: [
       {
+        status: 'processing',
+        fulfilmentLines: [{ productId: 'p0', ordered: 1, shipped: 0, received: 0, remaining: 1, collected: 0, requested: 1, sent: null, supplierReportedOrdered: 1, allocated: 0, returned: 0, backordered: false, quantityMismatch: false }],
+      },
+      {
         status: 'ready',
         fulfilmentLines: [{ productId: 'p1', ordered: 2, shipped: 2, received: 2, remaining: 0, collected: 0, requested: 2, sent: null, supplierReportedOrdered: 2, allocated: 2, returned: 0, backordered: false, quantityMismatch: false }],
       },
@@ -110,6 +114,38 @@ test('mixed ready and in-flight prescriptions do not classify the order as ready
     ],
   } as PatientOrder;
   assert.equal(orderStage(order).stage, 'dispatched');
+  assert.deepEqual(orderFulfilmentHeadline(order), {
+    label: 'Split fulfilment',
+    mixedPrescriptions: true,
+    prescriptionSummaries: ['Prescription 1: Being prepared', 'Prescription 2: Ready', 'Prescription 3: In transit'],
+  });
+});
+
+test('order header uses one stable prescription stage and reserves split delivery for pack consignments', () => {
+  const uniform = {
+    date: new Date(),
+    payment: { status: 'paid' },
+    prescriptions: [{ status: 'processing' }, { status: 'approved' }, { status: 'processing' }],
+  } as PatientOrder;
+  assert.equal(orderFulfilmentHeadline(uniform)?.label, 'Curaleaf Dispensing');
+
+  const splitDelivery = {
+    date: new Date(),
+    payment: { status: 'paid' },
+    prescriptions: [{
+      status: 'dispatched',
+      dispatchStatus: 'partial',
+      fulfilmentLines: [{ productId: 'p1', ordered: 3, shipped: 1, received: 0, remaining: 2, collected: 0, requested: 3, sent: null, supplierReportedOrdered: 3, allocated: 1, returned: 0, backordered: true, quantityMismatch: false }],
+    }],
+  } as PatientOrder;
+  assert.equal(orderFulfilmentHeadline(splitDelivery)?.label, 'Split delivery');
+
+  const complete = {
+    date: new Date(),
+    payment: { status: 'paid' },
+    prescriptions: [{ status: 'collected' }, { status: 'collected' }],
+  } as PatientOrder;
+  assert.equal(orderFulfilmentHeadline(complete)?.label, 'Collected');
 });
 
 test('mixed ready and unplaced prescriptions do not classify the order as ready', () => {

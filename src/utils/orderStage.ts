@@ -209,6 +209,57 @@ export function prescriptionStatusLabel(prescription: OrderPrescription) {
   } as const)[prescription.status];
 }
 
+export type OrderFulfilmentHeadline = {
+  label: string;
+  prescriptionSummaries: string[];
+  mixedPrescriptions: boolean;
+};
+
+/**
+ * Stable, pharmacy-facing status for the order-record header. Pack fractions are
+ * deliberately excluded: the header sits beside a prescription count, so a
+ * fraction there can otherwise be mistaken for prescriptions completed.
+ */
+export function orderFulfilmentHeadline(order: PatientOrder): OrderFulfilmentHeadline | null {
+  const prescriptions = order.prescriptions
+    .map((prescription, index) => ({ prescription, number: index + 1 }))
+    .filter(({ prescription }) => !prescriptionIsCancelled(prescription));
+  if (!prescriptions.length) return null;
+
+  const displayLabel = (prescription: OrderPrescription) => {
+    const label = prescriptionStatusLabel(prescription);
+    return ({
+      'Part In Transit': 'In transit',
+      'In Transit': 'In transit',
+      'Part Checked In': 'Checked in',
+      'Checked In': 'Checked in',
+      'Ready to Collect': 'Ready',
+    } as Record<string, string>)[label] ?? label;
+  };
+
+  const summaryLabel = (prescription: OrderPrescription) => {
+    const label = displayLabel(prescription);
+    return label === 'Curaleaf Dispensing' ? 'Being prepared' : label;
+  };
+
+  const prescriptionSummaries = prescriptions.map(({ prescription, number }) =>
+    `Prescription ${number}: ${summaryLabel(prescription)}`,
+  );
+  const labels = prescriptions.map(({ prescription }) => displayLabel(prescription));
+  const mixedPrescriptions = new Set(labels).size > 1;
+
+  if (labels.every(label => label === 'Collected')) {
+    return { label: 'Collected', prescriptionSummaries, mixedPrescriptions: false };
+  }
+  if (mixedPrescriptions) {
+    return { label: 'Split fulfilment', prescriptionSummaries, mixedPrescriptions: true };
+  }
+  if (orderIsSplitFulfilment(order)) {
+    return { label: 'Split delivery', prescriptionSummaries, mixedPrescriptions: false };
+  }
+  return { label: labels[0]!, prescriptionSummaries, mixedPrescriptions: false };
+}
+
 export function prescriptionStatusChipTone(prescription: OrderPrescription) {
   if (prescriptionIsCancelled(prescription)) return 'cancelled';
   const totals = prescriptionPackTotals(prescription);

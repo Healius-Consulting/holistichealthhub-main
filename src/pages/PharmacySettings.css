@@ -272,10 +272,24 @@
 
 /* ---- Payment route ---- */
 
+.pharmacy-settings-section--payment{
+  padding: 18px;
+}
+
+.pharmacy-settings-section--payment > header{
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.pharmacy-settings-section--payment .pharmacy-settings-section__lead{
+  max-width: 650px;
+  margin-bottom: 16px;
+}
+
 .pharmacy-settings-route{
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
 }
 
 .pharmacy-settings-toggle{
@@ -300,20 +314,22 @@
 .pharmacy-settings-route button{
   display: grid;
   grid-template-columns: minmax(0, 1fr) 18px;
+  min-height: 82px;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 14px 15px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 11px;
   color: var(--text-secondary);
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
   cursor: pointer;
   font: inherit;
   text-align: left;
 }
 
 .pharmacy-settings-route button:hover:not(:disabled){
-  border-color: var(--border-strong, var(--border));
+  border-color: color-mix(in srgb, var(--tenant-primary) 30%, var(--border));
+  background: var(--bg-surface);
 }
 
 .pharmacy-settings-route button:focus-visible{
@@ -327,8 +343,9 @@
 }
 
 .pharmacy-settings-route button[aria-checked='true']{
-  border-color: color-mix(in srgb, var(--tenant-primary) 45%, var(--border));
-  background: var(--tenant-primary-soft);
+  border-color: color-mix(in srgb, var(--tenant-primary) 58%, var(--border));
+  background: color-mix(in srgb, var(--tenant-primary-soft) 70%, var(--bg-surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tenant-primary) 12%, transparent);
 }
 
 .pharmacy-settings-route strong{
@@ -343,7 +360,7 @@
   margin-top: 2px;
   color: var(--text-tertiary);
   font-size: 11.5px;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 
 .pharmacy-settings-route svg{ color: var(--tenant-primary-strong); }
@@ -352,10 +369,11 @@
 
 .pharmacy-settings-connection{
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 11px 13px;
+  grid-template-columns: minmax(90px, .7fr) minmax(150px, 1fr) auto;
+  align-items: center;
+  gap: 12px 20px;
+  margin: 12px 0 0;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-elevated);

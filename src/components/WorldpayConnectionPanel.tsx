@@ -11,6 +11,11 @@ import './WorldpayConnectionPanel.css';
 
 const EMPTY_FORM = { username: '', password: '', entityId: '' };
 
+function worldpayErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message.trim() : '';
+  return message && !/^request failed with status \d+/i.test(message) ? message : fallback;
+}
+
 export default function WorldpayConnectionPanel({
   organisationId,
   onConnected,
@@ -66,7 +71,7 @@ export default function WorldpayConnectionPanel({
         );
       }
     } catch (refreshError) {
-      const message = refreshError instanceof Error ? refreshError.message : 'Worldpay connection status could not be loaded.';
+      const message = worldpayErrorMessage(refreshError, 'Worldpay connection status could not be loaded. Try refreshing.');
       setError(message);
       if (announce) onNotifyRef.current?.(message, 'error');
     } finally {
@@ -92,7 +97,7 @@ export default function WorldpayConnectionPanel({
         entityId: form.entityId.trim(),
       }));
     } catch (connectError) {
-      setError(connectError instanceof Error ? connectError.message : 'Worldpay could not verify these merchant details.');
+      setError(worldpayErrorMessage(connectError, 'Worldpay could not verify these merchant details. Check them and try again.'));
     } finally {
       setBusy(false);
     }
@@ -106,21 +111,21 @@ export default function WorldpayConnectionPanel({
     try {
       applyStatus(await removeWorldpayConnection(organisationId));
     } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : 'The Worldpay connection could not be removed.');
+      setError(worldpayErrorMessage(removeError, 'The Worldpay connection could not be removed. Try again.'));
     } finally {
       setBusy(false);
     }
   };
 
-  const showCredentialForm = !status?.connected || rotating;
+  const showCredentialForm = status !== null && (!status.connected || rotating);
 
   return (
-    <section className="worldpay-connect-panel">
+    <section className="worldpay-connect-panel" aria-busy={status === null || busy}>
       <header>
         <span className="worldpay-connect-panel__icon"><KeyRound size={17} /></span>
         <span>
-          <strong>{status?.connected ? 'Worldpay merchant connected' : status?.configured ? 'Worldpay verification required' : 'Connect this pharmacy’s merchant account'}</strong>
-          <small>Your Worldpay details are verified securely and are never displayed again after saving.</small>
+          <strong>{status?.connected ? 'Worldpay merchant connected' : status?.configured ? 'Worldpay verification required' : status === null ? 'Checking Worldpay connection…' : 'Connect this pharmacy’s merchant account'}</strong>
+          <small>{status === null ? 'Reading this pharmacy’s saved connection status.' : 'Worldpay details are verified securely and are never displayed again after saving.'}</small>
         </span>
         {status?.connected ? <span className="pill pill-green"><CheckCircle2 size={11} /> Connected</span> : null}
       </header>
@@ -146,11 +151,11 @@ export default function WorldpayConnectionPanel({
             <Unplug size={13} /> Remove connection
           </button>
         </div>
-      ) : status?.configured ? (
+      ) : status?.configured || (status === null && error) ? (
         <button type="button" className="btn btn-sm" disabled={busy} onClick={() => void refresh(true)}><RefreshCw size={13} className={busy ? 'spin' : ''} /> Refresh connection status</button>
       ) : null}
 
-      {error ? <p className="worldpay-connect-panel__error">{error}</p> : null}
+      {error ? <p className="worldpay-connect-panel__error" role="alert">{error}</p> : null}
     </section>
   );
 }

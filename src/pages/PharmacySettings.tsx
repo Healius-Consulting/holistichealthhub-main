@@ -419,7 +419,7 @@ export default function PharmacySettings() {
             )}
           </section>
 
-          <section className="pharmacy-settings-section">
+          <section className="pharmacy-settings-section pharmacy-settings-section--payment">
             <header>
               <h3><CreditCard size={16} aria-hidden="true" /> Payment route</h3>
               <span className={`pill ${organisation.defaultPaymentRoute === 'worldpay' ? 'pill-green' : 'pill-neutral'}`}>

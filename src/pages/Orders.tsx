@@ -55,6 +55,7 @@ import {
   orderHasPartialCuraleafDispense,
   orderHasUncollectedReceivedPacks,
   orderIsSplitFulfilment,
+  orderFulfilmentHeadline,
   orderPaymentAllowsManualCancellation,
   orderRequiresCuraleafCancel,
   orderAwaitingCuraleafCancel,
@@ -1470,6 +1471,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const { order, patient, stage } = record;
   const pharmacy = state.organisations.find(organisation => organisation.id === state.currentOrganisationId);
   const meta = recordStageMeta(record);
+  const fulfilmentHeadline = orderFulfilmentHeadline(order);
   const Icon = meta.icon;
   const cancellationResolution = orderCancellationResolution(order);
   const typedResolutionClosed = ['REPLACED', 'REFUNDED', 'SPLIT_RESOLVED'].includes(order.resolution?.status ?? '');
@@ -1488,6 +1490,15 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
   const canFullHandout = stage === 'ready' && !supplyIncomplete && orderUncollectedReadyPacks(order) > 0;
   const reviewOpen = quoteReviewIsOpen(order) && !supplierCancelledAfterCall(order);
   const showSupplierCancel = order.payment.status === 'paid' && supplierCancelledAfterCall(order) && !cancellationClosed;
+  const useFulfilmentHeadline = placedCount > 0 && stage !== 'awaiting-payment'
+    && cancellationResolution === 'none' && !quoteReviewIsOpen(order)
+    && !['rejected', 'archived', 'cancelled'].includes(stage);
+  const headerStatusLabel = useFulfilmentHeadline && fulfilmentHeadline
+    ? fulfilmentHeadline.label
+    : meta.label;
+  const headerStatusTone = headerStatusLabel === 'Split fulfilment' || headerStatusLabel === 'Split delivery'
+    ? 'partial'
+    : meta.tone;
 
   const openPatientRecord = () => {
     if (!order.patientId) return;
@@ -1527,7 +1538,7 @@ function OrderDetail({ record, now, placementConfirmation, handoutBusy, onOpenHa
               </span>
             </div>
           </div>
-          <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
+          <span className={`order-stage-pill order-tone--${headerStatusTone}`}>{headerStatusLabel}</span>
         </div>
         <div className="order-crm-record__toolbar">
           <div className="order-crm-record__value">
@@ -1732,11 +1743,11 @@ function PrePlacementDeliveryGuidance({ now }: { now: Date }) {
 
 function splitPackStatItems(snapshot: ReturnType<typeof orderSplitPackSnapshot>) {
   return [
-    { value: snapshot.collected, label: 'Collected' },
-    { value: snapshot.atPharmacy, label: 'Checked In' },
-    { value: snapshot.inTransit, label: 'In Transit' },
-    { value: snapshot.dispensedAtCuraleaf, label: 'Dispensed at Curaleaf' },
-    { value: snapshot.awaitingDispense, label: 'Awaiting Dispense' },
+    { value: snapshot.collected, label: 'packs collected' },
+    { value: snapshot.atPharmacy, label: 'packs checked in' },
+    { value: snapshot.inTransit, label: 'packs in transit' },
+    { value: snapshot.dispensedAtCuraleaf, label: 'packs dispensed at Curaleaf' },
+    { value: snapshot.awaitingDispense, label: 'packs awaiting dispense' },
   ].filter(stat => stat.value > 0);
 }
 
@@ -1747,6 +1758,7 @@ function SplitOrderDeliveryBanner({
   title,
   desc,
   stats,
+  showSingleStat = false,
 }: {
   tone: 'partial' | 'overdue' | 'ready';
   icon: LucideIcon;
@@ -1754,9 +1766,10 @@ function SplitOrderDeliveryBanner({
   title: string;
   desc: string;
   stats: Array<{ value: number; label: string }>;
+  showSingleStat?: boolean;
 }) {
   const visibleStats = stats.filter(stat => stat.value > 0);
-  const showStats = visibleStats.length > 1;
+  const showStats = visibleStats.length > (showSingleStat ? 0 : 1);
   return (
     <div className={`order-delivery-banner order-delivery-banner--${tone}`} role="status">
       <div className="order-delivery-banner__main">
@@ -1796,6 +1809,21 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
   const hasUncollected = orderHasUncollectedReceivedPacks(order);
   const hasPartialCollection = orderHasPartialCollection(order);
   const isSplit = orderIsSplitFulfilment(order);
+  const fulfilmentHeadline = orderFulfilmentHeadline(order);
+
+  if (fulfilmentHeadline?.mixedPrescriptions) {
+    return (
+      <SplitOrderDeliveryBanner
+        tone="partial"
+        icon={Layers2}
+        eyebrow="Split fulfilment"
+        title="Prescriptions progressing separately"
+        desc={fulfilmentHeadline.prescriptionSummaries.join(' · ')}
+        stats={splitStats}
+        showSingleStat
+      />
+    );
+  }
 
   if (hasUncollected) {
     const packsWaiting = splitSnapshot.atPharmacy;
