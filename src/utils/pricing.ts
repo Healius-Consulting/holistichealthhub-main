@@ -70,6 +70,15 @@ export function optionalChargeVisible(pence: number | null | undefined) {
   return safePence(pence) > 0;
 }
 
+/**
+ * Staff-facing pounds. Unknown values must not throw — a missing quote used to
+ * take down the whole pharmacy workspace via `null.toFixed()`.
+ */
+export function formatPounds(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  return `£${value.toFixed(2)}`;
+}
+
 type QuotePatientLine = {
   packId?: string;
   patientPackPrice?: string;

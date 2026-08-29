@@ -327,7 +327,6 @@ export default function CreateOrderPage() {
     ? activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({ ...item, rxId: rx.id })))
     : [];
   const draftBasketCount = draftBasketItems.length;
-  const draftBasketTotal = activeOrder ? orderRevenue(activeOrder) : 0;
   // Curaleaf's own tax on the pharmacy's purchase is a supplier-side figure and is
   // deliberately not surfaced to staff, so only wholesale and delivery come through.
   const draftBasketCosts = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
@@ -340,7 +339,7 @@ export default function CreateOrderPage() {
     ? null
     : {
       medicine: quotedMedicinePence / 100,
-      total: quotedMedicinePence / 100 + activeOrder.dispensingFee + activeOrder.pharmacyDelivery,
+      total: quotedMedicinePence / 100 + (activeOrder.dispensingFee || 0) + (activeOrder.pharmacyDelivery || 0),
     };
   const draftBasketIssues = draftBasketItems.map(item => basketItemIssue({
     productId: item.productId,
@@ -1187,7 +1186,7 @@ export default function CreateOrderPage() {
           onToggle={() => setMobileSheetOpen(open => !open)}
           progress={wizard.progress}
           draftBasketCount={draftBasketCount}
-          draftBasketTotal={quotedPatientTotals?.total ?? draftBasketTotal}
+          draftBasketTotal={quotedPatientTotals?.total ?? null}
           draftBasketBlockedCount={draftBasketBlockedCount}
           draftBasketWarningCount={draftBasketWarningCount}
         />

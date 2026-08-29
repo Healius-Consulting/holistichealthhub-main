@@ -180,7 +180,9 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
   if (order.payment.paidAt) {
     events.push({
       label: 'Payment cleared',
-      detail: `£${order.payment.amount.toFixed(2)} received`,
+      detail: Number.isFinite(order.payment.amount)
+        ? `£${order.payment.amount.toFixed(2)} received`
+        : 'Payment received',
       date: order.payment.paidAt,
     });
   }
@@ -231,7 +233,9 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
   if (latestMatched) {
     events.push({
       label: 'Payment gate matched',
-      detail: `Patient total £${(latestMatched.patientTotalPence / 100).toFixed(2)} · ${latestMatched.phase.replaceAll('_', ' ').toLowerCase()}`,
+      detail: Number.isFinite(latestMatched.patientTotalPence)
+        ? `Patient total £${(latestMatched.patientTotalPence / 100).toFixed(2)} · ${latestMatched.phase.replaceAll('_', ' ').toLowerCase()}`
+        : `Payment gate ${latestMatched.phase.replaceAll('_', ' ').toLowerCase()}`,
       date: latestMatched.checkedAt,
     });
   }

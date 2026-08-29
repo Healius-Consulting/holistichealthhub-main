@@ -394,8 +394,12 @@ export default function Step4CheckoutPanel({
           <div className="rx-step4-commit__row">
             <div className="rx-step4-commit__total">
               <small>Patient total</small>
-              <strong>{money(patientTotal)}</strong>
-              <em>{money(productSubtotal)} medicine{activeOrder.dispensingFee ? ` + ${money(activeOrder.dispensingFee)} dispensing` : ''}{activeOrder.pharmacyDelivery ? ` + ${money(activeOrder.pharmacyDelivery)} delivery` : ''}</em>
+              <strong>{patientTotal == null ? 'Quote pending' : money(patientTotal)}</strong>
+              <em>
+                {productSubtotal == null
+                  ? 'Waiting for a Curaleaf quote'
+                  : `${money(productSubtotal)} medicine${activeOrder.dispensingFee ? ` + ${money(activeOrder.dispensingFee)} dispensing` : ''}${activeOrder.pharmacyDelivery ? ` + ${money(activeOrder.pharmacyDelivery)} delivery` : ''}`}
+              </em>
             </div>
             <button
               type="button"

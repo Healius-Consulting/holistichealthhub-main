@@ -7,7 +7,7 @@ type DraftBasketSheetProps = {
   onToggle: () => void;
   progress: WizardProgress;
   draftBasketCount: number;
-  draftBasketTotal: number;
+  draftBasketTotal: number | null;
   draftBasketBlockedCount: number;
   draftBasketWarningCount: number;
 };
@@ -36,7 +36,7 @@ export default function DraftBasketSheet({
           <strong>
             {progress.basketIsProvisional
               ? `${draftBasketCount} medicine${draftBasketCount === 1 ? '' : 's'} queued`
-              : `${draftBasketCount} medicine${draftBasketCount === 1 ? '' : 's'} · ${money(draftBasketTotal)}`}
+              : `${draftBasketCount} medicine${draftBasketCount === 1 ? '' : 's'} · ${draftBasketTotal == null ? 'Quote pending' : money(draftBasketTotal)}`}
           </strong>
         </span>
         <span className="rx-basket-sheet__hint">{open ? 'Hide' : 'Show'}{open ? <ChevronDown size={16} /> : <ChevronUp size={16} />}</span>

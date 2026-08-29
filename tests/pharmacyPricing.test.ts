@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { optionalChargeVisible, orderPricingTotals, quoteMedicineTotalPence, validOptionalChargePence } from '../src/utils/pricing.ts';
+import { formatPounds, optionalChargeVisible, orderPricingTotals, quoteMedicineTotalPence, validOptionalChargePence } from '../src/utils/pricing.ts';
 
 test('shared ledger keeps Curaleaf Delivery supplier-side', () => {
   assert.deepEqual(orderPricingTotals({
@@ -33,6 +33,14 @@ test('optional charges accept integer pence from £0 through £15', () => {
   assert.equal(validOptionalChargePence(-1), false);
   assert.equal(validOptionalChargePence(1_501), false);
   assert.equal(validOptionalChargePence(10.5), false);
+});
+
+test('pounds format stays on the page when the amount is not yet known', () => {
+  assert.equal(formatPounds(null), '—');
+  assert.equal(formatPounds(undefined), '—');
+  assert.equal(formatPounds(Number.NaN), '—');
+  assert.equal(formatPounds(0), '£0.00');
+  assert.equal(formatPounds(92), '£92.00');
 });
 
 test('patient medicine total comes from the live quote, not catalogue stand-ins', () => {

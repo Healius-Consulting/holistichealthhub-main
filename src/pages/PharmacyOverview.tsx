@@ -43,7 +43,8 @@ function ageLabel(kind: PriorityKind, ageDays: number) {
 }
 
 /** Whole pounds on the Overview: the pence belong on the Finance page. */
-function pounds(pence: number) {
+function pounds(pence: number | null | undefined) {
+  if (typeof pence !== 'number' || !Number.isFinite(pence)) return '—';
   return new Intl.NumberFormat('en-GB', {
     style: 'currency', currency: 'GBP', minimumFractionDigits: 0, maximumFractionDigits: 0,
   }).format(Math.round(pence) / 100);

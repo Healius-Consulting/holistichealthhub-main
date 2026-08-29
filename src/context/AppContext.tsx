@@ -15,6 +15,7 @@ import { replacementPrescriptionCopy } from '../utils/replacementPrescriptionCop
 import { orderRequiresCuraleafCancel, orderSupplyIncomplete } from '../utils/orderStage';
 import { PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
 import { businessOrderReference } from '../utils/orderReference';
+import { formatPounds } from '../utils/pricing';
 
 export { ORGANISATIONS };
 
@@ -452,7 +453,7 @@ export interface AppState {
    Helpers
    ═══════════════════════════════════════════════════════════ */
 
-export const money = (n: number) => '£' + n.toFixed(2);
+export const money = (n: number | null | undefined) => formatPounds(n);
 export const marginPct = (cost: number | null, retail: number) => cost !== null && retail > 0 ? Math.round((1 - cost / retail) * 100) : null;
 
 export const lineRevenue = (item: LineItem) => item.retail * item.qty;
@@ -468,7 +469,7 @@ export const lineContribution = (item: LineItem) => item.cost === null ? null : 
 /* The money vocabulary itself lives in utils/pricing so it is testable without
    React; it is re-exported here because every screen already imports from the
    app context for money(), lineRevenue() and friends. */
-export { PATIENT_PRICE_LABEL, PHARMACY_COST_LABEL, WHOLESALE_LABEL, WHOLESALE_LABEL_SHORT, MARGIN_HEALTHY_PCT, formatMargin, marginPercent, marginToneClass } from '../utils/pricing';
+export { PATIENT_PRICE_LABEL, PHARMACY_COST_LABEL, WHOLESALE_LABEL, WHOLESALE_LABEL_SHORT, MARGIN_HEALTHY_PCT, formatMargin, formatPounds, marginPercent, marginToneClass } from '../utils/pricing';
 
 function prescriptionIsPaymentReady(prescription: Prescription) {
   const sourceVerified = prescription.entryMode === 'manual'
