@@ -674,6 +674,65 @@ html{
   height: 0 !important;
 }
 
+/*
+ * Hover-only scrollbars for height-capped trays. The rest of the workspace stays
+ * chrome-free; these boxes only grow a thumb when their content actually overflows,
+ * and only while the pointer or keyboard is in that box.
+ */
+.crm-lane:is(:hover, :focus-within) .crm-lane__rows,
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results{
+  scrollbar-width: thin !important;
+  scrollbar-color: color-mix(in srgb, var(--text-tertiary) 70%, transparent) transparent !important;
+}
+
+.crm-lane:is(:hover, :focus-within) .crm-lane__rows::-webkit-scrollbar,
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar{
+  display: block !important;
+  width: 8px !important;
+  height: 8px !important;
+}
+
+.crm-lane:is(:hover, :focus-within) .crm-lane__rows::-webkit-scrollbar-track,
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar-track{
+  background: transparent !important;
+}
+
+.crm-lane:is(:hover, :focus-within) .crm-lane__rows::-webkit-scrollbar-thumb,
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar-thumb{
+  background: color-mix(in srgb, var(--text-tertiary) 70%, transparent) !important;
+  background-clip: padding-box !important;
+  border: 2px solid transparent !important;
+  border-radius: 999px !important;
+}
+
+@media (hover: none){
+  .crm-lane__rows,
+  .manual-rx-picker__results{
+    scrollbar-width: thin !important;
+    scrollbar-color: color-mix(in srgb, var(--text-tertiary) 70%, transparent) transparent !important;
+  }
+
+  .crm-lane__rows::-webkit-scrollbar,
+  .manual-rx-picker__results::-webkit-scrollbar{
+    display: block !important;
+    width: 8px !important;
+    height: 8px !important;
+  }
+
+  .crm-lane__rows::-webkit-scrollbar-track,
+  .manual-rx-picker__results::-webkit-scrollbar-track{
+    background: transparent !important;
+  }
+
+  .crm-lane__rows::-webkit-scrollbar-thumb,
+  .manual-rx-picker__results::-webkit-scrollbar-thumb{
+    background: color-mix(in srgb, var(--text-tertiary) 70%, transparent) !important;
+    background-clip: padding-box !important;
+    border: 2px solid transparent !important;
+    border-radius: 999px !important;
+  }
+}
+
 .app-shell{
   display: flex;
   height: 100vh;
@@ -7476,6 +7535,7 @@ html.modal-open .page-container{ overflow: hidden; }
   min-height: 0;
   flex-direction: column;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .crm-lane__rows > .order-crm-row{

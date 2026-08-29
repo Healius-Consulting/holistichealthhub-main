@@ -120,7 +120,7 @@
   letter-spacing: .055em;
   text-transform: uppercase;
 }
-.manual-rx-picker__results { max-height: 420px; overflow: auto; background: var(--bg-surface); }
+.manual-rx-picker__results { max-height: 420px; overflow: auto; background: var(--bg-surface); -webkit-overflow-scrolling: touch; }
 .manual-rx-picker__results button { width: 100%; min-height: 58px; padding: 8px 13px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; color: var(--text-primary); }
 .manual-rx-picker__results button:last-child { border-bottom: 0; }
 .manual-rx-picker__results button:hover, .manual-rx-picker__results button:focus-visible { background: var(--tenant-primary-soft); }
