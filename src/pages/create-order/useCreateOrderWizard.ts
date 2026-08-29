@@ -30,10 +30,13 @@ export function useCreateOrderWizard(options: UseCreateOrderWizardOptions) {
     routeExplicitlyChosen,
   });
 
+  const previousSelectedRxId = useRef<number | null>(null);
+
   useEffect(() => {
     if (activeOrderId === null) return;
     if (previousOrderId.current !== activeOrderId) {
       previousOrderId.current = activeOrderId;
+      previousSelectedRxId.current = selectedRxId;
       const rx = progressInput.selectedRx;
       const routeWasChosen = isRouteChosen(rx, false);
       const next = computeWizardProgress({ ...progressInput, routeExplicitlyChosen: routeWasChosen });
@@ -43,7 +46,20 @@ export function useCreateOrderWizard(options: UseCreateOrderWizardOptions) {
       skipFocusRef.current = true;
       previousPatientReady.current = progressInput.patientReady;
     }
-  }, [activeOrderId, progressInput.patientReady, progressInput.prescriptionAuthenticated, progressInput.prescriptionReady, progressInput.readyForProducts, progressInput.draftBasketCount, progressInput.readyForPayment, progressInput.isReplacement, progressInput.selectedRx]);
+  }, [activeOrderId, progressInput, selectedRxId]);
+
+  useEffect(() => {
+    if (activeOrderId === null) return;
+    if (previousOrderId.current !== activeOrderId) return;
+    if (previousSelectedRxId.current === selectedRxId) return;
+    previousSelectedRxId.current = selectedRxId;
+    const routeWasChosen = isRouteChosen(progressInput.selectedRx, false);
+    setRouteExplicitlyChosen(routeWasChosen);
+    setLockNotice(null);
+    skipFocusRef.current = true;
+    const next = computeWizardProgress({ ...progressInput, routeExplicitlyChosen: routeWasChosen });
+    setFocusedStep(current => (current > next.furthestUnlocked ? next.furthestUnlocked : current));
+  }, [activeOrderId, progressInput, selectedRxId]);
 
   useEffect(() => {
     if (progressInput.patientReady && !previousPatientReady.current) {

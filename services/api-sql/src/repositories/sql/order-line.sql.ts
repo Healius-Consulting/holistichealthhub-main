@@ -36,6 +36,15 @@ const MARK_LINES_PLACED_GQL = `
   }
 `;
 
+const MARK_LINES_PLACED_FOR_RX_GQL = `
+  mutation MarkOrderLinesPlacedForPrescription($orderId: UUID!, $prescriptionId: UUID!) {
+    orderLine_updateMany(
+      where: { orderId: { eq: $orderId }, prescriptionId: { eq: $prescriptionId } }
+      data: { placementState: PLACED, updatedAt_expr: "request.time" }
+    )
+  }
+`;
+
 const INSERT_LINE_GQL = `
   mutation InsertOrderLine(
     $orderId: UUID!
@@ -86,6 +95,12 @@ export class SqlOrderLineRepository implements OrderLineRepositoryPort {
   async markLinesPlaced(orderId: string): Promise<void> {
     await dataConnect.executeGraphql(MARK_LINES_PLACED_GQL, {
       variables: { orderId },
+    });
+  }
+
+  async markLinesPlacedByPrescriptionId(orderId: string, prescriptionId: string): Promise<void> {
+    await dataConnect.executeGraphql(MARK_LINES_PLACED_FOR_RX_GQL, {
+      variables: { orderId, prescriptionId },
     });
   }
 

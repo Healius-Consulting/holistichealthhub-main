@@ -72,4 +72,24 @@ describe('stampCuraleafPrescriptionOnSnapshot', () => {
     assert.equal(curaleaf.courier, 'POLAR_SPEED');
     assert.equal(curaleaf.customerReference, 'ORD-1');
   });
+
+  it('stamps Curaleaf identity onto one prescription without cloning it onto the other', () => {
+    const next = stampCuraleafPrescriptionOnSnapshot({
+      prescriptions: [
+        { id: '1', serialNumber: 'S1' },
+        { id: '2', serialNumber: 'S2' },
+      ],
+    }, {
+      prescriptionId: 'curaleaf-rx-2',
+      purchaseOrder: { id: 'po-2' },
+      rxKey: '2',
+      customerReferenceFallback: 'ORD-1-r1',
+    }) as Record<string, unknown>;
+    const prescriptions = next.prescriptions as Array<Record<string, unknown>>;
+    assert.equal(prescriptions[0]?.curaleafPrescriptionId, undefined);
+    assert.equal(prescriptions[1]?.curaleafPrescriptionId, 'curaleaf-rx-2');
+    const subOrders = next.curaleafSubOrders as Record<string, Record<string, unknown>>;
+    assert.equal(subOrders['2']?.purchaseOrderId, 'po-2');
+    assert.equal(subOrders['1'], undefined);
+  });
 });

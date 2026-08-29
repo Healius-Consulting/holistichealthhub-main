@@ -3,6 +3,7 @@ import { SqlOrderLineRepository } from '../../repositories/sql/order-line.sql.js
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
 import { prescriptionFileIdsFromSnapshot } from './prescription-file-purge.js';
+import { curaleafSubOrders, snapshotRxKey, snapshotRxList } from './snapshot-rx.js';
 
 const UUID_LIKE = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
 
@@ -61,6 +62,7 @@ export function stampCuraleafPrescriptionOnSnapshot(
     purchaseOrder?: Record<string, unknown> | null;
     customerReferenceFallback?: string | null;
     now?: string;
+    rxKey?: string | null;
   },
 ) {
   const root = asRecord(snapshot);
@@ -106,30 +108,36 @@ export function stampCuraleafPrescriptionOnSnapshot(
       ? prior.waitingSince
       : input.now ?? new Date().toISOString())
     : null;
-  const prescriptions = Array.isArray(root.prescriptions)
-    ? root.prescriptions.map((entry) => {
-      const rx = asRecord(entry);
-      return prescriptionId ? { ...rx, curaleafPrescriptionId: prescriptionId } : rx;
-    })
-    : root.prescriptions;
+  const rxList = snapshotRxList(root);
+  const rxKey = input.rxKey?.trim() || (rxList[0] ? snapshotRxKey(rxList[0], 0) : 'rx-0');
+  const prescriptions = rxList.length > 0 ? rxList.map((rx, index) => {
+    const key = snapshotRxKey(rx, index);
+    if (prescriptionId && key === rxKey) return { ...rx, curaleafPrescriptionId: prescriptionId };
+    return rx;
+  }) : root.prescriptions;
+  const curaleafRecord = {
+    ...prior,
+    ...(purchaseOrder ?? {}),
+    status,
+    prescriptionId,
+    prescriberId,
+    prescriberState: input.prescriberState ?? prior.prescriberState ?? null,
+    prescriptionState,
+    waitingFor,
+    waitingSince,
+    purchaseOrderId: purchaseOrder?.id ?? prior.purchaseOrderId ?? null,
+    purchaseOrderState: purchaseOrder?.state ?? prior.purchaseOrderState ?? null,
+    customerReference: purchaseOrder?.customerReference ?? prior.customerReference ?? input.customerReferenceFallback ?? null,
+    courier: purchaseOrder?.courier ?? prior.courier ?? null,
+  };
 
   return {
     ...root,
     prescriptions,
-    curaleaf: {
-      ...prior,
-      ...(purchaseOrder ?? {}),
-      status,
-      prescriptionId,
-      prescriberId,
-      prescriberState: input.prescriberState ?? prior.prescriberState ?? null,
-      prescriptionState,
-      waitingFor,
-      waitingSince,
-      purchaseOrderId: purchaseOrder?.id ?? prior.purchaseOrderId ?? null,
-      purchaseOrderState: purchaseOrder?.state ?? prior.purchaseOrderState ?? null,
-      customerReference: purchaseOrder?.customerReference ?? prior.customerReference ?? input.customerReferenceFallback ?? null,
-      courier: purchaseOrder?.courier ?? prior.courier ?? null,
+    curaleaf: curaleafRecord,
+    curaleafSubOrders: {
+      ...curaleafSubOrders(root),
+      [rxKey]: curaleafRecord,
     },
   };
 }
@@ -146,6 +154,7 @@ export async function persistCuraleafPrescriptionIdentity(input: {
   purchaseOrder?: Record<string, unknown> | null;
   customerReferenceFallback?: string | null;
   now?: string;
+  rxKey?: string | null;
   fulfilmentStatus?: 'SUPPLIER_PENDING' | 'SUPPLIER_PROCESSING' | 'SUPPLIER_ALLOCATED' | 'PARTIALLY_DISPATCHED_TO_PHARMACY' | 'DISPATCHED_TO_PHARMACY' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'READY_FOR_COLLECTION' | 'COLLECTED' | 'EXCEPTION';
 }) {
   if (!input.prescriptionId && !input.purchaseOrder && !input.prescriberId) return input.snapshot;
@@ -167,9 +176,19 @@ export async function persistCuraleafPrescriptionIdentity(input: {
       ? input.purchaseOrder.purchaseOrderId
       : null;
   const prescriptionRepo = new SqlPrescriptionRepository();
+  const rxList = snapshotRxList(snapshot);
+  const rxIndex = Math.max(0, rxList.findIndex((entry, index) => snapshotRxKey(entry, index) === (input.rxKey || snapshotRxKey(rxList[0] || {}, 0))));
+  const rx = rxList[rxIndex] ?? rxList[0] ?? {};
+  const hhhPrescriptionId = typeof rx.hhhPrescriptionId === 'string' && UUID_LIKE.test(rx.hhhPrescriptionId)
+    ? rx.hhhPrescriptionId
+    : null;
 
   if (purchaseOrderId) {
-    await new SqlOrderLineRepository().markLinesPlaced(input.orderId);
+    if (hhhPrescriptionId) {
+      await new SqlOrderLineRepository().markLinesPlacedByPrescriptionId(input.orderId, hhhPrescriptionId);
+    } else if (rxList.length <= 1) {
+      await new SqlOrderLineRepository().markLinesPlaced(input.orderId);
+    }
   }
 
   if (!input.prescriptionId) {
@@ -182,9 +201,6 @@ export async function persistCuraleafPrescriptionIdentity(input: {
     throw new Error('Order is missing a patient, so the Curaleaf prescription cannot be stored.');
   }
 
-  const root = asRecord(snapshot);
-  const prescriptions = Array.isArray(root.prescriptions) ? root.prescriptions.map(asRecord) : [];
-  const rx = prescriptions[0] ?? {};
   const serialNumber = typeof rx.serialNumber === 'string' && rx.serialNumber.trim()
     ? rx.serialNumber.trim()
     : `RX-${input.orderId.replace(/-/g, '').slice(0, 8)}`;
@@ -197,8 +213,9 @@ export async function persistCuraleafPrescriptionIdentity(input: {
   const patient = asRecord(rx.patient);
   const patientName = typeof patient.name === 'string' && patient.name.trim() ? patient.name.trim() : 'Unknown patient';
   const patientDob = typeof patient.dob === 'string' && patient.dob ? patient.dob.slice(0, 10) : '1900-01-01';
+  const rxFileId = typeof rx.fileId === 'string' && UUID_LIKE.test(rx.fileId) ? rx.fileId : null;
   const fileIds = prescriptionFileIdsFromSnapshot(snapshot);
-  const fileId = fileIds[0] && UUID_LIKE.test(fileIds[0]) ? fileIds[0] : null;
+  const fileId = rxFileId || (rxList.length <= 1 && fileIds[0] && UUID_LIKE.test(fileIds[0]) ? fileIds[0] : null);
   const placed = Boolean(purchaseOrderId);
 
   await prescriptionRepo.recordSupplierPrescription({
@@ -206,6 +223,7 @@ export async function persistCuraleafPrescriptionIdentity(input: {
     orderId: input.orderId,
     patientId,
     fileId,
+    existingPrescriptionId: hhhPrescriptionId,
     supplierPrescriptionId: input.prescriptionId,
     serialNumber,
     issueDate,

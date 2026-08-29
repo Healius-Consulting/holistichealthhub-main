@@ -65,6 +65,7 @@ export interface UpsertOrderPrescriptionInput {
   patientDobSnapshot: string;
   prescriberSnapshot: unknown;
   prescriberId?: string | null;
+  existingPrescriptionId?: string | null;
   supplierPurchaseOrderId?: string | null;
   placementState?: 'PENDING_PLACEMENT' | 'PLACED';
 }

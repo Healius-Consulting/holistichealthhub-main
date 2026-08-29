@@ -9,6 +9,7 @@ import {
   replacementSerialPolicy,
   serialReuseIsCurrent,
   serialReuseWindowStatus,
+  serialClaimsFromPrescriptions,
 } from './serial-reuse.js';
 
 const NOW = new Date('2026-08-12T12:00:00.000Z');
@@ -117,4 +118,16 @@ test('deleted prescription files are not reusable', () => {
   assert.equal(prescriptionFileIsUsable({ status: 'DELETED', deletedAt: null }), false);
   assert.equal(prescriptionFileIsUsable({ status: 'UPLOADED', deletedAt: '2026-08-12T00:00:00.000Z' }), false);
   assert.equal(prescriptionFileIsUsable(null), false);
+});
+
+test('create claims every printed serial on the order', () => {
+  assert.deepEqual(serialClaimsFromPrescriptions([
+    { serialNumber: ' SN-1 ', issueDate: '2026-08-01' },
+    { serialNumber: 'SN-2', issueDate: '2026-08-02T00:00:00.000Z' },
+    { serialNumber: '', issueDate: '2026-08-01' },
+    { serialNumber: 'SN-3', issueDate: '' },
+  ]), [
+    { serialNumber: 'SN-1', issueDate: '2026-08-01' },
+    { serialNumber: 'SN-2', issueDate: '2026-08-02' },
+  ]);
 });

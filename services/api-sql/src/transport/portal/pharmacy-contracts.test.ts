@@ -1263,4 +1263,65 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(flow?.lines?.[0]?.ordered, 10);
     assert.equal(flow?.lines?.[0]?.allocated, 1);
   });
+
+  it('keeps line items and purchase orders on the matching prescription', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-08-18T10:00:00.000Z',
+      fulfilmentStatus: 'SUPPLIER_PENDING',
+      quoteSnapshot: {
+        lineItems: [
+          { packId: 'pack-a', productId: 'pack-a', formulaId: 'f-a', name: 'Oil', quantity: 1, unitPricePence: 4800, localPrescriptionId: '1' },
+          { packId: 'pack-b', productId: 'pack-b', formulaId: 'f-b', name: 'Flower', quantity: 1, unitPricePence: 8500, localPrescriptionId: '2' },
+        ],
+        prescriptions: [
+          { id: '1', fileId: 'file-1', serialNumber: 'S1', issueDate: '2026-08-01', items: [{ packId: 'pack-a', productId: 'pack-a', quantity: 1 }] },
+          { id: '2', fileId: 'file-2', serialNumber: 'S2', issueDate: '2026-08-01', items: [{ packId: 'pack-b', productId: 'pack-b', quantity: 1 }] },
+        ],
+        curaleafSubOrders: {
+          1: { prescriptionId: 'curaleaf-1', purchaseOrderId: 'po-1', status: 'purchase_order_submitted' },
+        },
+      },
+    });
+    assert.equal(mapped.prescriptions?.[0]?.items?.length, 1);
+    assert.equal(mapped.prescriptions?.[0]?.items?.[0]?.packId, 'pack-a');
+    assert.equal(mapped.prescriptions?.[1]?.items?.length, 1);
+    assert.equal(mapped.prescriptions?.[1]?.items?.[0]?.packId, 'pack-b');
+    assert.equal(mapped.prescriptions?.[0]?.curaleafPrescriptionId, 'curaleaf-1');
+    assert.equal(mapped.prescriptions?.[1]?.curaleafPrescriptionId, null);
+    assert.equal(mapped.prescriptionFlow?.['1']?.purchaseOrderId, 'po-1');
+    assert.equal(mapped.prescriptionFlow?.['2']?.purchaseOrderId, null);
+    assert.equal(mapped.prescriptionFlow?.['1']?.state, 'PLACED');
+    assert.equal(mapped.prescriptionFlow?.['2']?.state, 'PENDING_PLACEMENT');
+  });
+
+  it('keeps a clinic script and a manual script as separate sub-orders', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-08-18T10:00:00.000Z',
+      fulfilmentStatus: 'SUPPLIER_PENDING',
+      quoteSnapshot: {
+        lineItems: [
+          { packId: 'pack-a', productId: 'pack-a', formulaId: 'f-a', name: 'Oil', quantity: 1, unitPricePence: 4800, localPrescriptionId: '1' },
+          { packId: 'pack-b', productId: 'pack-b', formulaId: 'f-b', name: 'Flower', quantity: 1, unitPricePence: 8500, localPrescriptionId: '2' },
+        ],
+        prescriptions: [
+          { id: '1', clinicScanId: 'scan-1', curaleafPrescriptionId: 'clinic-rx', issueDate: '2026-08-01', items: [{ packId: 'pack-a', productId: 'pack-a', quantity: 1 }] },
+          { id: '2', fileId: 'file-2', serialNumber: 'S2', issueDate: '2026-08-01', items: [{ packId: 'pack-b', productId: 'pack-b', quantity: 1 }] },
+        ],
+        curaleafSubOrders: {
+          1: { prescriptionId: 'clinic-rx', purchaseOrderId: 'po-clinic', status: 'purchase_order_submitted' },
+          2: { prescriptionId: 'manual-rx', purchaseOrderId: 'po-manual', status: 'purchase_order_submitted' },
+        },
+      },
+    });
+    assert.equal(mapped.prescriptions?.[0]?.curaleafPrescriptionId, 'clinic-rx');
+    assert.equal(mapped.prescriptions?.[1]?.curaleafPrescriptionId, 'manual-rx');
+    assert.equal(mapped.prescriptions?.[0]?.items?.[0]?.packId, 'pack-a');
+    assert.equal(mapped.prescriptions?.[1]?.items?.[0]?.packId, 'pack-b');
+    assert.equal(mapped.prescriptionFlow?.['1']?.purchaseOrderId, 'po-clinic');
+    assert.equal(mapped.prescriptionFlow?.['2']?.purchaseOrderId, 'po-manual');
+  });
 });

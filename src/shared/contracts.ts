@@ -481,6 +481,8 @@ export interface PortalOrderInput {
     name?: string;
     quantity: number;
     unitPricePence?: number;
+    localPrescriptionId?: string;
+    wholesalePackPricePence?: number;
   }>;
   prescriptions: Array<{
     id?: string;

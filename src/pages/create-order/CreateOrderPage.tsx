@@ -13,6 +13,8 @@ import Step3FormularyPanel from './Step3FormularyPanel';
 import Step4CheckoutPanel from './Step4CheckoutPanel';
 import UnresolvedOrdersPanel from './UnresolvedOrdersPanel';
 import { wizardNextHint, wizardStageTitle } from './computeWizardProgress';
+import PrescriptionStrip from './PrescriptionStrip';
+import { incompletePrescriptionPaymentGates, rxAuthenticated, rxMedicinesComplete, rxTabStatus } from './rxTabStatus';
 import { useCreateOrderWizard } from './useCreateOrderWizard';
 import { basketItemIssue, gmcNumber, patientInitials } from './utils';
 import type { WizardStep } from './types';
@@ -34,6 +36,7 @@ import { formatPatientDob } from '../../utils/patientDob';
 import { canCreateOrderForPatient } from '../../utils/patientOrderEligibility';
 import { quoteMedicineTotalPence } from '../../utils/pricing';
 import { MAX_PRESCRIPTION_FILE_BYTES, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
+import { draftAllowsAdditionalPrescriptions } from '../../utils/replacementPrescriptionCopy';
 
 function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
   if (reason === 'SERIAL_IN_USE') return 'This prescription serial is already on another live order.';
@@ -83,11 +86,8 @@ export default function CreateOrderPage() {
   const [selectedUnresolvedOrderId, setSelectedUnresolvedOrderId] = useState<number | null>(null);
   const [confirmingRouteSwitch, setConfirmingRouteSwitch] = useState<'clinic' | 'manual' | null>(null);
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
-  const [serialAvailability, setSerialAvailability] = useState<{ allowed: boolean; reason: string | null; pending: boolean }>({
-    allowed: false,
-    reason: null,
-    pending: false,
-  });
+  const [serialByRxId, setSerialByRxId] = useState<Record<number, { allowed: boolean; reason: string | null; pending: boolean }>>({});
+  const [confirmingRemoveRxId, setConfirmingRemoveRxId] = useState<number | null>(null);
   const durableDraftEnabled = isApiConfigured && !isLocalPortalPreview && state.workspaceMode === 'live';
   const durableDraftPayload = useMemo(() => activeOrder ? {
     localOrderId: activeOrder.id,
@@ -174,6 +174,7 @@ export default function CreateOrderPage() {
     setQuoteBusy(false);
     setEditingClinicFormularyRxId(null);
     setSelectedUnresolvedOrderId(activeOrder?.redoContext?.originalOrderId ?? null);
+    setConfirmingRemoveRxId(null);
   }, [activeOrder?.id, activeOrder?.redoContext?.originalOrderId]);
 
   const matchingPatients = useMemo(() => {
@@ -214,35 +215,63 @@ export default function CreateOrderPage() {
   }, [activeOrder?.redoContext?.originalOrderId, selectedUnresolvedOrderId, unresolvedOrdersForPatient]);
 
   const selectedRx = activeOrder?.prescriptions.find(rx => rx.id === selectedRxId) ?? null;
+  const serialOccupancySignature = activeOrder
+    ? activeOrder.prescriptions.map(rx => `${rx.id}:${rx.entryMode}:${rx.serialNumber ?? ''}:${rx.issueDate ?? ''}:${rx.clinicScanId ?? ''}:${rx.serialInherited ? '1' : '0'}`).join('|')
+    : '';
 
   useEffect(() => {
-    if (selectedRx?.entryMode === 'clinic') {
-      setSerialAvailability({ allowed: Boolean(selectedRx.clinicScanId), reason: 'clinic', pending: false });
+    if (!activeOrder) {
+      setSerialByRxId({});
       return;
     }
-    const serial = selectedRx?.serialNumber?.trim() ?? '';
-    if (!selectedRx || !serial) {
-      setSerialAvailability({ allowed: false, reason: null, pending: false });
-      return;
-    }
+    const manuals = activeOrder.prescriptions.filter(rx => rx.entryMode === 'manual' && rx.serialNumber?.trim());
+    setSerialByRxId(current => {
+      const next: Record<number, { allowed: boolean; reason: string | null; pending: boolean }> = {};
+      for (const rx of activeOrder.prescriptions) {
+        if (rx.entryMode === 'clinic') {
+          next[rx.id] = { allowed: Boolean(rx.clinicScanId), reason: 'clinic', pending: false };
+        } else if (!rx.serialNumber?.trim()) {
+          next[rx.id] = { allowed: false, reason: null, pending: false };
+        } else {
+          next[rx.id] = current[rx.id] ?? { allowed: false, reason: null, pending: true };
+        }
+      }
+      return next;
+    });
+    if (!manuals.length) return;
     if (isLocalPortalPreview || !isApiConfigured) {
-      setSerialAvailability({ allowed: true, reason: 'ok', pending: false });
+      setSerialByRxId(current => {
+        const next = { ...current };
+        for (const rx of manuals) next[rx.id] = { allowed: true, reason: 'ok', pending: false };
+        return next;
+      });
       return;
     }
-    setSerialAvailability(current => ({ ...current, pending: true }));
+    setSerialByRxId(current => {
+      const next = { ...current };
+      for (const rx of manuals) next[rx.id] = { ...(current[rx.id] ?? { allowed: false, reason: null }), pending: true };
+      return next;
+    });
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void checkPrescriptionSerialAvailability({
-        organisationId: state.currentOrganisationId,
-        serialNumber: serial,
-        issueDate: selectedRx.issueDate,
-        sourceOrderId: activeOrder?.redoContext?.originalBackendId ?? null,
-        sourceSerial: selectedRx.serialInherited ? serial : null,
-        patientId: activeOrder?.patientId ?? null,
-      }).then(result => {
-        if (!cancelled) setSerialAvailability({ allowed: result.allowed, reason: result.reason, pending: false });
-      }).catch(() => {
-        if (!cancelled) setSerialAvailability({ allowed: false, reason: 'SERIAL_CHECK_FAILED', pending: false });
+      void Promise.all(manuals.map(rx => {
+        const serial = rx.serialNumber!.trim();
+        return checkPrescriptionSerialAvailability({
+          organisationId: state.currentOrganisationId,
+          serialNumber: serial,
+          issueDate: rx.issueDate,
+          sourceOrderId: activeOrder.redoContext?.originalBackendId ?? null,
+          sourceSerial: rx.serialInherited ? serial : null,
+          patientId: activeOrder.patientId ?? null,
+        }).then(result => ({ id: rx.id, allowed: result.allowed, reason: result.reason }))
+          .catch(() => ({ id: rx.id, allowed: false, reason: 'SERIAL_CHECK_FAILED' }));
+      })).then(entries => {
+        if (cancelled) return;
+        setSerialByRxId(current => {
+          const next = { ...current };
+          for (const entry of entries) next[entry.id] = { allowed: entry.allowed, reason: entry.reason, pending: false };
+          return next;
+        });
       });
     }, 400);
     return () => {
@@ -250,30 +279,38 @@ export default function CreateOrderPage() {
       window.clearTimeout(timer);
     };
   }, [
+    activeOrder?.id,
     activeOrder?.patientId,
     activeOrder?.redoContext?.originalBackendId,
-    selectedRx?.clinicScanId,
-    selectedRx?.entryMode,
-    selectedRx?.issueDate,
-    selectedRx?.serialInherited,
-    selectedRx?.serialNumber,
+    serialOccupancySignature,
     state.currentOrganisationId,
   ]);
+
+  const serialAvailability = selectedRx
+    ? serialByRxId[selectedRx.id] ?? { allowed: false, reason: null, pending: false }
+    : { allowed: false, reason: null, pending: false };
   const requiresLiveCuraleafEvidence = state.workspaceMode === 'live' && !isLocalPortalPreview;
   const hasPrescriptionRecords = Boolean(activeOrder?.prescriptions.length);
+  const allManualSerialsAllowed = !activeOrder || activeOrder.prescriptions.every(rx => {
+    if (rx.entryMode !== 'manual') return true;
+    const occupancy = serialByRxId[rx.id];
+    return Boolean(occupancy?.allowed && !occupancy.pending);
+  });
   const readiness = activeOrder ? [
     { label: 'Approved referral or active patient linked', complete: canCreateOrderForPatient(patient) },
     { label: 'Prescription evidence attached', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => Boolean(rx.copyFileName) && (!requiresLiveCuraleafEvidence || Boolean(rx.fileId))) },
     { label: 'Serial number / Clinic source verified', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.entryMode === 'manual' ? Boolean(rx.serialNumber?.trim()) : Boolean(rx.clinicScanId && rx.curaleafPrescriptionId)) },
     { label: 'Prescription inside its 28-day window', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => prescriptionDateIsCurrent(rx.issueDate, rx.expiryDate)) },
     { label: 'Prescriber details complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => Boolean(rx.issueDate && rx.prescriber.trim() && (rx.entryMode === 'manual' ? rx.prescriberPin?.trim() : rx.prescriberId))) },
-    { label: 'Priced medicines and quantities complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rx.items.length > 0 && rx.items.every(item => Boolean(item.productId && item.formulaId) && Number.isInteger(item.qty) && item.qty > 0 && Number.isInteger(item.unitsNeededCount) && item.unitsNeededCount! > 0 && Number.isFinite(item.retail) && item.retail > 0)) },
+    { label: 'Priced medicines and quantities complete', complete: hasPrescriptionRecords && activeOrder.prescriptions.every(rx => rxMedicinesComplete(rx)) },
   ] : [];
-  const prescriptionAuthenticated = readiness
-    .filter(item => item.label !== 'Priced medicines and quantities complete')
-    .every(item => item.complete)
-    && (selectedRx?.entryMode !== 'manual' || (serialAvailability.allowed && !serialAvailability.pending));
-  const prescriptionReady = readiness.every(item => item.complete);
+  const selectedRxAuthenticated = Boolean(
+    selectedRx
+    && rxAuthenticated(selectedRx, { requireLiveFile: requiresLiveCuraleafEvidence })
+    && (selectedRx.entryMode !== 'manual' || (serialAvailability.allowed && !serialAvailability.pending)),
+  );
+  const prescriptionAuthenticated = selectedRxAuthenticated;
+  const prescriptionReady = readiness.every(item => item.complete) && allManualSerialsAllowed;
   const wholesaleKnown = Boolean(activeOrder?.prescriptions.every(rx => rx.items.every(item => item.cost !== null)));
   const currentQuoteItems = activeOrder?.prescriptions.flatMap(rx => rx.items.map(item => ({ packId: item.productId, quantity: item.qty }))) ?? [];
   const currentQuoteSignature = JSON.stringify(currentQuoteItems.slice().sort((a, b) => a.packId.localeCompare(b.packId)));
@@ -301,7 +338,11 @@ export default function CreateOrderPage() {
   const redoPriceResolutionReady = paidRedoAmountMatches
     || activeOrder?.redoContext?.priceResolution === 'absorb';
   const readyForPayment = prescriptionReady && quoteGateComplete && paymentRouteReady && redoPriceResolutionReady && dispensingFeeValid;
+  const incompletePrescriptionGates = activeOrder
+    ? incompletePrescriptionPaymentGates(activeOrder.prescriptions)
+    : [];
   const paymentGate = activeOrder ? [
+    ...incompletePrescriptionGates,
     ...readiness,
     { label: requiresLiveCuraleafEvidence ? 'Live Curaleaf price and stock quote verified' : 'Curaleaf quote optional in training', complete: quoteGateComplete },
     { label: 'Dispensing charge is £0–£15', complete: dispensingFeeValid },
@@ -327,6 +368,10 @@ export default function CreateOrderPage() {
     ? activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({ ...item, rxId: rx.id })))
     : [];
   const draftBasketCount = draftBasketItems.length;
+  const selectedBasketCount = selectedRx?.items.length ?? 0;
+  const incompletePrescriptionCount = activeOrder
+    ? activeOrder.prescriptions.filter(rx => rxTabStatus(rx) !== 'ready').length
+    : 0;
   // Curaleaf's own tax on the pharmacy's purchase is a supplier-side figure and is
   // deliberately not surfaced to staff, so only wholesale and delivery come through.
   const draftBasketCosts = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
@@ -360,6 +405,7 @@ export default function CreateOrderPage() {
     prescriptionReady,
     readyForProducts,
     draftBasketCount,
+    selectedBasketCount,
     readyForPayment,
     selectedRx,
     isReplacement: Boolean(activeOrder?.redoContext),
@@ -409,12 +455,38 @@ export default function CreateOrderPage() {
     entryMode: selectedRx?.entryMode,
     readyForProducts,
     draftBasketCount,
+    incompletePrescriptionCount,
   });
 
   const advanceStep = () => {
     const next = Math.min(wizard.focusedStep + 1, wizard.progress.furthestUnlocked) as WizardStep;
     if (next > wizard.focusedStep) wizard.goToStep(next);
   };
+
+  const addPrescriptionToDraft = () => {
+    if (!activeOrder || !draftAllowsAdditionalPrescriptions(activeOrder)) return;
+    const nextRxId = state.nextIds.rx;
+    dispatch({ type: 'ADD_RX', orderId: activeOrder.id });
+    setSelectedRxId(nextRxId);
+    setConfirmingRemoveRxId(null);
+    wizard.markSkipFocus();
+    wizard.goToStep(2);
+  };
+
+  const removeSelectedPrescription = () => {
+    if (!activeOrder || !selectedRx || activeOrder.prescriptions.length < 2) return;
+    const remaining = activeOrder.prescriptions.filter(rx => rx.id !== selectedRx.id);
+    dispatch({ type: 'REMOVE_RX', orderId: activeOrder.id, rxId: selectedRx.id });
+    setSelectedRxId(remaining[0]?.id ?? null);
+    setConfirmingRemoveRxId(null);
+  };
+
+  const canAddPrescription = Boolean(
+    patient
+    && draftAllowsAdditionalPrescriptions(activeOrder)
+    && selectedRx
+    && selectedRx.items.length > 0,
+  );
 
   const activeOrderRef = activeOrder ? orderReference(activeOrder) : '';
 
@@ -525,7 +597,7 @@ export default function CreateOrderPage() {
         if (!quoteAvailable) throw new Error('A complete in-stock Curaleaf quote is required before creating the live order.');
         const pricingQuote = latestQuote;
         const quoteItems = Array.isArray(pricingQuote?.items) ? pricingQuote.items : [];
-        const lineItems = activeOrder.prescriptions.flatMap(rx => rx.items.map(item => {
+          const lineItems = activeOrder.prescriptions.flatMap(rx => rx.items.map(item => {
           const quoted = quoteItems.find(entry => entry.packId === item.productId);
           const quotedPatientPence = quoted
             ? Math.round(Number(quoted.patientPackPrice) * 100)
@@ -546,6 +618,7 @@ export default function CreateOrderPage() {
             unitPricePence: quotedPatientPence > 0 ? quotedPatientPence : Math.round((item.retail || 0) * 100),
             wholesalePackPrice: quoted?.wholesalePackPrice,
             wholesalePackPricePence,
+            localPrescriptionId: String(rx.id),
           };
         }));
         const dispensingFeePence = Math.round((activeOrder.dispensingFee || 0) * 100);
@@ -586,6 +659,7 @@ export default function CreateOrderPage() {
           } : undefined,
           lineItems,
           prescriptions: activeOrder.prescriptions.map(rx => ({
+            id: String(rx.id),
             fileId: rx.fileId!,
             clinicScanId: rx.clinicScanId,
             curaleafPrescriptionId: rx.curaleafPrescriptionId,
@@ -1033,6 +1107,24 @@ export default function CreateOrderPage() {
           <div className="rx-create-layout__main">
             <OrderStepper progress={wizard.progress} focusedStep={wizard.focusedStep} onStepClick={wizard.goToStep} />
 
+            {patient && wizard.focusedStep >= 2 ? (
+              <PrescriptionStrip
+                prescriptions={activeOrder.prescriptions}
+                selectedRxId={selectedRx?.id ?? null}
+                canAdd={canAddPrescription}
+                canRemove={activeOrder.prescriptions.length > 1 && draftAllowsAdditionalPrescriptions(activeOrder)}
+                confirmingRemove={confirmingRemoveRxId === selectedRx?.id}
+                onSelect={rxId => {
+                  setSelectedRxId(rxId);
+                  setConfirmingRemoveRxId(null);
+                }}
+                onAdd={addPrescriptionToDraft}
+                onRequestRemove={() => selectedRx && setConfirmingRemoveRxId(selectedRx.id)}
+                onConfirmRemove={removeSelectedPrescription}
+                onCancelRemove={() => setConfirmingRemoveRxId(null)}
+              />
+            ) : null}
+
               <header className="rx-guided__stage-head">
               <p className="section-label">Step {wizard.focusedStep} of 4</p>
               <h2 key={wizard.focusedStep} ref={wizard.stageHeadingRef} tabIndex={-1}>{stageTitle}</h2>
@@ -1173,6 +1265,7 @@ export default function CreateOrderPage() {
             draftBasketBlockedCount={draftBasketBlockedCount}
             canEditBasketItems={canEditBasketItems}
             selectedRxId={selectedRx?.id ?? null}
+            prescriptions={activeOrder.prescriptions.map(rx => ({ id: rx.id, entryMode: rx.entryMode }))}
             onStepClick={wizard.goToStep}
             onContinue={advanceStep}
             continueDisabled={wizard.focusedStep >= wizard.progress.furthestUnlocked}

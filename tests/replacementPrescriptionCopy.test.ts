@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { replacementPrescriptionCopy, replacementBannerState } from '../src/utils/replacementPrescriptionCopy.ts';
+import { replacementPrescriptionCopy, replacementBannerState, replacementSourcePrescriptions, draftAllowsAdditionalPrescriptions } from '../src/utils/replacementPrescriptionCopy.ts';
 import type { Prescription } from '../src/context/AppContext.tsx';
 
 const source = {
@@ -61,4 +61,12 @@ test('replacement banner distinguishes a carried serial from a new scan', () => 
   assert.equal(expired.serialTitle, 'New serial required');
   assert.equal(expired.serialDetail, 'This prescription cannot be reused. Enter a new serial.');
   assert.equal(expired.scanTitle, 'New scan required');
+});
+
+test('replacement drafts stay on the first source prescription', () => {
+  const scripts = [{ id: 1 }, { id: 2 }, { id: 3 }];
+  assert.deepEqual(replacementSourcePrescriptions(scripts), [{ id: 1 }]);
+  assert.equal(draftAllowsAdditionalPrescriptions({ redoContext: { originalOrderId: 9 } }), false);
+  assert.equal(draftAllowsAdditionalPrescriptions({}), true);
+  assert.equal(draftAllowsAdditionalPrescriptions(null), false);
 });

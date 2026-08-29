@@ -1,6 +1,15 @@
 import { serialReuseIsCurrent } from '@hhh/domain/prescription-date';
 import type { Prescription } from '../context/AppContext';
 
+/** Replacement drafts copy only the first source script. Extra scripts belong on a new order. */
+export function replacementSourcePrescriptions<T>(prescriptions: T[]): T[] {
+  return prescriptions.slice(0, 1);
+}
+
+export function draftAllowsAdditionalPrescriptions(order: { redoContext?: unknown } | null | undefined) {
+  return order != null && !order.redoContext;
+}
+
 export function replacementPrescriptionCopy(sourceRx: Prescription | undefined, now = new Date()) {
   const serialEligible = Boolean(sourceRx?.serialNumber && sourceRx.issueDate && serialReuseIsCurrent(sourceRx.issueDate, now));
   const fileReusable = Boolean(sourceRx?.fileId);

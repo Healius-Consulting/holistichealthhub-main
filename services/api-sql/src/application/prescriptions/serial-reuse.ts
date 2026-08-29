@@ -37,6 +37,17 @@ export function normalizeSerialNumber(value?: string | null) {
   return String(value || '').trim();
 }
 
+export function serialClaimsFromPrescriptions(
+  prescriptions: Array<{ serialNumber?: string | null; issueDate?: string | null }>,
+) {
+  return prescriptions.flatMap(rx => {
+    const serialNumber = normalizeSerialNumber(rx.serialNumber);
+    const issueDate = String(rx.issueDate || '').slice(0, 10);
+    if (!serialNumber || !issueDate) return [];
+    return [{ serialNumber, issueDate }];
+  });
+}
+
 export function serialReuseUntilDate(issueDate?: string | null) {
   const issued = dateOrdinal(issueDate);
   return issued === null ? null : ordinalDate(issued + SERIAL_REUSE_WINDOW_DAYS);

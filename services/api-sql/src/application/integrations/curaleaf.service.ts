@@ -19,10 +19,20 @@ import {
   matchPurchaseOrder,
 } from '../orders/curaleaf-fulfilment.js';
 import {
+  prescriptionFileIdsFromRx,
   prescriptionFileIdsFromSnapshot,
   purgeOrderPrescriptionFiles,
 } from '../prescriptions/prescription-file-purge.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
+import {
+  allSnapshotRxsHavePurchaseOrders,
+  customerReferenceForRx,
+  curaleafSubOrders,
+  pendingPlacementRxIndexes,
+  rxHasPurchaseOrder,
+  snapshotRxKey,
+  snapshotRxList,
+} from '../prescriptions/snapshot-rx.js';
 import { recordVerifiedPrescriberInDirectory } from '../prescriptions/verified-prescriber-directory.js';
 import {
   curaleafSerialLookupDecision,
@@ -623,8 +633,14 @@ async function uploadLocalPrescriptionCopyToCuraleaf(
   organisationId: string,
   snapshot: unknown,
   curaleafPrescriptionId: string,
+  rx?: Record<string, unknown> | null,
 ) {
-  const fileIds = prescriptionFileIdsFromSnapshot(snapshot);
+  const fromRx = prescriptionFileIdsFromRx(rx);
+  const fileIds = fromRx.length
+    ? fromRx
+    : snapshotRxList(snapshot).length > 1
+      ? []
+      : prescriptionFileIdsFromSnapshot(snapshot);
   if (!fileIds.length) return { uploaded: false, required: false, correctionRequired: false };
   const prescriptionRepo = new SqlPrescriptionRepository();
   const storage = new StorageProvider();
@@ -696,6 +712,16 @@ async function persistPlacementAttention(input: {
   };
 }
 
+type CuraleafPlacementResult = {
+  skipped?: boolean;
+  reason?: string;
+  purchaseOrder?: { id?: string | null; purchaseOrderId?: string | null } | null;
+  prescriptionId?: string | null;
+  prescriberId?: string | null;
+  prescriberState?: string | null;
+  quoteReview?: unknown;
+};
+
 export async function executeCuraleafOrderPlacement(
   connection: IntegrationConnectionRecord,
   order: {
@@ -706,8 +732,9 @@ export async function executeCuraleafOrderPlacement(
     paidAt?: string | null;
     quoteSnapshot?: unknown;
     patientId?: string | null;
+    __placementRxIndex?: number;
   }
-) {
+): Promise<CuraleafPlacementResult> {
   if (order.status === 'CANCELLED') {
     return { skipped: true, reason: 'Order is cancelled' };
   }
@@ -720,8 +747,39 @@ export async function executeCuraleafOrderPlacement(
     return { skipped: true, reason: 'Order is not paid yet' };
   }
 
+  const rxListEarly = snapshotRxList(order.quoteSnapshot);
+  if (order.__placementRxIndex == null && rxListEarly.length > 1) {
+    let working = order;
+    let last: CuraleafPlacementResult = { skipped: true, reason: 'No prescriptions' };
+    const orderRepo = new SqlOrderRepository();
+    for (const index of pendingPlacementRxIndexes(working.quoteSnapshot)) {
+      last = await executeCuraleafOrderPlacement(connection, { ...working, __placementRxIndex: index });
+      const refreshed = await orderRepo.findOrderById(order.id, connection.organisationId);
+      if (refreshed) {
+        working = {
+          ...working,
+          quoteSnapshot: refreshed.quoteSnapshot,
+          paymentStatus: refreshed.paymentStatus,
+          status: refreshed.status,
+        };
+      }
+    }
+    return last;
+  }
+
   const recordedPurchaseOrder = existingCuraleafPurchaseOrder(order);
-  if (recordedPurchaseOrder) {
+  const rxIndex = order.__placementRxIndex ?? 0;
+  const rxKey = snapshotRxKey(snapshotRxList(order.quoteSnapshot)[rxIndex] || {}, rxIndex);
+  if (rxHasPurchaseOrder(order.quoteSnapshot, rxKey)) {
+    return {
+      skipped: true,
+      reason: 'Purchase order already recorded for this prescription',
+      purchaseOrder: curaleafSubOrders(order.quoteSnapshot)[rxKey] ?? recordedPurchaseOrder,
+      prescriptionId: null,
+      prescriberId: null,
+    };
+  }
+  if (recordedPurchaseOrder && snapshotRxList(order.quoteSnapshot).length <= 1) {
     await purgeOrderPrescriptionFiles(connection.organisationId, order.quoteSnapshot).catch(error =>
       console.warn('[Prescription file] Purge after recorded PO note:', error),
     );
@@ -734,11 +792,12 @@ export async function executeCuraleafOrderPlacement(
     };
   }
 
-  const customerReference = order.orderNumber || `HHH-${order.id}`;
+  const customerReference = customerReferenceForRx(order.orderNumber, order.id, rxIndex);
   let snapshot = (order.quoteSnapshot ?? {}) as Record<string, unknown>;
-  const priorCuraleaf = (snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
+  const priorFromSub = curaleafSubOrders(snapshot)[rxKey];
+  const priorCuraleaf = (priorFromSub || (rxIndex === 0 && snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
     ? snapshot.curaleaf
-    : null) as {
+    : null)) as {
       prescriptionId?: string | null;
       prescriberId?: string | null;
       prescriberState?: string | null;
@@ -748,9 +807,9 @@ export async function executeCuraleafOrderPlacement(
   try {
     const livePurchaseOrders = await fetchCuraleafPurchaseOrders(connection);
     const matchedPurchaseOrder = matchPurchaseOrder(
-      { id: order.id, orderNumber: order.orderNumber ?? customerReference },
+      { id: order.id, orderNumber: customerReference },
       livePurchaseOrders,
-      null,
+      priorCuraleaf,
     );
     if (matchedPurchaseOrder?.id) {
       if (isCuraleafTerminalRejection(matchedPurchaseOrder.state || matchedPurchaseOrder.purchaseOrderState)) {
@@ -769,9 +828,11 @@ export async function executeCuraleafOrderPlacement(
         });
         return { skipped: true, reason: 'Curaleaf purchase order was cancelled' };
       }
-      await purgeOrderPrescriptionFiles(connection.organisationId, snapshot).catch(error =>
-        console.warn('[Prescription file] Purge after existing PO note:', error),
-      );
+      if (snapshotRxList(order.quoteSnapshot).length <= 1) {
+        await purgeOrderPrescriptionFiles(connection.organisationId, snapshot).catch(error =>
+          console.warn('[Prescription file] Purge after existing PO note:', error),
+        );
+      }
       return {
         skipped: true,
         reason: 'Purchase order already exists at Curaleaf',
@@ -788,8 +849,8 @@ export async function executeCuraleafOrderPlacement(
     return { skipped: true, reason: 'Existing Curaleaf purchase orders could not be checked' };
   }
 
-  const rxList = Array.isArray(snapshot.prescriptions) ? snapshot.prescriptions as Array<Record<string, unknown>> : [];
-  const rxData = (rxList[0] && typeof rxList[0] === 'object' ? rxList[0] : {}) as Record<string, unknown>;
+  const rxList = snapshotRxList(snapshot);
+  const rxData = (rxList[rxIndex] && typeof rxList[rxIndex] === 'object' ? rxList[rxIndex] : rxList[0] || {}) as Record<string, unknown>;
   const prescriberInfo = (rxData.prescriber && typeof rxData.prescriber === 'object'
     ? rxData.prescriber
     : {}) as Record<string, unknown>;
@@ -907,6 +968,7 @@ export async function executeCuraleafOrderPlacement(
     snapshot = await persistCuraleafPrescriptionIdentity({
       organisationId: connection.organisationId,
       orderId: order.id,
+      rxKey,
       patientId: order.patientId,
       snapshot,
       prescriberId,
@@ -949,11 +1011,13 @@ export async function executeCuraleafOrderPlacement(
 
   // Step 2: Extract line items. Units are pack count × product pack size — never a 10g guess.
   const rxDataItems = Array.isArray(rxData.items) ? rxData.items as Array<Record<string, unknown>> : [];
-  const rawItems: Array<Record<string, unknown>> = Array.isArray(snapshot.lineItems)
-    ? snapshot.lineItems as Array<Record<string, unknown>>
-    : Array.isArray(snapshot.items)
-      ? snapshot.items as Array<Record<string, unknown>>
-      : rxList.flatMap(rx => Array.isArray(rx.items) ? rx.items as Array<Record<string, unknown>> : []);
+  const rawItems: Array<Record<string, unknown>> = rxDataItems.length > 0
+    ? rxDataItems
+    : Array.isArray(snapshot.lineItems) && rxList.length <= 1
+      ? snapshot.lineItems as Array<Record<string, unknown>>
+      : Array.isArray(snapshot.items) && rxList.length <= 1
+        ? snapshot.items as Array<Record<string, unknown>>
+        : rxDataItems;
   const prescriptionItems = [...rxDataItems, ...prescriptionItemsFromSnapshot(snapshot)];
   let catalogPackSizeByPackId = new Map<string, number>();
   let placedLines = buildPrescriptionPlacementItems({
@@ -1135,6 +1199,7 @@ export async function executeCuraleafOrderPlacement(
   snapshot = await persistCuraleafPrescriptionIdentity({
     organisationId: connection.organisationId,
     orderId: order.id,
+    rxKey,
     patientId: order.patientId,
     snapshot,
     prescriptionId: curaleafPrescriptionId,
@@ -1148,6 +1213,7 @@ export async function executeCuraleafOrderPlacement(
       connection.organisationId,
       snapshot,
       curaleafPrescriptionId,
+      rxData,
     );
     if (upload.correctionRequired) {
       return persistPlacementAttention({
@@ -1184,6 +1250,7 @@ export async function executeCuraleafOrderPlacement(
       await persistCuraleafPrescriptionIdentity({
         organisationId: connection.organisationId,
         orderId: order.id,
+        rxKey,
         patientId: order.patientId,
         snapshot,
         prescriptionId: curaleafPrescriptionId,
@@ -1204,6 +1271,7 @@ export async function executeCuraleafOrderPlacement(
       await persistCuraleafPrescriptionIdentity({
         organisationId: connection.organisationId,
         orderId: order.id,
+        rxKey,
         patientId: order.patientId,
         snapshot,
         prescriptionId: curaleafPrescriptionId,
@@ -1275,6 +1343,7 @@ export async function executeCuraleafOrderPlacement(
     await persistCuraleafPrescriptionIdentity({
       organisationId: connection.organisationId,
       orderId: order.id,
+      rxKey,
       patientId: order.patientId,
       snapshot,
       prescriptionId: curaleafPrescriptionId,
@@ -1284,9 +1353,12 @@ export async function executeCuraleafOrderPlacement(
       customerReferenceFallback: customerReference,
       fulfilmentStatus: 'SUPPLIER_PROCESSING',
     });
-    await purgeOrderPrescriptionFiles(connection.organisationId, snapshot).catch(error =>
-      console.warn('[Prescription file] Purge after purchase-order-from-prescriptions note:', error),
-    );
+    const placedSnapshot = (await new SqlOrderRepository().findOrderById(order.id, connection.organisationId))?.quoteSnapshot ?? snapshot;
+    if (allSnapshotRxsHavePurchaseOrders(placedSnapshot) || snapshotRxList(placedSnapshot).length <= 1) {
+      await purgeOrderPrescriptionFiles(connection.organisationId, placedSnapshot).catch(error =>
+        console.warn('[Prescription file] Purge after purchase-order-from-prescriptions note:', error),
+      );
+    }
   } catch (poErr) {
     console.warn('[Curaleaf] Purchase order from prescription failed.', {
       code: poErr instanceof HttpError ? poErr.code : 'CURALEAF_PURCHASE_ORDER_FAILED',

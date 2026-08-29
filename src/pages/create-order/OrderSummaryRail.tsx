@@ -40,6 +40,7 @@ type OrderSummaryRailProps = {
   draftBasketBlockedCount: number;
   canEditBasketItems: boolean;
   selectedRxId: number | null;
+  prescriptions: Array<{ id: number; entryMode: 'clinic' | 'manual' }>;
   onStepClick: (step: WizardStep) => void;
   onContinue: () => void;
   continueDisabled: boolean;
@@ -75,6 +76,7 @@ export default function OrderSummaryRail({
   draftBasketBlockedCount,
   canEditBasketItems,
   selectedRxId,
+  prescriptions,
   onStepClick,
   onContinue,
   continueDisabled,
@@ -146,15 +148,22 @@ export default function OrderSummaryRail({
         ) : (
           <>
             <ul className="rx-order-summary-rail__items">
-              {draftBasketItems.map((item, index) => {
+              {(prescriptions.length > 1 ? prescriptions : [{ id: selectedRxId ?? -1, entryMode: 'clinic' as const }]).flatMap((rx, rxIndex) => {
+                const grouped = draftBasketItems
+                  .map((item, index) => ({ item, index }))
+                  .filter(entry => prescriptions.length > 1 ? entry.item.rxId === rx.id : true);
+                if (!grouped.length) return [];
+                const heading = prescriptions.length > 1 ? (
+                  <li key={`rx-head-${rx.id}`} className="rx-order-summary-rail__rx-head">
+                    {`Prescription ${rxIndex + 1} · ${rx.entryMode === 'manual' ? 'Manual' : 'Clinic'}`}
+                  </li>
+                ) : null;
+                const rows = grouped.map(({ item, index }) => {
                 const issue = draftBasketIssues[index];
                 const packLabel = `${item.qty} pack${item.qty === 1 ? '' : 's'}`;
-                // When the quantity is editable the pack count belongs next to the
-                // −/+ that change it, not stranded opposite the price.
                 const editable = canEditBasketItems && item.rxId === selectedRxId;
                 return (
                   <li key={`${item.rxId}-${item.productId}`} className={issue ? `is-${issue.tone}` : undefined}>
-                    {/* The name gets the full rail width so its marquee frame has room to read. */}
                     <div className="rx-order-summary-rail__product">
                       <MedicineLabel name={item.name} />
                     </div>
@@ -182,13 +191,14 @@ export default function OrderSummaryRail({
                       <div className="rx-order-summary-rail__edit">
                         <button type="button" className="icon-button" aria-label={`Reduce packs of ${item.name}`} disabled={item.qty <= 1} onClick={() => onEditQuantity(item.rxId, item.productId, item.qty - 1)}><Minus size={14} /></button>
                         <button type="button" className="icon-button" aria-label={`Add pack of ${item.name}`} disabled={item.qty >= 100} onClick={() => onEditQuantity(item.rxId, item.productId, item.qty + 1)}><Plus size={14} /></button>
-                        {/* Reads out the new count after −/+ without a second live region. */}
                         <span className="rx-order-summary-rail__edit-qty" aria-live="polite">{packLabel}</span>
                         <button type="button" className="icon-button danger rx-order-summary-rail__edit-remove" aria-label={`Remove ${item.name}`} onClick={() => onRemoveItem(item.rxId, item.productId)}><Trash2 size={14} /></button>
                       </div>
                     ) : null}
                   </li>
                 );
+                });
+                return heading ? [heading, ...rows] : rows;
               })}
             </ul>
 

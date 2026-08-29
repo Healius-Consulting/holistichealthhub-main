@@ -14,7 +14,7 @@ import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
 import { formatShippingAddress } from '../utils/shippingAddress';
 import { nextDraftIdAfterDeletion, preferredDraftIndex, preferredDraftPaymentRoute } from '../utils/createOrderDraft';
-import { replacementPrescriptionCopy } from '../utils/replacementPrescriptionCopy';
+import { replacementPrescriptionCopy, replacementSourcePrescriptions } from '../utils/replacementPrescriptionCopy';
 import { orderRequiresCuraleafCancel, orderSupplyIncomplete } from '../utils/orderStage';
 import { PHARMACY_REVIEWER_DISPLAY, isNegativeEligibilityStatus } from '../utils/eligibilityPresentation';
 import { businessOrderReference } from '../utils/orderReference';
@@ -1119,16 +1119,18 @@ function findOrder(state: AppState, orderId: number) {
 }
 
 function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: UnresolvedOrderReason): PatientOrder {
-  const cancelledRemainders = source.prescriptions.flatMap(rx => rx.items.flatMap(item => {
-    const cancelledPacks = rx.fulfilmentLines?.find(line => line.productId === item.productId)?.cancelledRemainder ?? 0;
+  const sourceRx = replacementSourcePrescriptions(source.prescriptions)[0];
+  const cancelledRemainders = (sourceRx?.items ?? []).flatMap(item => {
+    const cancelledPacks = sourceRx?.fulfilmentLines?.find(line => line.productId === item.productId)?.cancelledRemainder ?? 0;
     if (cancelledPacks <= 0) return [];
     const unitsPerPack = item.unitsNeededCount && item.qty > 0 ? item.unitsNeededCount / item.qty : undefined;
     return [{ ...item, qty: cancelledPacks, unitsNeededCount: unitsPerPack ? Math.max(1, Math.round(unitsPerPack * cancelledPacks)) : item.unitsNeededCount }];
-  }));
+  });
   const items = cancelledRemainders.length
     ? cancelledRemainders
-    : source.prescriptions.flatMap(rx => rx.items).map(item => ({ ...item }));
-  const targetRxId = draft.prescriptions[0]?.id;
+    : (sourceRx?.items ?? []).map(item => ({ ...item }));
+  const draftRx = draft.prescriptions[0] ?? blankRx(draft.id * 100 + 1);
+  const copied = replacementPrescriptionCopy(sourceRx);
   return {
     ...draft,
     patientId: source.patientId ?? draft.patientId,
@@ -1141,37 +1143,32 @@ function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: U
       isPaidRedo: source.payment.status === 'paid' && source.refund?.status !== 'completed',
       reason,
     },
-    prescriptions: draft.prescriptions.map(rx => {
-      if (rx.id !== targetRxId) return rx;
-      const sourceRx = source.prescriptions[0];
-      const copied = replacementPrescriptionCopy(sourceRx);
-      return {
-        ...rx,
-        items,
-        prescriber: sourceRx?.prescriber ?? rx.prescriber,
-        prescriberId: sourceRx?.prescriberId ?? rx.prescriberId,
-        prescriberPin: sourceRx?.prescriberPin ?? rx.prescriberPin,
-        prescriberGmcNumber: sourceRx?.prescriberGmcNumber ?? rx.prescriberGmcNumber,
-        prescriberGphcNumber: sourceRx?.prescriberGphcNumber ?? rx.prescriberGphcNumber,
-        copyFileName: copied.copyFileName,
-        fileId: copied.fileId,
-        clinicScanId: undefined,
-        curaleafPrescriptionId: undefined,
-        serialNumber: copied.serialNumber,
-        issueDate: copied.issueDate,
-        expiryDate: copied.expiryDate,
-        serialInherited: copied.serialInherited,
-        entryMode: copied.serialEligible ? 'manual' : rx.entryMode,
-        curaleafPatientName: undefined,
-        curaleafPatientDob: undefined,
-        placed: false,
-        poRef: null,
-        status: 'draft',
-        invoiceRef: null,
-        trackingNumber: null,
-        carrier: null,
-      };
-    }),
+    prescriptions: [{
+      ...draftRx,
+      items,
+      prescriber: sourceRx?.prescriber ?? draftRx.prescriber,
+      prescriberId: sourceRx?.prescriberId ?? draftRx.prescriberId,
+      prescriberPin: sourceRx?.prescriberPin ?? draftRx.prescriberPin,
+      prescriberGmcNumber: sourceRx?.prescriberGmcNumber ?? draftRx.prescriberGmcNumber,
+      prescriberGphcNumber: sourceRx?.prescriberGphcNumber ?? draftRx.prescriberGphcNumber,
+      copyFileName: copied.copyFileName,
+      fileId: copied.fileId,
+      clinicScanId: undefined,
+      curaleafPrescriptionId: undefined,
+      serialNumber: copied.serialNumber,
+      issueDate: copied.issueDate,
+      expiryDate: copied.expiryDate,
+      serialInherited: copied.serialInherited,
+      entryMode: copied.serialEligible ? 'manual' : draftRx.entryMode,
+      curaleafPatientName: undefined,
+      curaleafPatientDob: undefined,
+      placed: false,
+      poRef: null,
+      status: 'draft',
+      invoiceRef: null,
+      trackingNumber: null,
+      carrier: null,
+    }],
   };
 }
 
@@ -1614,6 +1611,8 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_ORDER_PAYMENT_ROUTE':
       return mapOrder(state, action.orderId, order => order.payment.status === 'none' ? { ...order, paymentRoute: action.paymentRoute } : order);
     case 'ADD_RX': {
+      const order = findOrder(state, action.orderId);
+      if (!order || order.redoContext) return state;
       const rxId = state.nextIds.rx;
       return {
         ...mapOrder(state, action.orderId, o => ({ ...o, prescriptions: [...o.prescriptions, blankRx(rxId)] })),
@@ -1747,9 +1746,11 @@ function reducer(state: AppState, action: Action): AppState {
         ...r, items: r.items.map(i => i.productId === action.productId ? { ...i, unitsNeededCount: Math.max(1, Math.floor(action.unitsNeededCount)) } : i),
       })));
     case 'REMOVE_RX':
-      return mapOrder(state, action.orderId, o => ({
-        ...o, prescriptions: o.prescriptions.filter(r => r.id !== action.rxId),
-      }));
+      return mapOrder(state, action.orderId, o => {
+        if (o.prescriptions.length <= 1) return o;
+        const next = o.prescriptions.filter(r => r.id !== action.rxId);
+        return next.length ? { ...o, prescriptions: next } : o;
+      });
     case 'CLEAR_ORDER':
     {
       const removedOrder = state.orders.find(order => order.id === action.orderId);

@@ -22,6 +22,7 @@ import { sqlIntakeCaseReference } from './intake-contracts.js';
 import { pendingEnquiryDisplayStatus, portalSourceType } from './intake-source.js';
 import { overviewFinanceSnapshot } from '../../application/finance/pharmacy-ledger.js';
 import { serialReuseUntilDate } from '../../application/prescriptions/serial-reuse.js';
+import { snapshotRxKey } from '../../application/prescriptions/snapshot-rx.js';
 
 type PortalOrder = ReturnType<typeof toPortalOrder>;
 
@@ -499,11 +500,25 @@ export function toPortalOrder(order: PortalOrderSource) {
   });
 
   const rawPrescriptions = snapshot?.prescriptions || [];
-  const prescriptions = Array.isArray(rawPrescriptions) && rawPrescriptions.length > 0 ? rawPrescriptions.map((rx: any) => ({
-    ...rx,
-    curaleafPrescriptionId: rx.curaleafPrescriptionId || prescriptionId || persistedCuraleaf?.prescriptionId || null,
-    items: lineItems,
-  })) : (lineItems.length > 0 ? [{
+  const multiRx = Array.isArray(rawPrescriptions) && rawPrescriptions.length > 1;
+  const prescriptions = Array.isArray(rawPrescriptions) && rawPrescriptions.length > 0 ? rawPrescriptions.map((rx: any, index: number) => {
+    const rxKey = snapshotRxKey(rx && typeof rx === 'object' ? rx : {}, index);
+    const sub = snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
+      ? (snapshot.curaleafSubOrders as Record<string, any>)[rxKey]
+      : null;
+    const snapshotLines = Array.isArray(snapshot?.lineItems) ? snapshot.lineItems as Array<Record<string, unknown>> : [];
+    const localId = String(rx?.id ?? '');
+    const attributed = snapshotLines.filter(line => String(line.localPrescriptionId || '') === localId);
+    const packIds = new Set(
+      (attributed.length ? attributed : Array.isArray(rx?.items) ? rx.items : []).map((item: any) => String(item.packId || item.productId || '')).filter(Boolean),
+    );
+    const ownItems = packIds.size ? lineItems.filter((item: { packId: string; productId: string }) => packIds.has(item.packId) || packIds.has(item.productId)) : [];
+    return {
+      ...rx,
+      curaleafPrescriptionId: rx.curaleafPrescriptionId || sub?.prescriptionId || (!multiRx ? (prescriptionId || persistedCuraleaf?.prescriptionId || null) : null),
+      items: ownItems.length ? ownItems : (!multiRx ? lineItems : []),
+    };
+  }) : (lineItems.length > 0 ? [{
     id: `rx-${order.id.slice(0, 8)}`,
     fileId: `rx-${order.id.slice(0, 8)}`,
     curaleafPrescriptionId: prescriptionId || persistedCuraleaf?.prescriptionId || null,
@@ -561,6 +576,13 @@ export function toPortalOrder(order: PortalOrderSource) {
   const prescriptionFlow: Record<string, any> = {};
   for (const rx of prescriptions) {
     const rxKey = String(rx.id || rx.fileId || `rx-${order.id.slice(0, 8)}`);
+    const sub = snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
+      ? (snapshot.curaleafSubOrders as Record<string, any>)[rxKey]
+      : null;
+    const rxPurchaseOrderId = typeof sub?.purchaseOrderId === 'string' && sub.purchaseOrderId.trim()
+      ? sub.purchaseOrderId.trim()
+      : (prescriptions.length <= 1 ? purchaseOrderId : null);
+    const rxHasPo = Boolean(rxPurchaseOrderId);
     prescriptionFlow[rxKey] = {
       id: rxKey,
       orderId: rxKey,
@@ -572,15 +594,15 @@ export function toPortalOrder(order: PortalOrderSource) {
         : hasCheckedInPacks && order.fulfilmentStatus === 'READY_FOR_COLLECTION' ? 'READY_FOR_COLLECTION'
         : hasCheckedInPacks && order.fulfilmentStatus === 'RECEIVED' ? 'RECEIVED'
         : hasCheckedInPacks && (order.fulfilmentStatus === 'PARTIALLY_RECEIVED' || computedFulfilment === 'PARTIALLY_RECEIVED') ? 'PARTIALLY_RECEIVED'
-        : isSupplierFlowActive || hasPurchaseOrderRecord ? 'PLACED'
+        : rxHasPo || (prescriptions.length <= 1 && (isSupplierFlowActive || hasPurchaseOrderRecord)) ? 'PLACED'
         : isPaid ? 'PENDING_PLACEMENT'
         : 'AWAITING_PAYMENT',
-      lines,
+      lines: rxHasPo || prescriptions.length <= 1 ? lines : [],
       shipmentIds,
       shipmentStates,
       dispatchStatus,
       quantityMismatch: lines.some(line => line.quantityMismatch),
-      purchaseOrderId,
+      purchaseOrderId: rxPurchaseOrderId,
       placedAt,
       latestShipmentAt,
       goodsInAt: hasCheckedInPacks ? (persistedCuraleaf?.goodsInAt ?? po?.goodsInAt ?? null) : null,
@@ -692,6 +714,9 @@ export function toPortalOrder(order: PortalOrderSource) {
     curaleafApprovedAt: po?.createdAt || po?.issuedDate || undefined,
     autoPlacementEnabled: true,
     curaleaf,
+    curaleafSubOrders: snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
+      ? snapshot.curaleafSubOrders
+      : undefined,
     curaleafPlacement,
     quoteReview,
     quoteChecks,

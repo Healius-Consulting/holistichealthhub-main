@@ -24,6 +24,7 @@ export function computeWizardProgress(input: ComputeWizardProgressInput): Wizard
     prescriptionReady,
     readyForProducts,
     draftBasketCount,
+    selectedBasketCount,
     readyForPayment,
     selectedRx,
     routeExplicitlyChosen,
@@ -32,7 +33,7 @@ export function computeWizardProgress(input: ComputeWizardProgressInput): Wizard
 
   const routeChosen = isRouteChosen(selectedRx, routeExplicitlyChosen);
   const rxSubStep = deriveRxSubStep(selectedRx, routeChosen);
-  const medicinesComplete = draftBasketCount >= 1 && readyForProducts;
+  const medicinesComplete = selectedBasketCount >= 1 && readyForProducts;
 
   const steps: WizardProgress['steps'] = {
     1: { complete: patientReady },
@@ -77,7 +78,7 @@ export function computeWizardProgress(input: ComputeWizardProgressInput): Wizard
     suggestedFocus,
     rxSubStep,
     steps,
-    basketUnlocked: prescriptionAuthenticated && draftBasketCount > 0,
+    basketUnlocked: draftBasketCount > 0 && (prescriptionAuthenticated || !isReplacement),
     basketIsProvisional: isReplacement && draftBasketCount > 0 && !prescriptionAuthenticated,
     isReplacement,
     patientLocked: isReplacement,
@@ -111,8 +112,9 @@ export function wizardNextHint(input: {
   entryMode?: 'clinic' | 'manual';
   readyForProducts: boolean;
   draftBasketCount: number;
+  incompletePrescriptionCount?: number;
 }): string {
-  const { progress, patientLinked, patientEligible, entryMode, readyForProducts, draftBasketCount } = input;
+  const { progress, patientLinked, patientEligible, entryMode, readyForProducts, draftBasketCount, incompletePrescriptionCount = 0 } = input;
   if (!progress.steps[1].complete) {
     if (patientLinked && !patientEligible) return 'This patient cannot start an order until they are approved.';
     return 'Link an approved patient to continue.';
@@ -127,5 +129,10 @@ export function wizardNextHint(input: {
       : 'Wait until Curaleaf verifies the barcode, or try the scan again.';
   }
   if (draftBasketCount === 0 && progress.steps[2].complete) return 'Add a prescribed medicine to review payment.';
+  if (incompletePrescriptionCount > 0 && progress.steps[2].complete) {
+    return incompletePrescriptionCount === 1
+      ? 'Finish the remaining prescription before requesting payment.'
+      : 'Finish every prescription before requesting payment.';
+  }
   return '';
 }

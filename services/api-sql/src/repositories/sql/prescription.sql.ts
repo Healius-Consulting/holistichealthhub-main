@@ -191,6 +191,14 @@ const FIND_PRESCRIPTION_BY_SUPPLIER_ID_GQL = `
   }
 `;
 
+const FIND_PRESCRIPTION_BY_ID_GQL = `
+  query FindPrescriptionById($id: UUID!) {
+    prescriptions(where: { id: { eq: $id } }, limit: 1) {
+      ${PRESCRIPTION_FIELDS}
+    }
+  }
+`;
+
 const FIND_PRESCRIPTION_BY_SERIAL_GQL = `
   query FindPrescriptionBySerial($organisationId: UUID!, $serialNumber: String!) {
     prescriptions(
@@ -608,6 +616,14 @@ export class SqlPrescriptionRepository implements PrescriptionRepositoryPort {
     return true;
   }
 
+  async findPrescriptionById(id: string): Promise<PrescriptionRecord | null> {
+    const result = await dataConnect.executeGraphql<{ prescriptions: PrescriptionRecord[] }, { id: string }>(
+      FIND_PRESCRIPTION_BY_ID_GQL,
+      { variables: { id } },
+    );
+    return result.data.prescriptions?.[0] ?? null;
+  }
+
   async findPrescriptionBySupplierId(organisationId: string, supplierPrescriptionId: string): Promise<PrescriptionRecord | null> {
     const result = await dataConnect.executeGraphql<{ prescriptions: PrescriptionRecord[] }, any>(
       FIND_PRESCRIPTION_BY_SUPPLIER_ID_GQL,
@@ -628,7 +644,10 @@ export class SqlPrescriptionRepository implements PrescriptionRepositoryPort {
     const existingBySupplier = input.supplierPrescriptionId
       ? await this.findPrescriptionBySupplierId(input.organisationId, input.supplierPrescriptionId)
       : null;
-    const existing = existingBySupplier;
+    const existingById = input.existingPrescriptionId
+      ? await this.findPrescriptionById(input.existingPrescriptionId)
+      : null;
+    const existing = existingBySupplier ?? existingById;
 
     if (existing) {
       await dataConnect.executeGraphql(UPDATE_PRESCRIPTION_SUPPLIER_GQL, {

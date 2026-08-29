@@ -22,14 +22,18 @@ export type WizardProgress = {
 
 export type ComputeWizardProgressInput = {
   patientReady: boolean;
+  /** Selected prescription is authenticated (unlocks medicines for that tab). */
   prescriptionAuthenticated: boolean;
+  /** Every prescription on the draft is complete, including medicines. */
   prescriptionReady: boolean;
   readyForProducts: boolean;
   draftBasketCount: number;
+  selectedBasketCount: number;
   readyForPayment: boolean;
   selectedRx: Prescription | null;
   routeExplicitlyChosen: boolean;
   isReplacement: boolean;
+  incompletePrescriptionCount?: number;
 };
 
 export const WIZARD_STEP_LABELS: Record<WizardStep, string> = {

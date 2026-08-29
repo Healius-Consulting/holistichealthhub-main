@@ -103,4 +103,16 @@ describe('buildPrescriptionPlacementItems', () => {
     assert.deepEqual(result.items, []);
     assert.deepEqual(result.missingPackSize, [vapePack]);
   });
+
+  it('places only the packs passed for that prescription', () => {
+    const result = buildPrescriptionPlacementItems({
+      rawLines: [{ packId: vapePack, formulaId: vapeFormula, quantity: 1, packSize: 1 }],
+      prescriptionItems: [
+        { packId: flowerPack, formulaId: flowerFormula, quantity: 2, packSize: 10 },
+        { packId: vapePack, formulaId: vapeFormula, quantity: 1, packSize: 1 },
+      ],
+    });
+    assert.equal(result.items.length, 1);
+    assert.equal(result.items[0]?.productId, vapePack);
+  });
 });

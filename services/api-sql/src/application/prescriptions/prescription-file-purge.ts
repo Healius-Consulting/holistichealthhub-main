@@ -10,6 +10,18 @@ const PRESCRIPTION_FILE_ID_KEYS = new Set([
   'sourceFileId',
 ]);
 
+export function prescriptionFileIdsFromRx(rx: unknown): string[] {
+  const record = rx && typeof rx === 'object' && !Array.isArray(rx)
+    ? rx as Record<string, unknown>
+    : {};
+  const ids: string[] = [];
+  for (const key of PRESCRIPTION_FILE_ID_KEYS) {
+    const value = record[key];
+    if (typeof value === 'string' && UUID_LIKE.test(value)) ids.push(value);
+  }
+  return ids;
+}
+
 export function prescriptionFileIdsFromSnapshot(snapshot: unknown): string[] {
   const ids = new Set<string>();
   const seen = new Set<object>();

@@ -62,9 +62,19 @@ import { assertSerialAvailableForCreate, serialAvailabilityHttpError } from '../
 import {
   normalizeSerialNumber,
   prescriptionFileIsUsable,
+  serialClaimsFromPrescriptions,
 } from '../../application/prescriptions/serial-reuse.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
+
+const UUID_LIKE = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
+
+function plusDaysIso(isoDate: string, days: number) {
+  const parsed = new Date(`${isoDate}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return isoDate;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
 
 function serialPolicyConflict(policy: {
   allowed: boolean;
@@ -161,6 +171,8 @@ const createOrderInputSchema = z.object({
     packSize: z.number().int().positive().optional(),
     unitsNeededCount: z.number().int().positive().optional(),
     unitPricePence: z.number().int().nonnegative().optional(),
+    localPrescriptionId: z.string().optional(),
+    wholesalePackPricePence: z.number().int().nonnegative().optional(),
   })).default([]),
   prescriptions: z.array(z.object({
     id: z.string().optional(),
@@ -591,27 +603,73 @@ export function createPortalOrderRouter(): Router {
       });
 
       if (result.id) {
+        const rxSqlIds = new Map<string, string>();
+        const today = new Date().toISOString().slice(0, 10);
+        for (const [index, rx] of input.prescriptions.entries()) {
+          const localKey = String(rx.id || index);
+          const serial = normalizeSerialNumber(rx.serialNumber);
+          const issueDate = String(rx.issueDate || '').slice(0, 10) || today;
+          const expiryDate = String(rx.expiryDate || '').slice(0, 10) || plusDaysIso(issueDate, 28);
+          const fileId = rx.fileId && UUID_LIKE.test(rx.fileId) ? rx.fileId : null;
+          const pendingSupplierId = (typeof rx.curaleafPrescriptionId === 'string' && rx.curaleafPrescriptionId.trim())
+            || `pending:${result.id}:${localKey}`;
+          try {
+            const saved = await prescriptionRepo.recordSupplierPrescription({
+              organisationId: scope.organisationId,
+              orderId: result.id,
+              patientId: input.patientId,
+              fileId,
+              supplierPrescriptionId: pendingSupplierId,
+              serialNumber: serial || `RX-${result.id.replace(/-/g, '').slice(0, 8)}-${index}`,
+              issueDate,
+              expiryDate,
+              status: 'PENDING_PLACEMENT',
+              patientNameSnapshot: rx.patient?.name?.trim() || 'Unknown patient',
+              patientDobSnapshot: (rx.patient?.dob || '').slice(0, 10) || '1900-01-01',
+              prescriberSnapshot: rx.prescriber ?? {},
+              placementState: 'PENDING_PLACEMENT',
+            });
+            rxSqlIds.set(localKey, saved.id);
+          } catch (error) {
+            console.warn('[Order create] Prescription row note:', error);
+          }
+        }
+
+        quoteSnapshot = {
+          ...(quoteSnapshot && typeof quoteSnapshot === 'object' ? quoteSnapshot as Record<string, unknown> : {}),
+          prescriptions: input.prescriptions.map((rx, index) => ({
+            ...rx,
+            hhhPrescriptionId: rxSqlIds.get(String(rx.id || index)) ?? null,
+          })),
+        };
+        await orderRepo.updateQuoteSnapshot({
+          id: result.id,
+          organisationId: scope.organisationId,
+          quoteSnapshot,
+        });
+
         await orderLineRepo.replaceOrderLines(result.id, authoritativeLineItems.map(item => {
+          const localKey = String(item.localPrescriptionId || '');
+          const onlyId = rxSqlIds.size === 1 ? [...rxSqlIds.values()][0] : null;
           return {
             orderId: result.id as string,
             packId: item.packId,
             formulaId: item.formulaId ?? null,
             formulaName: item.name ?? null,
             quantity: item.quantity,
+            prescriptionId: rxSqlIds.get(localKey) ?? onlyId ?? null,
             fixedPatientPricePence: item.unitPricePence,
             wholesalePackPricePence: item.wholesalePackPricePence,
             lineMedicineRevenuePence: item.unitPricePence * item.quantity,
           };
         }));
 
-        const createdSerial = normalizeSerialNumber(input.prescriptions[0]?.serialNumber);
-        const createdIssueDate = String(input.prescriptions[0]?.issueDate || '').slice(0, 10);
-        if (createdSerial && createdIssueDate) {
+        for (const claim of serialClaimsFromPrescriptions(input.prescriptions)) {
           try {
             await serialRepo.claim({
               organisationId: scope.organisationId,
-              serialNumber: createdSerial,
-              issueDate: createdIssueDate,
+              serialNumber: claim.serialNumber,
+              issueDate: claim.issueDate,
               patientId: input.patientId,
               orderId: result.id,
               sourceOrderId: replacement?.source.id ?? redoContext?.originalOrderId ?? null,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { prescriptionFileIdsFromSnapshot } from './prescription-file-purge.js';
+import { prescriptionFileIdsFromRx, prescriptionFileIdsFromSnapshot } from './prescription-file-purge.js';
 
 test('finds prescription file references in legacy and nested workflow snapshots', () => {
   const legacyFileId = '6410ed3a-0a47-4b1a-94e1-c64a15e0db34';
@@ -41,4 +41,11 @@ test('deduplicates file references and tolerates cyclic payloads', () => {
   snapshot.self = snapshot;
 
   assert.deepEqual(prescriptionFileIdsFromSnapshot(snapshot), [fileId]);
+});
+
+test('keeps only the file ids that belong to one prescription', () => {
+  const fileA = '6410ed3a-0a47-4b1a-94e1-c64a15e0db34';
+  const fileB = '9c2d91f1-d387-4cb7-b88c-f59e720175d0';
+  assert.deepEqual(prescriptionFileIdsFromRx({ fileId: fileA, other: fileB }), [fileA]);
+  assert.deepEqual(prescriptionFileIdsFromRx({ fileId: 'not-a-uuid' }), []);
 });

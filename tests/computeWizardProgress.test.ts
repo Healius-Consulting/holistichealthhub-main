@@ -5,7 +5,7 @@ import {
   deriveRxSubStep,
   isRouteChosen,
   prescriptionUploaded,
-  wizardStageTitle,
+  wizardNextHint,
 } from '../src/pages/create-order/computeWizardProgress.ts';
 import type { Prescription } from '../src/context/AppContext.ts';
 
@@ -31,6 +31,7 @@ test('fresh empty draft starts at step 1', () => {
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 0,
+    selectedBasketCount: 0,
     readyForPayment: false,
     selectedRx: blankRx(),
     routeExplicitlyChosen: false,
@@ -49,6 +50,7 @@ test('patient prefilled from overview lands on step 2', () => {
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 0,
+    selectedBasketCount: 0,
     readyForPayment: false,
     selectedRx: blankRx(),
     routeExplicitlyChosen: false,
@@ -65,6 +67,7 @@ test('redo with carried medicines stays on step 2 with provisional basket', () =
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 2,
+    selectedBasketCount: 2,
     readyForPayment: false,
     selectedRx: blankRx({ prescriber: 'Dr Smith', items: [{ productId: 'p1', formulaId: 'f1', name: 'Oil', qty: 1, unitsNeededCount: 1, cost: null, retail: 85 }] }),
     routeExplicitlyChosen: false,
@@ -92,6 +95,7 @@ test('resumed draft with verified file opens on upload sub-step', () => {
     prescriptionReady: false,
     readyForProducts: false,
     draftBasketCount: 0,
+    selectedBasketCount: 0,
     readyForPayment: false,
     selectedRx: rx,
     routeExplicitlyChosen: false,
@@ -108,6 +112,7 @@ test('manual auth complete unlocks step 3 before medicines are priced', () => {
     prescriptionReady: false,
     readyForProducts: true,
     draftBasketCount: 0,
+    selectedBasketCount: 0,
     readyForPayment: false,
     selectedRx: blankRx({
       entryMode: 'manual',
@@ -134,6 +139,7 @@ test('authenticated prescription with basket unlocks step 4 focus when ready', (
     prescriptionReady: true,
     readyForProducts: true,
     draftBasketCount: 1,
+    selectedBasketCount: 1,
     readyForPayment: true,
     selectedRx: blankRx({ clinicScanId: 'scan-1', copyFileName: 'rx.pdf' }),
     routeExplicitlyChosen: false,
@@ -151,6 +157,7 @@ test('paid redo with price difference can focus step 4 when auth complete', () =
     prescriptionReady: true,
     readyForProducts: true,
     draftBasketCount: 2,
+    selectedBasketCount: 2,
     readyForPayment: false,
     selectedRx: blankRx({ clinicScanId: 'scan-1', serialNumber: 'SN1' }),
     routeExplicitlyChosen: false,
@@ -160,8 +167,93 @@ test('paid redo with price difference can focus step 4 when auth complete', () =
   assert.equal(progress.basketUnlocked, true);
 });
 
-test('wizard stage titles follow focused step', () => {
-  assert.equal(wizardStageTitle({ focusedStep: 1, rxSubStep: 'route', paidRedo: false }), 'Link an approved patient');
-  assert.equal(wizardStageTitle({ focusedStep: 2, rxSubStep: 'route', paidRedo: false }), 'Scan the Curaleaf QR or enter it manually');
-  assert.equal(wizardStageTitle({ focusedStep: 4, rxSubStep: 'details', paidRedo: true }), 'Review and carry over payment');
+test('incomplete second prescription does not unlock payment', () => {
+  const progress = computeWizardProgress({
+    patientReady: true,
+    prescriptionAuthenticated: true,
+    prescriptionReady: false,
+    readyForProducts: true,
+    draftBasketCount: 2,
+    selectedBasketCount: 2,
+    readyForPayment: false,
+    selectedRx: blankRx({ clinicScanId: 'scan-1', copyFileName: 'rx.pdf' }),
+    routeExplicitlyChosen: false,
+    isReplacement: false,
+  });
+  assert.equal(progress.furthestUnlocked, 3);
+  assert.equal(progress.steps[3].complete, true);
+  assert.equal(progress.steps[4].complete, false);
+  assert.equal(progress.basketUnlocked, true);
 });
+
+test('selected prescription without packs does not mark medicines complete', () => {
+  const progress = computeWizardProgress({
+    patientReady: true,
+    prescriptionAuthenticated: false,
+    prescriptionReady: false,
+    readyForProducts: false,
+    draftBasketCount: 2,
+    selectedBasketCount: 0,
+    readyForPayment: false,
+    selectedRx: blankRx(),
+    routeExplicitlyChosen: false,
+    isReplacement: false,
+  });
+  assert.equal(progress.furthestUnlocked, 2);
+  assert.equal(progress.steps[3].complete, false);
+  assert.equal(progress.basketUnlocked, true);
+});
+
+test('mixed clinic and manual: selected clinic can unlock medicines while payment stays locked', () => {
+  const clinicRx = blankRx({
+    id: 1,
+    clinicScanId: 'scan-1',
+    copyFileName: 'clinic.pdf',
+    curaleafPrescriptionId: 'curaleaf-1',
+    prescriber: 'Dr Smith',
+    prescriberId: 'p1',
+    issueDate: '2026-08-01',
+    expiryDate: '2026-08-29',
+    items: [{ productId: 'p1', formulaId: 'f1', name: 'Oil', qty: 1, unitsNeededCount: 1, cost: 40, retail: 85 }],
+  });
+  const progress = computeWizardProgress({
+    patientReady: true,
+    prescriptionAuthenticated: true,
+    prescriptionReady: false,
+    readyForProducts: true,
+    draftBasketCount: 1,
+    selectedBasketCount: 1,
+    readyForPayment: false,
+    selectedRx: clinicRx,
+    routeExplicitlyChosen: false,
+    isReplacement: false,
+  });
+  assert.equal(progress.furthestUnlocked, 3);
+  assert.equal(progress.steps[3].complete, true);
+  assert.equal(progress.steps[4].complete, false);
+});
+
+test('incomplete second prescription is named in the next-step hint', () => {
+  const progress = computeWizardProgress({
+    patientReady: true,
+    prescriptionAuthenticated: true,
+    prescriptionReady: false,
+    readyForProducts: true,
+    draftBasketCount: 2,
+    selectedBasketCount: 2,
+    readyForPayment: false,
+    selectedRx: blankRx({ clinicScanId: 'scan-1', copyFileName: 'rx.pdf' }),
+    routeExplicitlyChosen: false,
+    isReplacement: false,
+  });
+  assert.equal(wizardNextHint({
+    progress,
+    patientLinked: true,
+    patientEligible: true,
+    entryMode: 'clinic',
+    readyForProducts: true,
+    draftBasketCount: 2,
+    incompletePrescriptionCount: 1,
+  }), 'Finish the remaining prescription before requesting payment.');
+});
+

@@ -6,8 +6,10 @@ import {
   money,
   orderCost,
   orderReference,
+  rxRevenue,
   type PatientOrder,
 } from '../../context/AppContext';
+import { rxRouteLabel, rxTabStatus, rxTabStatusLabel } from './rxTabStatus';
 import { CURALEAF_DELIVERY_LABEL, MEDICINE_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL, marginPercent } from '../../utils/pricing';
 
 type Step4CheckoutPanelProps = {
@@ -178,6 +180,28 @@ export default function Step4CheckoutPanel({
             </div>
           ) : null}
         </div>
+
+        {activeOrder.prescriptions.length > 1 ? (
+          <ul className="rx-step4-rx-list" aria-label="Prescriptions on this order">
+            {activeOrder.prescriptions.map((rx, index) => {
+              const status = rxTabStatus(rx);
+              const packCount = rx.items.reduce((sum, item) => sum + item.qty, 0);
+              return (
+                <li key={rx.id}>
+                  <span>
+                    <strong>Prescription {index + 1} · {rxRouteLabel(rx)}</strong>
+                    <small>
+                      {status === 'ready'
+                        ? `${rx.copyFileName || rx.clinicScanId ? 'copy attached' : ''} · ${packCount} pack${packCount === 1 ? '' : 's'}`
+                        : rxTabStatusLabel(status)}
+                    </small>
+                  </span>
+                  <strong>{quotedPatientTotals ? money(rxRevenue(rx)) : 'Quote pending'}</strong>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
 
         <dl className="rx-step4-ledger" aria-label="Order commercial summary">
           <div className="rx-step4-ledger__section">
