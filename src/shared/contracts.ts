@@ -981,6 +981,8 @@ export interface CuraleafActivationInput {
   customerId: string;
   /** Single Curaleaf X-API-Key for this pharmacy. Stored as writeApiKey for existing secrets. */
   writeApiKey: string;
+  /** Pin the estate when replacing test credentials with live ones. Omit to discover from the key. */
+  environment?: 'TEST' | 'PRODUCTION';
   /** @deprecated Curaleaf issues one key; ignored if sent. */
   readApiKey?: string;
   /** @deprecated No longer required; ignored by the API if sent. */

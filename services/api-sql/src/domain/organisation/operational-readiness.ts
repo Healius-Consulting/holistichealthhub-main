@@ -261,7 +261,7 @@ export function goLiveBlockedMessage(operational: PharmacyOperationalStatus): st
 }
 
 export const GO_LIVE_CURALEAF_TEST_ACK =
-  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Integrations on Overview.';
+  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Manage → Curaleaf.';
 
 export function goLiveRequiresCuraleafTestAcknowledgement(operational: PharmacyOperationalStatus): boolean {
   return !operational.curaleaf.production;

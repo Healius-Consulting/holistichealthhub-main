@@ -1972,6 +1972,10 @@ export default function AdminPortal() {
                         goLiveError={goLiveError}
                         goLiveBusy={goLiveBusy}
                         onFlipLive={options => void flipPharmacyLive(selectedPharmacy.id, options)}
+                        onOpenCuraleaf={() => {
+                          setOverviewManagePanel('curaleaf');
+                          setOverviewManageOpen(false);
+                        }}
                         onReverted={status => dispatch({ type: 'UPDATE_ORGANISATION', organisationId: selectedPharmacy.id, updates: { status } })}
                       />
                     </div>
@@ -1981,7 +1985,7 @@ export default function AdminPortal() {
                     <div className="admin-overview-manage-panel">
                       <section className="card admin-detail-card">
                         <div className="admin-detail-card-title"><LockKeyhole size={18} /><h2>Curaleaf connection</h2></div>
-                        <p>Credentials are protected server-side and never returned to the portal. Rotate the API key or refresh the live connection for this pharmacy here.</p>
+                        <p>Enter new credentials, or replace a test connection with live credentials. Keys are stored server-side and never shown again.</p>
                         <CuraleafConnectionPanel
                           key={selectedPharmacy.id}
                           organisationId={selectedPharmacy.id}

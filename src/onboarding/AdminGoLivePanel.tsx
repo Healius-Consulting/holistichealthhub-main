@@ -10,18 +10,20 @@ interface AdminGoLivePanelProps {
   goLiveError: string | null;
   goLiveBusy: boolean;
   onFlipLive: (options?: { acknowledgedCuraleafTest?: boolean }) => void;
+  onOpenCuraleaf?: () => void;
   onReverted?: (status: PharmacyTenant['status']) => void;
 }
 
 const INTAKE_EVIDENCE = 'HHH logged the intake call.';
 export const GO_LIVE_CURALEAF_TEST_ACK =
-  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Integrations on Overview.';
+  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Manage → Curaleaf.';
 
 export function AdminGoLivePanel({
   organisation,
   goLiveError,
   goLiveBusy,
   onFlipLive,
+  onOpenCuraleaf,
   onReverted,
 }: AdminGoLivePanelProps) {
   const liveWorkspace = organisation.status === 'live';
@@ -102,7 +104,7 @@ export function AdminGoLivePanel({
         <div>
           <p className="section-label">Go live</p>
           <h2>Pharmacy workspace</h2>
-          <p>Log the intake call, then flip the workspace live. If Curaleaf is still on test, confirm that the pharmacy has been told not to create or place orders until it is switched to live. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
+          <p>Log the intake call, then flip the workspace live. If Curaleaf is still on test, confirm that the pharmacy has been told not to create or place orders until live credentials are saved under Manage → Curaleaf. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
         </div>
         {liveWorkspace ? (
           <button type="button" className="btn btn-secondary btn-sm" disabled={goLiveBusy || reverting} onClick={() => void revertLive()}>
@@ -166,9 +168,16 @@ export function AdminGoLivePanel({
           <li>
             <div>
               <strong>Curaleaf</strong>
-              <span>Switch it from test to live under Integrations on Overview before they create or place orders. A test connection does not block go-live.</span>
+              <span>Enter new credentials, or replace the test key with live ones, under Manage → Curaleaf. A test connection does not block go-live.</span>
             </div>
-            <span className={`pill ${curaleafProduction ? 'pill-green' : 'pill-amber'}`}>{curaleafLabel}</span>
+            <div className="admin-golive-actions__aside">
+              <span className={`pill ${curaleafProduction ? 'pill-green' : 'pill-amber'}`}>{curaleafLabel}</span>
+              {onOpenCuraleaf ? (
+                <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenCuraleaf}>
+                  {curaleafProduction ? 'Open Curaleaf' : curaleafLabel === 'Waiting' ? 'Enter credentials' : 'Replace with live credentials'}
+                </button>
+              ) : null}
+            </div>
           </li>
         </ul>
       ) : null}

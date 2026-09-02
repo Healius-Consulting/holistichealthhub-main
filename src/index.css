@@ -2745,6 +2745,15 @@ td.font-semibold{
   flex-shrink: 0;
 }
 
+.admin-golive-actions__aside{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .admin-golive-ack{
   display: flex;
   align-items: flex-start;
@@ -2799,6 +2808,12 @@ td.font-semibold{
   }
   .admin-golive-actions .btn{
     width: 100%;
+  }
+  .admin-golive-actions__aside{
+    justify-content: stretch;
+  }
+  .admin-golive-actions__aside .btn{
+    flex: 1;
   }
 }
 
@@ -12626,6 +12641,11 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   gap: 10px;
 }
 
+.admin-curaleaf-connect > header .btn{
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
 .admin-curaleaf-connect > header > span:nth-child(2){
   min-width: 0;
   flex: 1;
@@ -12707,6 +12727,25 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   line-height: 1.45;
 }
 
+.admin-curaleaf-connect__warn{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.admin-curaleaf-connect__warn > svg{
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .admin-curaleaf-connect__actions{
   display: flex;
   flex-wrap: wrap;
@@ -12723,6 +12762,13 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 @media (max-width: 1000px){
+  .admin-curaleaf-connect > header{
+    display: grid;
+  }
+  .admin-curaleaf-connect > header .btn{
+    width: 100%;
+    justify-content: center;
+  }
   .admin-curaleaf-connect__fields{
     grid-template-columns: 1fr;
   }
