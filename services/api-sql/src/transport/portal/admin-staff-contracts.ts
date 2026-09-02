@@ -69,8 +69,9 @@ function lowerStaffStatus(status: StaffUserRecord['status']): PortalPharmacyStaf
 export function toPortalPharmacyStaffAccounts(
   organisationId: string,
   staff: StaffUserRecord[],
+  assignedOwnerUid?: string | null,
 ): PortalPharmacyStaffAccount[] {
-  const ownerUid = resolveOwnerUid(staff);
+  const ownerUid = resolveOwnerUid(staff, assignedOwnerUid);
   return staff.map(record => ({
     uid: record.uid,
     email: record.email,

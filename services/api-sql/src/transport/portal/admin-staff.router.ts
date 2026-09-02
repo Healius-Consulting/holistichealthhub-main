@@ -10,6 +10,7 @@ import { SqlOrganisationRepository } from '../../repositories/sql/organisation.s
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
+import { assertStaffCanBePharmacyOwner } from '../../application/identity/assign-pharmacy-owner.js';
 import { resolveOwnerUid, staffInviteEmailKey, staffInviteResendEmailKey, toPortalPharmacyStaffAccounts, toPortalPlatformAdminAccounts } from './admin-staff-contracts.js';
 
 const organisationIdSchema = z.string().regex(/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
@@ -64,7 +65,7 @@ export function createAdminStaffRouter(): Router {
       }
       const staff = await identityRepo.listPharmacyStaffByOrganisationId(organisationId);
       res.setHeader('Cache-Control', 'no-store');
-      res.status(200).json(toPortalPharmacyStaffAccounts(organisationId, staff));
+      res.status(200).json(toPortalPharmacyStaffAccounts(organisationId, staff, organisation.primaryContactUid));
     } catch (error) {
       next(error);
     }
@@ -108,8 +109,15 @@ export function createAdminStaffRouter(): Router {
       });
 
       const existingStaff = await identityRepo.listPharmacyStaffByOrganisationId(input.organisationId);
-      const contactRole = existingStaff.length === 0 ? 'owner' : 'staff';
       const createdAt = existingProfile?.createdAt ?? new Date().toISOString();
+      const assignedOwnerUid = organisation.primaryContactUid
+        ?? (existingStaff.length === 0 ? user.uid : null);
+      if (!organisation.primaryContactUid && existingStaff.length === 0) {
+        await organisationRepo.updateOrganisationPrimaryContactUid(input.organisationId, user.uid);
+      }
+      const contactRole = user.uid === resolveOwnerUid([...existingStaff, { uid: user.uid, createdAt }], assignedOwnerUid)
+        ? 'owner'
+        : 'staff';
 
       await identityRepo.upsertStaffUser({
         uid: user.uid,
@@ -185,7 +193,7 @@ export function createAdminStaffRouter(): Router {
       }
 
       const activeStaff = await identityRepo.listPharmacyStaffByOrganisationId(profile.organisationId);
-      const ownerUid = resolveOwnerUid(activeStaff);
+      const ownerUid = resolveOwnerUid(activeStaff, organisation.primaryContactUid);
       if (profile.uid === ownerUid) {
         throw new HttpError(409, 'The pharmacy owner account cannot be removed.', 'OWNER_ACCOUNT_PROTECTED');
       }
@@ -208,6 +216,39 @@ export function createAdminStaffRouter(): Router {
       });
 
       res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/admin/staff/:uid/owner', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const uid = staffUidSchema.parse(req.params.uid);
+      const profile = await identityRepo.findStaffUser(uid);
+      assertStaffCanBePharmacyOwner(profile);
+      const organisation = await organisationRepo.findOrganisationById(profile.organisationId);
+      if (!organisation) {
+        throw new HttpError(404, 'Pharmacy account not found.', 'NOT_FOUND');
+      }
+
+      await organisationRepo.updateOrganisationPrimaryContactUid(profile.organisationId, profile.uid);
+      const staff = await identityRepo.listPharmacyStaffByOrganisationId(profile.organisationId);
+
+      await identityRepo.appendAudit({
+        organisationId: profile.organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'staff.owner_assigned',
+        recordType: 'StaffUser',
+        recordId: profile.uid,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: { previousOwnerUid: organisation.primaryContactUid ?? resolveOwnerUid(staff) },
+      });
+
+      res.status(200).json(toPortalPharmacyStaffAccounts(profile.organisationId, staff, profile.uid));
     } catch (error) {
       next(error);
     }

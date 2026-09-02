@@ -13,6 +13,8 @@ import { publicReferralResolveLimiter, publicSubmissionLimiter } from '../../sec
 import { sha256 } from '../../security/session-utils.js';
 import type { CreateSubmissionInput } from '../../repositories/ports/intake.port.js';
 import { listPlatformAdminRecipients, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { attachPublicPharmacyLogo } from '../../application/organisation/public-pharmacy-logo.js';
+import { StorageProvider } from '../../providers/storage/storage.provider.js';
 
 export const referralTokenSchema = z.string().min(12).max(160).regex(/^[A-Za-z0-9_-]+$/);
 const opaqueIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
@@ -129,6 +131,7 @@ export function createPublicIntakeV2Router(): Router {
   const identityRepo = new SqlIdentityRepository();
   const notificationRepo = new SqlNotificationRepository();
   const searchRepo = new SqlPostcodeSearchRepository();
+  const storage = new StorageProvider();
 
   router.post('/public/referral-tokens/resolve', publicReferralResolveLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -136,7 +139,10 @@ export function createPublicIntakeV2Router(): Router {
       const resolution = await organisationRepo.findDirectoryByTokenHash(sha256(token));
       if (!resolution) throw new HttpError(404, 'Pharmacy link not found.', 'NOT_FOUND');
       res.setHeader('Cache-Control', 'no-store');
-      res.status(200).json(resolution);
+      res.status(200).json({
+        ...resolution,
+        pharmacy: await attachPublicPharmacyLogo(storage, resolution.pharmacy),
+      });
     } catch (error) {
       next(error);
     }

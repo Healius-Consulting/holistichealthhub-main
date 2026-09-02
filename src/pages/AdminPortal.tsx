@@ -42,7 +42,7 @@ import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources'
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { useAuth } from '../auth/useAuth';
-import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
+import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
 import { isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
@@ -532,7 +532,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
                 <div className="pharmacy-logo-editor__copy">
                   <small>Email identity</small>
                   <strong id="pharmacy-logo-heading">Pharmacy logo</strong>
-                  <p>PNG, JPEG or WebP. It is automatically centred on a transparent {EMAIL_LOGO_SPEC.assetWidth} × {EMAIL_LOGO_SPEC.assetHeight}px canvas for a consistent {EMAIL_LOGO_SPEC.displayWidth} × {EMAIL_LOGO_SPEC.displayHeight}px email header.</p>
+                  <p>PNG, JPEG or WebP. A flat background (white or a solid colour around the mark) is removed from the edges, then the logo is centred on a transparent {EMAIL_LOGO_SPEC.assetWidth} × {EMAIL_LOGO_SPEC.assetHeight}px canvas. Logos that already have a transparent PNG stay as they are.</p>
                   <div className="pharmacy-logo-editor__actions">
                     <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={selectLogo} hidden />
                     <button className="btn" type="button" onClick={() => logoInputRef.current?.click()} disabled={busy}><ImagePlus size={14} /> {logoPreviewUrl ? 'Replace logo' : 'Choose logo'}</button>
@@ -804,6 +804,7 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
   const [deletingUid, setDeletingUid] = useState<string | null>(null);
   const [resettingUid, setResettingUid] = useState<string | null>(null);
   const [resendingUid, setResendingUid] = useState<string | null>(null);
+  const [assigningUid, setAssigningUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -910,6 +911,24 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
     }
   };
 
+  const assignOwner = async (account: PharmacyStaffAccount) => {
+    if (account.contactRole === 'owner' || account.status === 'disabled') return;
+    if (!window.confirm(`Make ${account.displayName} the owner contact for this pharmacy? The previous owner stays as staff and can then be removed.`)) return;
+    setAssigningUid(account.uid);
+    setError(null);
+    try {
+      const updated = isLocalPortalPreview
+        ? staff.map(item => ({ ...item, contactRole: item.uid === account.uid ? 'owner' as const : 'staff' as const }))
+        : await assignPharmacyOwner(account.uid);
+      setStaff(updated);
+      dispatch({ type: 'ADD_TOAST', message: `${account.displayName} is now the owner contact.`, toastType: 'success' });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The owner contact could not be changed.');
+    } finally {
+      setAssigningUid(null);
+    }
+  };
+
   const resetMfa = async (account: PharmacyStaffAccount) => {
     if (account.status === 'disabled' || !window.confirm(`Remove ${account.displayName}'s authenticator app? They will set it up again the next time they sign in.`)) return;
     setResettingUid(account.uid);
@@ -928,7 +947,7 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
 
   return (
     <section className="card admin-staff-card">
-      <div className="admin-directory-head"><div><p className="section-label">Account access</p><h2>Pharmacy staff</h2><p>Create staff access for this pharmacy. The first account is tagged Owner only to identify the main contact; it receives no additional permissions.</p></div><span className="pill pill-info"><Users size={13} /> {staff.length} account{staff.length === 1 ? '' : 's'}</span></div>
+      <div className="admin-directory-head"><div><p className="section-label">Account access</p><h2>Pharmacy staff</h2><p>Create staff access for this pharmacy. Owner is the main contact tag only — it does not add permissions. After a setup login, invite the real account and assign them as owner so the setup account can be removed.</p></div><span className="pill pill-info"><Users size={13} /> {staff.length} account{staff.length === 1 ? '' : 's'}</span></div>
       <form className="admin-staff-invite-form" onSubmit={invite}>
         <label>Staff member name<input className="input" value={displayName} onChange={event => setDisplayName(event.target.value)} autoComplete="off" required /></label>
         <label>Work email address<input className="input" type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="off" required /></label>
@@ -938,8 +957,30 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
       {invitation && <div className="staff-invitation-result"><ShieldCheck size={17} /><div><strong>{invitation.contactRole === 'owner' ? 'Owner account created' : 'Staff account created'} · {emailDelivery === 'sent' ? 'Setup email queued' : emailDelivery === 'failed' ? 'Email not queued' : 'Preparing email'}</strong><span>{emailDelivery === 'sent' ? 'A password setup email has been queued. They will choose a password and set up two-factor authentication before entering the pharmacy workspace.' : 'A setup email could not be queued. Retry the invitation from this screen. The setup link is not shown in the browser.'}</span></div></div>}
       <div className="admin-staff-list">
         {loading && <div className="empty-state">Loading staff accounts…</div>}
-        {!loading && staff.length === 0 && <div className="empty-state">No pharmacy staff accounts yet. The first person added will be tagged Owner.</div>}
-        {staff.map(account => <div className="admin-staff-row" key={account.uid}><div className="staff-avatar">{account.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{account.displayName}</strong><span>{account.email}</span></div><span className={`pill ${account.contactRole === 'owner' ? 'pill-info' : 'pill-neutral'}`}>{account.contactRole === 'owner' ? 'Owner' : 'Staff'}</span><span className={`pill ${account.status === 'active' ? 'pill-green' : account.status === 'disabled' ? 'pill-red' : 'pill-amber'}`}>{account.status}</span><div className="admin-staff-row-actions"><button className="icon-btn" type="button" disabled={account.status !== 'invited' || resendingUid === account.uid} title={account.status === 'invited' ? 'Resend setup email' : 'Only pending invitations can be resent'} aria-label={`Resend setup email to ${account.displayName}`} onClick={() => void resendStaffInvite(account)}><MailPlus size={16} /></button><button className="icon-btn" type="button" disabled={account.status === 'disabled' || resettingUid === account.uid} title="Remove authenticator app" aria-label={`Remove authenticator for ${account.displayName}`} onClick={() => void resetMfa(account)}><ShieldOff size={16} /></button><button className="icon-btn" type="button" disabled={account.contactRole === 'owner' || deletingUid === account.uid} title={account.contactRole === 'owner' ? 'Owner account is protected' : 'Remove staff access'} aria-label={account.contactRole === 'owner' ? `${account.displayName} is the protected owner account` : `Remove ${account.displayName}`} onClick={() => void removeStaff(account)}><UserX size={16} /></button></div></div>)}
+        {!loading && staff.length === 0 && <div className="empty-state">No pharmacy staff accounts yet. The first person added will be tagged Owner. You can assign a different owner later.</div>}
+        {staff.map(account => (
+          <div className="admin-staff-row" key={account.uid}>
+            <div className="staff-avatar">{account.displayName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div>
+            <div><strong>{account.displayName}</strong><span>{account.email}</span></div>
+            <span className={`pill ${account.contactRole === 'owner' ? 'pill-info' : 'pill-neutral'}`}>{account.contactRole === 'owner' ? 'Owner' : 'Staff'}</span>
+            <span className={`pill ${account.status === 'active' ? 'pill-green' : account.status === 'disabled' ? 'pill-red' : 'pill-amber'}`}>{account.status}</span>
+            <div className="admin-staff-row-actions">
+              {account.contactRole !== 'owner' ? (
+                <button
+                  className="btn btn-sm btn-secondary"
+                  type="button"
+                  disabled={account.status === 'disabled' || assigningUid === account.uid}
+                  onClick={() => void assignOwner(account)}
+                >
+                  {assigningUid === account.uid ? 'Assigning…' : 'Assign as owner'}
+                </button>
+              ) : null}
+              <button className="icon-btn" type="button" disabled={account.status !== 'invited' || resendingUid === account.uid} title={account.status === 'invited' ? 'Resend setup email' : 'Only pending invitations can be resent'} aria-label={`Resend setup email to ${account.displayName}`} onClick={() => void resendStaffInvite(account)}><MailPlus size={16} /></button>
+              <button className="icon-btn" type="button" disabled={account.status === 'disabled' || resettingUid === account.uid} title="Remove authenticator app" aria-label={`Remove authenticator for ${account.displayName}`} onClick={() => void resetMfa(account)}><ShieldOff size={16} /></button>
+              <button className="icon-btn" type="button" disabled={account.contactRole === 'owner' || deletingUid === account.uid} title={account.contactRole === 'owner' ? 'Owner account is protected' : 'Remove staff access'} aria-label={account.contactRole === 'owner' ? `${account.displayName} is the protected owner account` : `Remove ${account.displayName}`} onClick={() => void removeStaff(account)}><UserX size={16} /></button>
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );

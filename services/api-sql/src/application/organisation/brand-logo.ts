@@ -40,6 +40,7 @@ function latestLogo(files: Array<{ storagePath: string; updatedAt: string | null
 export async function resolveOrganisationLogo(
   storage: Pick<StorageProvider, 'listPaths' | 'generateDownloadUrl'>,
   organisationId: string,
+  expiresInSeconds = 60 * 60,
 ): Promise<OrganisationLogoView> {
   const files = await storage.listPaths(brandLogoPrefix(organisationId));
   const current = latestLogo(files.filter(file => file.storagePath.includes('/email-logo-') && file.storagePath.endsWith('.png')));
@@ -53,7 +54,7 @@ export async function resolveOrganisationLogo(
     };
   }
   return {
-    emailLogoUrl: await storage.generateDownloadUrl(current.storagePath, 60 * 60),
+    emailLogoUrl: await storage.generateDownloadUrl(current.storagePath, expiresInSeconds),
     emailLogoStoragePath: current.storagePath,
     emailLogoWidth: EMAIL_LOGO_WIDTH,
     emailLogoHeight: EMAIL_LOGO_HEIGHT,

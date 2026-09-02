@@ -4,6 +4,7 @@ import { CONDITIONS, conditionLabel } from '@hhh/domain';
 import { createEligibilitySubmission, createV2Intake, resolvePublicReferralToken, searchPublicPharmacies } from '../../../src/shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
 import { tenantThemeVariables } from '../../../src/utils/tenantTheme';
+import { EMAIL_LOGO_SPEC } from '../../../src/utils/pharmacyLogo';
 import { parseEligibilityReferralRoute } from './referralRoute';
 
 const LOCAL_PREVIEW_TOKEN = 'local-preview';
@@ -13,6 +14,7 @@ const LOCAL_PREVIEW_PHARMACY: PublicPharmacy = {
   name: 'Holistic Health Pharmacy',
   tradingName: 'Holistic Health Pharmacy',
   logoText: 'HH',
+  logoUrl: HHH_MARK,
   gphcNumber: '9012345',
   superintendent: 'Local preview',
   address: 'Local preview — no patient data is stored',
@@ -28,9 +30,12 @@ function EligibilityBrand({
   identity,
   token,
 }: {
-  identity: Pick<PublicPharmacy, 'name'>;
+  identity: Pick<PublicPharmacy, 'name' | 'logoUrl'>;
   token: string;
 }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  const pharmacyLogo = token && identity.logoUrl && !logoFailed ? identity.logoUrl : null;
+  useEffect(() => { setLogoFailed(false); }, [identity.logoUrl]);
   const identityMarkup = <>
     <img className="eligibility-brand__mark" src={HHH_MARK} alt="" width="46" height="46" />
     <span>
@@ -38,11 +43,23 @@ function EligibilityBrand({
       <small>{token ? `In partnership with ${identity.name}` : 'Personalised healthcare'}</small>
     </span>
   </>;
-  return <header className="eligibility-brand">
+  return <header className={`eligibility-brand${pharmacyLogo ? ' eligibility-brand--pharmacy-logo' : ''}`} aria-label={token ? `${identity.name} eligibility` : 'Holistic Health Hub eligibility'}>
     <div className="eligibility-brand__inner">
-      {token
-        ? <div className="eligibility-brand__identity">{identityMarkup}</div>
-        : <a className="eligibility-brand__identity" href={PUBLIC_HOME_HREF} aria-label="Holistic Health Hub Home">{identityMarkup}</a>}
+      {pharmacyLogo
+        ? <div className="eligibility-brand__identity" aria-hidden="true" />
+        : token
+          ? <div className="eligibility-brand__identity">{identityMarkup}</div>
+          : <a className="eligibility-brand__identity" href={PUBLIC_HOME_HREF} aria-label="Holistic Health Hub Home">{identityMarkup}</a>}
+      {pharmacyLogo ? (
+        <img
+          className="eligibility-brand__pharmacy-logo"
+          src={pharmacyLogo}
+          alt={`${identity.name} logo`}
+          width={EMAIL_LOGO_SPEC.displayWidth}
+          height={EMAIL_LOGO_SPEC.displayHeight}
+          onError={() => setLogoFailed(true)}
+        />
+      ) : null}
       <div className="eligibility-brand__actions">
         {!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={15} aria-hidden="true" /> Return home</a>}
         <span className="eligibility-brand__secure"><LockKeyhole size={14} /> Private and secure</span>

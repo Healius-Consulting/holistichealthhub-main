@@ -478,5 +478,17 @@ mutation CreateReferralToken(
   })
 }
 
+mutation UpdateOrganisationPrimaryContactUid(
+  $id: UUID!
+  $primaryContactUid: String!
+) @auth(level: NO_ACCESS) {
+  organisation_update(
+    key: { id: $id }
+    data: {
+      primaryContactUid: $primaryContactUid
+    }
+  )
+}
+
 
 

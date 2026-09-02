@@ -2780,7 +2780,7 @@ td.font-semibold{
 
 .admin-staff-list{ margin-top: 18px; border-top: 1px solid var(--border); }
 
-.admin-staff-row{ display: grid; grid-template-columns: 38px minmax(180px, 1fr) auto auto auto; gap: 12px; align-items: center; padding: 13px 4px; border-bottom: 1px solid var(--border); }
+.admin-staff-row{ display: grid; grid-template-columns: 38px minmax(140px, 1fr) auto auto minmax(min-content, max-content); gap: 12px; align-items: center; padding: 13px 4px; border-bottom: 1px solid var(--border); }
 
 .admin-staff-row:last-child{ border-bottom: 0; }
 
@@ -2788,7 +2788,8 @@ td.font-semibold{
 
 .admin-staff-row > div:nth-child(2) span{ margin-top: 2px; color: var(--text-tertiary); font-size: 11px; }
 
-.admin-staff-row-actions{ display: flex; gap: 4px; justify-self: end; }
+.admin-staff-row-actions{ display: flex; flex-wrap: wrap; gap: 4px; justify-self: end; align-items: center; }
+.admin-staff-row-actions .btn{ white-space: nowrap; }
 
 .staff-avatar{ display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: var(--tenant-primary); background: var(--tenant-primary-soft); font-size: 11px; font-weight: 800; }
 
@@ -11746,6 +11747,29 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   height: 46px;
   object-fit: contain;
 }
+.eligibility-brand--pharmacy-logo .eligibility-brand__inner{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+.eligibility-brand--pharmacy-logo .eligibility-brand__identity{
+  min-width: 0;
+  min-height: 1px;
+}
+.eligibility-brand--pharmacy-logo .eligibility-brand__pharmacy-logo{
+  justify-self: center;
+}
+.eligibility-brand--pharmacy-logo .eligibility-brand__actions{
+  justify-self: end;
+}
+.eligibility-brand__pharmacy-logo{
+  display: block;
+  width: auto;
+  height: 52px;
+  max-width: min(280px, 46vw);
+  object-fit: contain;
+  object-position: center;
+}
 .eligibility-brand strong{
   display: block;
   color: var(--green);
@@ -12660,6 +12684,10 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .admin-overview-manage-panel .admin-staff-row-actions .icon-btn{
     min-width: 44px;
   }
+
+  .admin-staff-card .admin-staff-row-actions .btn{
+    min-height: 44px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -12910,6 +12938,16 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .eligibility-shell{ padding: 0 0 52px; }
   .eligibility-brand{ margin-bottom: 14px; }
   .eligibility-brand__inner{ flex-wrap: wrap; gap: 10px; }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__inner{
+    flex-wrap: nowrap;
+    height: auto;
+    min-height: var(--hhh-chrome-height);
+    padding-block: 8px;
+  }
+  .eligibility-brand__pharmacy-logo{
+    height: 40px;
+    max-width: min(220px, 58vw);
+  }
   .eligibility-brand__secure{ font-size: 0 !important; width: 36px; height: 36px; justify-content: center; }
   .eligibility-intro{ padding: 25px 22px; border-radius: 17px; }
   .eligibility-intro h1{ margin-top: 12px; font-size: 34px; }

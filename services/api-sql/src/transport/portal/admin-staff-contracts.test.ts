@@ -46,6 +46,12 @@ describe('admin staff contracts', () => {
     assert.equal(resolveOwnerUid([staffMember, owner]), owner.uid);
   });
 
+  it('maps an assigned later account as owner', () => {
+    const mapped = toPortalPharmacyStaffAccounts(organisationId, [owner, staffMember], staffMember.uid);
+    assert.equal(mapped.find(account => account.uid === staffMember.uid)?.contactRole, 'owner');
+    assert.equal(mapped.find(account => account.uid === owner.uid)?.contactRole, 'staff');
+  });
+
   it('maps SQL staff records to the portal contract', () => {
     const mapped = toPortalPharmacyStaffAccounts(organisationId, [owner, staffMember]);
     assert.deepEqual(mapped, [

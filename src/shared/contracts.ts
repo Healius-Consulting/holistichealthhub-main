@@ -3,6 +3,7 @@ export interface PublicPharmacy {
   name: string;
   tradingName: string;
   logoText: string;
+  logoUrl?: string | null;
   gphcNumber: string;
   superintendent: string;
   address: string;

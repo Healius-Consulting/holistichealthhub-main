@@ -76,6 +76,7 @@ query GetOrganisationById($id: UUID!) @auth(level: NO_ACCESS) {
     mainContactName
     mainContactPhone
     mainContactEmail
+    primaryContactUid
     address
     primaryColour
     logoText

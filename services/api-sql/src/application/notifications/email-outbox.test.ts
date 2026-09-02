@@ -36,9 +36,12 @@ const organisation = {
 } as OrganisationRecord;
 
 describe('pharmacy operational email recipients', () => {
-  it('sends only to the owner, not to other staff or the desk address', () => {
-    assert.deepEqual(pharmacyOwnerRecipients([staffMember, owner], organisation), [
-      { email: 'owner@example.test', displayName: 'Alex Owner' },
+  it('uses an assigned owner instead of invite order', () => {
+    assert.deepEqual(pharmacyOwnerRecipients([staffMember, owner], {
+      ...organisation,
+      primaryContactUid: staffMember.uid,
+    }), [
+      { email: 'staff@example.test', displayName: 'Sam Staff' },
     ]);
   });
 

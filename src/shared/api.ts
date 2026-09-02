@@ -810,6 +810,12 @@ export function removePharmacyStaff(uid: string) {
   return apiRequest<void>(`/v1/portal/admin/staff/${encodeURIComponent(uid)}`, { method: 'DELETE' });
 }
 
+export function assignPharmacyOwner(uid: string) {
+  return apiRequest<PharmacyStaffAccount[]>(`/v1/portal/admin/staff/${encodeURIComponent(uid)}/owner`, {
+    method: 'POST',
+  });
+}
+
 export function getPlatformAdmins() {
   return apiRequest<PlatformAdminAccount[]>('/v1/portal/admin/platform-admins');
 }

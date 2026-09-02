@@ -26,6 +26,7 @@ const GET_ORGANISATION_BY_ID_GQL = `
       mainContactName
       mainContactPhone
       mainContactEmail
+      primaryContactUid
       address
       addressLine1
       addressLine2
@@ -76,6 +77,7 @@ const LIST_ORGANISATIONS_GQL = `
       mainContactName
       mainContactPhone
       mainContactEmail
+      primaryContactUid
       address
       addressLine1
       addressLine2
@@ -413,6 +415,20 @@ const UPDATE_ORGANISATION_INTAKE_ENABLED_GQL = `
   }
 `;
 
+const UPDATE_ORGANISATION_PRIMARY_CONTACT_UID_GQL = `
+  mutation UpdateOrganisationPrimaryContactUid(
+    $id: UUID!
+    $primaryContactUid: String!
+  ) {
+    organisation_update(
+      key: { id: $id }
+      data: {
+        primaryContactUid: $primaryContactUid
+      }
+    )
+  }
+`;
+
 const UPDATE_STAFF_PREFERENCES_GQL = `
   mutation UpdateStaffPreferences(
     $uid: String!
@@ -522,6 +538,12 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
   async updateOrganisationIntakeEnabled(id: string, intakeEnabled: boolean): Promise<void> {
     await dataConnect.executeGraphql<any, any>(UPDATE_ORGANISATION_INTAKE_ENABLED_GQL, {
       variables: { id: asUuid(id), intakeEnabled },
+    });
+  }
+
+  async updateOrganisationPrimaryContactUid(id: string, uid: string): Promise<void> {
+    await dataConnect.executeGraphql<any, any>(UPDATE_ORGANISATION_PRIMARY_CONTACT_UID_GQL, {
+      variables: { id: asUuid(id), primaryContactUid: uid },
     });
   }
 

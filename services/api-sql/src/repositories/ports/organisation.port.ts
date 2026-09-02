@@ -34,6 +34,7 @@ export interface OrganisationRecord {
   gdprComplianceFlag: boolean;
   pausedReason: string | null;
   pausedAt: string | null;
+  primaryContactUid?: string | null;
   version: number;
   archivedAt?: string | null;
   companyNumber?: string | null;
@@ -83,6 +84,7 @@ export interface PublicPharmacyResolution {
     superintendent: string;
     address: string;
     primaryColour: string;
+    logoUrl?: string | null;
   };
 }
 
@@ -138,6 +140,7 @@ export interface OrganisationRepositoryPort {
   updateOrganisationPaymentRoute(id: string, defaultPaymentRoute: OrganisationRecord['defaultPaymentRoute'], worldpayEnabled: boolean): Promise<void>;
   updateOrganisationPharmacyDelivery(id: string, enabled: boolean): Promise<void>;
   updateOrganisationIntakeEnabled(id: string, intakeEnabled: boolean): Promise<void>;
+  updateOrganisationPrimaryContactUid(id: string, uid: string): Promise<void>;
   findDirectoryByTokenHash(tokenHash: string): Promise<PublicPharmacyResolution | null>;
   findReferralTokenByHash(tokenHash: string): Promise<ReferralTokenRecord | null>;
   createReferralToken(params: {

@@ -330,6 +330,7 @@ type Organisation @table {
   mainContactName: String
   mainContactPhone: String
   mainContactEmail: String
+  primaryContactUid: String
   address: String!
   addressLine1: String
   addressLine2: String

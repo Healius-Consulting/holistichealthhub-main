@@ -88,7 +88,7 @@ export async function listPlatformAdminRecipients(identityRepo: IdentityReposito
 }
 
 function ownerRecipient(staff: StaffUserRecord[], organisation: OrganisationRecord | null | undefined) {
-  const ownerUid = resolveOwnerUid(staff);
+  const ownerUid = resolveOwnerUid(staff, organisation?.primaryContactUid);
   const owner = staff.find(member => member.uid === ownerUid);
   if (owner && owner.status !== 'REMOVED' && !owner.disabled) {
     return [{ email: owner.email, displayName: owner.displayName }];
