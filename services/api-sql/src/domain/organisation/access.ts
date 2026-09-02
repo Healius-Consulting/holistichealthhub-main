@@ -1,4 +1,5 @@
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
+import { isTrainingDirectoryOrganisation } from './training-directory.js';
 
 export type PharmacyWorkspaceMode = 'training' | 'live' | 'paused';
 
@@ -31,14 +32,25 @@ export function pharmacyOperationalAccess(organisation: OrganisationRecord | nul
   );
 }
 
-/** New referred patient records — live pharmacies only. Paused workspaces keep CRM but do not accept new activations. */
+/** Pending enquiries and referred patient records — not orders. Training sandboxes never qualify. */
+export function pharmacyIntakeDirectoryAccess(organisation: OrganisationRecord | null | undefined): boolean {
+  return Boolean(organisation) && canReceiveReferral(organisation) && !isTrainingDirectoryOrganisation(organisation);
+}
+
+/** Which pharmacy portal collections this tenant may load. Orders stay live-only. */
+export function pharmacyPortalRecordAccess(organisation: OrganisationRecord | null | undefined) {
+  const operational = pharmacyOperationalAccess(organisation);
+  const intakeDirectory = pharmacyIntakeDirectoryAccess(organisation);
+  return {
+    patients: !isTrainingDirectoryOrganisation(organisation) && (operational || intakeDirectory),
+    orders: operational,
+    pendingEnquiries: intakeDirectory,
+  };
+}
+
+/** HHH may activate a referred patient on any intake-eligible destination, including onboarding. Orders stay live-only. */
 export function canActivateReferredPatient(organisation: OrganisationRecord | null | undefined): boolean {
-  return Boolean(
-    organisation
-    && !organisation.archivedAt
-    && organisation.classification !== 'TRAINING'
-    && organisation.status === 'LIVE',
-  );
+  return pharmacyIntakeDirectoryAccess(organisation);
 }
 
 export function pharmacyWorkspaceMode(organisation: OrganisationRecord | null | undefined): PharmacyWorkspaceMode {

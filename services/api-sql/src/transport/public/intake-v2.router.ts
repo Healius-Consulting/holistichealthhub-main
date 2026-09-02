@@ -13,6 +13,8 @@ import { publicReferralResolveLimiter, publicSubmissionLimiter } from '../../sec
 import { sha256 } from '../../security/session-utils.js';
 import type { CreateSubmissionInput } from '../../repositories/ports/intake.port.js';
 import { listPlatformAdminRecipients, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { resolveWebsiteAssignedPharmacy } from '../../domain/intake/website-assignment.js';
+import { queuePharmacyEnquiryEmail } from '../../application/notifications/pharmacy-enquiry-email.js';
 import { attachPublicPharmacyLogo } from '../../application/organisation/public-pharmacy-logo.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 
@@ -156,7 +158,6 @@ export function createPublicIntakeV2Router(): Router {
       let sourceType: CreateSubmissionInput['sourceType'] = 'GENERAL_HHH_WEBSITE';
       let assignmentStatus: CreateSubmissionInput['assignmentStatus'] = 'AWAITING_HHH_ALLOCATION';
       let provisionalPharmacyName: string | null = null;
-      let warning: 'SELECTED_PHARMACY_UNAVAILABLE' | null = null;
 
       if (input.type === 'future_pharmacy_qr') {
         const resolution = await organisationRepo.findDirectoryByTokenHash(sha256(input.referralToken));
@@ -180,15 +181,16 @@ export function createPublicIntakeV2Router(): Router {
           const selectedKey = uuidKey(input.selectedDirectoryProfileId);
           const allowed = (search.resultOrganisationIds ?? []).some((id) => uuidKey(id) === selectedKey);
           if (!allowed) throw new HttpError(400, 'Select a pharmacy from the current search.', 'INVALID_SELECTION');
-          const organisation = await organisationRepo.findOrganisationById(asUuid(input.selectedDirectoryProfileId));
-          if (organisation) {
-            sourceOrganisationId = organisation.id;
-            assignedOrganisationId = organisation.id;
-            assignmentStatus = 'PROVISIONAL';
-            provisionalPharmacyName = organisation.name || organisation.tradingName;
-          } else {
-            warning = 'SELECTED_PHARMACY_UNAVAILABLE';
+          const organisation = resolveWebsiteAssignedPharmacy(
+            await organisationRepo.findOrganisationById(asUuid(input.selectedDirectoryProfileId)),
+          );
+          if (!organisation) {
+            throw new HttpError(400, 'That pharmacy is no longer available. Search again and choose another.', 'SELECTED_PHARMACY_UNAVAILABLE');
           }
+          sourceOrganisationId = organisation.id;
+          assignedOrganisationId = organisation.id;
+          assignmentStatus = 'PROVISIONAL';
+          provisionalPharmacyName = organisation.name || organisation.tradingName;
         }
       }
 
@@ -237,6 +239,16 @@ export function createPublicIntakeV2Router(): Router {
           ['admin-enquiry', submission.id],
           {},
         );
+        await queuePharmacyEnquiryEmail({
+          notificationRepo,
+          identityRepo,
+          organisationRepo,
+          organisationId: assignedOrganisationId,
+          submissionId: submission.id,
+          caseReference: caseReference(submission.id, submission.submittedAt || new Date().toISOString()),
+          assignmentVersion: 1,
+          event: 'assigned',
+        });
       }
 
       const submittedAt = submission.submittedAt || new Date().toISOString();
@@ -246,7 +258,7 @@ export function createPublicIntakeV2Router(): Router {
         submittedAt,
         assignmentStatus: assignmentStatus.toLowerCase(),
         provisionalPharmacyName,
-        warning,
+        warning: null,
       });
     } catch (error) {
       next(error);

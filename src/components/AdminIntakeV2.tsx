@@ -372,7 +372,7 @@ export default function AdminIntakeV2() {
             <div className="order-crm-empty order-crm-empty--detail">
               <ClipboardList size={38} />
               <strong>Select a patient</strong>
-              <span>Form answers, pharmacy assignment and referral stay on this record. A live pharmacy only sees the current destination enquiry until you refer.</span>
+              <span>Form answers, pharmacy assignment and referral stay on this record. The current destination pharmacy can see this enquiry until you refer or move it.</span>
             </div>
           ) : detailLoading || !detail ? (
             <div className="order-crm-empty order-crm-empty--detail">
@@ -423,7 +423,7 @@ export default function AdminIntakeV2() {
                   <ShieldCheck size={16} aria-hidden="true" />
                   <span>
                     <strong>Enquiries stay visible until referral</strong>
-                    <small>Only the current destination pharmacy can see this person as an enquiry. Completing referral marks them referred for that pharmacy.</small>
+                    <small>Only the current destination pharmacy can see this person as an enquiry. Completing referral marks them referred for that pharmacy, including before Go live. Orders stay locked until the workspace is live.</small>
                   </span>
                 </section>
 

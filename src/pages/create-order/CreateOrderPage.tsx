@@ -33,7 +33,7 @@ import { TRAINING_PRESCRIBER, TRAINING_PRODUCT } from '../../training/workspace'
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 import { checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
 import { formatPatientDob } from '../../utils/patientDob';
-import { canCreateOrderForPatient } from '../../utils/patientOrderEligibility';
+import { canCreateOrderForPatient, canLinkPatientOnOrderDraft } from '../../utils/patientOrderEligibility';
 import { quoteMedicineTotalPence } from '../../utils/pricing';
 import { MAX_PRESCRIPTION_FILE_BYTES, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
 import { draftAllowsAdditionalPrescriptions } from '../../utils/replacementPrescriptionCopy';
@@ -50,7 +50,8 @@ function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
 export default function CreateOrderPage() {
   const { state, dispatch } = useApp();
   const organisationPatients = state.crm.filter(candidate => candidate.organisationId === state.currentOrganisationId);
-  const orderablePatients = organisationPatients.filter(canCreateOrderForPatient);
+  const liveWorkspace = isLocalPortalPreview || state.workspaceMode === 'live';
+  const orderablePatients = organisationPatients.filter(patient => canLinkPatientOnOrderDraft(patient, liveWorkspace));
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const canUseWorldpay = organisation?.worldpay.status === 'connected';
   const worldpayStatusReady = Boolean(organisation?.worldpay.lastSyncedAt);
@@ -1032,7 +1033,7 @@ export default function CreateOrderPage() {
                   <span><strong>{candidate.name}</strong><small className="rx-patient-result__dob">DOB {formatPatientDob(candidate.dob)}</small><small>{candidate.email} · {candidate.mobile}</small></span>
                   {candidate.id === patient?.id ? <em>Current</em> : null}
                 </button>
-              )) : <span className="rx-patient-results__empty">{orderablePatients.length ? `No approved patients match “${patientQuery.trim()}”.` : isLocalPortalPreview ? 'Training patients did not load. Keep ?devPortal=pharmacy in the address bar and refresh.' : 'No approved patients are available to link in this pharmacy.'}</span>}
+              )) : <span className="rx-patient-results__empty">{orderablePatients.length ? `No approved patients match “${patientQuery.trim()}”.` : isLocalPortalPreview ? 'Training patients did not load. Keep ?devPortal=pharmacy in the address bar and refresh.' : !liveWorkspace ? 'Orders unlock after HHH flips this pharmacy live. Referred patients stay on Patients until then.' : 'No approved patients are available to link in this pharmacy.'}</span>}
             </div>
           ) : null}
         </div>

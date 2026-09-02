@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
 import { canReceiveReferral, queueQuerySchema } from './intake-v2.router.js';
+import { pharmacyIntakeDirectoryAccess } from '../../domain/organisation/access.js';
+import { isTrainingDirectoryOrganisation } from '../../domain/organisation/training-directory.js';
 
 const eligibleOrganisation: OrganisationRecord = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', companyId: null, name: 'Eligible Pharmacy',
@@ -36,5 +38,17 @@ describe('admin intake queue query', () => {
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, status: 'PAUSED' }), false);
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, status: 'ONBOARDING' }), true);
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, status: 'INTAKE_LIVE' }), true);
+    assert.equal(isTrainingDirectoryOrganisation({
+      ...eligibleOrganisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      name: 'Primary Branch',
+    }), true);
+    assert.equal(pharmacyIntakeDirectoryAccess({
+      ...eligibleOrganisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      name: 'Primary Branch',
+      status: 'LIVE',
+    }), false);
+    assert.equal(pharmacyIntakeDirectoryAccess({ ...eligibleOrganisation, status: 'ONBOARDING' }), true);
   });
 });

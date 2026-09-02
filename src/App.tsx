@@ -25,7 +25,7 @@ import {
   StaffLogin,
 } from './auth/AuthScreens';
 import { getAdminOrganisations, getPortalSession } from './shared/api';
-import type { PortalOrganisation } from './shared/contracts';
+import { isTrainingDirectoryPharmacy, type PortalOrganisation } from './shared/contracts';
 import { isLocalPortalPreview, withLocationSearch } from './dev/localPortalPreview';
 import { resolvePharmacyWorkspaceMode } from './training/workspace';
 import LocalPortalSwitcher from './dev/LocalPortalSwitcher';
@@ -295,7 +295,11 @@ function StaffWorkspace() {
         {state.workspaceMode === 'training' && (
           <div className="training-mode-banner" role="status">
             <strong>Training</strong>
-            <span>This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH flips you to live. Supplier writes and payments are not sent from training.</span>
+            <span>
+              {isLocalPortalPreview || (organisation && isTrainingDirectoryPharmacy(organisation))
+                ? 'This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH flips you to live. Supplier writes and payments are not sent from training.'
+                : 'Orders, supplier writes and payments stay locked until HHH flips this pharmacy live. Enquiries and referred patients assigned to you are already visible.'}
+            </span>
           </div>
         )}
         {paused && (

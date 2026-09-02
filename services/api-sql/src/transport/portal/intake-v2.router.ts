@@ -9,11 +9,12 @@ import { SqlIntakeRepository } from '../../repositories/sql/intake.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
-import { canActivateReferredPatient, canReceiveReferral } from '../../domain/organisation/access.js';
+import { canActivateReferredPatient, canReceiveReferral, pharmacyIntakeDirectoryAccess } from '../../domain/organisation/access.js';
+import { queuePharmacyEnquiryEmail } from '../../application/notifications/pharmacy-enquiry-email.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
-import { isDedicatedSqlIntake, isOpenSqlIntake, toAdminIntakeDetail, toAdminIntakeQueueItem } from './intake-contracts.js';
+import { isDedicatedSqlIntake, isOpenSqlIntake, sqlIntakeCaseReference, toAdminIntakeDetail, toAdminIntakeQueueItem } from './intake-contracts.js';
 
 export { canReceiveReferral };
 
@@ -151,7 +152,7 @@ export function createPortalIntakeV2Router(): Router {
       if (!record) throw new HttpError(404, 'The requested record was not found.', 'NOT_FOUND');
       assertPending(record);
       const organisations = (await organisationRepo.listOrganisations())
-        .filter(canReceiveReferral)
+        .filter(pharmacyIntakeDirectoryAccess)
         .filter(organisation => !query || `${organisation.tradingName} ${organisation.gphcNumber} ${organisation.address}`.toLowerCase().includes(query))
         .map(organisation => ({
           id: organisation.id,
@@ -183,7 +184,7 @@ export function createPortalIntakeV2Router(): Router {
       if (record.assignmentVersion !== input.expectedVersion) {
         throw new HttpError(409, 'This intake changed. Refresh before moving it.', 'VERSION_CONFLICT');
       }
-      if (!canReceiveReferral(destination)) {
+      if (!pharmacyIntakeDirectoryAccess(destination)) {
         throw new HttpError(409, 'The selected pharmacy is not currently eligible to receive referrals.', 'DESTINATION_UNAVAILABLE');
       }
       if (sameUuid(record.assignedOrganisationId, destinationOrganisationId)) {
@@ -216,6 +217,16 @@ export function createPortalIntakeV2Router(): Router {
           notePresent: Boolean(input.note),
           sourceOrganisationId: record.sourceOrganisationId,
         },
+      });
+      await queuePharmacyEnquiryEmail({
+        notificationRepo,
+        identityRepo,
+        organisationRepo,
+        organisationId: destinationOrganisationId,
+        submissionId: record.id,
+        caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
+        assignmentVersion: newVersion,
+        event: 'assigned',
       });
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ id: caseId, assignedOrganisationId: destinationOrganisationId, assignmentVersion: newVersion, pharmacyAccessStatus: 'withheld' });
@@ -291,6 +302,16 @@ export function createPortalIntakeV2Router(): Router {
           surface: 'admin',
           details: { notePresent: Boolean(input.notes) },
         });
+        await queuePharmacyEnquiryEmail({
+          notificationRepo,
+          identityRepo,
+          organisationRepo,
+          organisationId: record.assignedOrganisationId,
+          submissionId: record.id,
+          caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
+          assignmentVersion: newVersion,
+          event: 'declined',
+        });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).json({ id: caseId, decision: 'declined', assignmentVersion: newVersion });
         return;
@@ -306,7 +327,7 @@ export function createPortalIntakeV2Router(): Router {
       }
       const destination = await organisationRepo.findOrganisationById(record.assignedOrganisationId);
       if (!canActivateReferredPatient(destination)) {
-        throw new HttpError(409, 'The selected pharmacy cannot receive the patient record until it is live.', 'DESTINATION_UNAVAILABLE');
+        throw new HttpError(409, 'The selected pharmacy cannot receive this referral.', 'DESTINATION_UNAVAILABLE');
       }
       const patientId = randomUUID();
       await intakeRepo.activateSubmission({

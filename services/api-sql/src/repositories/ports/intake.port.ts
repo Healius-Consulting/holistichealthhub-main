@@ -54,6 +54,9 @@ export interface TenantPendingEnquiryRecord {
   postcode: string;
   conditionCodes?: string[] | null;
   primaryConditionCode?: string | null;
+  triedTwoTreatments?: boolean | null;
+  psychiatricExclusion?: boolean | null;
+  heardAbout?: string | null;
 }
 
 export interface IdempotentSubmissionRecord {

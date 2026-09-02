@@ -198,4 +198,26 @@ describe('email template renderer', () => {
     assert.match(rendered.html, /cid:email-hhh-logo/);
     assert.match(rendered.html, /cid:email-curaleaf-logo/);
   });
+
+  it('notifies the assigned pharmacy without patient contact details', () => {
+    const rendered = renderEmailTemplate('pharmacy_new_enquiry_assigned', {
+      pharmacyName: 'Eastwood Health',
+      caseReference: 'HHH-20260819-ABCDEF12',
+    });
+    assert.match(rendered.subject, /New enquiry assigned/);
+    assert.match(rendered.html, /HHH-20260819-ABCDEF12/);
+    assert.match(rendered.html, /Eastwood Health/);
+    assert.doesNotMatch(rendered.html, /07700900000/);
+    assert.doesNotMatch(rendered.html, /avery@example.com/);
+  });
+
+  it('notifies the assigned pharmacy when HHH declines an enquiry', () => {
+    const rendered = renderEmailTemplate('pharmacy_enquiry_declined', {
+      pharmacyName: 'Eastwood Health',
+      caseReference: 'HHH-20260819-ABCDEF12',
+    });
+    assert.match(rendered.subject, /declined/i);
+    assert.match(rendered.html, /HHH-20260819-ABCDEF12/);
+    assert.doesNotMatch(rendered.html, /07700900000/);
+  });
 });

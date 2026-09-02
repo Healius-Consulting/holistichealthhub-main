@@ -263,6 +263,38 @@ export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): 
           'Do not ask the patient to reply to this email.',
         ],
       });
+    case 'pharmacy_new_enquiry_assigned':
+      return render({
+        kind,
+        payload,
+        subject: 'New enquiry assigned to your pharmacy',
+        preheader: 'An eligibility enquiry is waiting in Patients.',
+        title: 'New enquiry assigned',
+        text: `A new eligibility enquiry has been assigned to ${value(payload, 'pharmacyName') || 'your pharmacy'}${caseReference ? ` (${value(payload, 'caseReference')})` : ''}. Open Patients to review it.`,
+        paragraphs: [
+          `A new eligibility enquiry has been assigned to <strong>${pharmacyName}</strong>${caseReference ? ` (<strong>${caseReference}</strong>)` : ''}.`,
+          'Open Patients to see the form answers. HHH may still move or complete this enquiry.',
+        ],
+        cta: { label: 'Open portal', href: 'https://portal.holistichealthhub.live' },
+        detailsTitle: 'Enquiry',
+        details: [{ label: 'Reference', value: value(payload, 'caseReference') }],
+      });
+    case 'pharmacy_enquiry_declined':
+      return render({
+        kind,
+        payload,
+        subject: 'Enquiry declined by HHH',
+        preheader: 'This enquiry is no longer assigned to your pharmacy.',
+        title: 'Enquiry declined',
+        text: `HHH declined an eligibility enquiry previously assigned to ${value(payload, 'pharmacyName') || 'your pharmacy'}${caseReference ? ` (${value(payload, 'caseReference')})` : ''}. It is no longer in New enquiries.`,
+        paragraphs: [
+          `HHH declined an eligibility enquiry previously assigned to <strong>${pharmacyName}</strong>${caseReference ? ` (<strong>${caseReference}</strong>)` : ''}.`,
+          'It is no longer in New enquiries.',
+        ],
+        cta: { label: 'Open portal', href: 'https://portal.holistichealthhub.live' },
+        detailsTitle: 'Enquiry',
+        details: [{ label: 'Reference', value: value(payload, 'caseReference') }],
+      });
     case 'pharmacy_staff_invite':
       return render({
         kind,

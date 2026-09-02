@@ -12,6 +12,7 @@ import ConditionEditor from '../components/ConditionEditor';
 import { updatePatientConditions } from '../shared/api';
 import MedicineLabel from '../components/MedicineLabel';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
+import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { isNegativeEligibilityStatus, pharmacyDecisionReason } from '../utils/eligibilityPresentation';
 import {
   derivePatientJourneyStage,
@@ -313,10 +314,8 @@ export default function Patients() {
   }, [state.crm, state.orders, state.currentOrganisationId]);
 
   const enquiries = useMemo(() => (
-    state.workspaceMode === 'training'
-      ? []
-      : state.enquiries.filter(enquiry => enquiry.organisationId === state.currentOrganisationId)
-  ), [state.enquiries, state.currentOrganisationId, state.workspaceMode]);
+    state.enquiries.filter(enquiry => enquiry.organisationId === state.currentOrganisationId)
+  ), [state.enquiries, state.currentOrganisationId]);
 
   const records = useMemo<CrmRecord[]>(() => {
     const patientEmails = new Set(patients.map(patient => patient.email.toLowerCase()));
@@ -421,6 +420,16 @@ export default function Patients() {
 
   useEffect(() => {
     const target = state.navigationTarget;
+    if (target?.kind === 'patient-lane') {
+      if (target.lane === 'enquiries') {
+        setActiveFilter('enquiries');
+        setView('list');
+        setSearch('');
+        setSelectedKey(null);
+      }
+      dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
+      return;
+    }
     if (target?.kind !== 'patient') return;
     const record = records.find(item => item.kind === 'patient' && item.id === target.id);
     if (record) {
@@ -436,6 +445,10 @@ export default function Patients() {
   };
 
   const handleCreateOrder = (patient: UnifiedPatient) => {
+    if (!isLocalPortalPreview && state.workspaceMode !== 'live') {
+      dispatch({ type: 'ADD_TOAST', message: 'Orders unlock after HHH flips this workspace live.', toastType: 'warning' });
+      return;
+    }
     const crmPatient = patient.crmPatient;
     if (!canCreateOrderForPatient(crmPatient)) {
       dispatch({ type: 'ADD_TOAST', message: 'Orders stay locked until HHH completes referral.', toastType: 'warning' });
@@ -553,7 +566,7 @@ export default function Patients() {
           {selected.patient ? (
             <PatientCrmDetail
               record={selected}
-              workspaceLive={state.workspaceMode === 'live' || state.workspaceMode === 'training'}
+              workspaceLive={isLocalPortalPreview || state.workspaceMode === 'live'}
               onCreateOrder={() => handleCreateOrder(selected.patient!)}
               onConditionsSaved={(patientId, conditions, primaryCondition) => {
                 dispatch({ type: 'SET_PATIENT_CONDITIONS', patientId, conditions, primaryCondition });
@@ -1075,6 +1088,9 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
   const Icon = CRM_ICONS[meta.icon];
   const conditions = enquiry.conditions;
   const primaryCondition = enquiry.primaryCondition ?? conditions[0] ?? '';
+  const treatmentCheck = enquiry.triedTwoTreatments === true ? 'Yes' : enquiry.triedTwoTreatments === false ? 'No' : null;
+  const psychosisCheck = enquiry.psychiatricExclusion === true ? 'Excluded' : enquiry.psychiatricExclusion === false ? 'Passed' : null;
+  const heardAbout = enquiry.heardAbout?.trim() || null;
   return (
     <article className="order-crm-record">
       <header className="order-crm-record__header">
@@ -1099,7 +1115,7 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
             </button>
           </div>
         </div>
-        <span className="patient-crm-gate">HHH may still move this enquiry. Referral marks them referred; orders stay locked until then.</span>
+        <span className="patient-crm-gate">HHH may still move this enquiry. Referral marks them referred; orders stay locked until the workspace is live.</span>
       </header>
       <PatientJourneyRail stage="enquiry" />
       <div className="patient-crm-detail__body">
@@ -1124,6 +1140,9 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
             {/* The pills above already carry the conditions; this row is the empty fallback. */}
             <dl className="patient-chart-facts">
               {conditions.length === 0 ? <div><dt>Conditions</dt><dd>{EMPTY_FIELD}</dd></div> : null}
+              <div><dt>Tried two treatments</dt><dd>{treatmentCheck ?? EMPTY_FIELD}</dd></div>
+              <div><dt>Psychosis exclusion</dt><dd>{psychosisCheck ?? EMPTY_FIELD}</dd></div>
+              <div><dt>Heard about</dt><dd>{heardAbout ?? EMPTY_FIELD}</dd></div>
               <div><dt>Referral source</dt><dd>{record.sourceLabel ?? EMPTY_FIELD}</dd></div>
             </dl>
           </section>

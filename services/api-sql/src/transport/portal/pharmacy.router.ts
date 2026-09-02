@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { buildOrganisationProfileUpdate, syncDirectoryProfileFromOrganisation } from '../../application/organisation/profile-sync.js';
 import { HttpError } from '../../domain/common/errors.js';
-import { pharmacyOperationalAccess } from '../../domain/organisation/access.js';
+import { pharmacyPortalRecordAccess } from '../../domain/organisation/access.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlDirectoryRepository } from '../../repositories/sql/directory.sql.js';
@@ -83,13 +83,14 @@ export function createPortalPharmacyRouter(): Router {
     if (!organisation) {
       throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
     }
-    if (!pharmacyOperationalAccess(organisation)) {
+    const access = pharmacyPortalRecordAccess(organisation);
+    if (!access.patients && !access.orders && !access.pendingEnquiries) {
       return { organisation, patients: [], orders: [], pendingEnquiries: [] };
     }
     const [patients, orders, pendingEnquiries] = await Promise.all([
-      patientRepo.listTenantPatients(organisationId),
-      orderRepo.listTenantOrders(organisationId),
-      intakeRepo.listTenantPendingEnquiries(organisationId),
+      access.patients ? patientRepo.listTenantPatients(organisationId) : Promise.resolve([]),
+      access.orders ? orderRepo.listTenantOrders(organisationId) : Promise.resolve([]),
+      access.pendingEnquiries ? intakeRepo.listTenantPendingEnquiries(organisationId) : Promise.resolve([]),
     ]);
     return { organisation, patients, orders, pendingEnquiries };
   }

@@ -217,6 +217,18 @@
   background: #dceeff;
 }
 
+.overview-enquiry-notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  justify-self: end;
+}
+
+.overview-enquiry-notice__actions .btn {
+  min-height: 44px;
+}
+
 .overview-enquiry-notice h2 { margin: 0.125rem 0 0.25rem; font-size: 1rem; }
 .overview-enquiry-notice p:last-child { margin: 0; color: var(--text-muted, #526157); font-size: 0.875rem; }
 
@@ -620,7 +632,7 @@
   .integration-health li { grid-template-columns: 1fr auto; }
   .integration-health li small { grid-column: 1 / -1; text-align: left; }
   .overview-enquiry-notice { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
-  .overview-enquiry-notice > .status-badge { grid-column: 2; justify-self: start; }
+  .overview-enquiry-notice__actions { grid-column: 2; justify-self: start; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -7592,6 +7604,15 @@ html.modal-open .page-container{ overflow: hidden; }
 .crm-lane--needs-action .crm-lane__header b{
   color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 14%, var(--bg-surface));
+}
+
+.crm-lane--enquiries .crm-lane__header{
+  background: color-mix(in srgb, var(--tenant-primary, #0f766e) 8%, var(--bg-surface));
+}
+
+.crm-lane--enquiries .crm-lane__header b{
+  color: var(--tenant-primary-strong, #0f766e);
+  background: color-mix(in srgb, var(--tenant-primary, #0f766e) 14%, var(--bg-surface));
 }
 
 .crm-lane--ready .crm-lane__header{

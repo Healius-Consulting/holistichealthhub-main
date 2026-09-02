@@ -2,7 +2,7 @@ import { createContext, useContext, useReducer, useEffect, useRef, type ReactNod
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
 import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, getWorldpayConnectionStatus, isApiConfigured } from '../shared/api';
 import type { CuraleafCancellationState, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
-import { activeRedoPriceResolution } from '../shared/contracts';
+import { activeRedoPriceResolution, isTrainingDirectoryPharmacy } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
 import { ORGANISATIONS, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace } from '../training/workspace';
@@ -405,6 +405,7 @@ export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | '
  */
 export type NavigationTarget =
   | { kind: 'patient'; id: string }
+  | { kind: 'patient-lane'; lane: 'enquiries' }
   | { kind: 'order'; key: string }
   | { kind: 'catalogue'; query: string }
   | null;
@@ -1375,7 +1376,21 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, portalMode: action.mode, screenHistory: [], navigationTarget: null };
     case 'SET_WORKSPACE_MODE': {
       const organisationId = action.organisationId ?? state.currentOrganisationId;
+      const organisation = state.organisations.find(item => item.id === organisationId);
+      const sandboxPharmacy = organisation
+        ? isTrainingDirectoryPharmacy(organisation)
+        : isLocalPortalPreview;
       if (action.mode === 'training') {
+        if (!sandboxPharmacy) {
+          if (state.workspaceMode === 'training' && (!organisationId || organisationId === state.currentOrganisationId)) {
+            return state;
+          }
+          return {
+            ...state,
+            workspaceMode: 'training',
+            currentOrganisationId: organisationId || state.currentOrganisationId,
+          };
+        }
         const stayingInTraining = state.workspaceMode === 'training'
           && state.crm.some(patient => patient.organisationId === organisationId && isTrainingSandboxPatient(patient));
         if (stayingInTraining) {
@@ -1383,7 +1398,6 @@ function reducer(state: AppState, action: Action): AppState {
             ...state,
             workspaceMode: 'training',
             currentOrganisationId: organisationId || state.currentOrganisationId,
-            enquiries: [],
           };
         }
         const training = trainingWorkspace(organisationId);
@@ -2162,6 +2176,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const currentOrganisation = state.organisations.find(organisation => organisation.id === state.currentOrganisationId);
   const livePharmacyWorkspace = resolvePharmacyWorkspaceMode(currentOrganisation) === 'live';
+  const sandboxPharmacy = currentOrganisation ? isTrainingDirectoryPharmacy(currentOrganisation) : false;
+  const intakeDirectorySync = Boolean(
+    currentOrganisation
+    && currentOrganisation.intakeEnabled !== false
+    && currentOrganisation.status !== 'paused'
+    && !sandboxPharmacy
+  );
+  const syncPatientDirectory = livePharmacyWorkspace || intakeDirectorySync;
 
   useEffect(() => {
     if (!isLocalPortalPreview) return;
@@ -2314,7 +2336,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentOrganisation?.worldpay.lastSyncedAt, livePharmacyWorkspace, state.currentOrganisationId, state.staffSession]);
 
   useEffect(() => {
-    if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;
+    if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !syncPatientDirectory) return;
     let cancelled = false;
     const organisationId = state.currentOrganisationId;
     getPortalPatientDirectory(organisationId).then(directory => {
@@ -2327,7 +2349,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     }).catch(error => console.warn('Patient directory sync unavailable:', error));
     return () => { cancelled = true; };
-  }, [livePharmacyWorkspace, state.currentOrganisationId, state.staffSession]);
+  }, [syncPatientDirectory, state.currentOrganisationId, state.staffSession]);
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;

@@ -67,17 +67,7 @@ const LIST_TENANT_PENDING_ENQUIRIES_GQL = `
         _and: [
           { pharmacyAccessStatus: { eq: WITHHELD } }
           { outcomeStatus: { eq: OPEN } }
-          {
-            _or: [
-              { assignedOrganisationId: { eq: $organisationId } }
-              {
-                _and: [
-                  { assignedOrganisationId: { isNull: true } }
-                  { sourceOrganisationId: { eq: $organisationId } }
-                ]
-              }
-            ]
-          }
+          { assignedOrganisationId: { eq: $organisationId } }
         ]
       }
       limit: $limit
@@ -94,6 +84,9 @@ const LIST_TENANT_PENDING_ENQUIRIES_GQL = `
       postcode
       conditionCodes
       primaryConditionCode
+      triedTwoTreatments
+      psychiatricExclusion
+      heardAbout
     }
   }
 `;

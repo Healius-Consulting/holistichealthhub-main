@@ -102,6 +102,11 @@ export default function PharmacyOverview() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const openEnquiryLane = () => {
+    dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient-lane', lane: 'enquiries' } });
+    dispatch({ type: 'SET_SCREEN', screen: 'patients' });
+  };
+
   const openScreen = (screen: 'orders' | 'patients' | 'finance') => {
     dispatch({ type: 'SET_NAVIGATION_TARGET', target: null });
     dispatch({ type: 'SET_SCREEN', screen });
@@ -192,10 +197,15 @@ export default function PharmacyOverview() {
             </h2>
             <p>
               HHH admin may accept this pharmacy or move the enquiry.
-              Open Patients to see who is currently assigned to you. Referral marks them referred.
+              Open New enquiries to see who is currently assigned to you. Referral marks them referred.
             </p>
           </div>
-          <span className="status-badge status-badge--intake_live">With HHH admin</span>
+          <div className="overview-enquiry-notice__actions">
+            <span className="status-badge status-badge--intake_live">With HHH admin</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={openEnquiryLane}>
+              Open New enquiries <ArrowRight size={14} aria-hidden="true" />
+            </button>
+          </div>
         </section>
       )}
 

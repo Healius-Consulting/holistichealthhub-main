@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
-import { canAcceptPublicIntake, canActivateReferredPatient, canReceiveReferral, pharmacyOperationalAccess, pharmacyWorkspaceMode } from './access.js';
+import { canAcceptPublicIntake, canActivateReferredPatient, canReceiveReferral, pharmacyIntakeDirectoryAccess, pharmacyOperationalAccess, pharmacyPortalRecordAccess, pharmacyWorkspaceMode } from './access.js';
 
 const organisation: OrganisationRecord = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', companyId: null, name: 'Eligible Pharmacy',
@@ -39,11 +39,35 @@ describe('pharmacy intake access', () => {
     assert.equal(pharmacyOperationalAccess({ ...organisation, status: 'PAUSED' }), true);
     assert.equal(canActivateReferredPatient(organisation), true);
     assert.equal(canActivateReferredPatient({ ...organisation, status: 'PAUSED' }), false);
-    assert.equal(canActivateReferredPatient({ ...organisation, status: 'ONBOARDING' }), false);
+    assert.equal(canActivateReferredPatient({ ...organisation, status: 'ONBOARDING' }), true);
+    assert.equal(canActivateReferredPatient({ ...organisation, status: 'INTAKE_LIVE' }), true);
+    assert.equal(canActivateReferredPatient({ ...organisation, classification: 'TRAINING' }), false);
+    assert.equal(canActivateReferredPatient({
+      ...organisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      name: 'Primary Branch',
+      tradingName: 'Primary Pharmacy',
+    }), false);
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'ONBOARDING' }), 'training');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'INTAKE_LIVE' }), 'training');
     assert.equal(pharmacyWorkspaceMode(organisation), 'live');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, classification: 'ALLOCATION_HOLDING', status: 'ONBOARDING' }), 'live');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'PAUSED' }), 'paused');
+    assert.equal(pharmacyIntakeDirectoryAccess({ ...organisation, status: 'ONBOARDING' }), true);
+    assert.equal(pharmacyIntakeDirectoryAccess({
+      ...organisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      name: 'Primary Branch',
+    }), false);
+    const onboarding = pharmacyPortalRecordAccess({ ...organisation, status: 'ONBOARDING' });
+    assert.deepEqual(onboarding, { patients: true, orders: false, pendingEnquiries: true });
+    const sandbox = pharmacyPortalRecordAccess({
+      ...organisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      name: 'Primary Branch',
+    });
+    assert.deepEqual(sandbox, { patients: false, orders: true, pendingEnquiries: false });
+    const paused = pharmacyPortalRecordAccess({ ...organisation, status: 'PAUSED' });
+    assert.deepEqual(paused, { patients: true, orders: true, pendingEnquiries: false });
   });
 });

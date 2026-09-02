@@ -554,6 +554,9 @@ export interface PortalPendingEnquiryRecord {
   postcode: string;
   conditions: string[];
   primaryCondition: string | null;
+  triedTwoTreatments?: boolean | null;
+  psychiatricExclusion?: boolean | null;
+  heardAbout?: string | null;
 }
 
 export interface PortalPatientRecord {

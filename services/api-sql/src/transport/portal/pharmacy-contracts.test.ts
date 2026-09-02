@@ -961,12 +961,18 @@ describe('SQL pharmacy compatibility contracts', () => {
       postcode: 'NG16 3AA',
       conditionCodes: ['chronic-pain'],
       primaryConditionCode: 'chronic-pain',
+      triedTwoTreatments: true,
+      psychiatricExclusion: false,
+      heardAbout: 'Poster',
     });
     assert.equal(mapped.caseReference, 'HHH-20260817-12345678');
     assert.equal(mapped.displayStatus, 'New enquiry');
     assert.equal(mapped.sourceType, 'future_pharmacy_qr');
     assert.equal(mapped.firstName, 'Avery');
     assert.equal(mapped.primaryCondition, 'chronic-pain');
+    assert.equal(mapped.triedTwoTreatments, true);
+    assert.equal(mapped.psychiatricExclusion, false);
+    assert.equal(mapped.heardAbout, 'Poster');
   });
 
   it('maps an in-progress HHH review enquiry', () => {

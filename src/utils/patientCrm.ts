@@ -62,19 +62,14 @@ export function patientCrmGroup(record: PatientCrmFilterInput): PatientCrmGroup 
   return 'care';
 }
 
-/**
- * Board lanes. Unlike `patientCrmGroup`, enquiries sit with referred and active
- * patients rather than in a lane of their own, and closed records get a lane
- * that the board hides until someone asks for it. Needs-action still wins, so a
- * declined record with outstanding follow-up cannot disappear.
- */
-export type PatientCrmLane = 'needs-action' | 'ready' | 'on-order' | 'care' | 'declined';
+export type PatientCrmLane = 'needs-action' | 'enquiries' | 'ready' | 'on-order' | 'care' | 'declined';
 
 export const PATIENT_CRM_LANES: Array<{ key: PatientCrmLane; label: string; detail: string }> = [
   { key: 'needs-action', label: 'Needs action', detail: 'Exceptions, refunds and cancellations' },
+  { key: 'enquiries', label: 'New enquiries', detail: 'Assigned to you; HHH may still move them' },
   { key: 'ready', label: 'Ready to collect', detail: 'Checked in and waiting for the patient' },
   { key: 'on-order', label: 'On order', detail: 'Draft, payment or fulfilment' },
-  { key: 'care', label: 'Referred & active', detail: 'In care, including open enquiries' },
+  { key: 'care', label: 'Referred & active', detail: 'In care after HHH referral' },
 ];
 
 export const PATIENT_CRM_CLOSED_LANE: { key: PatientCrmLane; label: string; detail: string } = {
@@ -85,6 +80,7 @@ export const PATIENT_CRM_CLOSED_LANE: { key: PatientCrmLane; label: string; deta
 
 export function patientCrmLane(record: PatientCrmFilterInput): PatientCrmLane {
   if (record.needsAction) return 'needs-action';
+  if (record.kind === 'enquiry') return 'enquiries';
   if (record.journey === 'declined' || record.journey === 'suspended') return 'declined';
   if (record.readyForCollection) return 'ready';
   if (record.hasOpenOrder) return 'on-order';

@@ -9,7 +9,8 @@ export function isTrainingDirectoryOrganisation(organisation: {
   name?: string | null;
   tradingName?: string | null;
   classification?: string | null;
-}) {
+} | null | undefined) {
+  if (!organisation) return false;
   if (String(organisation.classification || '').toUpperCase() === 'TRAINING') return true;
   if (TRAINING_DIRECTORY_PHARMACY_IDS.has(organisation.id.replaceAll('-', '').toLowerCase())) return true;
   return [organisation.name, organisation.tradingName]

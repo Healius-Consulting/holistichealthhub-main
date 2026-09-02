@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   patientCrmGroup,
+  patientCrmLane,
   patientCrmRecordKey,
   patientCrmStatusMeta,
   recordMatchesPatientFilter,
@@ -46,6 +47,13 @@ test('status filters keep enquiries and operational patients distinct', () => {
   assert.equal(recordMatchesPatientFilter(ready, 'ready'), true);
   assert.equal(recordMatchesPatientFilter(declined, 'declined'), true);
   assert.equal(recordMatchesPatientFilter(active, 'declined'), false);
+});
+
+test('board lanes keep new enquiries out of referred and active', () => {
+  assert.equal(patientCrmLane(enquiry), 'enquiries');
+  assert.equal(patientCrmLane(active), 'care');
+  assert.equal(patientCrmLane(needsAction), 'needs-action');
+  assert.equal(patientCrmLane(declined), 'declined');
 });
 
 test('grouped all-view ranks action, enquiries and care without overlap', () => {

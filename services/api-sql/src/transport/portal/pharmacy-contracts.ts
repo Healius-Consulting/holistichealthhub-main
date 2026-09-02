@@ -220,6 +220,9 @@ export function toPortalPendingEnquiry(record: TenantPendingEnquiryRecord) {
     postcode: record.postcode,
     conditions: fromForm.map(condition => condition.conditionCode),
     primaryCondition: primaryConditionCode(fromForm),
+    triedTwoTreatments: record.triedTwoTreatments ?? null,
+    psychiatricExclusion: record.psychiatricExclusion ?? null,
+    heardAbout: record.heardAbout ?? null,
   };
 }
 

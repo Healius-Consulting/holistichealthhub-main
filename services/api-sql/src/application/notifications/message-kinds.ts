@@ -5,6 +5,8 @@ export const EMAIL_TEMPLATE_CODES = [
   'patient_refunded',
   'patient_ready_for_collection',
   'admin_new_enquiry_received',
+  'pharmacy_new_enquiry_assigned',
+  'pharmacy_enquiry_declined',
   'pharmacy_staff_invite',
   'pharmacy_password_reset',
   'pharmacy_2fa_enabled',
