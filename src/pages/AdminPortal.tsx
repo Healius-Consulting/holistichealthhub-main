@@ -1547,7 +1547,7 @@ export default function AdminPortal() {
     }
   };
 
-  const flipPharmacyLive = async (organisationId: string) => {
+  const flipPharmacyLive = async (organisationId: string, options?: { acknowledgedCuraleafTest?: boolean }) => {
     setGoLiveBusy(true);
     setGoLiveError(null);
     try {
@@ -1556,7 +1556,7 @@ export default function AdminPortal() {
         dispatch({ type: 'ADD_TOAST', message: 'Preview workspace marked live.', toastType: 'success' });
         return;
       }
-      const readiness = await goLiveOrganisation(organisationId);
+      const readiness = await goLiveOrganisation(organisationId, options);
       dispatch({ type: 'UPDATE_ORGANISATION', organisationId, updates: { status: readiness.status } });
       dispatch({ type: 'ADD_TOAST', message: 'Pharmacy workspace is live.', toastType: 'success' });
     } catch (error) {
@@ -1971,7 +1971,7 @@ export default function AdminPortal() {
                         organisation={selectedPharmacy}
                         goLiveError={goLiveError}
                         goLiveBusy={goLiveBusy}
-                        onFlipLive={() => void flipPharmacyLive(selectedPharmacy.id)}
+                        onFlipLive={options => void flipPharmacyLive(selectedPharmacy.id, options)}
                         onReverted={status => dispatch({ type: 'UPDATE_ORGANISATION', organisationId: selectedPharmacy.id, updates: { status } })}
                       />
                     </div>

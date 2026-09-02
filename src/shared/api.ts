@@ -593,8 +593,8 @@ export function approveCuraleafPharmacy(organisationId: string) {
   );
 }
 
-export function goLiveOrganisation(organisationId: string) {
-  return apiRequest<GoLiveReadiness>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/go-live`, { method: 'POST', body: JSON.stringify({}) });
+export function goLiveOrganisation(organisationId: string, input: { acknowledgedCuraleafTest?: boolean } = {}) {
+  return apiRequest<GoLiveReadiness>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/go-live`, { method: 'POST', body: JSON.stringify(input) });
 }
 
 export function getGoLiveReadiness(organisationId: string) {

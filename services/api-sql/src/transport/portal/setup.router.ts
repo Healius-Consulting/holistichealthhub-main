@@ -15,7 +15,9 @@ import { canAcceptPublicIntake } from '../../domain/organisation/access.js';
 import {
   buildGoLiveReadinessView,
   buildSetupStatusView,
+  GO_LIVE_CURALEAF_TEST_ACK,
   goLiveBlockedMessage,
+  goLiveRequiresCuraleafTestAcknowledgement,
   type PharmacySetupStatusView,
 } from '../../domain/organisation/operational-readiness.js';
 import type { OrganisationRecord, SetupTaskRecord } from '../../repositories/ports/organisation.port.js';
@@ -504,6 +506,9 @@ export function createPortalSetupRouter(): Router {
       const organisationId = organisationIdSchema.parse(req.params.id);
       const organisation = await organisationRepo.findOrganisationById(organisationId);
       if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const input = z.object({
+        acknowledgedCuraleafTest: z.boolean().optional(),
+      }).parse(req.body ?? {});
       const readiness = await goLiveSnapshot(organisation);
       if (organisation.status === 'LIVE' && readiness.ready) {
         res.status(200).json(readiness);
@@ -513,6 +518,10 @@ export function createPortalSetupRouter(): Router {
         throw new HttpError(409, goLiveBlockedMessage(readiness.operational), 'GO_LIVE_GATES_INCOMPLETE', {
           missingGates: readiness.operational.missingGates,
         });
+      }
+      const curaleafTestAckRequired = goLiveRequiresCuraleafTestAcknowledgement(readiness.operational);
+      if (curaleafTestAckRequired && input.acknowledgedCuraleafTest !== true) {
+        throw new HttpError(409, GO_LIVE_CURALEAF_TEST_ACK, 'GO_LIVE_CURALEAF_TEST_ACK_REQUIRED');
       }
       await organisationRepo.updateOrganisationStatus(organisationId, 'LIVE');
       await identityRepo.appendAudit({
@@ -525,7 +534,11 @@ export function createPortalSetupRouter(): Router {
         requestId: scope.requestId,
         sessionHashPrefix: scope.sessionHash.slice(0, 12),
         surface: scope.surface,
-        details: { missingGates: readiness.operational.missingGates },
+        details: {
+          missingGates: readiness.operational.missingGates,
+          acknowledgedCuraleafTest: curaleafTestAckRequired,
+          curaleafLabel: readiness.operational.curaleaf.label,
+        },
       });
       const updated = await organisationRepo.findOrganisationById(organisationId);
       if (!updated) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');

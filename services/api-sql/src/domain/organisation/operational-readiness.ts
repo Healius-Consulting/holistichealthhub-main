@@ -55,6 +55,7 @@ export interface GoLiveReadinessView {
   allocationHolding: boolean;
   intakeReady: boolean;
   ready: boolean;
+  curaleafTestAcknowledgementRequired: boolean;
   status: 'onboarding' | 'intake_live' | 'live' | 'paused';
   gates: {
     gdprEvidence: {
@@ -117,7 +118,6 @@ export function buildOperationalStatus(input: {
   if (workspaceMode === 'paused') missingGates.push('paused');
   if (input.organisation.classification === 'TRAINING') missingGates.push('training_tenant');
   if (!intakeCall) missingGates.push('intake_call');
-  if (!curaleafProduction) missingGates.push('curaleaf_production');
 
   return {
     intake: { live: intakeLive, label: intakeLive ? 'Live' : 'Off' },
@@ -226,6 +226,7 @@ export function buildGoLiveReadinessView(input: {
     allocationHolding,
     intakeReady: canAcceptPublicIntake(input.organisation),
     ready: input.operational.goLiveReady,
+    curaleafTestAcknowledgementRequired: !input.operational.curaleaf.production,
     status,
     gates: {
       gdprEvidence: {
@@ -256,8 +257,12 @@ export function goLiveBlockedMessage(operational: PharmacyOperationalStatus): st
   if (operational.missingGates.includes('intake_call')) {
     return 'Log the intake call before flipping this workspace live.';
   }
-  if (operational.missingGates.includes('curaleaf_production')) {
-    return 'Activate Curaleaf production for this pharmacy before flipping the workspace live.';
-  }
   return 'This pharmacy cannot be flipped to live yet.';
+}
+
+export const GO_LIVE_CURALEAF_TEST_ACK =
+  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Integrations on Overview.';
+
+export function goLiveRequiresCuraleafTestAcknowledgement(operational: PharmacyOperationalStatus): boolean {
+  return !operational.curaleaf.production;
 }

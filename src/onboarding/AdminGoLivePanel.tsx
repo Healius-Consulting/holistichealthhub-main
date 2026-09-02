@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import type { PharmacyTenant } from '../context/AppContext';
 import type { GoLiveReadiness } from '../shared/contracts';
 import { getGoLiveReadiness, isApiConfigured, revertLiveOrganisation, updateAdminPharmacySetupTask } from '../shared/api';
@@ -8,11 +9,13 @@ interface AdminGoLivePanelProps {
   organisation: PharmacyTenant;
   goLiveError: string | null;
   goLiveBusy: boolean;
-  onFlipLive: () => void;
+  onFlipLive: (options?: { acknowledgedCuraleafTest?: boolean }) => void;
   onReverted?: (status: PharmacyTenant['status']) => void;
 }
 
 const INTAKE_EVIDENCE = 'HHH logged the intake call.';
+export const GO_LIVE_CURALEAF_TEST_ACK =
+  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Integrations on Overview.';
 
 export function AdminGoLivePanel({
   organisation,
@@ -28,6 +31,7 @@ export function AdminGoLivePanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loggingIntake, setLoggingIntake] = useState(false);
   const [reverting, setReverting] = useState(false);
+  const [acknowledgedCuraleafTest, setAcknowledgedCuraleafTest] = useState(false);
 
   const refresh = async () => {
     if (isLocalPortalPreview || !isApiConfigured) return;
@@ -48,7 +52,12 @@ export function AdminGoLivePanel({
   const curaleafProduction = operational?.curaleaf.production === true;
   const curaleafLabel = operational?.curaleaf.label ?? 'Waiting';
   const serverReady = readiness?.ready === true;
-  const canFlip = !liveWorkspace && !paused && !trainingTenant && (isLocalPortalPreview || serverReady);
+  const needsCuraleafAck = !liveWorkspace && !curaleafProduction;
+  const canFlip = !liveWorkspace && !paused && !trainingTenant && (isLocalPortalPreview || serverReady) && (!needsCuraleafAck || acknowledgedCuraleafTest);
+
+  useEffect(() => {
+    setAcknowledgedCuraleafTest(false);
+  }, [organisation.id, needsCuraleafAck]);
 
   const logIntakeCall = async () => {
     if (isLocalPortalPreview) return;
@@ -82,7 +91,7 @@ export function AdminGoLivePanel({
     }
   };
 
-  const blockers = [
+  const facts = [
     { id: 'intake_call', title: 'Intake call', value: intakeLogged ? 'Logged' : 'Not logged', passed: intakeLogged },
     { id: 'curaleaf', title: 'Curaleaf', value: curaleafLabel, passed: curaleafProduction },
   ];
@@ -93,7 +102,7 @@ export function AdminGoLivePanel({
         <div>
           <p className="section-label">Go live</p>
           <h2>Pharmacy workspace</h2>
-          <p>Log the intake call and switch Curaleaf from test to production. When both are done, flip the workspace live. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
+          <p>Log the intake call, then flip the workspace live. If Curaleaf is still on test, confirm that the pharmacy has been told not to create or place orders until it is switched to live. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
         </div>
         {liveWorkspace ? (
           <button type="button" className="btn btn-secondary btn-sm" disabled={goLiveBusy || reverting} onClick={() => void revertLive()}>
@@ -104,7 +113,7 @@ export function AdminGoLivePanel({
             type="button"
             className="btn btn-primary btn-sm"
             disabled={goLiveBusy || !canFlip}
-            onClick={onFlipLive}
+            onClick={() => onFlipLive({ acknowledgedCuraleafTest: needsCuraleafAck })}
           >
             {goLiveBusy ? 'Flipping…' : 'Flip workspace to live'}
           </button>
@@ -113,8 +122,20 @@ export function AdminGoLivePanel({
 
       {goLiveError || loadError ? <div className="banner banner-red" role="alert">{goLiveError || loadError}</div> : null}
 
-      <ul className="admin-golive-facts" aria-label={`Go-live blockers for ${organisation.tradingName}`}>
-        {blockers.map(row => (
+      {needsCuraleafAck ? (
+        <label className="admin-golive-ack">
+          <AlertTriangle size={16} aria-hidden="true" />
+          <input
+            type="checkbox"
+            checked={acknowledgedCuraleafTest}
+            onChange={event => setAcknowledgedCuraleafTest(event.target.checked)}
+          />
+          <span>{GO_LIVE_CURALEAF_TEST_ACK}</span>
+        </label>
+      ) : null}
+
+      <ul className="admin-golive-facts" aria-label={`Go-live status for ${organisation.tradingName}`}>
+        {facts.map(row => (
           <li key={row.id}>
             <span>{row.title}</span>
             <span className={`pill ${row.passed ? 'pill-green' : 'pill-amber'}`}>{row.value}</span>
@@ -145,7 +166,7 @@ export function AdminGoLivePanel({
           <li>
             <div>
               <strong>Curaleaf</strong>
-              <span>Activate production credentials in the Curaleaf panel. A test connection does not unlock go-live.</span>
+              <span>Switch it from test to live under Integrations on Overview before they create or place orders. A test connection does not block go-live.</span>
             </div>
             <span className={`pill ${curaleafProduction ? 'pill-green' : 'pill-amber'}`}>{curaleafLabel}</span>
           </li>

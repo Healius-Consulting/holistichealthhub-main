@@ -52,7 +52,7 @@ function loggedGoLiveTasks() {
 }
 
 describe('operational readiness', () => {
-  it('keeps intake live during training and blocks go-live until intake and Curaleaf production pass', () => {
+  it('keeps intake live during training and blocks go-live until the intake call is logged', () => {
     const operational = buildOperationalStatus({
       organisation,
       tasks: [task('pharmacy_profile', true), task('payment_route', true), task('pricing', true)],
@@ -65,7 +65,7 @@ describe('operational readiness', () => {
     assert.equal(operational.curaleaf.label, 'Waiting');
     assert.equal(operational.payment.label, 'Pharmacy-managed');
     assert.equal(operational.goLiveReady, false);
-    assert.deepEqual(operational.missingGates, ['intake_call', 'curaleaf_production']);
+    assert.deepEqual(operational.missingGates, ['intake_call']);
   });
 
   it('blocks go-live while paused or classified as a training tenant', () => {
@@ -104,7 +104,7 @@ describe('operational readiness', () => {
     assert.equal(operational.goLiveReady, true);
   });
 
-  it('rejects a test Curaleaf connection as production', () => {
+  it('lets a logged intake go live while Curaleaf is still on test, with an acknowledgement', () => {
     const operational = buildOperationalStatus({
       organisation,
       tasks: loggedGoLiveTasks(),
@@ -115,12 +115,12 @@ describe('operational readiness', () => {
     assert.equal(operational.curaleaf.connected, true);
     assert.equal(operational.curaleaf.production, false);
     assert.equal(operational.curaleaf.label, 'Test');
-    assert.equal(operational.goLiveReady, false);
-    assert.ok(operational.missingGates.includes('curaleaf_production'));
-    assert.equal(
-      goLiveBlockedMessage(operational),
-      'Activate Curaleaf production for this pharmacy before flipping the workspace live.',
-    );
+    assert.equal(operational.goLiveReady, true);
+    assert.ok(!operational.missingGates.includes('curaleaf_production'));
+    const readiness = buildGoLiveReadinessView({ organisation, operational, curaleaf: connection('CURALEAF', 'ACTIVE', 'TEST') });
+    assert.equal(readiness.ready, true);
+    assert.equal(readiness.curaleafTestAcknowledgementRequired, true);
+    assert.equal(readiness.gates.curaleafLive.passed, false);
   });
 
   it('marks go-live ready after the intake call and Curaleaf production, without a walkthrough log', () => {
@@ -147,6 +147,7 @@ describe('operational readiness', () => {
     assert.equal(readiness.ready, true);
     assert.equal(readiness.status, 'onboarding');
     assert.equal(readiness.gates.curaleafLive.passed, true);
+    assert.equal(readiness.curaleafTestAcknowledgementRequired, false);
     assert.equal(readiness.gates.curaleafLive.secretStored, true);
   });
 });

@@ -2745,6 +2745,38 @@ td.font-semibold{
   flex-shrink: 0;
 }
 
+.admin-golive-ack{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.admin-golive-ack > svg{
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.admin-golive-ack input{
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--tenant-primary);
+}
+
+.admin-golive-ack span{
+  min-width: 0;
+}
+
 .admin-golive-panel__hint,
 .admin-golive-panel__empty{
   margin: 12px 0 0;

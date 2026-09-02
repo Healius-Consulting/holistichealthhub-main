@@ -802,6 +802,7 @@ export interface GoLiveReadiness {
   allocationHolding?: boolean;
   intakeReady: boolean;
   ready: boolean;
+  curaleafTestAcknowledgementRequired?: boolean;
   status: 'onboarding' | 'intake_live' | 'live' | 'paused';
   gates: {
     gdprEvidence: {
