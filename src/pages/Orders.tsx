@@ -922,7 +922,7 @@ export default function Orders() {
     : [];
 
   return (
-    <div className="page-body order-crm">
+    <div className="page-body order-crm" data-tour="orders-board">
       {/* One tile per lane that currently holds work, plus the money still outstanding.
           Label and number only — the lane headings below carry the explanation. */}
       <section className="order-crm-summary order-crm-summary--compact" aria-label="Order pipeline summary">

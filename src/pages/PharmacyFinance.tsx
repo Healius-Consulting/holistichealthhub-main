@@ -276,7 +276,7 @@ export default function PharmacyFinance() {
   const realisedCount = totals?.paidPrescriptionCount ?? 0;
 
   return (
-    <div className="page-body pharmacy-finance" aria-busy={loading}>
+    <div className="page-body pharmacy-finance" aria-busy={loading} data-tour="finance">
       <header className="pharmacy-finance__header">
         <div className="pharmacy-finance__intro">
           <p className="section-label">Finance</p>

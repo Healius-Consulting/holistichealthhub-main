@@ -31,6 +31,7 @@ import {
 } from '../shared/api';
 import type { AuthenticatedSession } from '../shared/contracts';
 import { configureAccessibilitySync, saveAccessibilityPreferences } from '../accessibility/preferences';
+import { hydrateWorkspaceTourFromPreferences, mergeStaffPreferences, rememberStaffPreferenceExtras } from '../training/workspaceTourPreferences';
 import { firebaseConfiguration, mfaRequired, readAppCheckToken, requireFirebaseAuth, serverSessionAuth } from './firebase';
 import { AuthContext, type AuthContextValue } from './AuthContext';
 import type { AuthState, AuthenticatedStaff, StaffRole } from './types';
@@ -271,14 +272,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const enableSync = () => {
       if (!active) return;
       configureAccessibilitySync(preferences => {
-        pendingPreferences = preferences;
+        pendingPreferences = mergeStaffPreferences(preferences);
         if (preferenceSaveTimer !== null) window.clearTimeout(preferenceSaveTimer);
         preferenceSaveTimer = window.setTimeout(flushPreferenceSave, 900);
       });
     };
     void getStaffAccessibilityPreferences().then(preferences => {
       if (!active) return;
-      lastPersistedPreferences = JSON.stringify(preferences);
+      rememberStaffPreferenceExtras(preferences);
+      hydrateWorkspaceTourFromPreferences(preferences.workspaceTourCompleted, false);
+      lastPersistedPreferences = JSON.stringify(mergeStaffPreferences(preferences));
       saveAccessibilityPreferences(preferences);
       enableSync();
     }).catch(enableSync);

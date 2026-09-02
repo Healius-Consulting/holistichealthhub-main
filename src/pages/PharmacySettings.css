@@ -9,6 +9,10 @@
   gap: 16px;
 }
 
+.pharmacy-settings-tour-replay{
+  min-height: 44px;
+}
+
 /* ---- Compact header ---- */
 
 .pharmacy-settings__header{

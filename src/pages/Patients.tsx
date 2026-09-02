@@ -512,8 +512,8 @@ export default function Patients() {
             {visibleLanes.map(lane => {
               const laneRecords = lanes.get(lane.key) ?? [];
               return (
-                <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
-                  <header className="crm-lane__header" title={lane.detail}>
+                <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`} data-tour={lane.key === 'enquiries' ? 'patients-enquiries' : lane.key === 'care' ? 'patients-referred' : undefined}>
+                  <header className="crm-lane__header" title={lane.detail} data-tour={lane.key === 'care' ? 'patients-active' : undefined}>
                     <span><strong>{lane.label}</strong></span>
                     <b>{laneRecords.length}</b>
                   </header>
@@ -607,10 +607,18 @@ function crmMeta(record: CrmRecord) {
   });
 }
 
+function crmTourTarget(record: { kind: string; id: string }): string | undefined {
+  if (record.kind === 'enquiry') return 'patients-enquiry-record';
+  if (record.id.endsWith('-casey')) return 'patients-referred-record';
+  if (record.id.endsWith('-morgan')) return 'patients-active-record';
+  return undefined;
+}
+
 function CrmListRow({ record, selected, onSelect }: { record: CrmRecord; selected: boolean; onSelect: () => void }) {
   const meta = crmMeta(record);
   const Icon = CRM_ICONS[meta.icon];
   const stamp = record.kind === 'enquiry' && record.enquiry ? fmtDate(record.enquiry.submittedAt) : formatPatientDob(record.dob);
+  const tourTarget = crmTourTarget(record);
   return (
     <button
       type="button"
@@ -618,6 +626,7 @@ function CrmListRow({ record, selected, onSelect }: { record: CrmRecord; selecte
       aria-pressed={selected}
       aria-label={`${compactPatientName(record.name)}, ${meta.label}`}
       title={meta.description}
+      data-tour={tourTarget}
       onClick={onSelect}
     >
       <span className={`order-crm-row__stage order-tone--${meta.tone}`}><Icon size={15} aria-hidden="true" /></span>

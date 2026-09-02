@@ -1,0 +1,131 @@
+.workspace-tour{
+  position: fixed;
+  inset: 0;
+  z-index: 1700;
+  pointer-events: none;
+}
+
+.workspace-tour__catcher{
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.workspace-tour__catcher.is-dimmed{
+  background: rgb(2 6 12 / 72%);
+}
+
+.workspace-tour__spot{
+  position: fixed;
+  border: 2px solid var(--bg-app, #fff);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgb(2 6 12 / 72%);
+  pointer-events: none;
+}
+
+.workspace-tour__card{
+  position: fixed;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 24px));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  box-shadow: 0 18px 40px rgb(2 6 12 / 28%);
+  pointer-events: auto;
+}
+
+.workspace-tour__card--solo{
+  top: auto;
+  right: 12px;
+  bottom: 24px;
+  left: 12px;
+  margin: 0 auto;
+}
+
+.workspace-tour__status{
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.workspace-tour__card h2{
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+.workspace-tour__card p{
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.workspace-tour__actions{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.workspace-tour__nav{
+  display: flex;
+  gap: 8px;
+}
+
+.workspace-tour__skip{
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.workspace-tour__skip:focus-visible{
+  outline: 2px solid var(--tenant-primary, #0f766e);
+  outline-offset: 2px;
+}
+
+.workspace-tour__nav .btn{
+  min-height: 44px;
+  min-width: 44px;
+}
+
+html[data-reduced-motion='true'] .workspace-tour__spot,
+html[data-reduced-motion='true'] .workspace-tour__card{
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .workspace-tour__spot,
+  .workspace-tour__card{
+    transition: none;
+  }
+}
+
+@media (max-width: 760px){
+  .workspace-tour__card,
+  .workspace-tour__card--solo{
+    top: auto !important;
+    right: 12px !important;
+    bottom: 84px;
+    left: 12px !important;
+    width: auto;
+  }
+}

@@ -25,6 +25,7 @@ import { curaleafCatalogueEstateLabel } from '../utils/catalogueEstate';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { requestWorkspaceTourReplay } from '../training/workspaceTourPersist';
 import './PharmacySettings.css';
 
 /** A verification is only reassuring if staff can see how recent it is. */
@@ -272,7 +273,7 @@ export default function PharmacySettings() {
   };
 
   return (
-    <div className="page-body pharmacy-settings">
+    <div className="page-body pharmacy-settings" data-tour="settings">
       <header className="pharmacy-settings__header">
         <div className="tenant-mark" style={brandSwatchStyle(organisation.brand.primary)}>{organisation.logoText}</div>
         <div className="pharmacy-settings__identity">
@@ -295,6 +296,16 @@ export default function PharmacySettings() {
 
       {activeTab === 'settings' ? (
         <div className="pharmacy-settings__flow" id="settings-panel-organisation" role="tabpanel" aria-labelledby="settings-tab-organisation">
+          <section className="pharmacy-settings-section">
+            <header>
+              <h3><RefreshCw size={16} aria-hidden="true" /> Workspace tour</h3>
+            </header>
+            <p className="pharmacy-settings-section__lead">Walk through Overview, Patients, Orders, Create order, Catalogue, Finance and Settings. Completing or skipping saves against this staff account.</p>
+            <button type="button" className="btn btn-secondary pharmacy-settings-tour-replay" onClick={() => requestWorkspaceTourReplay()}>
+              Replay workspace tour
+            </button>
+          </section>
+
           <section className="pharmacy-settings-section">
             <header>
               <h3><Building2 size={16} aria-hidden="true" /> Pharmacy Delivery</h3>

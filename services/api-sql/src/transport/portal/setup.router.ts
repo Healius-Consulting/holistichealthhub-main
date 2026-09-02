@@ -59,6 +59,7 @@ const preferencesInputSchema = z.object({
   enhancedFocus: z.boolean(),
   underlineLinks: z.boolean(),
   overviewView: z.enum(['today', 'handover', 'operations', 'pipeline']).optional(),
+  workspaceTourCompleted: z.boolean().optional(),
 }).strict();
 
 const organisationIdSchema = z.string().regex(/^(?:[a-f\d]{32}|[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12})$/i);

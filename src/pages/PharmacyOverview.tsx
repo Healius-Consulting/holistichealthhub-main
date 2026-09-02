@@ -3,6 +3,8 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Coins, ListChecks, RefreshCw, 
 import { useApp } from '../context/AppContext';
 import { getPharmacyOverview } from '../shared/api';
 import type { PharmacyOverview as PharmacyOverviewContract } from '../shared/contracts';
+import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { sandboxOverviewForOrganisation, usesSandboxDummyPack } from '../training/workspace';
 
 type PriorityItem = PharmacyOverviewContract['priorityItems'][number];
 type PriorityKind = PriorityItem['kind'];
@@ -87,18 +89,28 @@ export default function PharmacyOverview() {
   const [overview, setOverview] = useState<PharmacyOverviewContract | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
+  const sandboxOverview = usesSandboxDummyPack(organisation, isLocalPortalPreview);
 
   const load = useCallback(async () => {
     setRefreshing(true);
     setError(null);
     try {
+      if (sandboxOverview && organisation) {
+        setOverview(sandboxOverviewForOrganisation(organisation));
+        return;
+      }
       setOverview(await getPharmacyOverview());
     } catch (loadError) {
+      if (sandboxOverview && organisation) {
+        setOverview(sandboxOverviewForOrganisation(organisation));
+        return;
+      }
       setError(loadError instanceof Error ? loadError.message : 'The operational overview is unavailable.');
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [organisation, sandboxOverview]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -156,7 +168,7 @@ export default function PharmacyOverview() {
 
   return (
     <div className="page-body secure-overview">
-      <header className="secure-overview__header">
+      <header className="secure-overview__header" data-tour="overview-identity">
         <div>
           {/* The screen already sits behind a server-verified session; announcing that in
               48pt type told staff nothing they could act on. The landmark keeps the
@@ -186,7 +198,7 @@ export default function PharmacyOverview() {
       )}
 
       {overview.enquiries.pendingCount > 0 && (
-        <section className="card overview-enquiry-notice" role="status" aria-label="HHH-managed eligibility enquiries">
+        <section className="card overview-enquiry-notice" role="status" aria-label="HHH-managed eligibility enquiries" data-tour="overview-enquiry">
           <span className="overview-enquiry-notice__icon"><ShieldCheck size={20} aria-hidden="true" /></span>
           <div>
             <p className="section-label">Eligibility enquiry</p>
@@ -235,7 +247,7 @@ export default function PharmacyOverview() {
         {/* Needs you comes first and owns the attention count. The separate
             "N items need attention today" strip said the same thing one line above
             the list that already showed each item, so it is gone. */}
-        <section className="card overview-queue" aria-labelledby="overview-needs-you">
+        <section className="card overview-queue" aria-labelledby="overview-needs-you" data-tour="overview-daily">
           <div className="section-heading">
             <div>
               <p className="section-label">Needs you</p>
@@ -297,7 +309,7 @@ export default function PharmacyOverview() {
 
         {/* Integration health and pipeline share the final row, in mobile source order. */}
         <div className="overview-secondary">
-          <section className="card overview-integrations" aria-label="Integration health">
+          <section className="card overview-integrations" aria-label="Integration health" data-tour="overview-integrations">
             <p className="section-label">Integrations</p>
             <ul className="overview-integrations__chips">
               {overview.integrations.map(item => (
@@ -312,7 +324,7 @@ export default function PharmacyOverview() {
             <button type="button" className="overview-integrations__link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'settings' })}>Open Settings <ArrowRight size={13} aria-hidden="true" /></button>
           </section>
 
-        <section className="card overview-pipeline" aria-labelledby="overview-pipeline-title">
+        <section className="card overview-pipeline" aria-labelledby="overview-pipeline-title" data-tour="overview-pipeline">
           <div className="section-heading">
             <div>
               <p className="section-label">Pipeline</p>

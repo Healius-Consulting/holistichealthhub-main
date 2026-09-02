@@ -163,6 +163,7 @@ const preferencesSchema = z.object({
   enhancedFocus: z.boolean().default(false),
   underlineLinks: z.boolean().default(false),
   overviewView: z.enum(['today', 'handover', 'operations', 'pipeline']).default('today'),
+  workspaceTourCompleted: z.boolean().optional(),
 });
 
 const financeRangeSchema = z.object({

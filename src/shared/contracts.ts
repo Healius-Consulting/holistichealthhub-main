@@ -1130,6 +1130,7 @@ export interface StaffAccessibilityPreferences {
   enhancedFocus: boolean;
   underlineLinks: boolean;
   overviewView?: 'today' | 'handover' | 'operations' | 'pipeline';
+  workspaceTourCompleted?: boolean;
 }
 
 export interface AuthenticatedSession {

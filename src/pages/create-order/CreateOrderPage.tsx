@@ -1077,7 +1077,7 @@ export default function CreateOrderPage() {
   } : null;
 
   return (
-    <div className="page-body rx-workbench rx-workbench--guided">
+    <div className="page-body rx-workbench rx-workbench--guided" data-tour="create-order">
       {isLocalPortalPreview ? (
         <p className="rx-guided-preview-banner" role="status">
           Local training preview. Synthetic barcode and quotes stay on this machine.

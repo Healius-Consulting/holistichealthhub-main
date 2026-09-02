@@ -30,6 +30,7 @@ import { isLocalPortalPreview, withLocationSearch } from './dev/localPortalPrevi
 import { resolvePharmacyWorkspaceMode } from './training/workspace';
 import LocalPortalSwitcher from './dev/LocalPortalSwitcher';
 import CommandPalette from './components/CommandPalette';
+import WorkspaceTour from './components/WorkspaceTour';
 import { appPathPrefix, isCurrentSurfacePath } from './auth/surface-path';
 import { surfaceRelativePath, surfaceRoutePath } from './routing/surfaceRoute';
 
@@ -310,6 +311,7 @@ function StaffWorkspace() {
         )}
         <div id="pharmacy-main-content" className="page-container" tabIndex={-1}>{renderScreen()}</div>
       </div>
+      <WorkspaceTour />
       {isLocalPortalPreview && <LocalPortalSwitcher />}
       <CommandPalette />
       <ToastContainer />

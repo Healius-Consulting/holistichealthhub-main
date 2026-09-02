@@ -58,7 +58,7 @@ export default function FormularyPricing() {
   };
 
   return (
-    <div className="page-body formulary-pricing-workspace">
+    <div className="page-body formulary-pricing-workspace" data-tour="catalogue">
       <section className="pricing-brief pricing-brief--readonly">
         <div className="pricing-brief__copy">
           <span className="pricing-brief__icon"><ShieldCheck size={18} /></span>
