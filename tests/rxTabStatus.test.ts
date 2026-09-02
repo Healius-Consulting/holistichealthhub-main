@@ -3,6 +3,15 @@ import test from 'node:test';
 import type { Prescription } from '../src/context/AppContext.ts';
 import { incompletePrescriptionPaymentGates, rxAuthenticated, rxTabStatus } from '../src/pages/create-order/rxTabStatus.ts';
 
+function isoDate(daysFromToday = 0) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + daysFromToday);
+  return date.toISOString().slice(0, 10);
+}
+
+const currentWindow = { issueDate: isoDate(0), expiryDate: isoDate(27) };
+
 const blankRx = (overrides: Partial<Prescription> = {}): Prescription => ({
   id: 1,
   entryMode: 'clinic',
@@ -29,8 +38,7 @@ test('uploaded clinic scan without packs needs medicines', () => {
     curaleafPrescriptionId: 'curaleaf-1',
     prescriber: 'Dr Smith',
     prescriberId: 'p1',
-    issueDate: '2026-08-01',
-    expiryDate: '2026-08-29',
+    ...currentWindow,
   })), 'needs medicines');
 });
 
@@ -41,8 +49,7 @@ test('complete clinic prescription is ready', () => {
     curaleafPrescriptionId: 'curaleaf-1',
     prescriber: 'Dr Smith',
     prescriberId: 'p1',
-    issueDate: '2026-08-01',
-    expiryDate: '2026-08-29',
+    ...currentWindow,
     items: [{ productId: 'p1', formulaId: 'f1', name: 'Oil', qty: 1, unitsNeededCount: 1, cost: 40, retail: 85 }],
   });
   assert.equal(rxTabStatus(rx), 'ready');
@@ -55,8 +62,7 @@ test('manual prescription without serial is not authenticated', () => {
     copyFileName: 'rx.pdf',
     prescriber: 'Dr Smith',
     prescriberPin: '1234',
-    issueDate: '2026-08-01',
-    expiryDate: '2026-08-29',
+    ...currentWindow,
   });
   assert.equal(rxAuthenticated(rx), false);
   assert.equal(rxTabStatus(rx), 'needs details');
@@ -72,8 +78,7 @@ test('mixed clinic and manual prescriptions can each be ready independently', ()
     curaleafPrescriptionId: 'curaleaf-1',
     prescriber: 'Dr Smith',
     prescriberId: 'p1',
-    issueDate: '2026-08-01',
-    expiryDate: '2026-08-29',
+    ...currentWindow,
     items: [pricedItem],
   });
   const manual = blankRx({
@@ -83,8 +88,7 @@ test('mixed clinic and manual prescriptions can each be ready independently', ()
     serialNumber: 'SN-2',
     prescriber: 'Dr Jones',
     prescriberPin: '4321',
-    issueDate: '2026-08-01',
-    expiryDate: '2026-08-29',
+    ...currentWindow,
     items: [{ ...pricedItem, productId: 'p2', formulaId: 'f2', name: 'Flower' }],
   });
   assert.equal(rxTabStatus(clinic), 'ready');
@@ -101,8 +105,7 @@ test('payment gates name the incomplete tab without serials or names', () => {
     curaleafPrescriptionId: 'curaleaf-1',
     prescriber: 'Dr Smith',
     prescriberId: 'p1',
-    issueDate: '2026-08-01',
-    expiryDate: '2026-08-29',
+    ...currentWindow,
     items: [pricedItem],
   });
   const missingCopy = blankRx({ id: 2, entryMode: 'manual' });

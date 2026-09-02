@@ -13,6 +13,7 @@ import { updatePatientConditions } from '../shared/api';
 import MedicineLabel from '../components/MedicineLabel';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { isTrainingSandboxPatient } from '../training/workspace';
 import { isNegativeEligibilityStatus, pharmacyDecisionReason } from '../utils/eligibilityPresentation';
 import {
   derivePatientJourneyStage,
@@ -237,11 +238,12 @@ function enquiryStatus(enquiry: PendingEnquiry): ReturnType<typeof deriveStatus>
   };
 }
 
-function newOrderGateMessage(workspaceLive: boolean, patient: UnifiedPatient): string | null {
-  if (!workspaceLive) return 'HHH must flip this workspace live before creating an order.';
+function newOrderGateMessage(workspaceLive: boolean, patient: UnifiedPatient, trainingDraft: boolean): string | null {
+  if (!workspaceLive && !trainingDraft) return 'HHH must flip this workspace live before creating an order.';
   if (!canCreateOrderForPatient(patient.crmPatient)) {
     return 'Orders unlock once HHH marks the patient Referred or Active. Enquiry and review stages must complete first.';
   }
+  if (!workspaceLive && trainingDraft) return 'Training draft only. Payment stays locked until Curaleaf is live.';
   if (patient.crmPatient?.status === 'Referred') return 'Create this approved referral’s first prescription order.';
   return 'Create a new prescription order.';
 }
@@ -445,11 +447,12 @@ export default function Patients() {
   };
 
   const handleCreateOrder = (patient: UnifiedPatient) => {
-    if (!isLocalPortalPreview && state.workspaceMode !== 'live') {
+    const crmPatient = patient.crmPatient;
+    const trainingDraft = Boolean(crmPatient && isTrainingSandboxPatient(crmPatient));
+    if (!isLocalPortalPreview && state.workspaceMode !== 'live' && !trainingDraft) {
       dispatch({ type: 'ADD_TOAST', message: 'Orders unlock after HHH flips this workspace live.', toastType: 'warning' });
       return;
     }
-    const crmPatient = patient.crmPatient;
     if (!canCreateOrderForPatient(crmPatient)) {
       dispatch({ type: 'ADD_TOAST', message: 'Orders stay locked until HHH completes referral.', toastType: 'warning' });
       return;
@@ -567,6 +570,7 @@ export default function Patients() {
             <PatientCrmDetail
               record={selected}
               workspaceLive={isLocalPortalPreview || state.workspaceMode === 'live'}
+              trainingDraft={Boolean(selected.patient.crmPatient && isTrainingSandboxPatient(selected.patient.crmPatient))}
               onCreateOrder={() => handleCreateOrder(selected.patient!)}
               onConditionsSaved={(patientId, conditions, primaryCondition) => {
                 dispatch({ type: 'SET_PATIENT_CONDITIONS', patientId, conditions, primaryCondition });
@@ -721,9 +725,10 @@ function PatientJourneyRail({ stage }: { stage: PatientJourneyStage }) {
   );
 }
 
-function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, onConditionsSaved }: {
+function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCreateOrder, onOpenOrder, onConditionsSaved }: {
   record: CrmRecord;
   workspaceLive: boolean;
+  trainingDraft?: boolean;
   onCreateOrder: () => void;
   onOpenOrder: (order: PatientOrder) => void;
   onConditionsSaved: (patientId: string, conditions: string[], primaryCondition: string) => void;
@@ -734,8 +739,8 @@ function PatientCrmDetail({ record, workspaceLive, onCreateOrder, onOpenOrder, o
   const clinical = patientClinicalProfile({ crmPatient: patient.crmPatient, submission: patient.submission });
   const conditions = clinical.conditions;
   const primaryCondition = clinical.primaryCondition;
-  const canOrder = workspaceLive && canCreateOrderForPatient(patient.crmPatient);
-  const orderGate = newOrderGateMessage(workspaceLive, patient);
+  const canOrder = (workspaceLive || trainingDraft) && canCreateOrderForPatient(patient.crmPatient);
+  const orderGate = newOrderGateMessage(workspaceLive, patient, trainingDraft);
   const foundService = clinical.heardAbout || portalSourceLabel(clinical.referralSource) || null;
   const treatmentCheck = clinical.triedTwoTreatments === true ? 'Yes' : clinical.triedTwoTreatments === false ? 'No' : null;
   const psychosisCheck = clinical.psychiatricExclusion === true ? 'Excluded' : clinical.psychiatricExclusion === false ? 'Passed' : null;

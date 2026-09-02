@@ -74,6 +74,14 @@ const LIST_LINKED_PRESCRIPTION_FILE_IDS_GQL = `
   }
 `;
 
+const LIST_PRESCRIPTION_IDS_BY_FILE_ID_GQL = `
+  query ListPrescriptionIdsByFileId($fileId: UUID!, $limit: Int!) {
+    prescriptions(where: { fileId: { eq: $fileId } }, limit: $limit) {
+      id
+    }
+  }
+`;
+
 const LIST_ACTIVE_PRESCRIBERS_GQL = `
   query ListActivePrescribers {
     prescribers(where: { active: { eq: true } }, limit: 500) {
@@ -452,6 +460,14 @@ export class SqlPrescriptionRepository implements PrescriptionRepositoryPort {
       { variables: { limit } },
     );
     return (result.data.prescriptions ?? []).flatMap(row => row.fileId ? [row.fileId] : []);
+  }
+
+  async listPrescriptionIdsByFileId(fileId: string, limit = 1): Promise<string[]> {
+    const result = await dataConnect.executeGraphql<{ prescriptions: Array<{ id: string }> }, any>(
+      LIST_PRESCRIPTION_IDS_BY_FILE_ID_GQL,
+      { variables: { fileId, limit } },
+    );
+    return (result.data.prescriptions ?? []).map(row => row.id);
   }
 
   async listActivePrescribers(): Promise<PrescriberRecord[]> {

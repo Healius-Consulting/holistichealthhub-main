@@ -93,7 +93,7 @@ export default function FormularyPricing() {
         <ProviderStatusNotice
           state="waiting"
           title="Curaleaf test catalogue"
-          detail="Prices and stock are from the sandbox estate."
+          detail="Prices and stock are from the sandbox estate. Create order uses this table as a training preview until Curaleaf is live."
         />
       ) : null}
 

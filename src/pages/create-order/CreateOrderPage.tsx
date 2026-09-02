@@ -12,9 +12,9 @@ import Step2PrescriptionPanel from './Step2PrescriptionPanel';
 import Step3FormularyPanel from './Step3FormularyPanel';
 import Step4CheckoutPanel from './Step4CheckoutPanel';
 import UnresolvedOrdersPanel from './UnresolvedOrdersPanel';
-import { wizardNextHint, wizardStageTitle } from './computeWizardProgress';
+import { wizardStageTitle } from './computeWizardProgress';
 import PrescriptionStrip from './PrescriptionStrip';
-import { incompletePrescriptionPaymentGates, rxAuthenticated, rxMedicinesComplete, rxTabStatus } from './rxTabStatus';
+import { incompletePrescriptionPaymentGates, rxAuthenticated, rxHasCopy, rxMedicinesComplete } from './rxTabStatus';
 import { useCreateOrderWizard } from './useCreateOrderWizard';
 import { basketItemIssue, gmcNumber, patientInitials } from './utils';
 import type { WizardStep } from './types';
@@ -31,13 +31,22 @@ import {
 } from '../../context/AppContext';
 import { TRAINING_PRESCRIBER, TRAINING_PRODUCT } from '../../training/workspace';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
-import { checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
+import { ApiRequestError, checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
+import { curaleafPlacementUnlocked, snapshotQuoteFromCatalogue } from '../../utils/curaleafPlacement';
 import { formatPatientDob } from '../../utils/patientDob';
 import { canCreateOrderForPatient, canLinkPatientOnOrderDraft } from '../../utils/patientOrderEligibility';
 import { quoteMedicineTotalPence } from '../../utils/pricing';
-import { MAX_PRESCRIPTION_FILE_BYTES, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
+import { MAX_PRESCRIPTION_FILE_BYTES, isPersistedPrescriptionFileId, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
 import { draftAllowsAdditionalPrescriptions } from '../../utils/replacementPrescriptionCopy';
 import { draftPrescriptionClientKey, flattenPrescriptionLines } from './prescriptionLineOwnership';
+
+function deferredPrescriptionFileCleanupFailed(error: unknown) {
+  return !(error instanceof ApiRequestError && (
+    error.status === 404
+    || error.code === 'NOT_FOUND'
+    || error.code === 'FILE_LOCKED'
+  ));
+}
 
 function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
   if (reason === 'SERIAL_IN_USE') return 'This prescription serial is already on another live order.';
@@ -51,6 +60,12 @@ export default function CreateOrderPage() {
   const { state, dispatch } = useApp();
   const organisationPatients = state.crm.filter(candidate => candidate.organisationId === state.currentOrganisationId);
   const liveWorkspace = isLocalPortalPreview || state.workspaceMode === 'live';
+  const placementUnlocked = curaleafPlacementUnlocked({
+    workspaceMode: state.workspaceMode,
+    localPreview: isLocalPortalPreview,
+    catalogueSource: state.catalogueSource,
+    catalogueEnvironment: state.catalogueEnvironment,
+  });
   const orderablePatients = organisationPatients.filter(patient => canLinkPatientOnOrderDraft(patient, liveWorkspace));
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const canUseWorldpay = organisation?.worldpay.status === 'connected';
@@ -81,6 +96,7 @@ export default function CreateOrderPage() {
   const [uploadingRxId, setUploadingRxId] = useState<number | null>(null);
   const [confirmingFileRemoveRxId, setConfirmingFileRemoveRxId] = useState<number | null>(null);
   const [fileRemovalBusyRxId, setFileRemovalBusyRxId] = useState<number | null>(null);
+  const [rxRemovalBusyRxId, setRxRemovalBusyRxId] = useState<number | null>(null);
   const [readingRxId, setReadingRxId] = useState<number | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -136,15 +152,15 @@ export default function CreateOrderPage() {
   }, [activeOrder?.id, activeOrder?.payment.status, activeOrder?.paymentRoute, canUseWorldpay, dispatch, organisation?.worldpay.lastSyncedAt]);
 
   useEffect(() => {
-    if (!durableDraftEnabled || !activeOrder || activeOrder.draftId || checkoutBusy) return;
+    if (!durableDraftEnabled || !activeOrder || activeOrder.draftId || checkoutBusy || uploadingRxId !== null || fileRemovalBusyRxId !== null || rxRemovalBusyRxId !== null) return;
     void ensureDurableDraft(activeOrder, durableDraftPayload ?? {})
       .catch(error => {
         if (!checkoutBusy) console.warn('Draft autosave:', error);
       });
-  }, [activeOrder, checkoutBusy, durableDraftEnabled, durableDraftPayload, ensureDurableDraft]);
+  }, [activeOrder, checkoutBusy, durableDraftEnabled, durableDraftPayload, ensureDurableDraft, fileRemovalBusyRxId, rxRemovalBusyRxId, uploadingRxId]);
 
   useEffect(() => {
-    if (!durableDraftEnabled || !activeOrder?.draftId || !durableDraftPayload || uploadingRxId !== null || fileRemovalBusyRxId !== null || checkoutBusy) return;
+    if (!durableDraftEnabled || !activeOrder?.draftId || !durableDraftPayload || uploadingRxId !== null || fileRemovalBusyRxId !== null || rxRemovalBusyRxId !== null || checkoutBusy) return;
     const timer = window.setTimeout(() => {
       void updateOrderDraft(activeOrder.draftId!, { organisationId: state.currentOrganisationId, patientId: activeOrder.patientId, payload: durableDraftPayload })
         .catch(error => {
@@ -152,7 +168,7 @@ export default function CreateOrderPage() {
         });
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [activeOrder?.draftId, activeOrder?.patientId, checkoutBusy, durableDraftEnabled, durableDraftPayload, durableDraftSignature, fileRemovalBusyRxId, state.currentOrganisationId, uploadingRxId]);
+  }, [activeOrder?.draftId, activeOrder?.patientId, checkoutBusy, durableDraftEnabled, durableDraftPayload, durableDraftSignature, fileRemovalBusyRxId, rxRemovalBusyRxId, state.currentOrganisationId, uploadingRxId]);
 
   useEffect(() => {
     if (!activeOrder?.prescriptions.length) return setSelectedRxId(null);
@@ -327,7 +343,8 @@ export default function CreateOrderPage() {
 
   const quoteCurrent = wholesaleKnown && quotedSignature === currentQuoteSignature;
   const currentUnavailableProductIds = quotedSignature === currentQuoteSignature ? quotedUnavailableProductIds : [];
-  const quoteAvailable = quoteCurrent && currentUnavailableProductIds.length === 0;
+  const snapshotQuoteReady = !placementUnlocked && quotedSignature === currentQuoteSignature;
+  const quoteAvailable = (quoteCurrent || snapshotQuoteReady) && currentUnavailableProductIds.length === 0;
   const dispensingFeeValid = !activeOrder
     || (activeOrder.dispensingFee >= 0 && activeOrder.dispensingFee <= 15);
   const quoteGateComplete = !requiresLiveCuraleafEvidence || quoteAvailable;
@@ -371,9 +388,6 @@ export default function CreateOrderPage() {
     : [];
   const draftBasketCount = draftBasketItems.length;
   const selectedBasketCount = selectedRx?.items.length ?? 0;
-  const incompletePrescriptionCount = activeOrder
-    ? activeOrder.prescriptions.filter(rx => rxTabStatus(rx) !== 'ready').length
-    : 0;
   // Curaleaf's own tax on the pharmacy's purchase is a supplier-side figure and is
   // deliberately not surfaced to staff, so only wholesale and delivery come through.
   const draftBasketCosts = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
@@ -450,15 +464,6 @@ export default function CreateOrderPage() {
     entryMode: selectedRx?.entryMode,
     paidRedo,
   });
-  const nextHint = wizardNextHint({
-    progress: wizard.progress,
-    patientLinked,
-    patientEligible: canCreateOrderForPatient(patient),
-    entryMode: selectedRx?.entryMode,
-    readyForProducts,
-    draftBasketCount,
-    incompletePrescriptionCount,
-  });
 
   const advanceStep = () => {
     const next = Math.min(wizard.focusedStep + 1, wizard.progress.furthestUnlocked) as WizardStep;
@@ -475,12 +480,58 @@ export default function CreateOrderPage() {
     wizard.goToStep(2);
   };
 
-  const removeSelectedPrescription = () => {
-    if (!activeOrder || !selectedRx || activeOrder.prescriptions.length < 2) return;
-    const remaining = activeOrder.prescriptions.filter(rx => rx.id !== selectedRx.id);
-    dispatch({ type: 'REMOVE_RX', orderId: activeOrder.id, rxId: selectedRx.id });
-    setSelectedRxId(remaining[0]?.id ?? null);
-    setConfirmingRemoveRxId(null);
+  const removePrescriptionFromDraft = async (rxId: number) => {
+    if (!activeOrder || activeOrder.prescriptions.length < 2) return;
+    const removed = activeOrder.prescriptions.find(rx => rx.id === rxId);
+    if (!removed) return;
+    const remaining = activeOrder.prescriptions.filter(rx => rx.id !== rxId);
+    const finishLocalRemove = () => {
+      dispatch({ type: 'REMOVE_RX', orderId: activeOrder.id, rxId });
+      if (selectedRxId === rxId) setSelectedRxId(remaining[0]?.id ?? null);
+      setConfirmingRemoveRxId(null);
+    };
+
+    if (!durableDraftEnabled) {
+      finishLocalRemove();
+      return;
+    }
+
+    setRxRemovalBusyRxId(rxId);
+    try {
+      const payload = { ...(durableDraftPayload ?? {}), prescriptions: remaining };
+      const draftId = await ensureDurableDraft(activeOrder, payload);
+      await updateOrderDraft(draftId, {
+        organisationId: state.currentOrganisationId,
+        patientId: activeOrder.patientId,
+        payload,
+      });
+      finishLocalRemove();
+      if (isPersistedPrescriptionFileId(removed.fileId)) {
+        void deletePrescriptionFile(removed.fileId, state.currentOrganisationId)
+          .catch(error => {
+            if (deferredPrescriptionFileCleanupFailed(error)) console.warn('Removed prescription copy cleanup was deferred.');
+          });
+      }
+    } catch (error) {
+      dispatch({
+        type: 'ADD_TOAST',
+        message: error instanceof Error ? error.message : 'The prescription could not be removed from the saved draft.',
+        toastType: 'error',
+      });
+    } finally {
+      setRxRemovalBusyRxId(null);
+    }
+  };
+
+  const requestRemovePrescription = (rxId: number) => {
+    if (!activeOrder || activeOrder.prescriptions.length < 2 || !draftAllowsAdditionalPrescriptions(activeOrder)) return;
+    const rx = activeOrder.prescriptions.find(item => item.id === rxId);
+    if (!rx) return;
+    if (rxHasCopy(rx)) {
+      setConfirmingRemoveRxId(rxId);
+      return;
+    }
+    void removePrescriptionFromDraft(rxId);
   };
 
   const canAddPrescription = Boolean(
@@ -592,7 +643,7 @@ export default function CreateOrderPage() {
   };
 
   const createPaymentRequest = async () => {
-    if (!activeOrder || !patient || !readyForPayment) return;
+    if (!activeOrder || !patient || !readyForPayment || !placementUnlocked) return;
     setCheckoutBusy(true);
     try {
       if (!isLocalPortalPreview && state.workspaceMode === 'live') {
@@ -777,7 +828,9 @@ export default function CreateOrderPage() {
       dispatch({ type: 'SET_RX_FILE', orderId: activeOrder.id, rxId, fileName: file.name, fileId: uploaded.id });
       if (prescription.fileId) {
         void deletePrescriptionFile(prescription.fileId, state.currentOrganisationId)
-          .catch(() => console.warn('Previous prescription copy cleanup was deferred.'));
+          .catch(error => {
+            if (deferredPrescriptionFileCleanupFailed(error)) console.warn('Previous prescription copy cleanup was deferred.');
+          });
       }
       if (prescription.entryMode === 'manual') {
         dispatch({ type: 'ADD_TOAST', message: prescription.fileId ? 'Prescription copy replaced securely.' : 'Manual prescription copy uploaded securely.', toastType: 'success' });
@@ -810,7 +863,9 @@ export default function CreateOrderPage() {
         });
         dispatch({ type: 'CLEAR_RX_FILE', orderId: activeOrder.id, rxId });
         void deletePrescriptionFile(prescription.fileId, state.currentOrganisationId)
-          .catch(() => console.warn('Removed prescription copy cleanup was deferred.'));
+          .catch(error => {
+            if (deferredPrescriptionFileCleanupFailed(error)) console.warn('Removed prescription copy cleanup was deferred.');
+          });
       } else {
         dispatch({ type: 'CLEAR_RX_FILE', orderId: activeOrder.id, rxId });
       }
@@ -825,14 +880,26 @@ export default function CreateOrderPage() {
   };
 
   const refreshQuote = async ({ silent = false }: { silent?: boolean } = {}) => {
-    if (!activeOrder || !currentQuoteItems.length || !isApiConfigured) return;
+    if (!activeOrder || !currentQuoteItems.length) return;
+    if (placementUnlocked && !isApiConfigured) return;
     const requestVersion = ++quoteRequestVersion.current;
     setQuoteBusy(true);
     setQuoteError(null);
     try {
-      const quote = isLocalPortalPreview
-        ? await getDevCuraleafQuote(currentQuoteItems)
-        : await getCuraleafQuote(state.currentOrganisationId, currentQuoteItems);
+      const snapshot = placementUnlocked ? null : snapshotQuoteFromCatalogue(
+        currentQuoteItems,
+        state.catalogue,
+        activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({
+          productId: item.productId,
+          cost: item.cost,
+          retail: item.retail,
+        }))),
+      );
+      const quote = snapshot
+        ? snapshot.quote
+        : isLocalPortalPreview
+          ? await getDevCuraleafQuote(currentQuoteItems)
+          : await getCuraleafQuote(state.currentOrganisationId, currentQuoteItems);
       if (requestVersion !== quoteRequestVersion.current) return;
       const quotedPackIds = new Set(quote.items.map(item => item.packId));
       const missingPackIds = [...new Set(currentQuoteItems.map(item => item.packId).filter(packId => !quotedPackIds.has(packId)))];
@@ -849,23 +916,28 @@ export default function CreateOrderPage() {
         setQuoteCheckedAt(null);
         setQuotedUnavailableProductIds([]);
         setQuoteError({
-          title: 'Selected pack not quoted by Curaleaf',
-          detail: state.workspaceMode === 'training'
-            ? `Curaleaf returned no wholesale or availability line for ${names.join(', ') || 'the selected pack'}. The draft is unchanged and no supplier order has been sent.`
-            : `Curaleaf returned no wholesale or availability line for ${names.join(', ') || 'the selected pack'}, although it remains listed in the catalogue. Keep the draft and retry later, or ask your HHH administrator to raise the pack with Curaleaf.`,
+          title: snapshot ? 'Selected pack is not in the test catalogue' : 'Selected pack not quoted by Curaleaf',
+          detail: snapshot
+            ? `${names.join(', ') || 'The selected pack'} is not in the Curaleaf test catalogue on this workspace. Choose a pack from the catalogue table.`
+            : state.workspaceMode === 'training'
+              ? `Curaleaf returned no wholesale or availability line for ${names.join(', ') || 'the selected pack'}. The draft is unchanged and no supplier order has been sent.`
+              : `Curaleaf returned no wholesale or availability line for ${names.join(', ') || 'the selected pack'}, although it remains listed in the catalogue. Keep the draft and retry later, or ask your HHH administrator to raise the pack with Curaleaf.`,
         });
         return;
       }
-      dispatch({
-        type: 'APPLY_CURALEAF_QUOTE',
-        items: quote.items.map(item => ({
-          productId: item.packId,
-          wholesalePrice: Number(item.wholesalePackPrice),
-          patientPrice: Number(item.patientPackPrice),
-          inStock: item.inStock,
-          stockStatus: item.stockStatus ?? (item.inStock ? 'in_stock' : 'out_of_stock'),
-        })),
-      });
+      const quotedLines = quote.items.filter(item => item.wholesalePackPrice !== '');
+      if (quotedLines.length) {
+        dispatch({
+          type: 'APPLY_CURALEAF_QUOTE',
+          items: quotedLines.map(item => ({
+            productId: item.packId,
+            wholesalePrice: Number(item.wholesalePackPrice),
+            patientPrice: Number(item.patientPackPrice),
+            inStock: item.inStock,
+            stockStatus: item.stockStatus ?? (item.inStock ? 'in_stock' : 'out_of_stock'),
+          })),
+        });
+      }
       const unavailableProductIds = quote.items.filter(item => !item.inStock || item.stockStatus === 'out_of_stock').map(item => item.packId);
       setQuotedSignature(currentQuoteSignature);
       setLatestQuote(quote);
@@ -881,7 +953,15 @@ export default function CreateOrderPage() {
         if (!silent) dispatch({ type: 'ADD_TOAST', message: 'Curaleaf returned pricing, but one or more selected packs are out of stock.', toastType: 'info' });
       } else {
         setQuoteError(null);
-        if (!silent) dispatch({ type: 'ADD_TOAST', message: `Curaleaf quote refreshed for ${quote.items.length} product line${quote.items.length === 1 ? '' : 's'}.`, toastType: 'success' });
+        if (!silent) {
+          dispatch({
+            type: 'ADD_TOAST',
+            message: snapshot
+              ? `Test catalogue prices applied for ${quote.items.length} product line${quote.items.length === 1 ? '' : 's'}. Payment stays locked.`
+              : `Curaleaf quote refreshed for ${quote.items.length} product line${quote.items.length === 1 ? '' : 's'}.`,
+            toastType: snapshot ? 'info' : 'success',
+          });
+        }
       }
     } catch (error) {
       if (requestVersion !== quoteRequestVersion.current) return;
@@ -908,7 +988,7 @@ export default function CreateOrderPage() {
     const shouldQuote = Boolean(
       automaticQuoteOrderId
       && hasCurrentQuoteItems
-      && isApiConfigured
+      && (placementUnlocked ? isApiConfigured : true)
       && (prescriptionReady || (hasCurrentQuoteItems && !activeOrder?.redoContext)),
     );
     if (!shouldQuote) return;
@@ -916,7 +996,7 @@ export default function CreateOrderPage() {
       void automaticQuoteRef.current({ silent: true });
     }, 500);
     return () => window.clearTimeout(timeoutId);
-  }, [activeOrder?.redoContext, automaticQuoteOrderId, currentQuoteSignature, hasCurrentQuoteItems, prescriptionReady, state.currentOrganisationId, state.workspaceMode]);
+  }, [activeOrder?.redoContext, automaticQuoteOrderId, currentQuoteSignature, hasCurrentQuoteItems, placementUnlocked, prescriptionReady, state.catalogue, state.currentOrganisationId, state.workspaceMode]);
 
   const selectPatient = (patientId: string) => {
     if (!activeOrder || !patientId) return;
@@ -1114,14 +1194,17 @@ export default function CreateOrderPage() {
                 selectedRxId={selectedRx?.id ?? null}
                 canAdd={canAddPrescription}
                 canRemove={activeOrder.prescriptions.length > 1 && draftAllowsAdditionalPrescriptions(activeOrder)}
-                confirmingRemove={confirmingRemoveRxId === selectedRx?.id}
+                confirmingRemoveRxId={confirmingRemoveRxId}
+                removingBusy={rxRemovalBusyRxId !== null}
                 onSelect={rxId => {
                   setSelectedRxId(rxId);
                   setConfirmingRemoveRxId(null);
                 }}
                 onAdd={addPrescriptionToDraft}
-                onRequestRemove={() => selectedRx && setConfirmingRemoveRxId(selectedRx.id)}
-                onConfirmRemove={removeSelectedPrescription}
+                onRequestRemove={requestRemovePrescription}
+                onConfirmRemove={() => {
+                  if (confirmingRemoveRxId != null) void removePrescriptionFromDraft(confirmingRemoveRxId);
+                }}
                 onCancelRemove={() => setConfirmingRemoveRxId(null)}
               />
             ) : null}
@@ -1222,6 +1305,7 @@ export default function CreateOrderPage() {
                   wholesaleKnown={wholesaleKnown}
                   pharmacyDeliveryCurrentlyEnabled={organisation.pharmacyDeliveryEnabled}
                   workspaceMode={state.workspaceMode}
+                  paymentPreview={!placementUnlocked}
                   quoteAvailable={quoteAvailable}
                   quoteBusy={quoteBusy}
                   quoteCurrent={quoteCurrent}
@@ -1248,8 +1332,6 @@ export default function CreateOrderPage() {
                 />
                     ) : null}
                   </div>
-
-            {nextHint ? <p className="rx-guided__next-hint" role="status">{nextHint}</p> : null}
                     </div>
 
           <OrderSummaryRail

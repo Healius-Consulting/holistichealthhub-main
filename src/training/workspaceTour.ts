@@ -78,7 +78,7 @@ export const WORKSPACE_TOUR_STEPS: WorkspaceTourStep[] = [
     screen: 'create',
     targets: ['create-order'],
     title: 'Create an order',
-    body: 'Link a Referred or Active patient, then add the prescription. Real supplier writes and payments stay locked until HHH marks the pharmacy live. Training and local preview do not send to Curaleaf or take money.',
+    body: 'Link a Referred or Active patient, then add a prescription from the Curaleaf test catalogue. Payment is shown as a preview. Worldpay, ePOS and Curaleaf placement stay locked until Curaleaf is live.',
   },
   {
     id: 'catalogue',

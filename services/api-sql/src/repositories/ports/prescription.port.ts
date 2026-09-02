@@ -74,6 +74,7 @@ export interface PrescriptionRepositoryPort {
   findFileById(id: string, organisationId: string): Promise<PrescriptionFileRecord | null>;
   listCleanupCandidateFiles(limit?: number): Promise<PrescriptionFileRecord[]>;
   listLinkedPrescriptionFileIds(limit?: number): Promise<string[]>;
+  listPrescriptionIdsByFileId(fileId: string, limit?: number): Promise<string[]>;
   createFile(data: {
     id?: string;
     organisationId: string;

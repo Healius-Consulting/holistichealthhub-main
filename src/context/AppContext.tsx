@@ -173,6 +173,12 @@ export type PaymentStatus = 'none' | 'sent' | 'paid' | 'cancelled' | 'refund_req
 export type PaymentRoute = 'worldpay' | 'pharmacy' | null;
 export type ManualTender = 'epos-card' | 'cash' | 'bank-transfer' | 'other';
 
+const MANUAL_TENDERS: readonly ManualTender[] = ['epos-card', 'cash', 'bank-transfer', 'other'];
+
+function parseManualTender(value: string | null | undefined): ManualTender | null {
+  return value && MANUAL_TENDERS.includes(value as ManualTender) ? value as ManualTender : null;
+}
+
 export type UnresolvedOrderReason = 'expired' | 'rejected' | 'cancelled';
 
 export interface OrderRedoContext {
@@ -1029,7 +1035,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
       ref: record.manualReference ?? null,
       sentAt: new Date(record.createdAt),
       paidAt: paid ? (record.paidAt ? new Date(record.paidAt) : new Date(record.updatedAt)) : null,
-      manualTender: record.manualTender ?? (record.paymentRoute === 'manual' ? 'epos-card' : null),
+      manualTender: parseManualTender(record.manualTender) ?? (record.paymentRoute === 'manual' ? 'epos-card' : null),
       manualReference: record.manualReference ?? null,
       manualNotes: null,
       manualRecordedBy: null,

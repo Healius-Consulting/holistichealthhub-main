@@ -9,6 +9,7 @@ import './ManualPrescriptionEditor.css';
 import { getPrescriberDirectory, isApiConfigured } from '../shared/api';
 import type { PrescriberDirectoryRecord } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { isCuraleafTestCatalogue } from '../utils/catalogueEstate';
 
 type MetadataField = 'issueDate' | 'prescriberPin' | 'prescriberGmcNumber' | 'prescriberGphcNumber' | 'serialNumber';
 
@@ -201,6 +202,9 @@ export default function ManualPrescriptionEditor({
   const [prescribers, setPrescribers] = useState<PrescriberDirectoryRecord[]>([]);
   const [prescriberError, setPrescriberError] = useState<string | null>(null);
   const directoryEnabled = isApiConfigured && !isLocalPortalPreview && state.workspaceMode === 'live';
+  const testCatalogue = isLocalPortalPreview
+    || state.workspaceMode === 'training'
+    || isCuraleafTestCatalogue(state.catalogueSource, state.catalogueEnvironment);
   const dateHelp = issueDateHelp(prescription);
   const selectedProductIds = useMemo(() => new Set(prescription.items.map(item => item.productId)), [prescription.items]);
   const activeProducts = useMemo(
@@ -393,14 +397,14 @@ export default function ManualPrescriptionEditor({
                 </article>
               );
             }) : (
-              <div className="manual-rx-selected__empty"><Package size={18} /><span><strong>No medicines selected yet</strong><small>Add every prescribed pack from the live catalogue below.</small></span></div>
+              <div className="manual-rx-selected__empty"><Package size={18} /><span><strong>No medicines selected yet</strong><small>Add every prescribed pack from the {testCatalogue ? 'test catalogue' : 'live catalogue'} below.</small></span></div>
             )}
           </div>
         </section>}
 
         <section className="manual-rx-picker">
           <div className="manual-rx-picker__heading">
-            <span><small>{hideSelectedList ? 'Catalogue' : 'Section 4'}</small><strong>Add medicines from the live Curaleaf catalogue</strong><em>{hideSelectedList ? 'Selected packs and prices stay in the basket drawer at the bottom of the screen.' : 'Results stay open so you can add several prescribed products quickly.'}</em></span>
+            <span><small>{hideSelectedList ? 'Catalogue' : 'Section 4'}</small><strong>Add medicines from the {testCatalogue ? 'Curaleaf test catalogue' : 'live Curaleaf catalogue'}</strong><em>{hideSelectedList ? 'Selected packs and prices stay in the basket drawer at the bottom of the screen.' : 'Results stay open so you can add several prescribed products quickly.'}</em></span>
             <small>{filteredProducts.length} matching active pack{filteredProducts.length === 1 ? '' : 's'}</small>
           </div>
           <div className="manual-rx-picker__field">
@@ -469,7 +473,7 @@ export default function ManualPrescriptionEditor({
                   <span className="manual-rx-picker__add">{selected ? <Check size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />} {selected ? 'Added' : 'Add'}</span>
                 </button>
               );
-            }) : <span className="manual-rx-picker__empty">No active Curaleaf packs match this search and medicine type.</span>}
+            }) : <span className="manual-rx-picker__empty">No active packs match this search in the {testCatalogue ? 'test catalogue' : 'Curaleaf catalogue'}.</span>}
             </div>
           </div>
           {filteredProducts.length > pageSize ? (

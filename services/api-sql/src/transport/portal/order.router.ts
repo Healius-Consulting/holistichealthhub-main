@@ -32,7 +32,7 @@ import { SqlOrderLineRepository } from '../../repositories/sql/order-line.sql.js
 import { SqlPatientFinanceRepository } from '../../repositories/sql/patient-finance.sql.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
-import { purgeOrderPrescriptionFiles } from '../../application/prescriptions/prescription-file-purge.js';
+import { orphanedPrescriptionFileIds, purgeOrderPrescriptionFiles, purgeUnlinkedPrescriptionFileIds } from '../../application/prescriptions/prescription-file-purge.js';
 import { persistCuraleafPrescriptionIdentity } from '../../application/prescriptions/curaleaf-prescription-record.js';
 import type { OrderRecord } from '../../repositories/ports/order.port.js';
 import { requireCsrf } from '../../security/csrf.js';
@@ -322,6 +322,16 @@ export function createPortalOrderRouter(): Router {
         throw new HttpError(404, 'Order draft not found.', 'NOT_FOUND');
       }
 
+      const orphanedFileIds = orphanedPrescriptionFileIds(draft.payload, input.payload);
+      if (orphanedFileIds.length) {
+        await purgeUnlinkedPrescriptionFileIds(scope.organisationId, orphanedFileIds).catch(error =>
+          console.warn('[Order draft] Orphaned prescription file purge failed:', {
+            draftId,
+            error: error instanceof Error ? error.message : 'Unknown purge error',
+          }),
+        );
+      }
+
       res.status(200).json({ id: draftId, status: 'draft_updated' });
     } catch (error) {
       next(error);
@@ -333,11 +343,25 @@ export function createPortalOrderRouter(): Router {
     try {
       const scope = assertTenantScope(req.context!);
       const draftId = String(req.params.id || '');
+      const draft = await orderRepo.findDraftById(draftId, scope.organisationId);
+      if (!draft) {
+        throw new HttpError(404, 'Order draft not found.', 'NOT_FOUND');
+      }
       const deleted = await orderRepo.deleteDraft(draftId, scope.organisationId);
 
       if (!deleted) {
         throw new HttpError(404, 'Order draft not found.', 'NOT_FOUND');
       }
+
+      await purgeUnlinkedPrescriptionFileIds(
+        scope.organisationId,
+        orphanedPrescriptionFileIds(draft.payload, {}),
+      ).catch(error =>
+        console.warn('[Order draft] Prescription file purge failed:', {
+          draftId,
+          error: error instanceof Error ? error.message : 'Unknown purge error',
+        }),
+      );
 
       res.status(204).end();
     } catch (error) {

@@ -22,6 +22,7 @@ type Step4CheckoutPanelProps = {
   wholesaleKnown: boolean;
   pharmacyDeliveryCurrentlyEnabled: boolean;
   workspaceMode: string;
+  paymentPreview?: boolean;
   quoteAvailable: boolean;
   quoteBusy: boolean;
   quoteCurrent: boolean;
@@ -49,6 +50,7 @@ type Step4CheckoutPanelProps = {
 
 function quoteStatusLine(input: {
   workspaceMode: string;
+  paymentPreview: boolean;
   quoteAvailable: boolean;
   quoteBusy: boolean;
   quoteCurrent: boolean;
@@ -59,6 +61,7 @@ function quoteStatusLine(input: {
 }) {
   const {
     workspaceMode,
+    paymentPreview,
     quoteAvailable,
     quoteBusy,
     quoteCurrent,
@@ -66,10 +69,10 @@ function quoteStatusLine(input: {
     quoteCheckedAt,
     currentQuoteItemsCount,
   } = input;
-  const label = workspaceMode === 'training' ? 'Curaleaf test quote' : 'Curaleaf quote';
+  const label = paymentPreview || workspaceMode === 'training' ? 'Curaleaf test catalogue' : 'Curaleaf quote';
 
   if (quoteAvailable) {
-    const parts = [`${label} verified`];
+    const parts = paymentPreview ? [`${label} prices`] : [`${label} verified`];
     if (quoteCheckedAt) {
       parts.push(`checked ${new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(quoteCheckedAt))}`);
     }
@@ -92,6 +95,7 @@ export default function Step4CheckoutPanel({
   wholesaleKnown,
   pharmacyDeliveryCurrentlyEnabled,
   workspaceMode,
+  paymentPreview = false,
   quoteAvailable,
   quoteBusy,
   quoteCurrent,
@@ -123,6 +127,7 @@ export default function Step4CheckoutPanel({
   const grossMargin = pharmacyTotal == null || patientTotal == null ? null : patientTotal - pharmacyTotal;
   const quoteStatus = quoteStatusLine({
     workspaceMode,
+    paymentPreview,
     quoteAvailable,
     quoteBusy,
     quoteCurrent,
@@ -163,7 +168,11 @@ export default function Step4CheckoutPanel({
             <span>{quoteStatus.text}</span>
           </p>
           {quoteAvailable ? (
-            <p className="rx-step4-status__note">Quotes refresh when medicines or pack quantities change.</p>
+            <p className="rx-step4-status__note">
+              {paymentPreview
+                ? 'Prices come from the Curaleaf test catalogue on this workspace. They are a preview until Curaleaf is live.'
+                : 'Quotes refresh when medicines or pack quantities change.'}
+            </p>
           ) : null}
           {quoteError ? (
             <div className="rx-step4-status__error">
@@ -227,15 +236,15 @@ export default function Step4CheckoutPanel({
           </div>
           {activeOrder.dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(activeOrder.dispensingFee)}</dd></div> : null}
           {activeOrder.pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(activeOrder.pharmacyDelivery)}</dd></div> : null}
+          <div className="is-total">
+            <dt>{PATIENT_TOTAL_LABEL}</dt>
+            <dd>{patientTotal == null ? 'Quote pending' : money(patientTotal)}</dd>
+          </div>
           <div className="rx-step4-ledger__margin">
             <dt>Gross Margin</dt>
             <dd className={marginToneClass(marginPercent(grossMargin, patientTotal ?? 0))}>
               {formatMargin(grossMargin, patientTotal ?? 0)}
             </dd>
-          </div>
-          <div className="is-total">
-            <dt>{PATIENT_TOTAL_LABEL}</dt>
-            <dd>{patientTotal == null ? 'Quote pending' : money(patientTotal)}</dd>
           </div>
         </dl>
 
@@ -404,7 +413,15 @@ export default function Step4CheckoutPanel({
         ) : null}
 
         <div className="rx-step4-commit">
-          {!readyForPayment ? (
+          {paymentPreview ? (
+            <p id="rx-checkout-lock-tip" className="rx-step4-commit__lock" role="status">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>Payment is a preview</strong>
+                Worldpay, ePOS and Curaleaf placement stay locked until Curaleaf is live. You can still choose a route to see how checkout looks.
+              </span>
+            </p>
+          ) : !readyForPayment ? (
             <p id="rx-checkout-lock-tip" className="rx-step4-commit__lock" role="status">
               <AlertTriangle size={14} aria-hidden="true" />
               <span>
@@ -428,8 +445,8 @@ export default function Step4CheckoutPanel({
             <button
               type="button"
               className="btn btn-primary rx-create-payment"
-              disabled={checkoutBusy || !readyForPayment || (selectedPaymentRoute === 'worldpay' && !canUseWorldpay)}
-              aria-describedby={!readyForPayment ? 'rx-checkout-lock-tip' : undefined}
+              disabled={checkoutBusy || paymentPreview || !readyForPayment || (selectedPaymentRoute === 'worldpay' && !canUseWorldpay)}
+              aria-describedby={paymentPreview || !readyForPayment ? 'rx-checkout-lock-tip' : undefined}
               onClick={onSubmit}
             >
               <Send size={15} />

@@ -22,6 +22,16 @@ export function prescriptionFileIdsFromRx(rx: unknown): string[] {
   return ids;
 }
 
+export function orphanedPrescriptionFileIds(previous: unknown, next: unknown): string[] {
+  const remaining = new Set(prescriptionFileIdsFromSnapshot(next));
+  return prescriptionFileIdsFromSnapshot(previous).filter(fileId => !remaining.has(fileId));
+}
+
+export function unlinkedPrescriptionFileIds(fileIds: string[], linkedIds: Iterable<string>): string[] {
+  const linked = new Set(linkedIds);
+  return fileIds.filter(fileId => !linked.has(fileId));
+}
+
 export function prescriptionFileIdsFromSnapshot(snapshot: unknown): string[] {
   const ids = new Set<string>();
   const seen = new Set<object>();
@@ -91,4 +101,27 @@ export async function purgeOrderPrescriptionFiles(
     }
   }
   return results;
+}
+
+export async function purgeUnlinkedPrescriptionFileIds(
+  organisationId: string,
+  fileIds: string[],
+  deps?: {
+    prescriptionRepo?: PrescriptionRepositoryPort;
+    storage?: StorageProvider;
+  },
+) {
+  const prescriptionRepo = deps?.prescriptionRepo ?? new SqlPrescriptionRepository();
+  const linkedIds: string[] = [];
+  for (const fileId of fileIds) {
+    const linked = await prescriptionRepo.listPrescriptionIdsByFileId(fileId, 1);
+    if (linked.length) linkedIds.push(fileId);
+  }
+  const unlinked = unlinkedPrescriptionFileIds(fileIds, linkedIds);
+  if (!unlinked.length) return [];
+  return purgeOrderPrescriptionFiles(
+    organisationId,
+    { prescriptions: unlinked.map(fileId => ({ fileId })) },
+    { ...deps, prescriptionRepo },
+  );
 }

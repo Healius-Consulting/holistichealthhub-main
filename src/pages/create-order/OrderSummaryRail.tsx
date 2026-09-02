@@ -233,15 +233,15 @@ export default function OrderSummaryRail({
               </div>
               {dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(dispensingFee)}</dd></div> : null}
               {pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(pharmacyDelivery)}</dd></div> : null}
+              <div className="is-total">
+                <dt>{PATIENT_TOTAL_LABEL}</dt>
+                <dd>{patientTotal == null ? pendingQuote : money(patientTotal)}</dd>
+              </div>
               <div className="rx-order-summary-rail__margin">
                 <dt>Gross Margin</dt>
                 <dd className={marginToneClass(marginPercent(grossMargin, patientTotal ?? 0))}>
                   {formatMargin(grossMargin, patientTotal ?? 0)}
                 </dd>
-              </div>
-              <div className="is-total">
-                <dt>{PATIENT_TOTAL_LABEL}</dt>
-                <dd>{patientTotal == null ? pendingQuote : money(patientTotal)}</dd>
               </div>
             </dl>
           </>

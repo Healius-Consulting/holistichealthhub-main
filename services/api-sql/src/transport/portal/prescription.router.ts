@@ -160,8 +160,13 @@ export function createPortalPrescriptionRouter(): Router {
       const scope = assertTenantScope(req.context!);
       const fileId = String(req.params.id || '');
       const fileRecord = await prescriptionRepo.findFileById(fileId, scope.organisationId);
-      if (!fileRecord) {
-        throw new HttpError(404, 'Prescription file not found.', 'NOT_FOUND');
+      if (!fileRecord || fileRecord.status === 'DELETED' || fileRecord.deletedAt) {
+        res.status(204).end();
+        return;
+      }
+      const linkedPrescriptions = await prescriptionRepo.listPrescriptionIdsByFileId(fileId, 1);
+      if (linkedPrescriptions.length) {
+        throw new HttpError(409, 'This prescription copy is already part of an order. Use the order cancellation or replacement workflow.', 'FILE_LOCKED');
       }
       await storageProvider.deleteFile(fileRecord.storagePath);
       await prescriptionRepo.deleteFile(fileId, scope.organisationId);
