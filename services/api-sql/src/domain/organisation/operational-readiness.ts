@@ -117,7 +117,6 @@ export function buildOperationalStatus(input: {
   if (workspaceMode === 'paused') missingGates.push('paused');
   if (input.organisation.classification === 'TRAINING') missingGates.push('training_tenant');
   if (!intakeCall) missingGates.push('intake_call');
-  if (!walkthrough) missingGates.push('walkthrough');
   if (!curaleafProduction) missingGates.push('curaleaf_production');
 
   return {
@@ -256,9 +255,6 @@ export function goLiveBlockedMessage(operational: PharmacyOperationalStatus): st
   }
   if (operational.missingGates.includes('intake_call')) {
     return 'Log the intake call before flipping this workspace live.';
-  }
-  if (operational.missingGates.includes('walkthrough')) {
-    return 'Log the platform walkthrough before flipping this workspace live.';
   }
   if (operational.missingGates.includes('curaleaf_production')) {
     return 'Activate Curaleaf production for this pharmacy before flipping the workspace live.';

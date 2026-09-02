@@ -354,7 +354,7 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
                   <div className="tenant-mark" style={brandSwatchStyle(primary)}>{(tradingName || name).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PH'}</div>
                   <span>
                     <strong>{tradingName || name || 'Pharmacy workspace'}</strong>
-                    <small>Preview of their staff portal only</small>
+                    <small>Staff portal and eligibility form</small>
                   </span>
                   <span className="brand-preview-button" style={{ background: onboardingTheme.primary, color: onboardingTheme.onPrimary }}>Primary action</span>
                   <span className="preview-secondary" style={{ background: onboardingTheme.secondary, color: onboardingTheme.onSecondary }}>Secondary</span>
@@ -521,7 +521,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
             </section>
 
             <section className="admin-onboard-section">
-              <div className="form-section-heading"><span>02</span><div><strong>Pharmacy workspace identity</strong><small>Logo and colour apply to their staff portal. Replacing the logo archives the previous file.</small></div></div>
+              <div className="form-section-heading"><span>02</span><div><strong>Pharmacy workspace identity</strong><small>Logo and colour apply to their staff portal and eligibility form. Replacing the logo archives the previous file.</small></div></div>
               <label>Pharmacy name<input className="input" value={name} readOnly /><small>Also used as the portal name.</small></label>
               <section className="pharmacy-logo-editor" aria-labelledby="pharmacy-logo-heading">
                 <div className={`pharmacy-logo-preview${logoPreviewUrl ? ' has-image' : ''}`}>
@@ -532,7 +532,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
                 <div className="pharmacy-logo-editor__copy">
                   <small>Email identity</small>
                   <strong id="pharmacy-logo-heading">Pharmacy logo</strong>
-                  <p>PNG, JPEG or WebP. A flat background (white or a solid colour around the mark) is removed from the edges, then the logo is centred on a transparent {EMAIL_LOGO_SPEC.assetWidth} × {EMAIL_LOGO_SPEC.assetHeight}px canvas. Logos that already have a transparent PNG stay as they are.</p>
+                  <p>PNG, JPEG or WebP. Edge background is removed, then the mark is cropped and scaled to fill a transparent {EMAIL_LOGO_SPEC.assetWidth} × {EMAIL_LOGO_SPEC.assetHeight}px banner. Replace an existing logo to reprocess it.</p>
                   <div className="pharmacy-logo-editor__actions">
                     <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={selectLogo} hidden />
                     <button className="btn" type="button" onClick={() => logoInputRef.current?.click()} disabled={busy}><ImagePlus size={14} /> {logoPreviewUrl ? 'Replace logo' : 'Choose logo'}</button>
@@ -559,7 +559,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
                   <div className="tenant-mark" style={brandSwatchStyle(primaryColour)}>{logoText}</div>
                   <span>
                     <strong>{name || 'Pharmacy workspace'}</strong>
-                    <small>Preview of their staff portal only</small>
+                    <small>Staff portal and eligibility form</small>
                   </span>
                   <span className="brand-preview-button" style={{ background: editTheme.primary, color: editTheme.onPrimary }}>Primary action</span>
                   <span className="preview-secondary" style={{ background: editTheme.secondary, color: editTheme.onSecondary }}>Secondary</span>
@@ -1935,7 +1935,7 @@ export default function AdminPortal() {
                             <label>Automatic secondary<span className="derived-colour"><i style={{ background: tenantTheme.secondary }} /><code>{tenantTheme.secondary}</code><small>Derived from primary</small></span></label>
                           </div>
                           <div className="generated-palette" aria-label="Automatically generated pharmacy palette"><span style={{ background: tenantTheme.primary }} title="Primary" /><span style={{ background: tenantTheme.secondary }} title="Secondary" /><span style={{ background: tenantTheme.primaryMuted }} title="Muted brand" /><span style={{ background: tenantTheme.primarySoft }} title="Soft surface" /><span style={{ background: tenantTheme.sidebar }} title="Navigation" /></div>
-                          <p className="theme-help">This palette is applied in the pharmacy staff portal only. HHH admin keeps the Holistic Health Hub forest, cream and rust colours.</p>
+                          <p className="theme-help">This palette is applied in the pharmacy staff portal and on that pharmacy's eligibility form. HHH admin keeps the Holistic Health Hub forest, cream and rust colours.</p>
                           <div className="tenant-brand-preview" aria-hidden="true" style={{ borderTopColor: tenantTheme.primary, background: tenantTheme.surfaceTint }}>
                             <div className="tenant-mark" style={brandSwatchStyle(selectedPharmacy.brand.primary)}>{selectedPharmacy.logoText}</div>
                             <span><strong>{selectedPharmacy.brand.portalName}</strong><small>Patient and pharmacy workspace preview</small></span>

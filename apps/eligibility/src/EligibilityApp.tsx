@@ -72,8 +72,23 @@ function directoryContactLine(result: PublicDirectoryResult) {
   return [result.website, result.publicPhone].filter(value => value?.trim()).join(' · ');
 }
 
-function EligibilityShell({ themeStyle, children }: { themeStyle: CSSProperties; children: ReactNode }) {
-  return <main className="eligibility-shell tenant-surface" style={themeStyle}>{children}</main>;
+function EligibilityShell({
+  themeStyle,
+  pharmacyThemed = false,
+  children,
+}: {
+  themeStyle: CSSProperties;
+  pharmacyThemed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <main
+      className={`eligibility-shell tenant-surface${pharmacyThemed ? ' eligibility-shell--tenant' : ''}`}
+      style={themeStyle}
+    >
+      {children}
+    </main>
+  );
 }
 
 export default function EligibilityApp() {
@@ -101,6 +116,7 @@ export default function EligibilityApp() {
   const [psychHistory, setPsychHistory] = useState<'' | 'yes' | 'no'>('');
   const conditionMenuRef = useRef<HTMLDetailsElement>(null);
   const themeStyle = tenantThemeVariables(pharmacy?.primaryColour ?? '#0f766e') as CSSProperties;
+  const pharmacyThemed = Boolean(token && (pharmacy || loading));
 
   useEffect(() => {
     if (referralRoute.kind === 'invalid-token') {
@@ -220,15 +236,15 @@ export default function EligibilityApp() {
     setConditionError('');
   };
 
-  if (loading) return <EligibilityShell themeStyle={themeStyle}><EligibilityBrand identity={HHH_PUBLIC_IDENTITY} token={token} /><section className="eligibility-card eligibility-message"><LoaderCircle className="spin" size={34} /><h1>Checking your pharmacy link</h1></section></EligibilityShell>;
-  if (error && !pharmacy) return <EligibilityShell themeStyle={themeStyle}><EligibilityBrand identity={HHH_PUBLIC_IDENTITY} token={token} /><section className="eligibility-card eligibility-message"><AlertTriangle size={36} /><h1>Unable to open this form</h1><p>{error}</p><p>Please ask your pharmacy for its current eligibility link.</p>{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (loading) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={HHH_PUBLIC_IDENTITY} token={token} /><section className="eligibility-card eligibility-message"><LoaderCircle className="spin" size={34} /><h1>Checking your pharmacy link</h1></section></EligibilityShell>;
+  if (error && !pharmacy) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={HHH_PUBLIC_IDENTITY} token={token} /><section className="eligibility-card eligibility-message"><AlertTriangle size={36} /><h1>Unable to open this form</h1><p>{error}</p><p>Please ask your pharmacy for its current eligibility link.</p>{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
   if (!pharmacy) return null;
 
   const brandIdentity = token ? pharmacy : HHH_PUBLIC_IDENTITY;
 
-  if (complete) return <EligibilityShell themeStyle={themeStyle}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>{intakeVersion === 'v1' ? eligible ? 'Thank you — your pharmacy will be in touch' : 'Thank you — your answers need a clinical review' : 'Thank you — HHH will be in touch'}</h1><p>{receipt ? token ? `HHH received your application for ${pharmacy.tradingName}. HHH will review it and contact you before referring it to that pharmacy; the dedicated destination will not change.` : `${receipt.provisionalPharmacyName ? `${receipt.provisionalPharmacyName} has been recorded as your preference. ` : ''}Your application remains with HHH while the team reviews it and contacts you. Nothing is sent to a pharmacy until HHH completes the referral.` : `Your enquiry has been securely linked to ${pharmacy.name}.`} This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>{intakeVersion === 'v1' ? eligible ? 'Thank you — your pharmacy will be in touch' : 'Thank you — your answers need a clinical review' : 'Thank you — HHH will be in touch'}</h1><p>{receipt ? token ? `HHH received your application for ${pharmacy.tradingName}. HHH will review it and contact you before referring it to that pharmacy; the dedicated destination will not change.` : `${receipt.provisionalPharmacyName ? `${receipt.provisionalPharmacyName} has been recorded as your preference. ` : ''}Your application remains with HHH while the team reviews it and contacts you. Nothing is sent to a pharmacy until HHH completes the referral.` : `Your enquiry has been securely linked to ${pharmacy.name}.`} This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
 
-  return <EligibilityShell themeStyle={themeStyle}>
+  return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
     <EligibilityBrand identity={brandIdentity} token={token} />
     <div className="eligibility-layout">
       <aside className="eligibility-intro">

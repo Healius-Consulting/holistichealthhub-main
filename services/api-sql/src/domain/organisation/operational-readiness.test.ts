@@ -48,11 +48,11 @@ function connection(
 }
 
 function loggedGoLiveTasks() {
-  return [task('intake_call', true), task('operational_readiness', true)];
+  return [task('intake_call', true)];
 }
 
 describe('operational readiness', () => {
-  it('keeps intake live during training and blocks go-live until the three HHH gates pass', () => {
+  it('keeps intake live during training and blocks go-live until intake and Curaleaf production pass', () => {
     const operational = buildOperationalStatus({
       organisation,
       tasks: [task('pharmacy_profile', true), task('payment_route', true), task('pricing', true)],
@@ -65,7 +65,7 @@ describe('operational readiness', () => {
     assert.equal(operational.curaleaf.label, 'Waiting');
     assert.equal(operational.payment.label, 'Pharmacy-managed');
     assert.equal(operational.goLiveReady, false);
-    assert.deepEqual(operational.missingGates, ['intake_call', 'walkthrough', 'curaleaf_production']);
+    assert.deepEqual(operational.missingGates, ['intake_call', 'curaleaf_production']);
   });
 
   it('blocks go-live while paused or classified as a training tenant', () => {
@@ -123,13 +123,12 @@ describe('operational readiness', () => {
     );
   });
 
-  it('marks go-live ready only after intake call, walkthrough, and Curaleaf production', () => {
+  it('marks go-live ready after the intake call and Curaleaf production, without a walkthrough log', () => {
     const tasks = [
       task('pharmacy_profile', true),
       task('payment_route', true),
       task('pricing', true),
       task('intake_call', true),
-      task('operational_readiness', true),
     ];
     const curaleaf = connection('CURALEAF', 'ACTIVE');
     const setup = buildSetupStatusView({
@@ -141,6 +140,8 @@ describe('operational readiness', () => {
     });
     assert.equal(setup.tasks.find(item => item.id === 'curaleaf_account')?.completed, true);
     assert.equal(setup.operational.goLiveReady, true);
+    assert.equal(setup.operational.walkthrough.completed, false);
+    assert.ok(!setup.operational.missingGates.includes('walkthrough'));
     const readiness = buildGoLiveReadinessView({ organisation, operational: setup.operational, curaleaf });
     assert.equal(readiness.intakeReady, true);
     assert.equal(readiness.ready, true);

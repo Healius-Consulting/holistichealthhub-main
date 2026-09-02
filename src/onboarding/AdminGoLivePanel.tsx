@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { PharmacyTenant } from '../context/AppContext';
-import type { GoLiveReadiness, SetupTaskId } from '../shared/contracts';
+import type { GoLiveReadiness } from '../shared/contracts';
 import { getGoLiveReadiness, isApiConfigured, revertLiveOrganisation, updateAdminPharmacySetupTask } from '../shared/api';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 
@@ -12,20 +12,7 @@ interface AdminGoLivePanelProps {
   onReverted?: (status: PharmacyTenant['status']) => void;
 }
 
-const LOG_TASKS: Array<{ id: SetupTaskId; title: string; detail: string; evidence: string }> = [
-  {
-    id: 'intake_call',
-    title: 'Intake call',
-    detail: 'Log that HHH completed the intake call with this pharmacy.',
-    evidence: 'HHH logged the intake call.',
-  },
-  {
-    id: 'operational_readiness',
-    title: 'Platform walkthrough',
-    detail: 'Log that HHH completed the platform walkthrough with this pharmacy.',
-    evidence: 'HHH logged the platform walkthrough.',
-  },
-];
+const INTAKE_EVIDENCE = 'HHH logged the intake call.';
 
 export function AdminGoLivePanel({
   organisation,
@@ -39,7 +26,7 @@ export function AdminGoLivePanel({
   const trainingTenant = organisation.workspaceClassification === 'training';
   const [readiness, setReadiness] = useState<GoLiveReadiness | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [loggingTask, setLoggingTask] = useState<SetupTaskId | null>(null);
+  const [loggingIntake, setLoggingIntake] = useState(false);
   const [reverting, setReverting] = useState(false);
 
   const refresh = async () => {
@@ -58,23 +45,22 @@ export function AdminGoLivePanel({
 
   const operational = readiness?.operational;
   const intakeLogged = operational?.intakeCall.completed === true;
-  const walkthroughLogged = operational?.walkthrough.completed === true;
   const curaleafProduction = operational?.curaleaf.production === true;
   const curaleafLabel = operational?.curaleaf.label ?? 'Waiting';
   const serverReady = readiness?.ready === true;
   const canFlip = !liveWorkspace && !paused && !trainingTenant && (isLocalPortalPreview || serverReady);
 
-  const logTask = async (taskId: SetupTaskId, evidence: string) => {
+  const logIntakeCall = async () => {
     if (isLocalPortalPreview) return;
-    setLoggingTask(taskId);
+    setLoggingIntake(true);
     setLoadError(null);
     try {
-      await updateAdminPharmacySetupTask(organisation.id, taskId, { completed: true, evidence });
+      await updateAdminPharmacySetupTask(organisation.id, 'intake_call', { completed: true, evidence: INTAKE_EVIDENCE });
       await refresh();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'The call could not be logged.');
+      setLoadError(error instanceof Error ? error.message : 'The intake call could not be logged.');
     } finally {
-      setLoggingTask(null);
+      setLoggingIntake(false);
     }
   };
 
@@ -98,8 +84,7 @@ export function AdminGoLivePanel({
 
   const blockers = [
     { id: 'intake_call', title: 'Intake call', value: intakeLogged ? 'Logged' : 'Not logged', passed: intakeLogged },
-    { id: 'walkthrough', title: 'Platform walkthrough', value: walkthroughLogged ? 'Logged' : 'Not logged', passed: walkthroughLogged },
-    { id: 'curaleaf', title: 'Curaleaf production', value: curaleafLabel, passed: curaleafProduction },
+    { id: 'curaleaf', title: 'Curaleaf', value: curaleafLabel, passed: curaleafProduction },
   ];
 
   return (
@@ -108,7 +93,7 @@ export function AdminGoLivePanel({
         <div>
           <p className="section-label">Go live</p>
           <h2>Pharmacy workspace</h2>
-          <p>Log the intake call and platform walkthrough, then activate Curaleaf production. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
+          <p>Log the intake call and switch Curaleaf from test to production. When both are done, flip the workspace live. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
         </div>
         {liveWorkspace ? (
           <button type="button" className="btn btn-secondary btn-sm" disabled={goLiveBusy || reverting} onClick={() => void revertLive()}>
@@ -139,33 +124,28 @@ export function AdminGoLivePanel({
 
       {!liveWorkspace ? (
         <ul className="admin-golive-actions">
-          {LOG_TASKS.map(task => {
-            const logged = task.id === 'intake_call' ? intakeLogged : walkthroughLogged;
-            return (
-              <li key={task.id}>
-                <div>
-                  <strong>{task.title}</strong>
-                  <span>{task.detail}</span>
-                </div>
-                {logged ? (
-                  <span className="pill pill-green">Logged</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-secondary btn-sm"
-                    disabled={loggingTask !== null || isLocalPortalPreview}
-                    onClick={() => void logTask(task.id, task.evidence)}
-                  >
-                    {loggingTask === task.id ? 'Logging…' : `Log ${task.title.toLowerCase()}`}
-                  </button>
-                )}
-              </li>
-            );
-          })}
           <li>
             <div>
-              <strong>Curaleaf production</strong>
-              <span>Activate production credentials in the Curaleaf panel. Test connections do not unlock go-live.</span>
+              <strong>Intake call</strong>
+              <span>Log that HHH completed the intake call with this pharmacy.</span>
+            </div>
+            {intakeLogged ? (
+              <span className="pill pill-green">Logged</span>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={loggingIntake || isLocalPortalPreview}
+                onClick={() => void logIntakeCall()}
+              >
+                {loggingIntake ? 'Logging…' : 'Log intake call'}
+              </button>
+            )}
+          </li>
+          <li>
+            <div>
+              <strong>Curaleaf</strong>
+              <span>Activate production credentials in the Curaleaf panel. A test connection does not unlock go-live.</span>
             </div>
             <span className={`pill ${curaleafProduction ? 'pill-green' : 'pill-amber'}`}>{curaleafLabel}</span>
           </li>

@@ -4,6 +4,7 @@ import {
   imageHasTransparency,
   knockoutEdgeBackground,
   sampleCornerBackground,
+  visibleBoundsFromPixels,
 } from '../src/utils/pharmacyLogo.ts';
 
 function rgba(width: number, height: number, fill: [number, number, number, number]) {
@@ -24,6 +25,20 @@ function setPixel(pixels: Uint8ClampedArray, width: number, x: number, y: number
   pixels[index + 2] = fill[2];
   pixels[index + 3] = fill[3];
 }
+
+test('a small mark on a large transparent canvas crops to the ink', () => {
+  const width = 20;
+  const height = 12;
+  const pixels = rgba(width, height, [0, 0, 0, 0]);
+  for (const [x, y] of [[8, 4], [9, 4], [8, 5], [9, 5]]) {
+    setPixel(pixels, width, x, y, [16, 80, 64, 255]);
+  }
+  const bounds = visibleBoundsFromPixels(pixels, width, height, width, height);
+  assert.ok(bounds.width <= 6);
+  assert.ok(bounds.height <= 6);
+  assert.ok(bounds.x >= 6);
+  assert.ok(bounds.y >= 2);
+});
 
 test('a white JPEG-style frame around a mark becomes transparent', () => {
   const width = 5;

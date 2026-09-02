@@ -1,9 +1,11 @@
 const EMAIL_LOGO_WIDTH = 640;
 const EMAIL_LOGO_HEIGHT = 192;
-const EMAIL_LOGO_PADDING = 32;
+const EMAIL_LOGO_PADDING = 12;
 const MAX_SOURCE_BYTES = 8_000_000;
 const ALPHA_SCAN_MAX_DIMENSION = 2048;
 const VISIBLE_ALPHA_THRESHOLD = 8;
+const INK_ALPHA_THRESHOLD = 96;
+const INK_BOUNDS_PAD = 2;
 const BACKGROUND_CHANNEL_TOLERANCE = 18;
 const TRANSPARENT_PIXEL_RATIO = 0.02;
 const KNOCKOUT_ABORT_RATIO = 0.97;
@@ -101,7 +103,7 @@ export function knockoutEdgeBackground(
   return knocked;
 }
 
-function visibleBoundsFromPixels(pixels: Uint8ClampedArray, width: number, height: number, sourceWidth: number, sourceHeight: number) {
+export function visibleBoundsFromPixels(pixels: Uint8ClampedArray, width: number, height: number, sourceWidth: number, sourceHeight: number) {
   const { background, consistent } = sampleCornerBackground(pixels, width, height);
   let left = width;
   let top = height;
@@ -111,8 +113,8 @@ function visibleBoundsFromPixels(pixels: Uint8ClampedArray, width: number, heigh
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const index = (y * width + x) * 4;
-      if (pixels[index + 3] <= VISIBLE_ALPHA_THRESHOLD) continue;
-      if (consistent && background[3] > VISIBLE_ALPHA_THRESHOLD && pixelMatchesBackground(pixels, index, background)) continue;
+      if (pixels[index + 3] < INK_ALPHA_THRESHOLD) continue;
+      if (consistent && background[3] >= INK_ALPHA_THRESHOLD && pixelMatchesBackground(pixels, index, background)) continue;
       left = Math.min(left, x);
       top = Math.min(top, y);
       right = Math.max(right, x);
@@ -121,6 +123,11 @@ function visibleBoundsFromPixels(pixels: Uint8ClampedArray, width: number, heigh
   }
 
   if (right < left || bottom < top) throw new Error('The selected image does not contain a visible logo.');
+
+  left = Math.max(0, left - INK_BOUNDS_PAD);
+  top = Math.max(0, top - INK_BOUNDS_PAD);
+  right = Math.min(width - 1, right + INK_BOUNDS_PAD);
+  bottom = Math.min(height - 1, bottom + INK_BOUNDS_PAD);
 
   const scaleX = sourceWidth / width;
   const scaleY = sourceHeight / height;
@@ -197,6 +204,6 @@ export async function normalisePharmacyLogo(file: File) {
 export const EMAIL_LOGO_SPEC = {
   assetWidth: EMAIL_LOGO_WIDTH,
   assetHeight: EMAIL_LOGO_HEIGHT,
-  displayWidth: EMAIL_LOGO_WIDTH / 2,
-  displayHeight: EMAIL_LOGO_HEIGHT / 2,
+  displayWidth: 480,
+  displayHeight: 88,
 } as const;

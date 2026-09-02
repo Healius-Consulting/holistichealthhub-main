@@ -258,7 +258,7 @@ export function createPortalSetupRouter(): Router {
       const scope = assertTenantScope(req.context!);
       const taskId = setupTaskIdSchema.parse(req.params.taskId);
       if (taskId === 'curaleaf_account' || taskId === 'intake_call' || taskId === 'operational_readiness') {
-        throw new HttpError(403, 'HHH administrators log the intake call and platform walkthrough.', 'FORBIDDEN');
+        throw new HttpError(403, 'HHH administrators log the intake call.', 'FORBIDDEN');
       }
       const input = z.object({
         completed: z.boolean(),
@@ -308,7 +308,7 @@ export function createPortalSetupRouter(): Router {
       const input = setupTaskInputSchema.parse(req.body);
       const taskId = setupTaskIdSchema.parse(input.taskId);
       if (taskId === 'curaleaf_account' || taskId === 'intake_call' || taskId === 'operational_readiness') {
-        throw new HttpError(403, 'HHH administrators log the intake call and platform walkthrough.', 'FORBIDDEN');
+        throw new HttpError(403, 'HHH administrators log the intake call.', 'FORBIDDEN');
       }
       const [organisation, worldpay] = await Promise.all([
         organisationRepo.findOrganisationById(scope.organisationId),

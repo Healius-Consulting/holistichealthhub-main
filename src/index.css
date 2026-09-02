@@ -2187,7 +2187,7 @@ td.font-semibold{
   font-family: var(--serif, 'Fraunces', Georgia, serif);
   font-size: 18px;
   font-weight: 600;
-  color: #173f33;
+  color: var(--green, #173f33);
   letter-spacing: -0.02em;
 }
 
@@ -2218,7 +2218,7 @@ td.font-semibold{
   font-size: clamp(28px, 4vw, 36px);
   line-height: 1.1;
   margin: 10px 0 14px;
-  color: #173f33;
+  color: var(--green, #173f33);
   letter-spacing: -0.035em;
   font-weight: 500;
 }
@@ -2266,8 +2266,8 @@ td.font-semibold{
 }
 
 .eligibility-form .input:focus{
-  border-color: #173f33;
-  box-shadow: 0 0 0 3px rgba(23, 63, 51, 0.12);
+  border-color: var(--green, #173f33);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green, #173f33) 12%, transparent);
   outline: none;
 }
 
@@ -2433,9 +2433,9 @@ td.font-semibold{
   margin-bottom: 4px;
 }
 
-.eligibility-result-icon.pass{ color: #173f33; background: #d3e8dc; }
+.eligibility-result-icon.pass{ color: var(--green, #173f33); background: var(--mint, #d3e8dc); }
 
-.eligibility-result-icon.review{ color: #a84f35; background: #faeae6; }
+.eligibility-result-icon.review{ color: var(--rust, #a84f35); background: #faeae6; }
 
 .spin{ animation: eligibilitySpin 1s linear infinite; }
 
@@ -11634,7 +11634,7 @@ html[data-theme] :is(.app-main, .page-container, .admin-shell, .admin-content){
   background: var(--bg-app) !important;
 }
 
-/* Patient eligibility form — match public marketing identity. */
+/* Patient eligibility form — HHH marketing identity by default; pharmacy token forms remap below. */
 html.hhh-public-active,
 html.eligibility-active,
 html.hhh-public-active body,
@@ -11670,6 +11670,7 @@ body.eligibility-active{
   --mint-light: #e9f1ed;
   --green: #173f33;
   --rust: #a84f35;
+  --rust-hover: #933e33;
   --serif: "Fraunces", Georgia, "Times New Roman", serif;
   --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --hhh-chrome-height: 88px;
@@ -11685,6 +11686,73 @@ body.eligibility-active{
   font-family: var(--sans);
 }
 
+/* Token pharmacy forms use the same primary → derived palette as the staff portal. */
+.eligibility-shell--tenant{
+  --cream: var(--tenant-surface-tint);
+  --sand: var(--tenant-primary-soft);
+  --mint: var(--tenant-primary-muted);
+  --mint-light: var(--tenant-primary-soft);
+  --green: var(--tenant-primary-strong);
+  --rust: var(--tenant-primary);
+  --rust-hover: var(--tenant-primary-hover);
+}
+
+.eligibility-shell--tenant .eligibility-intro{
+  background: var(--tenant-sidebar);
+  box-shadow: 0 24px 54px color-mix(in srgb, var(--tenant-sidebar) 42%, transparent);
+}
+
+.eligibility-shell--tenant .eligibility-intro .section-label{
+  color: color-mix(in srgb, var(--tenant-primary-muted) 58%, #fff);
+}
+
+.eligibility-shell--tenant .eligibility-trust svg{
+  color: var(--tenant-primary-muted);
+}
+
+.eligibility-shell--tenant .eligibility-next-steps li > span{
+  background: color-mix(in srgb, var(--tenant-primary) 32%, transparent);
+  border-color: color-mix(in srgb, var(--tenant-primary) 48%, #fff);
+}
+
+.eligibility-shell--tenant :is(.btn-primary, .button-primary):not(:disabled){
+  color: var(--tenant-on-primary);
+}
+
+.eligibility-shell--tenant .eligibility-submit:not(:disabled){
+  color: var(--tenant-on-primary) !important;
+  background: var(--tenant-primary) !important;
+  border-color: var(--tenant-primary) !important;
+}
+
+.eligibility-shell--tenant .eligibility-submit:hover:not(:disabled){
+  background: var(--tenant-primary-hover) !important;
+  border-color: var(--tenant-primary-hover) !important;
+  box-shadow: 0 10px 26px var(--tenant-focus-ring) !important;
+}
+
+.eligibility-shell--tenant .eligibility-result-icon.pass{
+  color: var(--tenant-primary-strong);
+  background: var(--tenant-primary-muted);
+}
+
+.eligibility-shell--tenant .eligibility-result-icon.review{
+  color: var(--tenant-secondary);
+  background: var(--tenant-secondary-soft);
+}
+
+.eligibility-shell--tenant .eligibility-directory-results > button.is-selected .eligibility-directory-number{
+  background: var(--tenant-secondary);
+  border-color: var(--tenant-secondary);
+  color: var(--tenant-on-secondary);
+}
+
+.eligibility-shell--tenant .eligibility-location-map > button:hover svg,
+.eligibility-shell--tenant .eligibility-location-map > button.is-selected svg{
+  color: var(--tenant-secondary);
+  fill: var(--tenant-secondary);
+}
+
 .eligibility-brand{
   position: sticky;
   top: 0;
@@ -11695,7 +11763,7 @@ body.eligibility-active{
   min-height: var(--eligibility-brand-height);
   margin: 0 0 32px;
   padding: 0;
-  background: rgba(247, 245, 240, 0.92);
+  background: color-mix(in srgb, var(--cream) 92%, transparent);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid color-mix(in srgb, var(--green) 10%, transparent);
@@ -11747,10 +11815,18 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   height: 46px;
   object-fit: contain;
 }
+.eligibility-brand--pharmacy-logo{
+  min-height: 108px;
+}
+.eligibility-shell:has(.eligibility-brand--pharmacy-logo){
+  --eligibility-brand-height: 108px;
+}
 .eligibility-brand--pharmacy-logo .eligibility-brand__inner{
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
   align-items: center;
+  height: 108px;
+  min-height: 108px;
 }
 .eligibility-brand--pharmacy-logo .eligibility-brand__identity{
   min-width: 0;
@@ -11765,8 +11841,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-brand__pharmacy-logo{
   display: block;
   width: auto;
-  height: 52px;
-  max-width: min(280px, 46vw);
+  height: 88px;
+  max-width: min(520px, 72vw);
   object-fit: contain;
   object-position: center;
 }
@@ -11820,7 +11896,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   background: var(--green, #173f33);
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 26px;
-  box-shadow: 0 24px 54px rgba(23, 63, 51, 0.16);
+  box-shadow: 0 24px 54px color-mix(in srgb, var(--green, #173f33) 16%, transparent);
 }
 
 .eligibility-intro::after{
@@ -11908,14 +11984,14 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .eligibility-form-header{ padding: 32px 36px 28px; border-bottom: 1px solid #e5ebe8; }
 .eligibility-form-header > span{ display: flex; align-items: center; gap: 8px; color: var(--rust, #a84f35); font-size: 11px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
-.eligibility-form-header h2{ margin-top: 8px; color: #173f33; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: clamp(24px, 3vw, 30px); font-weight: 500; letter-spacing: -0.03em; }
+.eligibility-form-header h2{ margin-top: 8px; color: var(--green, #173f33); font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: clamp(24px, 3vw, 30px); font-weight: 500; letter-spacing: -0.03em; }
 .eligibility-form-header p{ margin-top: 6px; color: #62726a; font-size: 13px; }
 
 .eligibility-form-section{ display: grid; gap: 24px; padding: 32px 36px 36px; border-bottom: 1px solid #e5ebe8; }
 .eligibility-form-section--consent{ border-bottom: 0; }
 .eligibility-section-heading{ display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start; }
 .eligibility-section-heading > span{ display: grid; width: 36px; height: 36px; place-items: center; color: var(--green, #173f33); background: var(--mint-light, #e9f1ed); border: 1px solid #bfd2c8; border-radius: 10px; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 13px; font-weight: 600; }
-.eligibility-section-heading h3{ color: #173f33; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 19px; font-weight: 500; letter-spacing: -0.02em; margin: 0; }
+.eligibility-section-heading h3{ color: var(--green, #173f33); font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 19px; font-weight: 500; letter-spacing: -0.02em; margin: 0; }
 .eligibility-section-heading p{ margin-top: 4px; color: #62726a; font-size: 12px; line-height: 1.5; }
 
 .eligibility-form-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; }
@@ -11941,10 +12017,10 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-location-search label{ min-width: 0; }
 .eligibility-location-search .btn{ min-height: 47px; padding-inline: 18px; border-radius: 10px; }
 .eligibility-location-privacy{ display: flex; align-items: center; gap: 8px; margin-top: -4px; color: #5f7269; font-size: 12px; line-height: 1.45; }
-.eligibility-location-privacy svg{ flex: 0 0 auto; color: #173f33; }
+.eligibility-location-privacy svg{ flex: 0 0 auto; color: var(--green, #173f33); }
 .eligibility-location-results{ display: grid; gap: 14px; }
 .eligibility-location-copy{ display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
-.eligibility-location-copy strong{ color: #173f33; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 16px; font-weight: 500; }
+.eligibility-location-copy strong{ color: var(--green, #173f33); font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 16px; font-weight: 500; }
 .eligibility-location-copy span{ color: #62726a; font-size: 12px; text-align: right; }
 .eligibility-location-map{
   position: relative;
@@ -11975,11 +12051,11 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   cursor: pointer;
   transform: translate(-50%, -50%);
 }
-.eligibility-location-map > button svg{ position: absolute; inset: 0; width: 42px; height: 48px; color: #176d55; fill: #176d55; stroke: #fff; stroke-width: 1.7; }
+.eligibility-location-map > button svg{ position: absolute; inset: 0; width: 42px; height: 48px; color: var(--green, #176d55); fill: var(--green, #176d55); stroke: #fff; stroke-width: 1.7; }
 .eligibility-location-map > button span{ position: relative; z-index: 1; color: #fff; font-size: 11px; font-weight: 800; }
-.eligibility-location-map > button:hover svg, .eligibility-location-map > button.is-selected svg{ color: #a9482a; fill: #a9482a; }
+.eligibility-location-map > button:hover svg, .eligibility-location-map > button.is-selected svg{ color: var(--rust, #a9482a); fill: var(--rust, #a9482a); }
 .eligibility-location-map > button.is-selected{ z-index: 5; transform: translate(-50%, -50%) scale(1.16); }
-.eligibility-location-map > button:focus-visible{ outline: 3px solid rgba(169, 72, 42, .3); outline-offset: 3px; border-radius: 50%; }
+.eligibility-location-map > button:focus-visible{ outline: 3px solid color-mix(in srgb, var(--rust, #a9482a) 30%, transparent); outline-offset: 3px; border-radius: 50%; }
 .eligibility-location-origin{ position: absolute; z-index: 2; display: grid; justify-items: center; gap: 4px; color: #304c40; font-size: 10px; font-weight: 750; white-space: nowrap; transform: translate(-50%, -50%); }
 .eligibility-location-origin > span{ width: 14px; height: 14px; background: #fff; border: 4px solid #193e31; border-radius: 50%; box-shadow: 0 2px 7px rgba(25,62,49,.25); }
 .eligibility-location-required{ display: flex; min-height: 58px; align-items: flex-start; gap: 10px; padding: 14px 16px; color: #695022; background: #fffaf0; border: 1px solid #ead7ad; border-radius: 16px; }
@@ -11990,13 +12066,13 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-location-manual{ display: grid; gap: 10px; }
 .eligibility-location-manual .btn{ width: fit-content; min-height: 44px; }
 .eligibility-hhh-allocation{ display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 10px 14px; padding: 16px; background: #f8fbf9; border: 1px solid #cfe0d6; border-radius: 16px; }
-.eligibility-hhh-allocation.is-selected{ background: #e8f3ed; border-color: #173f33; box-shadow: inset 0 0 0 1px #173f33; }
+.eligibility-hhh-allocation.is-selected{ background: var(--mint-light, #e8f3ed); border-color: var(--green, #173f33); box-shadow: inset 0 0 0 1px var(--green, #173f33); }
 .eligibility-hhh-allocation__mark{ display: grid; width: 52px; height: 52px; place-items: center; background: #edf5f1; border: 1px solid #cfe0d6; border-radius: 14px; }
 .eligibility-hhh-allocation__mark img{ width: 38px; height: 38px; object-fit: contain; }
 .eligibility-hhh-allocation > span:nth-child(2){ display: grid; gap: 4px; color: #244137; }
 .eligibility-hhh-allocation small{ color: #63776e; line-height: 1.45; }
 .eligibility-hhh-allocation .btn, .eligibility-hhh-allocation__selected{ grid-column: 2; }
-.eligibility-hhh-allocation__selected{ display: inline-flex; align-items: center; gap: 6px; color: #176d55; font-size: 12px; font-weight: 800; }
+.eligibility-hhh-allocation__selected{ display: inline-flex; align-items: center; gap: 6px; color: var(--green, #176d55); font-size: 12px; font-weight: 800; }
 
 .eligibility-condition-field{ position: relative; gap: 8px !important; }
 .eligibility-condition-menu{ position: relative; background: #fbfcfb; border: 1px solid #cfd9d4; border-radius: 10px; }
@@ -12056,7 +12132,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-choice{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .eligibility-choice label{ display: flex; min-height: 58px; align-items: flex-start; gap: 10px; padding: 12px 13px; color: #34443d; background: #fbfcfb; border: 1px solid #d6dfda; border-radius: 10px; cursor: pointer; transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease; }
 .eligibility-choice label:hover{ border-color: #aebdb6; }
-.eligibility-choice label:has(input:checked){ color: #174f3f; background: var(--tenant-primary-soft); border-color: var(--tenant-primary); box-shadow: inset 0 0 0 1px var(--tenant-primary); }
+.eligibility-choice label:has(input:checked){ color: var(--green, #174f3f); background: var(--tenant-primary-soft); border-color: var(--tenant-primary); box-shadow: inset 0 0 0 1px var(--tenant-primary); }
 .eligibility-choice input{ width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--tenant-primary); }
 .eligibility-choice span, .eligibility-choice strong, .eligibility-choice small{ display: block; }
 .eligibility-choice strong{ font-size: 12px; }
@@ -12087,7 +12163,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .eligibility-form-footer{ display: grid; gap: 9px; padding: 0 32px 26px; }
 .eligibility-submit{ min-height: 50px; justify-content: center; padding: 13px 22px; border-radius: 999px !important; background: var(--rust, #a84f35) !important; border-color: var(--rust, #a84f35) !important; color: #fff !important; font-family: var(--sans, Outfit, sans-serif); font-size: 14px; font-weight: 700; }
-.eligibility-submit:hover:not(:disabled){ background: #933e33 !important; border-color: #933e33 !important; box-shadow: 0 10px 26px rgba(168, 79, 53, 0.28) !important; }
+.eligibility-submit:hover:not(:disabled){ background: var(--rust-hover, #933e33) !important; border-color: var(--rust-hover, #933e33) !important; box-shadow: 0 10px 26px color-mix(in srgb, var(--rust, #a84f35) 28%, transparent) !important; }
 .eligibility-submit:disabled{
   color: #7f8b86 !important;
   background: #dfe5e2 !important;
@@ -12120,17 +12196,17 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-finder .btn{ min-height: 48px; }
 .eligibility-directory-results{ display: grid; gap: 10px; }
 .eligibility-directory-results > button{ display: grid; grid-template-columns: 36px minmax(0, 1fr) minmax(120px, auto); min-height: 104px; align-items: center; gap: 14px; width: 100%; padding: 15px 16px; color: #244137; text-align: left; background: #f7fbf9; border: 1px solid #d0ddd6; border-radius: 16px; cursor: pointer; }
-.eligibility-directory-results > button:hover{ background: #eef6f1; border-color: #173f33; }
-.eligibility-directory-results > button.is-selected{ background: #e8f3ed; border-color: #173f33; box-shadow: inset 0 0 0 1px #173f33; }
-.eligibility-directory-results > button:focus-visible{ outline: 3px solid rgba(23, 63, 51, .28); outline-offset: 2px; }
+.eligibility-directory-results > button:hover{ background: #eef6f1; border-color: var(--green, #173f33); }
+.eligibility-directory-results > button.is-selected{ background: var(--mint-light, #e8f3ed); border-color: var(--green, #173f33); box-shadow: inset 0 0 0 1px var(--green, #173f33); }
+.eligibility-directory-results > button:focus-visible{ outline: 3px solid color-mix(in srgb, var(--green, #173f33) 28%, transparent); outline-offset: 2px; }
 .eligibility-directory-results span{ display: grid; gap: 4px; }
-.eligibility-directory-results .eligibility-directory-number{ display: grid; width: 32px; height: 32px; place-items: center; color: #173f33; background: #e9f1ed; border: 1px solid #bfd2c8; border-radius: 10px; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 13px; font-weight: 600; }
-.eligibility-directory-results > button.is-selected .eligibility-directory-number{ color: #fff; background: #a84f35; border-color: #a84f35; }
+.eligibility-directory-results .eligibility-directory-number{ display: grid; width: 32px; height: 32px; place-items: center; color: var(--green, #173f33); background: var(--mint-light, #e9f1ed); border: 1px solid #bfd2c8; border-radius: 10px; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 13px; font-weight: 600; }
+.eligibility-directory-results > button.is-selected .eligibility-directory-number{ color: #fff; background: var(--rust, #a84f35); border-color: var(--rust, #a84f35); }
 .eligibility-directory-results strong{ font-size: 16px; font-weight: 650; }
 .eligibility-directory-results span:nth-child(2) strong{ font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 17px; font-weight: 500; letter-spacing: -0.02em; }
 .eligibility-directory-results small{ color: #5f7269; overflow-wrap: anywhere; }
-.eligibility-directory-results .eligibility-directory-contact{ color: #173f33; font-weight: 600; }
-.eligibility-directory-results span:last-child{ max-width: 190px; color: #173f33; font-size: 12px; font-weight: 700; text-align: right; }
+.eligibility-directory-results .eligibility-directory-contact{ color: var(--green, #173f33); font-weight: 600; }
+.eligibility-directory-results span:last-child{ max-width: 190px; color: var(--green, #173f33); font-size: 12px; font-weight: 700; text-align: right; }
 .eligibility-directory-results span:last-child strong{ font-size: 12px; }
 .eligibility-directory-results span:last-child small{ font-size: 11px; font-weight: 600; }
 .eligibility-finder-actions{ display: flex; flex-wrap: wrap; gap: 10px; }
@@ -12941,12 +13017,12 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .eligibility-brand--pharmacy-logo .eligibility-brand__inner{
     flex-wrap: nowrap;
     height: auto;
-    min-height: var(--hhh-chrome-height);
-    padding-block: 8px;
+    min-height: 88px;
+    padding-block: 10px;
   }
   .eligibility-brand__pharmacy-logo{
-    height: 40px;
-    max-width: min(220px, 58vw);
+    height: 64px;
+    max-width: min(420px, 78vw);
   }
   .eligibility-brand__secure{ font-size: 0 !important; width: 36px; height: 36px; justify-content: center; }
   .eligibility-intro{ padding: 25px 22px; border-radius: 17px; }
