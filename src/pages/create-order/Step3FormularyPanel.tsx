@@ -13,6 +13,7 @@ type Step3FormularyPanelProps = {
   catalogueError: string | null;
   catalogueSource?: 'curaleaf' | 'training' | 'unavailable';
   catalogueEnvironment?: string;
+  paymentPreview?: boolean;
   onRetryCatalogue: () => void;
   editingClinicFormulary: boolean;
   onToggleEditFormulary: () => void;
@@ -33,6 +34,7 @@ export default function Step3FormularyPanel({
   catalogueError,
   catalogueSource,
   catalogueEnvironment,
+  paymentPreview = false,
   onRetryCatalogue,
   editingClinicFormulary,
   onToggleEditFormulary,
@@ -94,7 +96,9 @@ export default function Step3FormularyPanel({
         <ProviderStatusNotice
           state="waiting"
           title="Curaleaf test catalogue"
-          detail="Prices and stock are from the sandbox estate. Use this table to practise building a prescription. Payment stays locked until Curaleaf is live."
+          detail={paymentPreview
+            ? 'Prices and stock are from the sandbox estate. Use this table to practise building a prescription. Payment stays locked until Curaleaf is live.'
+            : 'Prices and stock are from the sandbox estate. Send for payment and Curaleaf placement use these sandbox keys.'}
         />
       ) : null}
       {/* An empty catalogue with no error is its own dead end — medicines cannot be

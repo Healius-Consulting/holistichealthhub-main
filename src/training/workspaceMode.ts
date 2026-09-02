@@ -1,4 +1,4 @@
-import { isTrainingDirectoryPharmacy } from '../shared/contracts.ts';
+import { isPlatformTestPharmacy } from '../shared/contracts.ts';
 
 export type PharmacyWorkspaceMode = 'training' | 'test' | 'live';
 
@@ -14,8 +14,8 @@ export function pharmacyWorkspaceStatusLabel(mode: string | null | undefined, pa
 }
 
 /**
- * Training: dummy directory pharmacies and local preview.
- * Test: flipped workspace on Curaleaf/Worldpay sandbox keys — real CRM and orders.
+ * Training: local `?devPortal=pharmacy` dummy pack only.
+ * Test: flipped workspace on sandbox keys, or always-on Primary/Alternate.
  * Live: flipped workspace on production Curaleaf keys.
  */
 export function resolvePharmacyWorkspaceMode(
@@ -25,17 +25,20 @@ export function resolvePharmacyWorkspaceMode(
     workspaceClassification?: string | null;
     testAccount?: boolean;
   } | null | undefined,
-  extras?: { curaleafEstate?: 'test' | 'production' },
+  extras?: { curaleafEstate?: 'test' | 'production'; localPreview?: boolean },
 ): PharmacyWorkspaceMode {
+  if (extras?.localPreview) return 'training';
   if (!organisation) return 'training';
-  if (isTrainingDirectoryPharmacy(organisation)) return 'training';
+  if (isPlatformTestPharmacy(organisation)) {
+    return extras?.curaleafEstate === 'production' ? 'live' : 'test';
+  }
   const flipped = organisation.status === 'live' || organisation.status === 'paused' || organisation.workspaceClassification === 'allocation_holding';
   if (!flipped) return 'training';
   return extras?.curaleafEstate === 'production' ? 'live' : 'test';
 }
 
 export function usesSandboxDummyPack(
-  organisation: {
+  _organisation: {
     id: string;
     name?: string | null;
     tradingName?: string | null;
@@ -44,6 +47,5 @@ export function usesSandboxDummyPack(
   } | null | undefined,
   localPreview: boolean,
 ) {
-  if (organisation) return isTrainingDirectoryPharmacy(organisation);
   return localPreview;
 }

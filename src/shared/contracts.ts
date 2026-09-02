@@ -1438,11 +1438,28 @@ export interface PortalOrganisation {
 
 export const HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL = 'Holistic Health Hub Allocation';
 
-const TRAINING_DIRECTORY_PHARMACY_IDS = new Set([
+const PLATFORM_TEST_PHARMACY_IDS = new Set([
   '70913a3071c34a41952ed532927af58c', // Primary
   'f486a221223644a5b072f06de399ab0e', // Alternate
 ]);
 
+/** Primary and Alternate — always-on platform Test pharmacies, not dummy Training. */
+export function isPlatformTestPharmacy(organisation: {
+  id?: string | null;
+  name?: string | null;
+  tradingName?: string | null;
+  testAccount?: boolean;
+  workspaceClassification?: string | null;
+} | string | null | undefined) {
+  const id = typeof organisation === 'string' ? organisation : organisation?.id;
+  if (!id) return false;
+  return PLATFORM_TEST_PHARMACY_IDS.has(id.replaceAll('-', '').toLowerCase());
+}
+
+/**
+ * Same ID set as `isPlatformTestPharmacy`.
+ * Use only to hide them from the public directory and HHH referral finance.
+ */
 export function isTrainingDirectoryPharmacy(organisation: {
   id: string;
   name?: string | null;
@@ -1450,7 +1467,7 @@ export function isTrainingDirectoryPharmacy(organisation: {
   testAccount?: boolean;
   workspaceClassification?: string | null;
 }) {
-  return TRAINING_DIRECTORY_PHARMACY_IDS.has(organisation.id.replaceAll('-', '').toLowerCase());
+  return isPlatformTestPharmacy(organisation);
 }
 
 export function workspaceClassificationLabel(classification?: string | null) {

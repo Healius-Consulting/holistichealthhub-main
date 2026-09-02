@@ -118,7 +118,6 @@ export function buildOperationalStatus(input: {
   const workspaceMode = pharmacyWorkspaceMode(input.organisation, { curaleafProduction });
   const missingGates: string[] = [];
   if (workspaceMode === 'paused') missingGates.push('paused');
-  if (isTrainingDirectoryOrganisation(input.organisation)) missingGates.push('training_tenant');
   if (!intakeCall) missingGates.push('intake_call');
 
   return {

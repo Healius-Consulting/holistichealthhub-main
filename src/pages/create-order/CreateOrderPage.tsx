@@ -65,6 +65,7 @@ export default function CreateOrderPage() {
     localPreview: isLocalPortalPreview,
     catalogueSource: state.catalogueSource,
     catalogueEnvironment: state.catalogueEnvironment,
+    organisationId: state.currentOrganisationId,
   });
   const orderablePatients = organisationPatients.filter(patient => canLinkPatientOnOrderDraft(patient, openWorkspace));
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
@@ -1286,6 +1287,7 @@ export default function CreateOrderPage() {
                   catalogueError={state.catalogueError}
                   catalogueSource={state.catalogueSource}
                   catalogueEnvironment={state.catalogueEnvironment}
+                  paymentPreview={!placementUnlocked}
                   onRetryCatalogue={() => dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' })}
                   editingClinicFormulary={editingClinicFormularyRxId === selectedRx?.id}
                   onToggleEditFormulary={() => setEditingClinicFormularyRxId(selectedRx?.id ?? null)}

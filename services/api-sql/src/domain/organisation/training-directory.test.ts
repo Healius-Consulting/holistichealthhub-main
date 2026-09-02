@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { isTrainingDirectoryOrganisation } from './training-directory.js';
+import { isPlatformTestOrganisation, isTrainingDirectoryOrganisation } from './training-directory.js';
 
-describe('isTrainingDirectoryOrganisation', () => {
-  it('keeps Primary and Alternate out of admin finance', () => {
-    assert.equal(isTrainingDirectoryOrganisation({
+describe('isPlatformTestOrganisation', () => {
+  it('recognises Primary and Alternate by id only', () => {
+    assert.equal(isPlatformTestOrganisation({
       id: '70913a30-71c3-4a41-952e-d532927af58c',
       tradingName: 'Primary Branch',
       classification: 'STANDARD',

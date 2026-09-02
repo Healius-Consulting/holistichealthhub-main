@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
+import { assertCuraleafTestPaymentAllowed } from '../../domain/organisation/curaleaf-payment-lock.js';
 import { executeCuraleafOrderPlacement } from '../../application/integrations/curaleaf.service.js';
 import { fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
 import { quoteCheckInput, quoteGateAllowsPayment, quotePricingPolicy } from '../../application/orders/quote-gate.js';
@@ -138,7 +139,12 @@ export function createPortalPaymentRouter(): Router {
     const lines = await orderLineRepo.listByOrderId(order.id);
     const basket = lines.map(line => ({ packId: line.packId, quantity: Number(line.quantity) }));
     if (!basket.length) throw new HttpError(409, 'This order has no persisted order lines to quote.', 'QUOTE_BASKET_MISSING');
-    const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF').catch(() => null);
+    const [connection, organisation] = await Promise.all([
+      integrationRepo.findConnection(organisationId, 'CURALEAF').catch(() => null),
+      organisationRepo.findOrganisationById(organisationId),
+    ]);
+    if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+    assertCuraleafTestPaymentAllowed(organisation, connection?.environment);
     if (!connection?.secretResourceName) throw new HttpError(409, 'A live Curaleaf connection is required before payment.', 'QUOTE_UNAVAILABLE');
     const rawQuote = await fetchCuraleafQuote(connection, basket);
     const check = await paymentRepo.createQuoteCheck(quoteCheckInput({

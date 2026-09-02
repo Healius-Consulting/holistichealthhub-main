@@ -43,7 +43,7 @@ import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { useAuth } from '../auth/useAuth';
 import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
-import { isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
+import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
 import { useModalFocus } from '../accessibility/useModalFocus';
@@ -1629,7 +1629,6 @@ export default function AdminPortal() {
   const pharmacyTone = (status: PharmacyTenant['status']) => status === 'live' ? 'paid' : status === 'paused' ? 'danger' : 'warning';
   const intakeIsLive = (organisation: PharmacyTenant) => {
     if (organisation.status === 'paused') return false;
-    if (isTrainingDirectoryPharmacy(organisation)) return false;
     if (organisation.intakeEnabled === false) return false;
     return true;
   };
@@ -1644,11 +1643,13 @@ export default function AdminPortal() {
       ...(crmByOrganisation.get(selectedPharmacy.id) ?? []).map(patient => patient.email),
       ...(submissionsByOrganisation.get(selectedPharmacy.id) ?? []).map(submission => submission.email),
     ]).size : 0;
-    const workspaceLabel = selectedPharmacy?.status === 'live'
-      ? 'Live'
-      : selectedPharmacy?.status === 'paused'
-        ? 'Paused'
-        : 'Training';
+    const workspaceLabel = selectedPharmacy?.status === 'paused'
+      ? 'Paused'
+      : isPlatformTestPharmacy(selectedPharmacy)
+        ? 'Test'
+        : selectedPharmacy?.status === 'live'
+          ? 'Live'
+          : 'Onboarding';
     const managePanelLabel = OVERVIEW_MANAGE_PANELS.find(panel => panel.id === overviewManagePanel)?.label ?? 'Summary';
     const tenantTheme = selectedPharmacy ? deriveTenantTheme(selectedPharmacy.brand.primary) : null;
     const formUrl = referralLink;
@@ -1880,8 +1881,16 @@ export default function AdminPortal() {
                         </article>
                         <article>
                           <small>Workspace</small>
-                          <strong>{selectedPharmacy.status === 'live' ? 'Live' : selectedPharmacy.status === 'paused' ? 'Paused' : 'Training'}</strong>
-                          <em>{selectedPharmacy.status === 'live' ? 'Referred patients and orders' : 'Training examples until go-live'}</em>
+                          <strong>{workspaceLabel}</strong>
+                          <em>{
+                            selectedPharmacy.status === 'paused'
+                              ? 'Intake off until unpaused'
+                              : isPlatformTestPharmacy(selectedPharmacy)
+                                ? 'Always-on Test: sandbox Curaleaf and Worldpay'
+                                : selectedPharmacy.status === 'live'
+                                  ? 'Referred patients and orders'
+                                  : 'Onboarding until HHH opens Test or Live'
+                          }</em>
                         </article>
                         <article>
                           <small>Intake</small>

@@ -25,7 +25,7 @@ import {
   StaffLogin,
 } from './auth/AuthScreens';
 import { getAdminOrganisations, getPortalSession } from './shared/api';
-import { isTrainingDirectoryPharmacy, type PortalOrganisation } from './shared/contracts';
+import { type PortalOrganisation } from './shared/contracts';
 import { isLocalPortalPreview, withLocationSearch } from './dev/localPortalPreview';
 import { resolvePharmacyWorkspaceMode } from './training/workspace';
 import LocalPortalSwitcher from './dev/LocalPortalSwitcher';
@@ -202,7 +202,10 @@ function StaffWorkspace() {
     ? undefined
     : state.organisations.find(org => org.id === state.currentOrganisationId);
   const tenantStyle = tenantThemeVariables(organisation?.brand.primary ?? '#0f766e') as React.CSSProperties;
-  const workspaceMode = resolvePharmacyWorkspaceMode(organisation, { curaleafEstate: state.catalogueEnvironment });
+  const workspaceMode = resolvePharmacyWorkspaceMode(organisation, {
+    curaleafEstate: state.catalogueEnvironment,
+    localPreview: isLocalPortalPreview,
+  });
   const paused = organisation?.status === 'paused';
   const initialPathHandled = useRef(false);
 
@@ -297,7 +300,7 @@ function StaffWorkspace() {
           <div className="training-mode-banner" role="status">
             <strong>Training</strong>
             <span>
-              {isLocalPortalPreview || (organisation && isTrainingDirectoryPharmacy(organisation))
+              {isLocalPortalPreview
                 ? 'This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH opens Test or Live. Supplier writes and payments are not sent from training.'
                 : 'Orders, supplier writes and payments stay locked until HHH opens this pharmacy as Test or Live. Enquiries and referred patients assigned to you are already visible.'}
             </span>

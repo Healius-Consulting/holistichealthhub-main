@@ -69,11 +69,11 @@ describe('pharmacy enquiry email', () => {
     assert.equal(enqueued.length, 0);
   });
 
-  it('skips training directory pharmacies', async () => {
+  it('queues an assigned enquiry for platform Test pharmacies', async () => {
     const enqueued: unknown[] = [];
     const result = await queuePharmacyEnquiryEmail({
       notificationRepo: notificationRepo(enqueued),
-      identityRepo: identityRepo([owner]),
+      identityRepo: identityRepo([{ ...owner, organisationId: primaryId }]),
       organisationRepo: organisationRepo({
         ...eastwood,
         id: primaryId,
@@ -86,8 +86,8 @@ describe('pharmacy enquiry email', () => {
       caseReference: 'HHH-20260902-ABCDEF12',
       event: 'assigned',
     });
-    assert.equal(result.queued, 0);
-    assert.equal(enqueued.length, 0);
+    assert.equal(result.queued, 1);
+    assert.equal(enqueued.length, 1);
   });
 
   it('queues an assigned enquiry to the pharmacy owner without patient contact details', async () => {

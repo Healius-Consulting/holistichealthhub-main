@@ -23,12 +23,33 @@ test('placement stays locked in training and local preview', () => {
   }), false);
 });
 
-test('placement unlocks on Test and Live when Curaleaf is connected, including sandbox keys', () => {
+test('placement unlocks on Live production Curaleaf, or on Primary and Alternate sandbox keys', () => {
   assert.equal(curaleafPlacementUnlocked({
     workspaceMode: 'test',
     localPreview: false,
     catalogueSource: 'curaleaf',
     catalogueEnvironment: 'test',
+  }), false);
+  assert.equal(curaleafPlacementUnlocked({
+    workspaceMode: 'test',
+    localPreview: false,
+    catalogueSource: 'curaleaf',
+    catalogueEnvironment: 'test',
+    organisationId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  }), false);
+  assert.equal(curaleafPlacementUnlocked({
+    workspaceMode: 'test',
+    localPreview: false,
+    catalogueSource: 'curaleaf',
+    catalogueEnvironment: 'test',
+    organisationId: '70913a30-71c3-4a41-952e-d532927af58c',
+  }), true);
+  assert.equal(curaleafPlacementUnlocked({
+    workspaceMode: 'test',
+    localPreview: false,
+    catalogueSource: 'curaleaf',
+    catalogueEnvironment: 'test',
+    organisationId: 'f486a221-2236-44a5-b072-f06de399ab0e',
   }), true);
   assert.equal(curaleafPlacementUnlocked({
     workspaceMode: 'live',

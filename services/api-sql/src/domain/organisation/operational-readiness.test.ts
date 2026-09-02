@@ -68,7 +68,7 @@ describe('operational readiness', () => {
     assert.deepEqual(operational.missingGates, ['intake_call']);
   });
 
-  it('blocks go-live while paused or on a dummy training pharmacy', () => {
+  it('blocks go-live while paused, and treats Primary as an always-on Test pharmacy', () => {
     const paused = buildOperationalStatus({
       organisation: { ...organisation, status: 'PAUSED' },
       tasks: loggedGoLiveTasks(),
@@ -80,16 +80,17 @@ describe('operational readiness', () => {
     assert.ok(paused.missingGates.includes('paused'));
     assert.equal(goLiveBlockedMessage(paused), 'Unpause this pharmacy before flipping the workspace to live.');
 
-    const training = buildOperationalStatus({
+    const platformTest = buildOperationalStatus({
       organisation: { ...organisation, id: '70913a30-71c3-4a41-952e-d532927af58c' },
       tasks: loggedGoLiveTasks(),
       staff: [staff('ACTIVE', 'owner')],
-      curaleaf: connection('CURALEAF', 'ACTIVE'),
+      curaleaf: connection('CURALEAF', 'ACTIVE', 'TEST'),
       worldpay: null,
     });
-    assert.equal(training.goLiveReady, false);
-    assert.ok(training.missingGates.includes('training_tenant'));
-    assert.equal(goLiveBlockedMessage(training), 'Training example pharmacies cannot be flipped to Test or Live.');
+    assert.equal(platformTest.goLiveReady, true);
+    assert.ok(!platformTest.missingGates.includes('training_tenant'));
+    assert.equal(platformTest.workspace.mode, 'test');
+    assert.equal(platformTest.intake.live, true);
   });
 
   it('lets a classified test pharmacy go live on Curaleaf sandbox keys', () => {

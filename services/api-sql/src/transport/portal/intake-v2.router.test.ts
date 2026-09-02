@@ -30,7 +30,7 @@ describe('admin intake queue query', () => {
     assert.throws(() => queueQuerySchema.parse({ __hhh_surface: 'pharmacy' }));
   });
 
-  it('offers onboarding, intake-live and live workspaces as destinations, except training sandboxes', () => {
+  it('offers onboarding, intake-live and live workspaces as destinations, including platform Test pharmacies', () => {
     assert.equal(canReceiveReferral(eligibleOrganisation), true);
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, classification: 'TRAINING' }), true);
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, classification: 'ALLOCATION_HOLDING' }), true);
@@ -47,8 +47,15 @@ describe('admin intake queue query', () => {
       ...eligibleOrganisation,
       id: '70913a30-71c3-4a41-952e-d532927af58c',
       name: 'Primary Branch',
-      status: 'LIVE',
-    }), false);
+      status: 'ONBOARDING',
+    }), true);
+    assert.equal(canReceiveReferral({
+      ...eligibleOrganisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      name: 'Primary Branch',
+      status: 'ONBOARDING',
+      gphcNumber: 'TRAINING-PRIMARY',
+    }), true);
     assert.equal(pharmacyIntakeDirectoryAccess({ ...eligibleOrganisation, status: 'ONBOARDING' }), true);
   });
 });

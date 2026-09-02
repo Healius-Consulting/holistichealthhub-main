@@ -3,7 +3,9 @@ import { ChevronLeft, ChevronRight, CircleDollarSign, Package, RefreshCw, Search
 import ProviderStatusNotice from '../components/ProviderStatusNotice';
 import MedicineLabel from '../components/MedicineLabel';
 import { WHOLESALE_LABEL, money, TYPE_LABELS, useApp } from '../context/AppContext';
+import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { isCuraleafTestCatalogue } from '../utils/catalogueEstate';
+import { curaleafPlacementUnlocked } from '../utils/curaleafPlacement';
 import { catalogueStockLabel, catalogueStockStatus, catalogueStockToneClass } from '../utils/catalogueStock';
 
 const TYPE_FILTERS = ['All', 'oil', 'flos', 'capsule', 'lozenge', 'vape', 'other'] as const;
@@ -15,6 +17,13 @@ export default function FormularyPricing() {
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [page, setPage] = useState(1);
   const ledgerRef = useRef<HTMLElement>(null);
+  const placementUnlocked = curaleafPlacementUnlocked({
+    workspaceMode: state.workspaceMode,
+    localPreview: isLocalPortalPreview,
+    catalogueSource: state.catalogueSource,
+    catalogueEnvironment: state.catalogueEnvironment,
+    organisationId: state.currentOrganisationId,
+  });
 
   const products = useMemo(() => state.catalogue.filter(product => {
     const needle = query.trim().toLowerCase();
@@ -93,7 +102,9 @@ export default function FormularyPricing() {
         <ProviderStatusNotice
           state="waiting"
           title="Curaleaf test catalogue"
-          detail="Prices and stock are from the sandbox estate. Create order uses this table as a training preview until Curaleaf is live."
+          detail={placementUnlocked
+            ? 'Prices and stock are from the sandbox estate. Send for payment and Curaleaf placement use these sandbox keys.'
+            : 'Prices and stock are from the sandbox estate. Create order uses this table as a training preview until Curaleaf is live.'}
         />
       ) : null}
 

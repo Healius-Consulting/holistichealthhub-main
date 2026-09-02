@@ -2,10 +2,10 @@ import { createContext, useContext, useReducer, useEffect, useRef, type ReactNod
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
 import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, getWorldpayConnectionStatus, isApiConfigured } from '../shared/api';
 import type { CuraleafCancellationState, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
-import { activeRedoPriceResolution, isTrainingDirectoryPharmacy } from '../shared/contracts';
+import { activeRedoPriceResolution } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
-import { ORGANISATIONS, isOpenPharmacyWorkspace, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace } from '../training/workspace';
+import { ORGANISATIONS, isOpenPharmacyWorkspace, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace, usesSandboxDummyPack } from '../training/workspace';
 import { parseCatalogueCache, serialiseCatalogueCache, shouldDiscardCatalogueCache } from '../utils/catalogueCache';
 import { curaleafCatalogueEstate, type CuraleafCatalogueEstate } from '../utils/catalogueEstate';
 import { CATALOGUE_TTL_MS, catalogueIsStale } from '../utils/catalogueFreshness';
@@ -1383,9 +1383,7 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_WORKSPACE_MODE': {
       const organisationId = action.organisationId ?? state.currentOrganisationId;
       const organisation = state.organisations.find(item => item.id === organisationId);
-      const sandboxPharmacy = organisation
-        ? isTrainingDirectoryPharmacy(organisation)
-        : isLocalPortalPreview;
+      const sandboxPharmacy = usesSandboxDummyPack(organisation, isLocalPortalPreview);
       if (action.mode === 'training') {
         if (!sandboxPharmacy) {
           if (state.workspaceMode === 'training' && (!organisationId || organisationId === state.currentOrganisationId)) {
@@ -2196,8 +2194,11 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const currentOrganisation = state.organisations.find(organisation => organisation.id === state.currentOrganisationId);
-  const livePharmacyWorkspace = isOpenPharmacyWorkspace(resolvePharmacyWorkspaceMode(currentOrganisation, { curaleafEstate: state.catalogueEnvironment }));
-  const sandboxPharmacy = currentOrganisation ? isTrainingDirectoryPharmacy(currentOrganisation) : false;
+  const livePharmacyWorkspace = isOpenPharmacyWorkspace(resolvePharmacyWorkspaceMode(currentOrganisation, {
+    curaleafEstate: state.catalogueEnvironment,
+    localPreview: isLocalPortalPreview,
+  }));
+  const sandboxPharmacy = usesSandboxDummyPack(currentOrganisation, isLocalPortalPreview);
   const intakeDirectorySync = Boolean(
     currentOrganisation
     && currentOrganisation.intakeEnabled !== false

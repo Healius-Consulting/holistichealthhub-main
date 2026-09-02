@@ -25,7 +25,7 @@ describe('website selected pharmacy assignment', () => {
     assert.equal(resolveWebsiteAssignedPharmacy(null), null);
   });
 
-  it('fails closed for training directory pharmacies', () => {
+  it('fails closed for pharmacies hidden from the public directory', () => {
     assert.equal(resolveWebsiteAssignedPharmacy({
       ...eastwood,
       id: '70913a30-71c3-4a41-952e-d532927af58c',

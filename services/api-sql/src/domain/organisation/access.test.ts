@@ -40,7 +40,8 @@ describe('pharmacy intake access', () => {
       ...organisation,
       id: '70913a30-71c3-4a41-952e-d532927af58c',
       classification: 'TRAINING',
-    }), false);
+      status: 'ONBOARDING',
+    }), true);
     assert.equal(pharmacyOperationalAccess({ ...organisation, status: 'PAUSED' }), true);
     assert.equal(canActivateReferredPatient(organisation), true);
     assert.equal(canActivateReferredPatient({ ...organisation, status: 'PAUSED' }), false);
@@ -52,11 +53,23 @@ describe('pharmacy intake access', () => {
       id: '70913a30-71c3-4a41-952e-d532927af58c',
       name: 'Primary Branch',
       tradingName: 'Primary Pharmacy',
-    }), false);
+      status: 'ONBOARDING',
+      gphcNumber: 'TRAINING-PRIMARY',
+    }), true);
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'ONBOARDING' }), 'training');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'INTAKE_LIVE' }), 'training');
     assert.equal(pharmacyWorkspaceMode(organisation), 'test');
     assert.equal(pharmacyWorkspaceMode(organisation, { curaleafProduction: true }), 'live');
+    assert.equal(pharmacyWorkspaceMode({
+      ...organisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      status: 'ONBOARDING',
+    }), 'test');
+    assert.equal(pharmacyWorkspaceMode({
+      ...organisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      status: 'ONBOARDING',
+    }, { curaleafProduction: true }), 'live');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, classification: 'ALLOCATION_HOLDING', status: 'ONBOARDING' }), 'test');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, classification: 'ALLOCATION_HOLDING', status: 'ONBOARDING' }, { curaleafProduction: true }), 'live');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'PAUSED' }), 'paused');
@@ -65,15 +78,17 @@ describe('pharmacy intake access', () => {
       ...organisation,
       id: '70913a30-71c3-4a41-952e-d532927af58c',
       name: 'Primary Branch',
-    }), false);
+      status: 'ONBOARDING',
+    }), true);
     const onboarding = pharmacyPortalRecordAccess({ ...organisation, status: 'ONBOARDING' });
     assert.deepEqual(onboarding, { patients: true, orders: false, pendingEnquiries: true });
-    const sandbox = pharmacyPortalRecordAccess({
+    const platformTest = pharmacyPortalRecordAccess({
       ...organisation,
       id: '70913a30-71c3-4a41-952e-d532927af58c',
       name: 'Primary Branch',
+      status: 'ONBOARDING',
     });
-    assert.deepEqual(sandbox, { patients: false, orders: false, pendingEnquiries: false });
+    assert.deepEqual(platformTest, { patients: true, orders: true, pendingEnquiries: true });
     const paused = pharmacyPortalRecordAccess({ ...organisation, status: 'PAUSED' });
     assert.deepEqual(paused, { patients: true, orders: true, pendingEnquiries: false });
   });

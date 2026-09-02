@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
+import { assertCuraleafTestPaymentAllowed } from '../../domain/organisation/curaleaf-payment-lock.js';
 import { queryWorldpayPayment } from '../../application/integrations/worldpay.service.js';
 import { verifyWorldpayRefund } from '../../application/payments/worldpay-query.js';
 import { assertCuraleafSerialAvailableForCreate, executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
@@ -378,6 +379,8 @@ export function createPortalOrderRouter(): Router {
       if (ownershipError) throw new HttpError(400, ownershipError, 'PRESCRIPTION_LINE_OWNERSHIP_INVALID');
       const organisation = await organisationRepo.findOrganisationById(scope.organisationId);
       if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const curaleafConnection = await integrationRepo.findConnection(scope.organisationId, 'CURALEAF').catch(() => null);
+      assertCuraleafTestPaymentAllowed(organisation, curaleafConnection?.environment);
       const sourceDraft = input.draftId
         ? await orderRepo.findDraftById(input.draftId, scope.organisationId)
         : null;

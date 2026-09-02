@@ -1,9 +1,4 @@
-import { uuidKey } from '../common/uuid.js';
-
-const HIDDEN_PUBLIC_PHARMACY_IDS = new Set([
-  uuidKey('70913a30-71c3-4a41-952e-d532927af58c'), // Primary
-  uuidKey('f486a221-2236-44a5-b072-f06de399ab0e'), // Alternate
-]);
+import { isPlatformTestOrganisation } from '../organisation/training-directory.js';
 
 export const HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL = 'Holistic Health Hub Allocation';
 
@@ -18,7 +13,7 @@ export type PublicListingOrganisation = {
 
 export function isHiddenPublicPharmacy(organisation: PublicListingOrganisation): boolean {
   if (organisation.classification === 'ALLOCATION_HOLDING') return true;
-  return HIDDEN_PUBLIC_PHARMACY_IDS.has(uuidKey(organisation.id));
+  return isPlatformTestOrganisation(organisation);
 }
 
 export function isPubliclyListedPharmacy(organisation: PublicListingOrganisation): boolean {

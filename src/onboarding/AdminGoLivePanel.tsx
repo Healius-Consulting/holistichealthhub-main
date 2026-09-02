@@ -3,7 +3,6 @@ import { AlertTriangle } from 'lucide-react';
 import type { PharmacyTenant } from '../context/AppContext';
 import type { GoLiveReadiness } from '../shared/contracts';
 import { getGoLiveReadiness, isApiConfigured, revertLiveOrganisation, updateAdminPharmacySetupTask } from '../shared/api';
-import { isTrainingDirectoryPharmacy } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 
 interface AdminGoLivePanelProps {
@@ -29,7 +28,6 @@ export function AdminGoLivePanel({
 }: AdminGoLivePanelProps) {
   const liveWorkspace = organisation.status === 'live';
   const paused = organisation.status === 'paused';
-  const trainingTenant = isTrainingDirectoryPharmacy(organisation);
   const [readiness, setReadiness] = useState<GoLiveReadiness | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loggingIntake, setLoggingIntake] = useState(false);
@@ -56,7 +54,7 @@ export function AdminGoLivePanel({
   const curaleafLabel = operational?.curaleaf.label ?? 'Waiting';
   const serverReady = readiness?.ready === true;
   const needsCuraleafAck = !liveWorkspace && !curaleafProduction;
-  const canFlip = !liveWorkspace && !paused && !trainingTenant && (isLocalPortalPreview || serverReady) && (!needsCuraleafAck || acknowledgedCuraleafTest);
+  const canFlip = !liveWorkspace && !paused && (isLocalPortalPreview || serverReady) && (!needsCuraleafAck || acknowledgedCuraleafTest);
 
   useEffect(() => {
     setAcknowledgedCuraleafTest(false);
@@ -185,9 +183,6 @@ export function AdminGoLivePanel({
 
       {paused ? (
         <p className="admin-golive-panel__hint">Unpause this pharmacy before flipping the workspace to live.</p>
-      ) : null}
-      {trainingTenant && !liveWorkspace ? (
-        <p className="admin-golive-panel__hint">Training example pharmacies stay in the Training workspace.</p>
       ) : null}
     </section>
   );

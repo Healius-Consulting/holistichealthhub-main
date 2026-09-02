@@ -1,4 +1,3 @@
-import { isTrainingDirectoryOrganisation } from '../../domain/organisation/training-directory.js';
 import type { IdentityRepositoryPort } from '../../repositories/ports/identity.port.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
@@ -18,7 +17,7 @@ export async function queuePharmacyEnquiryEmail(input: {
 }) {
   if (!input.organisationId) return { queued: 0, suppressed: 0 };
   const organisation = await input.organisationRepo.findOrganisationById(input.organisationId);
-  if (!organisation || isTrainingDirectoryOrganisation(organisation)) return { queued: 0, suppressed: 0 };
+  if (!organisation) return { queued: 0, suppressed: 0 };
   const recipients = await listPharmacyRecipients(input.organisationId, {
     identityRepo: input.identityRepo,
     organisationRepo: input.organisationRepo,

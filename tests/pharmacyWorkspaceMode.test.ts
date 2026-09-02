@@ -4,6 +4,7 @@ import {
   isOpenPharmacyWorkspace,
   pharmacyWorkspaceStatusLabel,
   resolvePharmacyWorkspaceMode,
+  usesSandboxDummyPack,
 } from '../src/training/workspaceMode.ts';
 
 const livePharmacy = {
@@ -13,12 +14,16 @@ const livePharmacy = {
   testAccount: true,
 };
 
+const primary = {
+  id: '70913a30-71c3-4a41-952e-d532927af58c',
+  status: 'onboarding' as const,
+  workspaceClassification: 'standard' as const,
+};
+
 test('Training, Test and Live are distinct pharmacy workspaces', () => {
-  assert.equal(resolvePharmacyWorkspaceMode({
-    id: '70913a30-71c3-4a41-952e-d532927af58c',
-    status: 'live',
-    workspaceClassification: 'standard',
-  }), 'training');
+  assert.equal(resolvePharmacyWorkspaceMode(primary), 'test');
+  assert.equal(resolvePharmacyWorkspaceMode(primary, { localPreview: true }), 'training');
+  assert.equal(resolvePharmacyWorkspaceMode(primary, { curaleafEstate: 'production' }), 'live');
   assert.equal(resolvePharmacyWorkspaceMode({
     ...livePharmacy,
     status: 'onboarding',
@@ -32,4 +37,11 @@ test('Training, Test and Live are distinct pharmacy workspaces', () => {
   assert.equal(pharmacyWorkspaceStatusLabel('test'), 'Test');
   assert.equal(pharmacyWorkspaceStatusLabel('live'), 'Live');
   assert.equal(pharmacyWorkspaceStatusLabel('training'), 'Training');
+});
+
+test('dummy pack is local preview only', () => {
+  assert.equal(usesSandboxDummyPack(primary, true), true);
+  assert.equal(usesSandboxDummyPack(primary, false), false);
+  assert.equal(usesSandboxDummyPack(livePharmacy, false), false);
+  assert.equal(usesSandboxDummyPack(null, true), true);
 });

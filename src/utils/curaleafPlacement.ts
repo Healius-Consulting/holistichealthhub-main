@@ -1,20 +1,24 @@
-import type { CuraleafQuote, CuraleafQuoteRequestItem } from '../shared/contracts';
+import { isPlatformTestPharmacy, type CuraleafQuote, type CuraleafQuoteRequestItem } from '../shared/contracts.ts';
 import { catalogueStockStatus, type CatalogueStockInput } from './catalogueStock.ts';
+import { curaleafCatalogueEstate } from './catalogueEstate.ts';
 
 /**
  * Real payment, Worldpay, and Curaleaf writes stay locked in Training and local
- * preview. Test and Live both place against the connected Curaleaf estate
- * (sandbox .dev or production .co.uk) using that pharmacy's own keys.
+ * preview. Production Curaleaf unlocks any Test or Live workspace. Primary and
+ * Alternate may also send for payment on Curaleaf sandbox keys.
  */
 export function curaleafPlacementUnlocked(input: {
   workspaceMode: string;
   localPreview: boolean;
   catalogueSource?: 'curaleaf' | 'training' | 'unavailable';
   catalogueEnvironment?: unknown;
+  organisationId?: string | null;
 }): boolean {
   if (input.localPreview) return false;
   if (input.workspaceMode !== 'live' && input.workspaceMode !== 'test') return false;
-  return input.catalogueSource === 'curaleaf';
+  if (input.catalogueSource !== 'curaleaf') return false;
+  if (isPlatformTestPharmacy(input.organisationId)) return true;
+  return curaleafCatalogueEstate(input.catalogueEnvironment) === 'production';
 }
 
 type SnapshotCatalogueRow = CatalogueStockInput & {
