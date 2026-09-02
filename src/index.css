@@ -680,25 +680,33 @@ html{
  * and only while the pointer or keyboard is in that box.
  */
 .crm-lane:is(:hover, :focus-within) .crm-lane__rows,
-.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results{
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results,
+.staff-login-page:is(:hover, :focus-within),
+.payment-return-page:is(:hover, :focus-within){
   scrollbar-width: thin !important;
   scrollbar-color: color-mix(in srgb, var(--text-tertiary) 70%, transparent) transparent !important;
 }
 
 .crm-lane:is(:hover, :focus-within) .crm-lane__rows::-webkit-scrollbar,
-.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar{
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar,
+.staff-login-page:is(:hover, :focus-within)::-webkit-scrollbar,
+.payment-return-page:is(:hover, :focus-within)::-webkit-scrollbar{
   display: block !important;
   width: 8px !important;
   height: 8px !important;
 }
 
 .crm-lane:is(:hover, :focus-within) .crm-lane__rows::-webkit-scrollbar-track,
-.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar-track{
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar-track,
+.staff-login-page:is(:hover, :focus-within)::-webkit-scrollbar-track,
+.payment-return-page:is(:hover, :focus-within)::-webkit-scrollbar-track{
   background: transparent !important;
 }
 
 .crm-lane:is(:hover, :focus-within) .crm-lane__rows::-webkit-scrollbar-thumb,
-.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar-thumb{
+.manual-rx-picker:is(:hover, :focus-within) .manual-rx-picker__results::-webkit-scrollbar-thumb,
+.staff-login-page:is(:hover, :focus-within)::-webkit-scrollbar-thumb,
+.payment-return-page:is(:hover, :focus-within)::-webkit-scrollbar-thumb{
   background: color-mix(in srgb, var(--text-tertiary) 70%, transparent) !important;
   background-clip: padding-box !important;
   border: 2px solid transparent !important;
@@ -707,25 +715,33 @@ html{
 
 @media (hover: none){
   .crm-lane__rows,
-  .manual-rx-picker__results{
+  .manual-rx-picker__results,
+  .staff-login-page,
+  .payment-return-page{
     scrollbar-width: thin !important;
     scrollbar-color: color-mix(in srgb, var(--text-tertiary) 70%, transparent) transparent !important;
   }
 
   .crm-lane__rows::-webkit-scrollbar,
-  .manual-rx-picker__results::-webkit-scrollbar{
+  .manual-rx-picker__results::-webkit-scrollbar,
+  .staff-login-page::-webkit-scrollbar,
+  .payment-return-page::-webkit-scrollbar{
     display: block !important;
     width: 8px !important;
     height: 8px !important;
   }
 
   .crm-lane__rows::-webkit-scrollbar-track,
-  .manual-rx-picker__results::-webkit-scrollbar-track{
+  .manual-rx-picker__results::-webkit-scrollbar-track,
+  .staff-login-page::-webkit-scrollbar-track,
+  .payment-return-page::-webkit-scrollbar-track{
     background: transparent !important;
   }
 
   .crm-lane__rows::-webkit-scrollbar-thumb,
-  .manual-rx-picker__results::-webkit-scrollbar-thumb{
+  .manual-rx-picker__results::-webkit-scrollbar-thumb,
+  .staff-login-page::-webkit-scrollbar-thumb,
+  .payment-return-page::-webkit-scrollbar-thumb{
     background: color-mix(in srgb, var(--text-tertiary) 70%, transparent) !important;
     background-clip: padding-box !important;
     border: 2px solid transparent !important;
@@ -1849,11 +1865,11 @@ td.font-semibold{
 }
 
 .staff-login-page{
-  height: 100vh; height: 100dvh; min-height: 0; width: 100%; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; display: grid; grid-template-columns: minmax(360px, .85fr) minmax(500px, 1.15fr);
+  height: 100vh; height: 100dvh; min-height: 0; width: 100%; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; display: grid; grid-template-columns: minmax(360px, .85fr) minmax(500px, 1.15fr); grid-template-rows: minmax(100%, max-content);
   background: radial-gradient(circle at 10% 10%, var(--tenant-primary-muted), transparent 42%), var(--bg-root);
 }
 
-.staff-login-brand{ padding: clamp(48px, 8vw, 110px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; border-right: 1px solid var(--border); }
+.staff-login-brand{ padding: clamp(48px, 8vw, 110px); display: flex; flex-direction: column; align-items: flex-start; justify-content: safe center; border-right: 1px solid var(--border); }
 
 .staff-login-brand h1{ font-size: clamp(34px, 4vw, 56px); line-height: 1.05; letter-spacing: -.04em; max-width: 650px; margin: 8px 0 22px; }
 
@@ -1863,7 +1879,7 @@ td.font-semibold{
 
 .staff-login-trust span{ display: flex; align-items: center; gap: 7px; padding: 9px 12px; border: 1px solid var(--border); background: rgba(19,27,46,.65); border-radius: 999px; color: #a7f3d0; font-size: 12px; }
 
-.staff-login-panel{ padding: 48px clamp(28px, 7vw, 100px); display: flex; flex-direction: column; justify-content: center; max-width: 760px; width: 100%; margin: 0 auto; }
+.staff-login-panel{ padding: 48px clamp(28px, 7vw, 100px); display: flex; flex-direction: column; justify-content: safe center; max-width: 760px; width: 100%; margin: 0 auto; }
 
 .staff-login-card{ padding: 28px; }
 
@@ -1902,10 +1918,15 @@ td.font-semibold{
 .staff-login-note{ color: var(--text-faint); text-align: center; font-size: 10px; margin-top: 14px; }
 
 .payment-return-page{
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   display: grid;
-  place-items: center;
+  justify-items: center;
+  align-content: safe center;
   padding: 24px;
   background: #f4f7f6;
 }
@@ -3574,7 +3595,7 @@ html[data-reduced-motion='true'] *, html[data-reduced-motion='true'] *::before, 
 }
 
 .auth-page .staff-login-panel{
-  align-items: center;
+  align-items: safe center;
 }
 
 .auth-page .staff-login-card{
@@ -3712,8 +3733,9 @@ html[data-reduced-motion='true'] *, html[data-reduced-motion='true'] *::before, 
 .mfa-manual-key code{ color: var(--text-primary); font-size: var(--font-sm); overflow-wrap: anywhere; }
 
 .auth-loading-page{
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16405,13 +16427,15 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  grid-template-rows: minmax(100%, max-content);
   align-items: stretch;
   width: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
-  height: auto;
+  height: 100%;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   color: var(--ink);
   background:
     radial-gradient(ellipse at 8% 0%, rgba(229, 240, 234, 0.72), transparent 42%),
@@ -16432,7 +16456,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .staff-login-page .staff-login-brand{
   padding: clamp(40px, 7vw, 96px) clamp(28px, 6vw, 88px);
-  justify-content: center;
+  justify-content: safe center;
 }
 
 .staff-login-page .staff-login-brand::after{
@@ -16566,8 +16590,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .staff-login-page .staff-login-panel{
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: safe center;
+  justify-content: safe center;
   width: 100%;
   max-width: none;
   margin: 0;
