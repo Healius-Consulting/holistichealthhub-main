@@ -280,7 +280,7 @@ function emptyCopy(filter: PatientDirectoryFilter, hasSearch: boolean) {
     case 'needs-action':
       return { title: 'Nothing needs action', detail: 'Paid exceptions, cancellations and refund follow-up will appear here.' };
     case 'ready':
-      return { title: 'No collections waiting', detail: 'Patients with medication ready at the pharmacy will appear here.' };
+      return { title: 'No collections waiting', detail: 'Patients with medicine ready at the pharmacy will appear here.' };
     case 'declined':
       return { title: 'No closed records', detail: 'Declined, rejected or suspended records will appear here.' };
     default:

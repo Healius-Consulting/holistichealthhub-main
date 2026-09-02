@@ -1816,9 +1816,9 @@ app.post('/v1/portal/orders/:id/handout', async (request, response, next) => {
         : {};
       const handoutPlan = planOrderHandout(flow);
       if (!handoutPlan.ready && handoutPlan.code === 'ORDER_NOT_READY_FOR_HANDOUT') {
-        throw new HttpError(409, 'Every active prescription must be ready to collect before handout.', 'ORDER_NOT_READY_FOR_HANDOUT');
+        throw new HttpError(409, 'Every active prescription must be ready to collect before handover.', 'ORDER_NOT_READY_FOR_HANDOUT');
       }
-      if (!handoutPlan.ready) throw new HttpError(409, 'The order has no ready shipments to hand out.', handoutPlan.code ?? 'SHIPMENT_REQUIRED');
+      if (!handoutPlan.ready) throw new HttpError(409, 'The order has no ready shipments to hand over.', handoutPlan.code ?? 'SHIPMENT_REQUIRED');
       const { activeFlows, shipmentIds } = handoutPlan;
       const shipmentRefs = shipmentIds.map(shipmentId => firestore.collection('shipments').doc(shipmentId));
       const shipmentSnapshots = await Promise.all(shipmentRefs.map(reference => transaction.get(reference)));
@@ -1827,7 +1827,7 @@ app.post('/v1/portal/orders/:id/handout', async (request, response, next) => {
       }
       const shipmentStatuses = Object.fromEntries(shipmentSnapshots.map(snapshot => [snapshot.id, String(snapshot.data()?.status ?? '')]));
       if (!shipmentsReadyForHandout(shipmentIds, shipmentStatuses)) {
-        throw new HttpError(409, 'Every shipment must be ready to collect before handout.', 'ORDER_NOT_READY_FOR_HANDOUT');
+        throw new HttpError(409, 'Every shipment must be ready to collect before handover.', 'ORDER_NOT_READY_FOR_HANDOUT');
       }
 
       const nextFlow = Object.fromEntries(Object.entries(flow).map(([prescriptionId, prescription]) => {

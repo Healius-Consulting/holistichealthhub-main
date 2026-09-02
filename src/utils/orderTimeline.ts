@@ -245,7 +245,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
 
   if (order.handoutAt && !order.prescriptions.some(prescription => (prescription.fulfilmentLines ?? []).some(line => line.collected > 0))) {
     events.push({
-      label: 'Medication handed out',
+      label: 'Medicine handed over',
       detail: 'Collected by patient',
       date: order.handoutAt,
       source: 'Dispensary',

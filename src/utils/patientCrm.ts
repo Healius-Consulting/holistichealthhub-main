@@ -114,7 +114,7 @@ export function patientCrmStatusMeta(input: PatientCrmFilterInput & { statusLabe
     return { label: 'Enquiry', description: 'Assigned to this pharmacy. HHH may still move them; orders stay locked until referral.', tone: 'info' as const, icon: 'inbox' as const };
   }
   if (group === 'ready') {
-    return { label: 'Ready to collect', description: 'Medication is checked in and waiting for patient collection.', tone: 'ready' as const, icon: 'package' as const };
+    return { label: 'Ready to collect', description: 'Medicine is checked in and waiting for patient collection.', tone: 'ready' as const, icon: 'package' as const };
   }
   if (group === 'on-order') {
     if (label.includes('awaiting payment')) {

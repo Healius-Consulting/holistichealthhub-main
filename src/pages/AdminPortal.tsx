@@ -651,11 +651,11 @@ function PlatformAdminDialog({ onClose, focusInvite = false }: { onClose: () => 
           dispatch({ type: 'ADD_TOAST', message: 'Setup email queued.', toastType: 'success' });
         } else {
           setEmailDelivery('failed');
-          dispatch({ type: 'ADD_TOAST', message: 'Account created. Retry the invitation email from this dialog.', toastType: 'warning' });
+          dispatch({ type: 'ADD_TOAST', message: 'Account created. Retry the invitation email from this window.', toastType: 'warning' });
         }
       } catch {
         setEmailDelivery('failed');
-        dispatch({ type: 'ADD_TOAST', message: 'Account created. Retry the invitation email from this dialog.', toastType: 'warning' });
+        dispatch({ type: 'ADD_TOAST', message: 'Account created. Retry the invitation email from this window.', toastType: 'warning' });
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The admin account could not be created.');
@@ -744,7 +744,7 @@ function PlatformAdminDialog({ onClose, focusInvite = false }: { onClose: () => 
             <p className="section-label">Platform access</p>
             <h2 id="admins-dialog-title">HHH administrators</h2>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close administrators dialog"><X size={18} /></button>
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close administrators"><X size={18} /></button>
         </div>
         <div className="drawer-body onboarding-form admin-admins-drawer__body">
           <p>Invite colleagues who need full admin portal access. Admin accounts are separate from pharmacy staff and are not tied to a pharmacy organisation.</p>
@@ -754,7 +754,7 @@ function PlatformAdminDialog({ onClose, focusInvite = false }: { onClose: () => 
             <button className="btn btn-primary" type="submit" disabled={busy}><UserPlus size={14} /> {busy ? 'Creating account…' : 'Invite admin'}</button>
           </form>
           {error && <div className="banner banner-red" role="alert"><AlertCircle size={16} /> {error}</div>}
-          {invitation && <div className="staff-invitation-result"><ShieldCheck size={17} /><div><strong>Admin account created · {emailDelivery === 'sent' ? 'Setup email queued' : emailDelivery === 'failed' ? 'Email not queued' : 'Preparing email'}</strong><span>{emailDelivery === 'sent' ? 'A password setup email has been queued. They will choose a password and set up two-factor authentication before entering the admin portal.' : 'A setup email could not be queued. Retry the invitation from this dialog. The setup link is not shown in the browser.'}</span></div></div>}
+          {invitation && <div className="staff-invitation-result"><ShieldCheck size={17} /><div><strong>Admin account created · {emailDelivery === 'sent' ? 'Setup email queued' : emailDelivery === 'failed' ? 'Email not queued' : 'Preparing email'}</strong><span>{emailDelivery === 'sent' ? 'A password setup email has been queued. They will choose a password and set up two-factor authentication before entering the admin portal.' : 'A setup email could not be queued. Retry the invitation from this window. The setup link is not shown in the browser.'}</span></div></div>}
           <div className="admin-admins-groups">
             {loading ? (
               <div className="empty-state">Loading admin accounts…</div>

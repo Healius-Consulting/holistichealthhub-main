@@ -71,7 +71,7 @@ export const WORKSPACE_TOUR_STEPS: WorkspaceTourStep[] = [
     screen: 'orders',
     targets: ['orders-board'],
     title: 'Live order lanes',
-    body: 'Needs action, awaiting payment, with Curaleaf, split delivery, and ready to collect. Empty drafts with nothing to send are not work. Open a card to place, check in, or hand out.',
+    body: 'Needs action, awaiting payment, with Curaleaf, split delivery, and ready to collect. Empty drafts with nothing to send are not work. Open a card to place, check in, or hand over.',
   },
   {
     id: 'create-order',

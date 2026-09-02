@@ -826,12 +826,12 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
       (persisted?.productId && c.id === persisted.productId) ||
       (persisted?.formulaId && c.formulaId === persisted.formulaId)
     );
-    const hasSpecificName = persisted?.name && !['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Prescribed product'].includes(persisted.name);
+    const hasSpecificName = persisted?.name && !['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Curaleaf medicine', 'Prescribed product'].includes(persisted.name);
     const resolvedName = hasSpecificName
       ? persisted.name
       : catItem?.name
         ?? persisted?.name
-        ?? (quote ? 'Curaleaf medication' : 'Curaleaf prescription item');
+        ?? (quote ? 'Curaleaf medicine' : 'Curaleaf prescription item');
 
     return {
       productId: item.packId,
@@ -1257,7 +1257,7 @@ function reducer(state: AppState, action: Action): AppState {
         prescriptions: order.prescriptions.map(rx => ({
           ...rx,
           items: rx.items.map(item => {
-            const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Prescribed product'].includes(item.name);
+            const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Curaleaf medicine', 'Prescribed product'].includes(item.name);
             if (!isGeneric) return item;
             const actualName = catMap.get(item.productId) || (item.formulaId ? formulaMap.get(item.formulaId) : undefined);
             return actualName ? { ...item, name: actualName } : item;

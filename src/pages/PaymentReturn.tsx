@@ -152,7 +152,7 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
                   <div className="lifecycle-step-marker"><FileCheck size={14} /></div>
                   <div className="lifecycle-step-body">
                     <strong>Prescription Approved</strong>
-                    <small>Clinical eligibility and prescriber authorization complete.</small>
+                    <small>Clinical eligibility and prescriber authorisation complete.</small>
                   </div>
                 </li>
                 <li className="lifecycle-step lifecycle-step--done">
@@ -166,7 +166,7 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
                   <div className="lifecycle-step-marker"><Package size={14} /></div>
                   <div className="lifecycle-step-body">
                     <strong>Dispensing & Packaging</strong>
-                    <small>Your pharmacy is preparing your medication.</small>
+                    <small>Your pharmacy is preparing your medicine.</small>
                   </div>
                 </li>
                 <li className="lifecycle-step lifecycle-step--next">

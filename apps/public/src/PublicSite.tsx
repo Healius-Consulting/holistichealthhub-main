@@ -113,7 +113,7 @@ const conditionGroups = [
     image: OTHER_CONDITIONS_IMAGE,
     imageAlt: 'A nurse sitting with an older patient at home during a quiet care conversation',
     imagePosition: 'center 38%',
-    lead: 'Gastrointestinal, palliative and specialized clinical indications reviewed individually.',
+    lead: 'Gastrointestinal, palliative and specialised clinical indications reviewed individually.',
     items: [
       'Anorexia', 'Binge eating disorder', 'Bulimia nervosa', 'Cancer-related appetite loss',
       'Chemotherapy-induced nausea and vomiting', 'Crohn’s disease', 'Eating disorders',
@@ -131,9 +131,9 @@ const faqs = [
   ['What is the difference between CBD and THC?', 'CBD and THC are two primary cannabinoids with distinct physiological effects. THC is psychoactive; CBD is non-intoxicating. Prescription products may contain formulated ratios of one or both, tailored by your specialist doctor.'],
   ['What’s the difference between CBD products and CBPMs?', 'Over-the-counter CBD wellness products sold on the high street are not the same as prescription cannabis-based medicines, which require formal clinical oversight, pharmaceutical GMP quality certification, and tailored clinical dosing.'],
   ['What does EU GMP medical cannabis mean?', 'EU GMP (Good Manufacturing Practice) refers to stringent European pharmaceutical manufacturing standards designed to guarantee consistent quality, purity, and controlled production without contaminants.'],
-  ['What is a Summary Care Record (SCR)?', 'A Summary Care Record contains key information from your GP medical file (including current medications, allergies, and health history). With your explicit consent, it allows the assessing specialist clinician to review your treatment history safely.'],
+  ['What is a Summary Care Record (SCR)?', 'A Summary Care Record contains key information from your GP medical record (including current medicines, allergies, and health history). With your explicit consent, it allows the assessing specialist clinician to review your treatment history safely.'],
   ['How do I get a prescription for CBPMs?', 'A specialist doctor must assess you through a clinical consultation. If treatment is appropriate and approved by the multi-disciplinary team (MDT), the prescription is transmitted to your nominated pharmacy for dispensing.'],
-  ['Am I eligible for CBPM therapy?', 'Eligibility generally requires that you have a diagnosed eligible condition and have previously tried at least two licensed therapies or medications that proved ineffective or caused intolerable side effects. Complete the secure Holistic Health Hub eligibility pre-check to start a review.'],
+  ['Am I eligible for CBPM therapy?', 'Eligibility generally requires that you have a diagnosed eligible condition and have previously tried at least two licensed therapies or medicines that proved ineffective or caused intolerable side effects. Complete the secure Holistic Health Hub eligibility pre-check to start a review.'],
 ] as const;
 
 
@@ -1039,7 +1039,7 @@ function AboutPage() {
                   image: TEAM_PHARMACIST_IMAGE,
                   imageAlt: 'A community pharmacist checking a medicine before dispensing',
                   title: 'Clinical pharmacists',
-                  copy: 'Your nominated community pharmacy supports dispensing, medication reviews, and convenient delivery or dispensary collection.',
+                  copy: 'Your nominated community pharmacy supports dispensing, medicines reviews, and convenient delivery or dispensary collection.',
                 },
                 {
                   image: TEAM_NURSE_IMAGE,
@@ -1371,7 +1371,7 @@ function PrivacyPage() {
 
           <h2>How do we protect your information?</h2>
           <p>
-            We employ robust technical and organizational safeguards, restrict access to authorized personnel, train staff on confidentiality, and enforce fail-closed data separation between pre-screening and pharmacy activation.
+            We employ robust technical and organisational safeguards, restrict access to authorised personnel, train staff on confidentiality, and enforce fail-closed data separation between pre-screening and pharmacy activation.
           </p>
 
           <h2>Your rights</h2>

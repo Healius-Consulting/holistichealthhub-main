@@ -150,7 +150,7 @@ const STAGE_META: Record<OrderStage, { label: string; description: string; tone:
   dispatched: { label: 'In Transit', description: 'Dispatched with courier to the pharmacy', tone: 'dispatched', icon: Truck },
   delivered: { label: 'Checked In', description: 'Checked in at pharmacy; not yet ready to collect', tone: 'delivered', icon: PackageCheck },
   ready: { label: 'Ready to Collect', description: 'Verified by pharmacy; patient notified', tone: 'ready', icon: Package },
-  collected: { label: 'Collected', description: 'Medication collected by the patient', tone: 'collected', icon: Check },
+  collected: { label: 'Collected', description: 'Medicine collected by the patient', tone: 'collected', icon: Check },
   rejected: { label: 'Curaleaf Exception', description: 'Order requires prescription or recipe fix', tone: 'danger', icon: ShieldAlert },
   archived: { label: 'Archived', description: 'Prescription 28-day window expired', tone: 'neutral', icon: Archive },
   cancelled: { label: 'Cancelled', description: 'Cancellation recorded for audit', tone: 'danger', icon: XCircle },
@@ -579,7 +579,7 @@ export default function Orders() {
           else sections.push({ ...section, items: [item] });
         }
         // Stable by first appearance, then by the section's own rank so the actionable
-        // group ("Part here to hand out") sits above the purely inbound one.
+        // group ("Part here to hand over") sits above the purely inbound one.
         sections.sort((left, right) => left.rank - right.rank);
         return { ...lane, items, sections };
       })
@@ -863,7 +863,7 @@ export default function Orders() {
     // dispensary shelf must never look like stock the supplier still owes.
     const supplyIncomplete = targetPrescription ? prescriptionSupplyIncomplete(targetPrescription) : orderSupplyIncomplete(order);
     if (!effectivePartial && supplyIncomplete) {
-      dispatch({ type: 'ADD_TOAST', message: 'Remaining packs are still awaiting dispatch. Use partial handout for arrived packs only.', toastType: 'warning' });
+      dispatch({ type: 'ADD_TOAST', message: 'Remaining packs are still awaiting dispatch. Use partial handover for arrived packs only.', toastType: 'warning' });
       return;
     }
     setHandoutBusy(true);
@@ -881,15 +881,15 @@ export default function Orders() {
       dispatch({
         type: 'ADD_TOAST',
         message: effectivePartial
-          ? `${targetPrescription ? 'Prescription handout' : 'Partial handout'} recorded. Other active prescriptions and remaining packs stay open.`
-          : 'Handout recorded. The order is now completed.',
+          ? `${targetPrescription ? 'Prescription handover' : 'Partial handover'} recorded. Other active prescriptions and remaining packs stay open.`
+          : 'Handover recorded. The order is now completed.',
         toastType: 'success',
       });
       setHandoutOrderId(null);
       setHandoutPrescriptionId(null);
       if (!effectivePartial && !supplyIncomplete) setActiveFilter('completed');
     } catch (error) {
-      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The handout could not be recorded.', toastType: 'error' });
+      dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The handover could not be recorded.', toastType: 'error' });
     } finally {
       setHandoutBusy(false);
     }
@@ -1102,7 +1102,7 @@ export default function Orders() {
                   <h2 id="chase-curaleaf-title" className="curaleaf-call-modal__title">Chase Delivery / Report Issue with Curaleaf</h2>
                 </div>
               </div>
-              <button type="button" className="curaleaf-call-modal__close" onClick={() => setChaseDeliveryModal(null)} aria-label="Close dialog">
+              <button type="button" className="curaleaf-call-modal__close" onClick={() => setChaseDeliveryModal(null)} aria-label="Close">
                 <X size={18} />
               </button>
             </header>
@@ -1211,7 +1211,7 @@ export default function Orders() {
                   <h2 id="call-curaleaf-title" className="curaleaf-call-modal__title">Call Curaleaf to cancel</h2>
                 </div>
               </div>
-              <button type="button" className="curaleaf-call-modal__close" onClick={() => setCallCuraleafModal(null)} aria-label="Close dialog">
+              <button type="button" className="curaleaf-call-modal__close" onClick={() => setCallCuraleafModal(null)} aria-label="Close">
                 <X size={18} />
               </button>
             </header>
@@ -1286,20 +1286,20 @@ export default function Orders() {
           <section className="order-handout-dialog" role="alertdialog" aria-modal="true" aria-labelledby="order-handout-title" aria-describedby="order-handout-description">
             <span className="order-handout-dialog__icon"><PackageCheck size={22} /></span>
             <div>
-              <small>Patient handout</small>
-              <h2 id="order-handout-title">{selected.order.prescriptions.length > 1 ? `Confirm prescription ${Math.max(1, selected.order.prescriptions.findIndex(prescription => prescription.id === handoutPrescriptionId) + 1)} handout` : handoutPartial ? 'Confirm partial handout to patient' : 'Confirm medication has been handed to the patient'}</h2>
+              <small>Patient handover</small>
+              <h2 id="order-handout-title">{selected.order.prescriptions.length > 1 ? `Confirm prescription ${Math.max(1, selected.order.prescriptions.findIndex(prescription => prescription.id === handoutPrescriptionId) + 1)} handover` : handoutPartial ? 'Confirm partial handover to the patient' : 'Confirm the medicine has been handed to the patient'}</h2>
               <p id="order-handout-description">
                 {selected.order.prescriptions.length > 1
                   ? `This records only the selected prescription’s ready consignment for ${orderReference(selected.order)}. Other prescriptions remain in their current stages.`
                   : handoutPartial
-                  ? `This records handout of arrived packs only for ${orderReference(selected.order)}. Remaining packs are still awaiting dispatch.`
-                  : `This completes ${orderReference(selected.order)} and records the handout in the audit trail.`}
+                  ? `This records handover of arrived packs only for ${orderReference(selected.order)}. Remaining packs are still awaiting dispatch.`
+                  : `This completes ${orderReference(selected.order)} and records the handover in the audit trail.`}
               </p>
             </div>
             <footer>
               <button type="button" className="btn btn-secondary" disabled={handoutBusy} onClick={() => { setHandoutOrderId(null); setHandoutPrescriptionId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); }}>Cancel</button>
               <button type="button" className="btn btn-primary" disabled={handoutBusy} onClick={() => void handleOrderHandout(selected.order, handoutPrescriptionId, handoutPartial, handoutShipmentId)}>
-                <Check size={14} /> {handoutBusy ? 'Recording handout…' : selected.order.prescriptions.length > 1 ? 'Confirm prescription handout' : handoutPartial ? 'Confirm partial handout' : 'Confirm handout'}
+                <Check size={14} /> {handoutBusy ? 'Recording handover…' : selected.order.prescriptions.length > 1 ? 'Confirm prescription handover' : handoutPartial ? 'Confirm partial handover' : 'Confirm handover'}
               </button>
             </footer>
           </section>
@@ -1575,10 +1575,10 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
   };
 
   const resolveProductName = (item: { name?: string; productId: string; formulaId?: string }): string => {
-    const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Prescribed product'].includes(item.name);
-    if (!isGeneric) return item.name ?? 'Curaleaf medication';
+    const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Curaleaf medicine', 'Prescribed product'].includes(item.name);
+    if (!isGeneric) return item.name ?? 'Curaleaf medicine';
     const cat = state.catalogue.find(c => c.id === item.productId || (item.formulaId && c.formulaId === item.formulaId));
-    return cat?.name ?? item.name ?? 'Curaleaf medication';
+    return cat?.name ?? item.name ?? 'Curaleaf medicine';
   };
 
   return (
@@ -1601,7 +1601,7 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
             <span className="order-crm-record__opened">Order created {formatDate(order.date)}</span>
           </div>
           <div className="order-crm-record__actions" role="group" aria-label="Order actions">
-            {canFullHandout && selectedPrescription ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(selectedPrescription, false)}><Check size={13} /> Handout</button> : null}
+            {canFullHandout && selectedPrescription ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(selectedPrescription, false)}><Check size={13} /> Hand over</button> : null}
             {mayCallCuraleafToCancel ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => onCallCuraleaf(selectedPrescription ?? undefined)}><PhoneCall size={13} aria-hidden="true" /> Call Curaleaf to cancel</button> : null}
             {canViewPrescriptionCopy ? (
               <button
@@ -1911,8 +1911,8 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
         <SplitOrderDeliveryBanner
           tone="partial"
           icon={PackageCheck}
-          eyebrow="Ready for Handout"
-          title={`${packsWaiting} pack${packsWaiting === 1 ? '' : 's'} checked in — verify and hand out to the patient`}
+          eyebrow="Ready to hand over"
+          title={`${packsWaiting} pack${packsWaiting === 1 ? '' : 's'} checked in — verify and hand over to the patient`}
           desc={splitSnapshot.withCuraleaf > 0 && splitSnapshot.inTransit > 0
             ? 'Other packs are still in transit or waiting to dispatch.'
             : splitSnapshot.inTransit > 0
@@ -1930,13 +1930,13 @@ function FulfilmentDeliveryStatus({ order, now }: { order: PatientOrder; now: Da
           </div>
           <div className="order-delivery-banner__content">
             <div className="order-delivery-banner__eyebrow">
-              <span>Ready for Patient Handout</span>
+              <span>Ready to hand over to the patient</span>
             </div>
             <strong className="order-delivery-banner__title">
               {packsWaiting} pack{packsWaiting === 1 ? '' : 's'} checked in and awaiting collection
             </strong>
             <p className="order-delivery-banner__desc">
-              The goods-in check is complete and the patient notification is queued. Hand out only the ready packs when the patient arrives.
+              The goods-in check is complete and the patient notification is queued. Hand over only the ready packs when the patient arrives.
             </p>
           </div>
         </div>
@@ -2685,10 +2685,10 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
   }, 0);
 
   const resolveProductName = (item: { name?: string; productId: string; formulaId?: string }) => {
-    const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Prescribed product'].includes(item.name);
+    const isGeneric = !item.name || ['Curaleaf prescription item', 'Curaleaf formulary product', 'Curaleaf medication', 'Curaleaf medicine', 'Prescribed product'].includes(item.name);
     if (!isGeneric) return item.name!;
     const cat = state.catalogue.find(c => c.id === item.productId || (item.formulaId && c.formulaId === item.formulaId));
-    return cat?.name ?? item.name ?? 'Curaleaf medication';
+    return cat?.name ?? item.name ?? 'Curaleaf medicine';
   };
 
   const displayLines = prescription.items.map(item => {
@@ -2962,8 +2962,8 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
                 <span>
                   <PackageCheck size={16} style={{ color: 'var(--tenant-primary)' }} />
                   <span>
-                    <strong>Check in arriving packs before partial handout</strong>
-                    <small>{totalShippedPacks - totalReceivedPacks} pack(s) dispatched from Curaleaf are not checked in yet. Accept delivery when the consignment arrives — that books the packs in and tells the patient — then hand out the arrived quantity.</small>
+                    <strong>Check in arriving packs before partial handover</strong>
+                    <small>{totalShippedPacks - totalReceivedPacks} pack(s) dispatched from Curaleaf are not checked in yet. Accept delivery when the consignment arrives — that books the packs in and tells the patient — then hand over the arrived quantity.</small>
                   </span>
                 </span>
               </div>
@@ -2995,12 +2995,12 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
                 <span>
                   <PackageCheck size={16} style={{ color: 'var(--tenant-primary)' }} />
                   <span>
-                    <strong>Arrived packs ready — partial handout available</strong>
-                    <small>Hand out only the checked-in packs now. Remaining packs will ship separately.</small>
+                    <strong>Arrived packs ready — partial handover available</strong>
+                    <small>Hand over only the checked-in packs now. Remaining packs will ship separately.</small>
                   </span>
                 </span>
                 <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onOpenHandout(true, selectedShipmentId || undefined)}>
-                  <Check size={13} /> Partial handout ({handoutPacks} pk)
+                  <Check size={13} /> Partial handover ({handoutPacks} pk)
                 </button>
               </div>
             ) : null}
@@ -3009,12 +3009,12 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
                 <span>
                   <PackageCheck size={16} />
                   <span>
-                    <strong>All packs ready for handout</strong>
+                    <strong>All packs ready for handover</strong>
                     <small>Every ordered pack has been checked in and is ready for patient collection.</small>
                   </span>
                 </span>
                 <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onOpenHandout(false, selectedShipmentId || undefined)}>
-                  <Check size={13} /> Handout
+                  <Check size={13} /> Hand over
                 </button>
               </div>
             ) : null}
@@ -3022,8 +3022,8 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
               <div className="order-ready-confirmed">
                 <Mail size={16} />
                 <span>
-                  <strong>Medication ready for patient collection</strong>
-                  <small>Collection email notification queued{prescription.readyAt ? ` on ${formatDate(prescription.readyAt, true)}` : ''}. Hand out medication when patient arrives at dispensary.</small>
+                  <strong>Medicine ready for patient collection</strong>
+                  <small>Collection email notification queued{prescription.readyAt ? ` on ${formatDate(prescription.readyAt, true)}` : ''}. Hand over the medicine when the patient arrives at the dispensary.</small>
                 </span>
               </div>
             ) : null}

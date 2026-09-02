@@ -114,7 +114,7 @@ export interface OrderBoardSection {
  * card tag ("1/2 in transit"), not in a heading that would go stale row by row.
  */
 const SPLIT_SECTIONS = {
-  atPharmacy: { key: 'split-here', label: 'Part here to hand out', rank: 0 },
+  atPharmacy: { key: 'split-here', label: 'Part here to hand over', rank: 0 },
   collected: { key: 'split-collected', label: 'Part already collected', rank: 1 },
   inbound: { key: 'split-inbound', label: 'None arrived yet', rank: 2 },
 } as const;

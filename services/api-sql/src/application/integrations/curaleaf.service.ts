@@ -426,7 +426,7 @@ export async function curaleafApiRequest<T = any>(
       const publicMessage = response.status === 400 || response.status === 422
         ? 'Curaleaf could not accept the supplied details. Review the order and try again.'
         : response.status === 401 || response.status === 403
-          ? 'Curaleaf did not authorize this request.'
+          ? 'Curaleaf did not authorise this request.'
           : response.status === 429
             ? 'Curaleaf is rate limiting requests. Try again shortly.'
             : `Curaleaf could not complete the request (${response.status}).`;
