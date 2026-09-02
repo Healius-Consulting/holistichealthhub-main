@@ -1439,10 +1439,9 @@ export interface PortalOrganisation {
 export const HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL = 'Holistic Health Hub Allocation';
 
 const TRAINING_DIRECTORY_PHARMACY_IDS = new Set([
-  '70913a3071c34a41952ed532927af58c', // Primary Branch / Primary Pharmacy
-  'f486a221223644a5b072f06de399ab0e', // Alternate Branch / Alternate Pharmacy
+  '70913a3071c34a41952ed532927af58c', // Primary
+  'f486a221223644a5b072f06de399ab0e', // Alternate
 ]);
-const TRAINING_DIRECTORY_PHARMACY_NAMES = /^(primary|alternate)\s+(pharmacy|branch)$/i;
 
 export function isTrainingDirectoryPharmacy(organisation: {
   id: string;
@@ -1452,10 +1451,7 @@ export function isTrainingDirectoryPharmacy(organisation: {
   workspaceClassification?: string | null;
 }) {
   if (organisation.workspaceClassification === 'training' || organisation.testAccount) return true;
-  if (TRAINING_DIRECTORY_PHARMACY_IDS.has(organisation.id.replaceAll('-', '').toLowerCase())) return true;
-  return [organisation.name, organisation.tradingName]
-    .map(value => String(value || '').trim())
-    .some(name => TRAINING_DIRECTORY_PHARMACY_NAMES.test(name));
+  return TRAINING_DIRECTORY_PHARMACY_IDS.has(organisation.id.replaceAll('-', '').toLowerCase());
 }
 
 export function workspaceClassificationLabel(classification?: string | null) {

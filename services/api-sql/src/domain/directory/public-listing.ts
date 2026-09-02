@@ -1,11 +1,9 @@
 import { uuidKey } from '../common/uuid.js';
 
 const HIDDEN_PUBLIC_PHARMACY_IDS = new Set([
-  uuidKey('70913a30-71c3-4a41-952e-d532927af58c'), // Primary Branch / Primary Pharmacy
-  uuidKey('f486a221-2236-44a5-b072-f06de399ab0e'), // Alternate Branch / Alternate Pharmacy
+  uuidKey('70913a30-71c3-4a41-952e-d532927af58c'), // Primary
+  uuidKey('f486a221-2236-44a5-b072-f06de399ab0e'), // Alternate
 ]);
-
-const HIDDEN_PUBLIC_PHARMACY_NAMES = /^(primary|alternate)\s+(pharmacy|branch)$/i;
 
 export const HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL = 'Holistic Health Hub Allocation';
 
@@ -18,16 +16,9 @@ export type PublicListingOrganisation = {
   archivedAt?: string | null;
 };
 
-function normalisedName(value: string | null | undefined) {
-  return String(value || '').trim();
-}
-
 export function isHiddenPublicPharmacy(organisation: PublicListingOrganisation): boolean {
   if (organisation.classification === 'ALLOCATION_HOLDING') return true;
-  if (HIDDEN_PUBLIC_PHARMACY_IDS.has(uuidKey(organisation.id))) return true;
-  return [organisation.name, organisation.tradingName]
-    .map(normalisedName)
-    .some(name => HIDDEN_PUBLIC_PHARMACY_NAMES.test(name));
+  return HIDDEN_PUBLIC_PHARMACY_IDS.has(uuidKey(organisation.id));
 }
 
 export function isPubliclyListedPharmacy(organisation: PublicListingOrganisation): boolean {

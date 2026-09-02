@@ -41,8 +41,8 @@ const previewDedicated: V2EligibilityQueueItem = {
   nextFollowUpAt: null, destinationLocked: false,
 };
 const previewCandidates: Detail[] = [
-  { id: 'preview-pharmacy', tradingName: 'Eastwood Health', gphcNumber: '9012345', address: 'Nottinghamshire' },
-  { id: 'preview-pharmacy-2', tradingName: 'K-Chem Pharmacy', gphcNumber: '9023456', address: 'London' },
+  { id: 'preview-pharmacy', tradingName: 'Primary Branch', gphcNumber: 'TRAINING-PRIMARY', address: 'Leeds' },
+  { id: 'preview-pharmacy-2', tradingName: 'Alternate Pharmacy', gphcNumber: 'TRAINING-ALTERNATE', address: 'Manchester' },
 ];
 
 function previewDetail(record: V2EligibilityQueueItem): Detail {
@@ -52,8 +52,8 @@ function previewDetail(record: V2EligibilityQueueItem): Detail {
     assignmentVersion: record.version,
     pharmacyAccessStatus: 'withheld',
     destinationLocked: false,
-    sourceOrganisationName: dedicated ? 'Eastwood Health' : null,
-    assignedOrganisationName: dedicated ? 'Eastwood Health' : null,
+    sourceOrganisationName: dedicated ? 'Primary Branch' : null,
+    assignedOrganisationName: dedicated ? 'Primary Branch' : null,
     effectiveAssignedOrganisationId: record.assignedOrganisationId,
     dob: '1991-04-12', email: 'preview.patient@example.test', mobile: '07000 000 000',
     conditions: ['chronic_pain', 'sleep_disorders'], primaryCondition: 'chronic_pain',

@@ -51,5 +51,11 @@ describe('public pharmacy listing', () => {
       id: 'f486a221-2236-44a5-b072-f06de399ab0e',
       status: 'LIVE',
     }), false);
+    assert.equal(isHiddenPublicPharmacy({
+      ...realPharmacy,
+      id: '3e9f74ff-4fed-497d-904d-4d3ee3e5e126',
+      name: 'Primary Branch',
+      tradingName: 'Primary Branch',
+    }), false);
   });
 });

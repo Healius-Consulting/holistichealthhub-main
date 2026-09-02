@@ -24,10 +24,20 @@ describe('isTrainingDirectoryOrganisation', () => {
     }), true);
   });
 
-  it('leaves registered pharmacies in admin finance', () => {
+  it('leaves Eastwood, K-Chem, and new pharmacies registered even if branded Primary Branch', () => {
     assert.equal(isTrainingDirectoryOrganisation({
       id: '6d0176bb-89a0-4e32-9bce-c934c9557c42',
       tradingName: 'Eastwood Health Ltd',
+      classification: 'STANDARD',
+    }), false);
+    assert.equal(isTrainingDirectoryOrganisation({
+      id: '3e9f74ff-4fed-497d-904d-4d3ee3e5e126',
+      tradingName: 'Primary Branch',
+      classification: 'STANDARD',
+    }), false);
+    assert.equal(isTrainingDirectoryOrganisation({
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      tradingName: 'Primary Branch',
       classification: 'STANDARD',
     }), false);
   });
