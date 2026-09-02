@@ -355,7 +355,7 @@ export default function AdminIntakeV2() {
                 <div className="order-crm-empty"><CheckCircle2 size={26} /><strong>No patients waiting</strong><span>Try another filter or search term.</span></div>
               ) : queueFilter === 'all' ? (
                 <>
-                  <IntakeListGroup label="Main website" detail="holistichealthhub.cc forms" records={websiteRows} selectedId={selected?.id ?? null} onSelect={record => void open(record)} />
+                  <IntakeListGroup label="Main website" detail="holistichealthhub.live forms" records={websiteRows} selectedId={selected?.id ?? null} onSelect={record => void open(record)} />
                   <IntakeListGroup label="QR links" detail="Pharmacy dedicated links" records={qrRows} selectedId={selected?.id ?? null} onSelect={record => void open(record)} />
                 </>
               ) : (

@@ -332,7 +332,7 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
               </div>
               <div className="form-grid-two"><label>Main contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Main contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
               <label>Main contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
-              <label>Approved website domain<input className="input" type="text" value={domain} onChange={event => setDomain(event.target.value)} placeholder="pharmacy.cc" /></label>
+              <label>Approved website domain<input className="input" type="text" value={domain} onChange={event => setDomain(event.target.value)} placeholder="pharmacy.co.uk" /></label>
             </section>
 
             <section className="admin-onboard-section">
@@ -516,7 +516,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
               </div>
               <div className="form-grid-two"><label>Main contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Main contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
               <label>Main contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
-              <label>Approved website domains<textarea className="input" value={domains} onChange={event => setDomains(event.target.value)} placeholder={'pharmacy.cc\nanother-domain.cc'} /><small>Enter one domain per line. Protocols and page paths are removed automatically.</small></label>
+              <label>Approved website domains<textarea className="input" value={domains} onChange={event => setDomains(event.target.value)} placeholder={'pharmacy.co.uk\nanother-pharmacy.co.uk'} /><small>Enter one domain per line. Protocols and page paths are removed automatically.</small></label>
               <div className="form-grid-two"><label>Account status<select className="input" value={status === 'intake_live' ? 'onboarding' : status} onChange={event => setStatus(event.target.value as PharmacyTenant['status'])}><option value="onboarding">Onboarding</option>{status === 'live' && <option value="live">Live</option>}<option value="paused">Paused</option></select><small>Onboarding means the workspace is still training. Public intake is already on. Use Go live to unlock the live pharmacy workspace.</small></label></div>
             </section>
 

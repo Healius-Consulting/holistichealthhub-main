@@ -32,7 +32,7 @@ describe('email template renderer', () => {
       firstName: 'Avery',
       pharmacyName: 'Eastwood Health',
       pharmacyPhone: '01522 000 000',
-      pharmacyEmail: 'contact@eastwoodhealthpharmacy.cc',
+      pharmacyEmail: 'contact@eastwoodhealthpharmacy.co.uk',
       pharmacyAddress: 'Nottinghamshire',
     });
     assert.match(rendered.subject, /referred/i);
