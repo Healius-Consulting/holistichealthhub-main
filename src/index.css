@@ -12966,6 +12966,13 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   margin-bottom: 14px;
 }
 
+/* Admin (and any other surface) that puts metrics directly in the summary
+   still gets the same four-up row as Orders, which wraps them in __tiles. */
+.order-crm-summary:has(> .order-crm-metric){
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .order-crm-summary__total{
   margin: 0;
   color: var(--text-tertiary);
@@ -16150,6 +16157,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .patient-crm .order-crm-row__position{ padding-top: 0; }
 
 @media (max-width: 1180px){
+  .order-crm-summary:has(> .order-crm-metric),
   .order-crm-summary__tiles{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .order-crm-workspace{ grid-template-columns: 300px minmax(0, 1fr); }
   .order-crm-record__header{ gap: 12px; padding: 16px; }
@@ -16181,6 +16189,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .patient-crm .order-journey-rail--premium{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .patient-crm .patient-chart-order__open,
   .order-crm-record__actions .btn{ min-height: 44px; }
+  .order-crm-summary:has(> .order-crm-metric),
   .order-crm-summary__tiles{ grid-template-columns: 1fr 1fr; }
   .order-crm-metric{ grid-template-columns: 28px minmax(0, 1fr); min-height: 92px; padding: 11px; }
   .order-crm-metric__icon{ width: 27px; height: 27px; }

@@ -298,10 +298,12 @@ export default function AdminIntakeV2() {
   return (
     <div className="page-body order-crm patient-crm admin-intake-crm">
       <section className="order-crm-summary" aria-label="HHH intake summary">
-        <SummaryMetric label="Open" value={String(allRecords.length)} detail="Enquiries awaiting HHH referral" icon={Inbox} tone="primary" />
-        <SummaryMetric label="Website" value={String(general.length)} detail="Main HHH site forms" icon={Globe} tone="primary" />
-        <SummaryMetric label="QR links" value={String(referrals.length)} detail="Pharmacy dedicated links" icon={QrCode} tone="primary" />
-        <SummaryMetric label="In review" value={String(inProgressCount)} detail="Follow-up due or in progress" icon={ClipboardList} tone="warning" />
+        <div className="order-crm-summary__tiles">
+          <SummaryMetric label="Open" value={String(allRecords.length)} detail="Enquiries awaiting HHH referral" icon={Inbox} tone="primary" />
+          <SummaryMetric label="Website" value={String(general.length)} detail="Main HHH site forms" icon={Globe} tone="primary" />
+          <SummaryMetric label="QR links" value={String(referrals.length)} detail="Pharmacy dedicated links" icon={QrCode} tone="primary" />
+          <SummaryMetric label="In review" value={String(inProgressCount)} detail="Follow-up due or in progress" icon={ClipboardList} tone="warning" />
+        </div>
       </section>
 
       <section className="order-crm-controls">

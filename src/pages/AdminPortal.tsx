@@ -1648,26 +1648,28 @@ export default function AdminPortal() {
     return (
       <div className="page-body order-crm patient-crm admin-overview-crm">
         <section className="order-crm-summary" aria-label="Pharmacy portfolio summary">
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><Building2 size={16} /></span>
-            <span><small>Pharmacies</small><strong>{state.organisations.length}</strong><em>{registeredCount} registered · {trainingCount} testing</em></span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><Users size={16} /></span>
-            <span><small>Patient reach</small><strong>{allPatients.length}</strong><em>Attributed records across the portfolio</em></span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><PoundSterling size={16} /></span>
-            <span>
-              <small>Accrued fees</small>
-              <strong>{financeReady ? referralFeeFormatter.format(portfolioAccrued) : 'Loading'}</strong>
-              <em>{adminFinanceError ? 'Ledger unavailable' : `${firstDispenseCount} first dispenses · £50 + £40 annual`}</em>
-            </span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><UserCheck size={16} /></span>
-            <span><small>Intake queue</small><strong>{pendingAdminDecisions}</strong><em>{pendingAdminDecisions ? 'Decisions waiting on HHH' : 'No pending decisions'}</em></span>
-          </article>
+          <div className="order-crm-summary__tiles">
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><Building2 size={16} /></span>
+              <span><small>Pharmacies</small><strong>{state.organisations.length}</strong><em>{registeredCount} registered · {trainingCount} testing</em></span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><Users size={16} /></span>
+              <span><small>Patient reach</small><strong>{allPatients.length}</strong><em>Attributed records across the portfolio</em></span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><PoundSterling size={16} /></span>
+              <span>
+                <small>Accrued fees</small>
+                <strong>{financeReady ? referralFeeFormatter.format(portfolioAccrued) : 'Loading'}</strong>
+                <em>{adminFinanceError ? 'Ledger unavailable' : `${firstDispenseCount} first dispenses · £50 + £40 annual`}</em>
+              </span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><UserCheck size={16} /></span>
+              <span><small>Intake queue</small><strong>{pendingAdminDecisions}</strong><em>{pendingAdminDecisions ? 'Decisions waiting on HHH' : 'No pending decisions'}</em></span>
+            </article>
+          </div>
         </section>
 
         <section className="order-crm-controls">
@@ -2066,26 +2068,28 @@ export default function AdminPortal() {
     return (
       <div className="page-body order-crm patient-crm admin-register-crm">
         <section className="order-crm-summary" aria-label="Patient register summary">
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><Users size={16} /></span>
-            <span><small>Register</small><strong>{isLocalPortalPreview ? allPatients.length : (serverPatientRegister?.resultCount ?? displayedPatients.length)}</strong><em>{isLocalPortalPreview ? 'Attributed records in this preview' : 'Records in the current server scope'}</em></span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><UserCheck size={16} /></span>
-            <span><small>Active</small><strong>{activeCount}</strong><em>HHH-approved patient records</em></span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><ClipboardCheck size={16} /></span>
-            <span><small>Referred</small><strong>{referredCount}</strong><em>Approved for a destination pharmacy</em></span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><PoundSterling size={16} /></span>
-            <span>
-              <small>Accrued fees</small>
-              <strong>{financeReady ? referralFeeFormatter.format(registerAccrued) : 'Loading'}</strong>
-              <em>{adminFinanceError ? 'Ledger unavailable' : 'First dispense £50 · annual £40'}</em>
-            </span>
-          </article>
+          <div className="order-crm-summary__tiles">
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><Users size={16} /></span>
+              <span><small>Register</small><strong>{isLocalPortalPreview ? allPatients.length : (serverPatientRegister?.resultCount ?? displayedPatients.length)}</strong><em>{isLocalPortalPreview ? 'Attributed records in this preview' : 'Records in the current server scope'}</em></span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><UserCheck size={16} /></span>
+              <span><small>Active</small><strong>{activeCount}</strong><em>HHH-approved patient records</em></span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><ClipboardCheck size={16} /></span>
+              <span><small>Referred</small><strong>{referredCount}</strong><em>Approved for a destination pharmacy</em></span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><PoundSterling size={16} /></span>
+              <span>
+                <small>Accrued fees</small>
+                <strong>{financeReady ? referralFeeFormatter.format(registerAccrued) : 'Loading'}</strong>
+                <em>{adminFinanceError ? 'Ledger unavailable' : 'First dispense £50 · annual £40'}</em>
+              </span>
+            </article>
+          </div>
         </section>
 
         <section className="order-crm-controls">
@@ -2406,38 +2410,40 @@ export default function AdminPortal() {
     return (
       <div className="page-body order-crm patient-crm admin-finance-crm">
         <section className="order-crm-summary" aria-label="Referral finance summary">
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><PoundSterling size={16} /></span>
-            <span>
-              <small>Total accrued</small>
-              <strong>{financeReady ? referralFeeFormatter.format(totalAccrued) : 'Loading'}</strong>
-              <em>{filteredReferralFeeEvents.length} fee event{filteredReferralFeeEvents.length === 1 ? '' : 's'} · {periodLabel}</em>
-            </span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><TrendingUp size={16} /></span>
-            <span>
-              <small>First dispenses</small>
-              <strong>{financeReady ? referralFeeFormatter.format(newReferralEvents.reduce((sum, event) => sum + event.amount, 0)) : 'Loading'}</strong>
-              <em>{newReferralEvents.length} × £50</em>
-            </span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><CheckCircle2 size={16} /></span>
-            <span>
-              <small>Annual fees</small>
-              <strong>{financeReady ? referralFeeFormatter.format(annualEvents.reduce((sum, event) => sum + event.amount, 0)) : 'Loading'}</strong>
-              <em>{annualEvents.length} × £40</em>
-            </span>
-          </article>
-          <article className="order-crm-metric">
-            <span className="order-crm-metric__icon"><Users size={16} /></span>
-            <span>
-              <small>Earning patients</small>
-              <strong>{patientsWithFees}</strong>
-              <em>Patients with accrued fees in this period</em>
-            </span>
-          </article>
+          <div className="order-crm-summary__tiles">
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><PoundSterling size={16} /></span>
+              <span>
+                <small>Total accrued</small>
+                <strong>{financeReady ? referralFeeFormatter.format(totalAccrued) : 'Loading'}</strong>
+                <em>{filteredReferralFeeEvents.length} fee event{filteredReferralFeeEvents.length === 1 ? '' : 's'} · {periodLabel}</em>
+              </span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><TrendingUp size={16} /></span>
+              <span>
+                <small>First dispenses</small>
+                <strong>{financeReady ? referralFeeFormatter.format(newReferralEvents.reduce((sum, event) => sum + event.amount, 0)) : 'Loading'}</strong>
+                <em>{newReferralEvents.length} × £50</em>
+              </span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><CheckCircle2 size={16} /></span>
+              <span>
+                <small>Annual fees</small>
+                <strong>{financeReady ? referralFeeFormatter.format(annualEvents.reduce((sum, event) => sum + event.amount, 0)) : 'Loading'}</strong>
+                <em>{annualEvents.length} × £40</em>
+              </span>
+            </article>
+            <article className="order-crm-metric">
+              <span className="order-crm-metric__icon"><Users size={16} /></span>
+              <span>
+                <small>Earning patients</small>
+                <strong>{patientsWithFees}</strong>
+                <em>Patients with accrued fees in this period</em>
+              </span>
+            </article>
+          </div>
         </section>
 
         <section className="order-crm-controls">
