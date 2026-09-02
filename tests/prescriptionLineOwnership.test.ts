@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { flattenPrescriptionLines } from '../src/pages/create-order/prescriptionLineOwnership.ts';
+import { draftPrescriptionClientKey, flattenPrescriptionLines } from '../src/pages/create-order/prescriptionLineOwnership.ts';
 
 describe('create-order prescription line ownership', () => {
   it('keeps three prescriptions attached to their own pack lines', () => {
@@ -16,6 +16,10 @@ describe('create-order prescription line ownership', () => {
       { packId: 'pack-c', quantity: 3, localPrescriptionId: '103' },
     ]);
     assert.deepEqual(lines.map(line => line.localPrescriptionId), ['101', '102', '103']);
+    assert.deepEqual(
+      lines.map(line => line.localPrescriptionId),
+      [{ id: 101 }, { id: 102 }, { id: 103 }].map(draftPrescriptionClientKey),
+    );
   });
 
   it('preserves the single-prescription payload shape', () => {

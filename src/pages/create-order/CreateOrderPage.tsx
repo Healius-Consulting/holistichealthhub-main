@@ -37,7 +37,7 @@ import { canCreateOrderForPatient } from '../../utils/patientOrderEligibility';
 import { quoteMedicineTotalPence } from '../../utils/pricing';
 import { MAX_PRESCRIPTION_FILE_BYTES, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
 import { draftAllowsAdditionalPrescriptions } from '../../utils/replacementPrescriptionCopy';
-import { flattenPrescriptionLines } from './prescriptionLineOwnership';
+import { draftPrescriptionClientKey, flattenPrescriptionLines } from './prescriptionLineOwnership';
 
 function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
   if (reason === 'SERIAL_IN_USE') return 'This prescription serial is already on another live order.';
@@ -659,7 +659,7 @@ export default function CreateOrderPage() {
           } : undefined,
           lineItems,
           prescriptions: activeOrder.prescriptions.map(rx => ({
-            clientKey: String(rx.id),
+            clientKey: draftPrescriptionClientKey(rx),
             fileId: rx.fileId!,
             clinicScanId: rx.clinicScanId,
             curaleafPrescriptionId: rx.curaleafPrescriptionId,

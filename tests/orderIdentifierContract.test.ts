@@ -21,8 +21,16 @@ test('the general order contract does not alias order identity as payment identi
 });
 
 test('new prescription payloads name their temporary identity explicitly', () => {
-  assert.match(createOrder, /clientKey:\s*String\(rx\.id\)/);
+  assert.match(createOrder, /clientKey:\s*draftPrescriptionClientKey\(rx\)/);
   assert.doesNotMatch(createOrder, /prescriptions:\s*activeOrder\.prescriptions\.map[\s\S]{0,100}id:\s*String\(rx\.id\)/);
   assert.match(contracts, /clientKey\?: string/);
   assert.match(contracts, /hhhPrescriptionId\?: string/);
+});
+
+test('order line ownership matches prescriptions by clientKey, not array index', () => {
+  const ownership = readFileSync(new URL('../services/api-sql/src/application/prescriptions/order-line-ownership.ts', import.meta.url), 'utf8');
+  assert.match(ownership, /clientKey/);
+  assert.match(ownership, /localPrescriptionId/);
+  assert.doesNotMatch(ownership, /rx\.id \|\| index/);
+  assert.match(createOrder, /clientKey:\s*draftPrescriptionClientKey\(rx\)/);
 });

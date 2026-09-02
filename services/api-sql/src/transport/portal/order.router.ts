@@ -66,7 +66,7 @@ import {
 } from '../../application/prescriptions/serial-reuse.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 import { SqlPrescriptionSerialRepository } from '../../repositories/sql/serial-use.sql.js';
-import { prescriptionOwnershipError } from '../../application/prescriptions/order-line-ownership.js';
+import { prescriptionCorrelationKey, prescriptionOwnershipError } from '../../application/prescriptions/order-line-ownership.js';
 import { curaleafSubOrders, snapshotRxKey, snapshotRxList } from '../../application/prescriptions/snapshot-rx.js';
 
 const UUID_LIKE = /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i;
@@ -613,7 +613,7 @@ export function createPortalOrderRouter(): Router {
         const rxSqlIds = new Map<string, string>();
         const today = new Date().toISOString().slice(0, 10);
         for (const [index, rx] of input.prescriptions.entries()) {
-          const localKey = String(rx.clientKey || rx.id || index);
+          const localKey = prescriptionCorrelationKey(rx, index);
           const serial = normalizeSerialNumber(rx.serialNumber);
           const issueDate = String(rx.issueDate || '').slice(0, 10) || today;
           const expiryDate = String(rx.expiryDate || '').slice(0, 10) || plusDaysIso(issueDate, 28);
@@ -658,7 +658,7 @@ export function createPortalOrderRouter(): Router {
           ...(quoteSnapshot && typeof quoteSnapshot === 'object' ? quoteSnapshot as Record<string, unknown> : {}),
           prescriptions: input.prescriptions.map((rx, index) => ({
             ...rx,
-            hhhPrescriptionId: rxSqlIds.get(String(rx.clientKey || rx.id || index)) ?? null,
+            hhhPrescriptionId: rxSqlIds.get(prescriptionCorrelationKey(rx, index)) ?? null,
             id: undefined,
           })),
         };
@@ -669,7 +669,7 @@ export function createPortalOrderRouter(): Router {
         });
 
         await orderLineRepo.replaceOrderLines(result.id, authoritativeLineItems.map(item => {
-          const localKey = String(item.localPrescriptionId || '');
+          const localKey = String(item.localPrescriptionId || '').trim();
           const onlyId = rxSqlIds.size === 1 ? [...rxSqlIds.values()][0] : null;
           return {
             orderId: result.id as string,
