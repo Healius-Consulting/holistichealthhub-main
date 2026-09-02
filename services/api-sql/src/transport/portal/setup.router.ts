@@ -12,6 +12,7 @@ import {
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { canAcceptPublicIntake } from '../../domain/organisation/access.js';
+import { isTrainingDirectoryOrganisation } from '../../domain/organisation/training-directory.js';
 import {
   buildGoLiveReadinessView,
   buildSetupStatusView,
@@ -471,8 +472,8 @@ export function createPortalSetupRouter(): Router {
       const organisationId = organisationIdSchema.parse(req.params.id);
       const organisation = await organisationRepo.findOrganisationById(organisationId);
       if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
-      if (organisation.classification === 'TRAINING') {
-        throw new HttpError(409, 'Training accounts cannot accept public patient intake.', 'INTAKE_LIVE_GATE_INCOMPLETE');
+      if (isTrainingDirectoryOrganisation(organisation)) {
+        throw new HttpError(409, 'Training example pharmacies cannot accept public patient intake.', 'INTAKE_LIVE_GATE_INCOMPLETE');
       }
       if (organisation.status === 'PAUSED' || organisation.archivedAt) {
         throw new HttpError(409, 'Unpause this pharmacy before turning the eligibility link on.', 'INTAKE_LIVE_GATE_INCOMPLETE');

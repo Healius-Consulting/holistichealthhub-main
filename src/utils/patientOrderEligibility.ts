@@ -6,7 +6,7 @@ export function canCreateOrderForPatient<T extends { status: OrderPatientStatus 
   return patient?.status === 'Referred' || patient?.status === 'HHH approved';
 }
 
-/** Pre-live workspaces may only attach local training drafts, not real referred patients. */
+/** Pre-live workspaces may only attach local training drafts, not real referred patients. Test and Live attach the pharmacy's own patients. */
 export function canLinkPatientOnOrderDraft<T extends {
   status: OrderPatientStatus;
   referralSource?: string | null;

@@ -7,7 +7,7 @@ Read this register before changing any pharmacy-facing screen. “Fixed” items
 | Item | Audience / access | Data class and source | Status | Interaction / audit | Required states and access behaviour |
 |---|---|---|---|---|---|
 | Sign-in, verified-email and TOTP enrol/challenge | Invited active staff; unauthenticated until exchange | Identity; Firebase Auth and `/v1/auth/*` | Fixed | Session create/logout; security event | Loading, generic denial, locked/disabled, offline; keyboard-complete and screen-reader-labelled |
-| Pharmacy identity and live/training/paused state | Authenticated pharmacy tenant | Tenant-confidential; session and Overview | Fixed | Read-only | Never hidden; text plus colour/icon; stacks at 360px |
+| Pharmacy identity and live/test/training/paused state | Authenticated pharmacy tenant | Tenant-confidential; session and Overview | Fixed | Read-only | Never hidden; text plus colour/icon; stacks at 360px |
 | Staff identity, role, session warning, sign-out | Authenticated staff | Identity; server session | Fixed | Activity/logout are CSRF protected and audited | Warning at 13 minutes; focus moves to warning; tab-synchronised lock |
 | Tenant-aware navigation | Authenticated pharmacy tenant | Tenant-confidential; server session | Fixed | Navigation only | Consistent order and labels; visible focus; mobile drawer traps and restores focus |
 | Content status, errors, stale and permission denial | Authenticated staff | Depends on view | Fixed meaning, flexible placement | Retry is read-only | Never colour-only; live region where appropriate; no sensitive toast text |
@@ -38,7 +38,7 @@ Read this register before changing any pharmacy-facing screen. “Fixed” items
 ## Forbidden patterns
 
 - Patient/contact/prescription data in URLs, analytics, browser storage, logs, or toast messages.
-- Hidden tenant identity or ambiguous live/training/paused state.
+- Hidden tenant identity or ambiguous live/test/training/paused state.
 - Client-only clinical, prescription, refund, payment, reminder, or messaging mutations.
 - Colour-only status, invisible focus, obscured focus, or motion required to understand state.
 - Production query parameters that switch portal, tenant, catalogue, admin, or authentication mode.

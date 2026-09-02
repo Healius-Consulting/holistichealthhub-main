@@ -29,7 +29,7 @@ import {
   type PatientOrder,
   type UnresolvedOrderReason,
 } from '../../context/AppContext';
-import { TRAINING_PRESCRIBER, TRAINING_PRODUCT } from '../../training/workspace';
+import { TRAINING_PRESCRIBER, TRAINING_PRODUCT, isOpenPharmacyWorkspace } from '../../training/workspace';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 import { ApiRequestError, checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
 import { curaleafPlacementUnlocked, snapshotQuoteFromCatalogue } from '../../utils/curaleafPlacement';
@@ -59,14 +59,14 @@ function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
 export default function CreateOrderPage() {
   const { state, dispatch } = useApp();
   const organisationPatients = state.crm.filter(candidate => candidate.organisationId === state.currentOrganisationId);
-  const liveWorkspace = isLocalPortalPreview || state.workspaceMode === 'live';
+  const openWorkspace = isLocalPortalPreview || isOpenPharmacyWorkspace(state.workspaceMode);
   const placementUnlocked = curaleafPlacementUnlocked({
     workspaceMode: state.workspaceMode,
     localPreview: isLocalPortalPreview,
     catalogueSource: state.catalogueSource,
     catalogueEnvironment: state.catalogueEnvironment,
   });
-  const orderablePatients = organisationPatients.filter(patient => canLinkPatientOnOrderDraft(patient, liveWorkspace));
+  const orderablePatients = organisationPatients.filter(patient => canLinkPatientOnOrderDraft(patient, openWorkspace));
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const canUseWorldpay = organisation?.worldpay.status === 'connected';
   const worldpayStatusReady = Boolean(organisation?.worldpay.lastSyncedAt);
@@ -106,7 +106,7 @@ export default function CreateOrderPage() {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [serialByRxId, setSerialByRxId] = useState<Record<number, { allowed: boolean; reason: string | null; pending: boolean }>>({});
   const [confirmingRemoveRxId, setConfirmingRemoveRxId] = useState<number | null>(null);
-  const durableDraftEnabled = isApiConfigured && !isLocalPortalPreview && state.workspaceMode === 'live';
+  const durableDraftEnabled = isApiConfigured && !isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode);
   const durableDraftPayload = useMemo(() => activeOrder ? {
     localOrderId: activeOrder.id,
     patientId: activeOrder.patientId,
@@ -307,7 +307,7 @@ export default function CreateOrderPage() {
   const serialAvailability = selectedRx
     ? serialByRxId[selectedRx.id] ?? { allowed: false, reason: null, pending: false }
     : { allowed: false, reason: null, pending: false };
-  const requiresLiveCuraleafEvidence = state.workspaceMode === 'live' && !isLocalPortalPreview;
+  const requiresLiveCuraleafEvidence = isOpenPharmacyWorkspace(state.workspaceMode) && !isLocalPortalPreview;
   const hasPrescriptionRecords = Boolean(activeOrder?.prescriptions.length);
   const allManualSerialsAllowed = !activeOrder || activeOrder.prescriptions.every(rx => {
     if (rx.entryMode !== 'manual') return true;
@@ -583,7 +583,7 @@ export default function CreateOrderPage() {
   };
 
   const readClinicBarcode = async (rxId: number, fileId: string) => {
-    if (!activeOrder || isLocalPortalPreview || state.workspaceMode !== 'live') return;
+    if (!activeOrder || isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode)) return;
     setReadingRxId(rxId);
     setScanError(null);
     try {
@@ -646,7 +646,7 @@ export default function CreateOrderPage() {
     if (!activeOrder || !patient || !readyForPayment || !placementUnlocked) return;
     setCheckoutBusy(true);
     try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live') {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
         if (!quoteAvailable) throw new Error('A complete in-stock Curaleaf quote is required before creating the live order.');
         const pricingQuote = latestQuote;
         const quoteItems = Array.isArray(pricingQuote?.items) ? pricingQuote.items : [];
@@ -797,7 +797,7 @@ export default function CreateOrderPage() {
     if (!activeOrder) return;
     const prescription = activeOrder.prescriptions.find(candidate => candidate.id === rxId);
     if (!prescription) return;
-    if (isLocalPortalPreview || state.workspaceMode !== 'live') {
+    if (isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode)) {
       if (prescription.entryMode === 'manual') {
         dispatch({ type: 'SET_RX_FILE', orderId: activeOrder.id, rxId, fileName: file.name, fileId: `training-file-${activeOrder.id}-${rxId}` });
         dispatch({ type: 'ADD_TOAST', message: 'Manual prescription attached for training. Nothing was uploaded.', toastType: 'info' });
@@ -851,7 +851,7 @@ export default function CreateOrderPage() {
     if (!prescription?.copyFileName) return;
     setFileRemovalBusyRxId(rxId);
     try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live' && prescription.fileId) {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && prescription.fileId) {
         const draftId = await ensureDurableDraft(activeOrder, durableDraftPayload ?? {});
         const prescriptions = activeOrder.prescriptions.map(candidate => candidate.id === rxId
           ? { ...candidate, copyFileName: null, fileId: null, clinicScanId: undefined, curaleafPrescriptionId: undefined }
@@ -1113,7 +1113,7 @@ export default function CreateOrderPage() {
                   <span><strong>{candidate.name}</strong><small className="rx-patient-result__dob">DOB {formatPatientDob(candidate.dob)}</small><small>{candidate.email} · {candidate.mobile}</small></span>
                   {candidate.id === patient?.id ? <em>Current</em> : null}
                 </button>
-              )) : <span className="rx-patient-results__empty">{orderablePatients.length ? `No approved patients match “${patientQuery.trim()}”.` : isLocalPortalPreview ? 'Training patients did not load. Keep ?devPortal=pharmacy in the address bar and refresh.' : !liveWorkspace ? 'Orders unlock after HHH flips this pharmacy live. Referred patients stay on Patients until then.' : 'No approved patients are available to link in this pharmacy.'}</span>}
+              )) : <span className="rx-patient-results__empty">{orderablePatients.length ? `No approved patients match “${patientQuery.trim()}”.` : isLocalPortalPreview ? 'Training patients did not load. Keep ?devPortal=pharmacy in the address bar and refresh.' : !openWorkspace ? 'Orders unlock after HHH opens this pharmacy as Test or Live. Referred patients stay on Patients until then.' : 'No approved patients are available to link in this pharmacy.'}</span>}
             </div>
           ) : null}
         </div>

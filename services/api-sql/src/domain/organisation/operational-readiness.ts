@@ -2,6 +2,7 @@ import type { IntegrationConnectionRecord } from '../../repositories/ports/integ
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
 import type { OrganisationRecord, SetupTaskRecord } from '../../repositories/ports/organisation.port.js';
 import { canAcceptPublicIntake, pharmacyWorkspaceMode } from './access.js';
+import { isTrainingDirectoryOrganisation } from './training-directory.js';
 
 const SETUP_TASK_IDS = [
   'pharmacy_profile',
@@ -17,7 +18,7 @@ export type SetupTaskId = typeof SETUP_TASK_IDS[number];
 
 export interface PharmacyOperationalStatus {
   intake: { live: boolean; label: 'Live' | 'Off' };
-  workspace: { mode: 'training' | 'live' | 'paused'; label: 'Training' | 'Live' | 'Paused' };
+  workspace: { mode: 'training' | 'test' | 'live' | 'paused'; label: 'Training' | 'Test' | 'Live' | 'Paused' };
   staff: { activeCount: number; invitedCount: number; passed: boolean; label: string };
   curaleaf: { connected: boolean; production: boolean; label: 'Waiting' | 'Test' | 'Production' };
   payment: { route: 'manual' | 'worldpay'; worldpayConnected: boolean; passed: boolean; label: string };
@@ -85,6 +86,7 @@ function connectionActive(connection: IntegrationConnectionRecord | null | undef
 
 function workspaceLabel(mode: PharmacyOperationalStatus['workspace']['mode']): PharmacyOperationalStatus['workspace']['label'] {
   if (mode === 'live') return 'Live';
+  if (mode === 'test') return 'Test';
   if (mode === 'paused') return 'Paused';
   return 'Training';
 }
@@ -113,10 +115,10 @@ export function buildOperationalStatus(input: {
   const invitedCount = invitedStaff.length;
   const staffPassed = activeCount >= 2;
   const intakeLive = canAcceptPublicIntake(input.organisation);
-  const workspaceMode = pharmacyWorkspaceMode(input.organisation);
+  const workspaceMode = pharmacyWorkspaceMode(input.organisation, { curaleafProduction });
   const missingGates: string[] = [];
   if (workspaceMode === 'paused') missingGates.push('paused');
-  if (input.organisation.classification === 'TRAINING') missingGates.push('training_tenant');
+  if (isTrainingDirectoryOrganisation(input.organisation)) missingGates.push('training_tenant');
   if (!intakeCall) missingGates.push('intake_call');
 
   return {
@@ -209,7 +211,7 @@ export function buildGoLiveReadinessView(input: {
   operational: PharmacyOperationalStatus;
   curaleaf: IntegrationConnectionRecord | null;
 }): GoLiveReadinessView {
-  const testAccount = input.organisation.classification === 'TRAINING';
+  const testAccount = isTrainingDirectoryOrganisation(input.organisation);
   const allocationHolding = input.organisation.classification === 'ALLOCATION_HOLDING';
   const secretStored = Boolean(input.curaleaf?.secretResourceName);
   const environment = input.curaleaf?.environment === 'TEST' ? 'test' as const : 'production' as const;
@@ -249,7 +251,7 @@ export function buildGoLiveReadinessView(input: {
 
 export function goLiveBlockedMessage(operational: PharmacyOperationalStatus): string {
   if (operational.missingGates.includes('training_tenant')) {
-    return 'Training tenants cannot be flipped to a live pharmacy workspace.';
+    return 'Training example pharmacies cannot be flipped to Test or Live.';
   }
   if (operational.missingGates.includes('paused')) {
     return 'Unpause this pharmacy before flipping the workspace to live.';
@@ -261,7 +263,7 @@ export function goLiveBlockedMessage(operational: PharmacyOperationalStatus): st
 }
 
 export const GO_LIVE_CURALEAF_TEST_ACK =
-  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Manage → Curaleaf.';
+  'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Manage → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
 
 export function goLiveRequiresCuraleafTestAcknowledgement(operational: PharmacyOperationalStatus): boolean {
   return !operational.curaleaf.production;

@@ -69,7 +69,7 @@ function quoteStatusLine(input: {
     quoteCheckedAt,
     currentQuoteItemsCount,
   } = input;
-  const label = paymentPreview || workspaceMode === 'training' ? 'Curaleaf test catalogue' : 'Curaleaf quote';
+  const label = paymentPreview || workspaceMode === 'training' ? 'Curaleaf test catalogue' : workspaceMode === 'test' ? 'Curaleaf test quote' : 'Curaleaf quote';
 
   if (quoteAvailable) {
     const parts = paymentPreview ? [`${label} prices`] : [`${label} verified`];

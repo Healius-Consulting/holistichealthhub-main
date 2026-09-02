@@ -12,6 +12,7 @@ import {
 } from '../../application/orders/curaleaf-fulfilment.js';
 import { parseQuote, type ParsedQuote, type ParsedQuoteItem } from '../../application/orders/quote-review.js';
 import { curaleafRequiresSupplierCancel, supplierCancellationAlreadyConfirmed } from '../../application/integrations/curaleaf-events.js';
+import { isTrainingDirectoryOrganisation } from '../../domain/organisation/training-directory.js';
 import { organisationAddressSummary } from '../../repositories/ports/directory.port.js';
 import type { OrderDraftRecord, OrderRecord } from '../../repositories/ports/order.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
@@ -1053,7 +1054,7 @@ export function buildSqlPharmacyOverview(params: {
       id: organisation.id,
       tradingName: organisation.tradingName,
       status: portalAccountStatus(organisation.status),
-      trainingMode: organisation.classification === 'TRAINING',
+      trainingMode: isTrainingDirectoryOrganisation(organisation),
       allocationHoldingMode: organisation.classification === 'ALLOCATION_HOLDING',
     },
     enquiries: {

@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { getPharmacyOverview } from '../shared/api';
 import type { PharmacyOverview as PharmacyOverviewContract } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { sandboxOverviewForOrganisation, usesSandboxDummyPack } from '../training/workspace';
+import { pharmacyWorkspaceStatusLabel, sandboxOverviewForOrganisation, usesSandboxDummyPack } from '../training/workspace';
 
 type PriorityItem = PharmacyOverviewContract['priorityItems'][number];
 type PriorityKind = PriorityItem['kind'];
@@ -176,8 +176,8 @@ export default function PharmacyOverview() {
           <p className="sr-only">Authenticated pharmacy workspace</p>
           <h1>{overview.organisation.tradingName}</h1>
           <div className="secure-overview__identity">
-            <span className={`status-badge status-badge--${state.workspaceMode === 'live' ? 'live' : 'training'}`}>
-              {state.workspaceMode === 'live' ? 'Live' : 'Training'}
+            <span className={`status-badge status-badge--${state.workspaceMode}`}>
+              {pharmacyWorkspaceStatusLabel(state.workspaceMode)}
             </span>
             {state.organisations.find(org => org.id === state.currentOrganisationId)?.status === 'paused' ? (
               <span className="status-badge status-badge--paused">Paused</span>

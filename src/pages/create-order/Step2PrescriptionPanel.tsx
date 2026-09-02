@@ -3,6 +3,7 @@ import ManualPrescriptionEditor from '../../components/ManualPrescriptionEditor'
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
 import type { CatalogueItem, LineItem, Prescription } from '../../context/AppContext';
 import { PRESCRIPTION_FILE_ACCEPT } from '../../utils/prescriptionFile';
+import { isOpenPharmacyWorkspace } from '../../training/workspace';
 import type { RxSubStep } from './types';
 
 type Step2PrescriptionPanelProps = {
@@ -134,7 +135,7 @@ export default function Step2PrescriptionPanel({
                 <span><strong>{uploadingRxId === selectedRx.id ? 'Uploading securely…' : readingRxId === selectedRx.id ? 'Curaleaf is reading its barcode…' : selectedRx.copyFileName ?? (selectedRx.entryMode === 'manual' ? 'Attach signed prescription' : 'Attach barcode prescription')}</strong><small>{selectedRx.clinicScanId ? 'Barcode verified and linked to this prescription' : selectedRx.fileId ? 'Uploaded and server-verified' : 'PDF, JPG or PNG · maximum 16 MB'}</small></span>
               </label>
             )}
-            {selectedRx.entryMode === 'clinic' && workspaceMode === 'live' && !isLocalPreview && selectedRx.fileId && !selectedRx.clinicScanId && readingRxId !== selectedRx.id ? (
+            {selectedRx.entryMode === 'clinic' && isOpenPharmacyWorkspace(workspaceMode) && !isLocalPreview && selectedRx.fileId && !selectedRx.clinicScanId && readingRxId !== selectedRx.id ? (
               <button type="button" className="btn btn-sm rx-scan-retry" onClick={onRetryBarcode}><RefreshCw size={13} /> Check barcode again</button>
             ) : null}
             {selectedRx.copyFileName ? (

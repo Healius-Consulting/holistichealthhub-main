@@ -46,6 +46,7 @@ import {
   type Prescription,
 } from '../context/AppContext';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { isOpenPharmacyWorkspace } from '../training/workspace';
 import { ApiRequestError, confirmPortalOrderRefund, createPortalOrderRefund, getPrescriptionFileDownloadUrl, handoutPortalOrder, placePrescriptionManually, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
 import { isPersistedPrescriptionFileId, orderPrescriptionCopyViewable } from '../utils/prescriptionFile';
 import { compactPatientName } from '../utils/patientName';
@@ -615,7 +616,7 @@ export default function Orders() {
     if (cancellationBusyOrderId) return;
     setCancellationBusyOrderId(order.id);
     try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live' && order.backendId) {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
         const result = await requestPortalOrderCancellation(order.backendId, {
           organisationId: state.currentOrganisationId,
           reason: 'other',
@@ -637,7 +638,7 @@ export default function Orders() {
 
   const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'refresh') => {
     if (quoteReviewBusyOrderId) return;
-    const trainingLocal = isLocalPortalPreview || state.workspaceMode !== 'live' || !order.backendId;
+    const trainingLocal = isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId;
     if (trainingLocal) {
       const review = order.quoteReview;
       if (action === 'refresh') {
@@ -691,7 +692,7 @@ export default function Orders() {
     if (order.refund || refundBusyOrderId) return;
     setRefundBusyOrderId(order.id);
     try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live' && order.backendId) {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
         const refund = await createPortalOrderRefund(order.backendId, { organisationId: state.currentOrganisationId, reason: 'patient_cancelled', resolution: 'cancel' });
         dispatch({ type: 'SET_ORDER_REFUND', orderId: order.id, refund });
       } else {
@@ -709,7 +710,7 @@ export default function Orders() {
     setRefundBusyOrderId(order.id);
     try {
       let recordedStatus: NonNullable<PatientOrder['refund']>['status'] = 'completed';
-      if (!isLocalPortalPreview && state.workspaceMode === 'live' && order.backendId) {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
         const refund = await confirmPortalOrderRefund(order.backendId, order.refund.id, { organisationId: state.currentOrganisationId, externalReference });
         recordedStatus = refund.status;
         dispatch({ type: 'SET_ORDER_REFUND', orderId: order.id, refund });
@@ -760,7 +761,7 @@ export default function Orders() {
     if (!form.confirmed) return;
     setSubmittingOrderId(order.id);
     try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live') {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
         if (!order.backendId) throw new Error('This order has not finished saving. Refresh and try again.');
         if (!form.reference.trim()) throw new Error('Enter the pharmacy receipt reference before recording a live payment.');
         const tender = ({ 'epos-card': 'epos', cash: 'cash', 'bank-transfer': 'bank_transfer', other: 'other' } as const)[form.tender];
@@ -817,7 +818,7 @@ export default function Orders() {
     }
     setFulfilmentBusyRxId(prescription.id);
     try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live') {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
         const targetShipmentId = shipmentId ?? prescription.shipmentId ?? prescription.shipmentIds?.[0];
         if (!targetShipmentId || !order.backendId) {
           throw new Error('This consignment is not linked to the order yet. Refresh and try again.');
@@ -868,7 +869,7 @@ export default function Orders() {
     }
     setHandoutBusy(true);
     try {
-      if (!isLocalPortalPreview && state.workspaceMode === 'live') {
+      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
         if (!order.backendId) throw new Error('This order has not finished saving. Refresh and try again.');
         await handoutPortalOrder(order.backendId, {
           organisationId: state.currentOrganisationId,
@@ -896,7 +897,7 @@ export default function Orders() {
   };
 
   const handlePaymentLinkResend = async (order: PatientOrder) => {
-    if (isLocalPortalPreview || state.workspaceMode !== 'live' || !order.backendId || paymentLinkBusyOrderId) return;
+    if (isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId || paymentLinkBusyOrderId) return;
     setPaymentLinkBusyOrderId(order.id);
     try {
       const session = await resendWorldpayPaymentLink(order.backendId, { organisationId: state.currentOrganisationId });
@@ -910,7 +911,7 @@ export default function Orders() {
   };
 
   const handleManualPlace = async (order: PatientOrder, prescription: Prescription) => {
-    if (isLocalPortalPreview || state.workspaceMode !== 'live' || !order.backendId || !prescription.backendId) return;
+    if (isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId || !prescription.backendId) return;
     setFulfilmentBusyRxId(prescription.id);
     try {
       await placePrescriptionManually(order.backendId, prescription.backendId, state.currentOrganisationId);

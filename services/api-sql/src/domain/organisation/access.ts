@@ -1,7 +1,7 @@
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
 import { isTrainingDirectoryOrganisation } from './training-directory.js';
 
-export type PharmacyWorkspaceMode = 'training' | 'live' | 'paused';
+export type PharmacyWorkspaceMode = 'training' | 'test' | 'live' | 'paused';
 
 function isTrainingGphc(organisation: Pick<OrganisationRecord, 'gphcNumber'>): boolean {
   return /^TRAINING-[A-Z0-9_-]+$/i.test(organisation.gphcNumber ?? '');
@@ -10,7 +10,7 @@ function isTrainingGphc(organisation: Pick<OrganisationRecord, 'gphcNumber'>): b
 /** Public eligibility token and HHH intake queue — independent of pharmacy operational access. */
 export function canAcceptPublicIntake(organisation: OrganisationRecord | null | undefined): boolean {
   if (!organisation || organisation.archivedAt) return false;
-  if (organisation.classification === 'TRAINING') return false;
+  if (isTrainingDirectoryOrganisation(organisation)) return false;
   if (!organisation.intakeEnabled) return false;
   if (organisation.status === 'PAUSED') return false;
   if (isTrainingGphc(organisation)) return organisation.status === 'LIVE';
@@ -22,12 +22,12 @@ export function canReceiveReferral(organisation: OrganisationRecord | null | und
   return canAcceptPublicIntake(organisation);
 }
 
-/** Pharmacy CRM, orders, and production writes. Training stays false until LIVE. Paused keeps existing records. */
+/** Pharmacy CRM, orders, and writes. Dummy directory pharmacies stay false. Test and Live both qualify once flipped. Paused keeps existing records. */
 export function pharmacyOperationalAccess(organisation: OrganisationRecord | null | undefined): boolean {
   return Boolean(
     organisation
     && !organisation.archivedAt
-    && organisation.classification !== 'TRAINING'
+    && !isTrainingDirectoryOrganisation(organisation)
     && (organisation.status === 'LIVE' || organisation.status === 'PAUSED'),
   );
 }
@@ -53,10 +53,14 @@ export function canActivateReferredPatient(organisation: OrganisationRecord | nu
   return pharmacyIntakeDirectoryAccess(organisation);
 }
 
-export function pharmacyWorkspaceMode(organisation: OrganisationRecord | null | undefined): PharmacyWorkspaceMode {
+export function pharmacyWorkspaceMode(
+  organisation: OrganisationRecord | null | undefined,
+  extras?: { curaleafProduction?: boolean },
+): PharmacyWorkspaceMode {
   if (!organisation || organisation.archivedAt || organisation.status === 'PAUSED') return 'paused';
-  if (organisation.classification === 'ALLOCATION_HOLDING') return 'live';
-  if (organisation.classification === 'TRAINING') return 'training';
-  if (organisation.status === 'LIVE') return 'live';
-  return 'training';
+  if (isTrainingDirectoryOrganisation(organisation)) return 'training';
+  const flipped = organisation.status === 'LIVE' || organisation.classification === 'ALLOCATION_HOLDING';
+  if (!flipped) return 'training';
+  if (extras?.curaleafProduction === true) return 'live';
+  return 'test';
 }

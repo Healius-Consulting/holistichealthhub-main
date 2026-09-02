@@ -13,7 +13,7 @@ import { updatePatientConditions } from '../shared/api';
 import MedicineLabel from '../components/MedicineLabel';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { isTrainingSandboxPatient } from '../training/workspace';
+import { isOpenPharmacyWorkspace, isTrainingSandboxPatient } from '../training/workspace';
 import { isNegativeEligibilityStatus, pharmacyDecisionReason } from '../utils/eligibilityPresentation';
 import {
   derivePatientJourneyStage,
@@ -449,8 +449,8 @@ export default function Patients() {
   const handleCreateOrder = (patient: UnifiedPatient) => {
     const crmPatient = patient.crmPatient;
     const trainingDraft = Boolean(crmPatient && isTrainingSandboxPatient(crmPatient));
-    if (!isLocalPortalPreview && state.workspaceMode !== 'live' && !trainingDraft) {
-      dispatch({ type: 'ADD_TOAST', message: 'Orders unlock after HHH flips this workspace live.', toastType: 'warning' });
+    if (!isLocalPortalPreview && !isOpenPharmacyWorkspace(state.workspaceMode) && !trainingDraft) {
+      dispatch({ type: 'ADD_TOAST', message: 'Orders unlock after HHH opens this pharmacy as Test or Live.', toastType: 'warning' });
       return;
     }
     if (!canCreateOrderForPatient(crmPatient)) {
@@ -569,7 +569,7 @@ export default function Patients() {
           {selected.patient ? (
             <PatientCrmDetail
               record={selected}
-              workspaceLive={isLocalPortalPreview || state.workspaceMode === 'live'}
+              workspaceLive={isLocalPortalPreview || isOpenPharmacyWorkspace(state.workspaceMode)}
               trainingDraft={Boolean(selected.patient.crmPatient && isTrainingSandboxPatient(selected.patient.crmPatient))}
               onCreateOrder={() => handleCreateOrder(selected.patient!)}
               onConditionsSaved={(patientId, conditions, primaryCondition) => {

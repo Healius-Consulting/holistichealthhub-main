@@ -68,7 +68,7 @@ describe('operational readiness', () => {
     assert.deepEqual(operational.missingGates, ['intake_call']);
   });
 
-  it('blocks go-live while paused or classified as a training tenant', () => {
+  it('blocks go-live while paused or on a dummy training pharmacy', () => {
     const paused = buildOperationalStatus({
       organisation: { ...organisation, status: 'PAUSED' },
       tasks: loggedGoLiveTasks(),
@@ -81,7 +81,7 @@ describe('operational readiness', () => {
     assert.equal(goLiveBlockedMessage(paused), 'Unpause this pharmacy before flipping the workspace to live.');
 
     const training = buildOperationalStatus({
-      organisation: { ...organisation, classification: 'TRAINING' },
+      organisation: { ...organisation, id: '70913a30-71c3-4a41-952e-d532927af58c' },
       tasks: loggedGoLiveTasks(),
       staff: [staff('ACTIVE', 'owner')],
       curaleaf: connection('CURALEAF', 'ACTIVE'),
@@ -89,6 +89,28 @@ describe('operational readiness', () => {
     });
     assert.equal(training.goLiveReady, false);
     assert.ok(training.missingGates.includes('training_tenant'));
+    assert.equal(goLiveBlockedMessage(training), 'Training example pharmacies cannot be flipped to Test or Live.');
+  });
+
+  it('lets a classified test pharmacy go live on Curaleaf sandbox keys', () => {
+    const operational = buildOperationalStatus({
+      organisation: { ...organisation, classification: 'TRAINING' },
+      tasks: loggedGoLiveTasks(),
+      staff: [staff('ACTIVE', 'owner')],
+      curaleaf: connection('CURALEAF', 'ACTIVE', 'TEST'),
+      worldpay: null,
+    });
+    assert.equal(operational.goLiveReady, true);
+    assert.equal(operational.workspace.mode, 'training');
+    const liveTest = buildOperationalStatus({
+      organisation: { ...organisation, classification: 'TRAINING', status: 'LIVE' },
+      tasks: loggedGoLiveTasks(),
+      staff: [staff('ACTIVE', 'owner')],
+      curaleaf: connection('CURALEAF', 'ACTIVE', 'TEST'),
+      worldpay: null,
+    });
+    assert.equal(liveTest.workspace.mode, 'test');
+    assert.equal(liveTest.workspace.label, 'Test');
   });
 
   it('does not treat Worldpay as a go-live blocker', () => {

@@ -5,7 +5,7 @@ import type { CuraleafCancellationState, OrderCancellationState, OrderDraftRecor
 import { activeRedoPriceResolution, isTrainingDirectoryPharmacy } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
-import { ORGANISATIONS, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace } from '../training/workspace';
+import { ORGANISATIONS, isOpenPharmacyWorkspace, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace } from '../training/workspace';
 import { parseCatalogueCache, serialiseCatalogueCache, shouldDiscardCatalogueCache } from '../utils/catalogueCache';
 import { curaleafCatalogueEstate, type CuraleafCatalogueEstate } from '../utils/catalogueEstate';
 import { CATALOGUE_TTL_MS, catalogueIsStale } from '../utils/catalogueFreshness';
@@ -417,7 +417,7 @@ export type NavigationTarget =
   | null;
 
 export type PortalMode = 'gateway' | 'admin' | 'clinician';
-export type WorkspaceMode = 'training' | 'live';
+export type WorkspaceMode = 'training' | 'test' | 'live';
 
 export interface StaffSession {
   email: string;
@@ -1420,21 +1420,35 @@ function reducer(state: AppState, action: Action): AppState {
           nextIds: training.nextIds,
         };
       }
-      if (state.workspaceMode === action.mode) return state;
-      return {
-        ...state,
-        workspaceMode: action.mode,
-        currentOrganisationId: organisationId || state.currentOrganisationId,
-        navigationTarget: null,
-        catalogue: action.mode === 'live' && state.catalogueSource === 'curaleaf' ? state.catalogue : [],
-        catalogueSource: action.mode === 'live' && state.catalogueSource === 'curaleaf' ? 'curaleaf' : 'unavailable',
-        catalogueEnvironment: action.mode === 'live' && state.catalogueSource === 'curaleaf' ? state.catalogueEnvironment : 'test',
-        crm: [],
-        submissions: [],
-        enquiries: [],
-        orders: [],
-        activeOrderId: null,
-      };
+      if (action.mode === 'test' || action.mode === 'live') {
+        const wasOpen = state.workspaceMode === 'test' || state.workspaceMode === 'live';
+        if (wasOpen) {
+          if (state.workspaceMode === action.mode && (!organisationId || organisationId === state.currentOrganisationId)) {
+            return state;
+          }
+          return {
+            ...state,
+            workspaceMode: action.mode,
+            currentOrganisationId: organisationId || state.currentOrganisationId,
+          };
+        }
+        const keepCatalogue = state.catalogueSource === 'curaleaf';
+        return {
+          ...state,
+          workspaceMode: action.mode,
+          currentOrganisationId: organisationId || state.currentOrganisationId,
+          navigationTarget: null,
+          catalogue: keepCatalogue ? state.catalogue : [],
+          catalogueSource: keepCatalogue ? 'curaleaf' : 'unavailable',
+          catalogueEnvironment: keepCatalogue ? state.catalogueEnvironment : 'test',
+          crm: [],
+          submissions: [],
+          enquiries: [],
+          orders: [],
+          activeOrderId: null,
+        };
+      }
+      return state;
     }
     case 'SIGN_IN_STAFF':
       return {
@@ -2182,7 +2196,7 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const currentOrganisation = state.organisations.find(organisation => organisation.id === state.currentOrganisationId);
-  const livePharmacyWorkspace = resolvePharmacyWorkspaceMode(currentOrganisation) === 'live';
+  const livePharmacyWorkspace = isOpenPharmacyWorkspace(resolvePharmacyWorkspaceMode(currentOrganisation, { curaleafEstate: state.catalogueEnvironment }));
   const sandboxPharmacy = currentOrganisation ? isTrainingDirectoryPharmacy(currentOrganisation) : false;
   const intakeDirectorySync = Boolean(
     currentOrganisation

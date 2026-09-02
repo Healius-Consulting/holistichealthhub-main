@@ -26,6 +26,7 @@ import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { requestWorkspaceTourReplay } from '../training/workspaceTourPersist';
+import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
 import './PharmacySettings.css';
 
 /** A verification is only reassuring if staff can see how recent it is. */
@@ -280,8 +281,8 @@ export default function PharmacySettings() {
           <h2>{organisation.brand.portalName}</h2>
           <p>{organisation.name} · GPhC {organisation.gphcNumber}</p>
         </div>
-        <span className={`pill ${organisation.status === 'paused' ? 'pill-red' : state.workspaceMode === 'live' ? 'pill-green' : 'pill-amber'}`}>
-          {organisation.status === 'paused' ? 'Paused' : state.workspaceMode === 'live' ? 'Live' : 'Training'}
+        <span className={`pill ${organisation.status === 'paused' ? 'pill-red' : state.workspaceMode === 'live' ? 'pill-green' : state.workspaceMode === 'test' ? 'pill-info' : 'pill-amber'}`}>
+          {organisation.status === 'paused' ? 'Paused' : pharmacyWorkspaceStatusLabel(state.workspaceMode)}
         </span>
       </header>
 

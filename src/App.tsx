@@ -202,7 +202,7 @@ function StaffWorkspace() {
     ? undefined
     : state.organisations.find(org => org.id === state.currentOrganisationId);
   const tenantStyle = tenantThemeVariables(organisation?.brand.primary ?? '#0f766e') as React.CSSProperties;
-  const workspaceMode = resolvePharmacyWorkspaceMode(organisation);
+  const workspaceMode = resolvePharmacyWorkspaceMode(organisation, { curaleafEstate: state.catalogueEnvironment });
   const paused = organisation?.status === 'paused';
   const initialPathHandled = useRef(false);
 
@@ -298,9 +298,15 @@ function StaffWorkspace() {
             <strong>Training</strong>
             <span>
               {isLocalPortalPreview || (organisation && isTrainingDirectoryPharmacy(organisation))
-                ? 'This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH flips you to live. Supplier writes and payments are not sent from training.'
-                : 'Orders, supplier writes and payments stay locked until HHH flips this pharmacy live. Enquiries and referred patients assigned to you are already visible.'}
+                ? 'This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH opens Test or Live. Supplier writes and payments are not sent from training.'
+                : 'Orders, supplier writes and payments stay locked until HHH opens this pharmacy as Test or Live. Enquiries and referred patients assigned to you are already visible.'}
             </span>
+          </div>
+        )}
+        {state.workspaceMode === 'test' && !paused && (
+          <div className="test-mode-banner" role="status">
+            <strong>Test</strong>
+            <span>This pharmacy is using Curaleaf and Worldpay sandbox keys. Patients, orders and payments are real for this workspace, against those sandboxes only. Live credentials under Manage → Curaleaf move it to Live.</span>
           </div>
         )}
         {paused && (

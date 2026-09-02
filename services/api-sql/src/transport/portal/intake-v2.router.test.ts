@@ -32,7 +32,7 @@ describe('admin intake queue query', () => {
 
   it('offers onboarding, intake-live and live workspaces as destinations, except training sandboxes', () => {
     assert.equal(canReceiveReferral(eligibleOrganisation), true);
-    assert.equal(canReceiveReferral({ ...eligibleOrganisation, classification: 'TRAINING' }), false);
+    assert.equal(canReceiveReferral({ ...eligibleOrganisation, classification: 'TRAINING' }), true);
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, classification: 'ALLOCATION_HOLDING' }), true);
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, gdprComplianceFlag: false }), true);
     assert.equal(canReceiveReferral({ ...eligibleOrganisation, status: 'PAUSED' }), false);

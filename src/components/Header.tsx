@@ -1,4 +1,5 @@
 import { useApp } from '../context/AppContext';
+import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
 import WorkspacePageHeader from './WorkspacePageHeader';
 
 const SCREEN_TITLES: Record<string, string> = {
@@ -15,6 +16,8 @@ export default function Header() {
   const { state, dispatch } = useApp();
   const organisation = state.organisations.find((org) => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const title = SCREEN_TITLES[state.screen] || 'HHH Portal';
+  const paused = organisation?.status === 'paused';
+  const workspaceLabel = pharmacyWorkspaceStatusLabel(state.workspaceMode);
 
   return (
     <WorkspacePageHeader
@@ -25,10 +28,10 @@ export default function Header() {
       onSectionClick={() => dispatch({ type: 'SET_SCREEN', screen: 'home' })}
       backAction={state.screenHistory.length ? { label: 'Return to previous workspace', onClick: () => dispatch({ type: 'GO_BACK' }) } : undefined}
       contextControl={
-        <div className="header-context" aria-label={`Current pharmacy status: ${state.workspaceMode === 'live' ? 'Live' : 'Training'}${organisation?.status === 'paused' ? ', paused' : ''}`}>
+        <div className="header-context" aria-label={`Current pharmacy status: ${workspaceLabel}${paused ? ', paused' : ''}`}>
           <span>Workspace</span>
-          <span className={`tenant-status tenant-status--${state.workspaceMode}`}>{state.workspaceMode === 'live' ? 'Live' : 'Training'}</span>
-          {organisation?.status === 'paused' ? <span className="tenant-status tenant-status--paused">Paused</span> : null}
+          <span className={`tenant-status tenant-status--${state.workspaceMode}`}>{workspaceLabel}</span>
+          {paused ? <span className="tenant-status tenant-status--paused">Paused</span> : null}
         </div>
       }
       identity={

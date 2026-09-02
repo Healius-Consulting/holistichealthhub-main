@@ -4,6 +4,7 @@ import { PATIENT_PRICE_LABEL, PHARMACY_COST_LABEL, WHOLESALE_LABEL, money, useAp
 import { getPharmacyPrescriptionFinance } from '../shared/api';
 import type { PharmacyPrescriptionFinanceReport } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { isOpenPharmacyWorkspace } from '../training/workspace';
 import { compactPatientName } from '../utils/patientName';
 import './PharmacyFinance.css';
 
@@ -206,7 +207,7 @@ type LedgerRow = FinanceRow & { realised: boolean; pendingCollection: boolean };
 
 export default function PharmacyFinance() {
   const { state } = useApp();
-  const liveWorkspace = state.workspaceMode === 'live';
+  const liveWorkspace = isOpenPharmacyWorkspace(state.workspaceMode);
   const [period, setPeriod] = useState<Period>('90');
   const [report, setReport] = useState<PharmacyPrescriptionFinanceReport | null>(null);
   const [loading, setLoading] = useState(true);

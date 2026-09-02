@@ -9,6 +9,7 @@ import './ManualPrescriptionEditor.css';
 import { getPrescriberDirectory, isApiConfigured } from '../shared/api';
 import type { PrescriberDirectoryRecord } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { isOpenPharmacyWorkspace } from '../training/workspace';
 import { isCuraleafTestCatalogue } from '../utils/catalogueEstate';
 
 type MetadataField = 'issueDate' | 'prescriberPin' | 'prescriberGmcNumber' | 'prescriberGphcNumber' | 'serialNumber';
@@ -201,7 +202,7 @@ export default function ManualPrescriptionEditor({
   const [prescriberQuery, setPrescriberQuery] = useState(prescription.prescriber);
   const [prescribers, setPrescribers] = useState<PrescriberDirectoryRecord[]>([]);
   const [prescriberError, setPrescriberError] = useState<string | null>(null);
-  const directoryEnabled = isApiConfigured && !isLocalPortalPreview && state.workspaceMode === 'live';
+  const directoryEnabled = isApiConfigured && !isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode);
   const testCatalogue = isLocalPortalPreview
     || state.workspaceMode === 'training'
     || isCuraleafTestCatalogue(state.catalogueSource, state.catalogueEnvironment);

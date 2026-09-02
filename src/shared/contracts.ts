@@ -1450,13 +1450,12 @@ export function isTrainingDirectoryPharmacy(organisation: {
   testAccount?: boolean;
   workspaceClassification?: string | null;
 }) {
-  if (organisation.workspaceClassification === 'training' || organisation.testAccount) return true;
   return TRAINING_DIRECTORY_PHARMACY_IDS.has(organisation.id.replaceAll('-', '').toLowerCase());
 }
 
 export function workspaceClassificationLabel(classification?: string | null) {
   if (classification === 'allocation_holding') return HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL;
-  if (classification === 'training') return 'Training workspace';
+  if (classification === 'training') return 'Test workspace';
   return 'Standard workspace';
 }
 

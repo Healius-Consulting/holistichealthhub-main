@@ -10,6 +10,5 @@ export function isTrainingDirectoryOrganisation(organisation: {
   classification?: string | null;
 } | null | undefined) {
   if (!organisation) return false;
-  if (String(organisation.classification || '').toUpperCase() === 'TRAINING') return true;
   return TRAINING_DIRECTORY_PHARMACY_IDS.has(organisation.id.replaceAll('-', '').toLowerCase());
 }

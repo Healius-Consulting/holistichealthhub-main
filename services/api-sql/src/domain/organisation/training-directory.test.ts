@@ -16,12 +16,12 @@ describe('isTrainingDirectoryOrganisation', () => {
     }), true);
   });
 
-  it('keeps classified training tenants out of admin finance', () => {
+  it('does not treat a TRAINING classification as a dummy directory pharmacy', () => {
     assert.equal(isTrainingDirectoryOrganisation({
       id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       tradingName: 'Sandbox',
       classification: 'TRAINING',
-    }), true);
+    }), false);
   });
 
   it('leaves Eastwood, K-Chem, and new pharmacies registered even if branded Primary Branch', () => {

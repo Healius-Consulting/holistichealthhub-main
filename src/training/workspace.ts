@@ -1,9 +1,15 @@
 import type { CRMPatient, PharmacyTenant } from '../context/AppContext';
-import { isTrainingDirectoryPharmacy } from '../shared/contracts';
 import { hydrateSandboxWorkspace } from './sandboxPack';
 
 export { TRAINING_PRESCRIBER, TRAINING_PRODUCT, TRAINING_REFERRAL_SOURCE } from './sandboxPack';
 export { hydrateSandboxWorkspace, sandboxOverviewForOrganisation, sandboxOverviewSnapshot } from './sandboxPack';
+export {
+  isOpenPharmacyWorkspace,
+  pharmacyWorkspaceStatusLabel,
+  resolvePharmacyWorkspaceMode,
+  usesSandboxDummyPack,
+  type PharmacyWorkspaceMode,
+} from './workspaceMode';
 
 export const ORGANISATIONS: PharmacyTenant[] = [
   {
@@ -56,20 +62,6 @@ export const ORGANISATIONS: PharmacyTenant[] = [
 
 export function isTrainingSandboxPatient(patient: Pick<CRMPatient, 'referralSource' | 'id'>): boolean {
   return patient.referralSource === 'training_sandbox' || patient.id.startsWith('training-');
-}
-
-/** Pharmacy staff only have two workspaces: Live (real referred patients) or Training (examples). */
-export function resolvePharmacyWorkspaceMode(organisation: Pick<PharmacyTenant, 'status' | 'workspaceClassification' | 'testAccount'> | null | undefined): 'live' | 'training' {
-  if (!organisation) return 'training';
-  if (organisation.workspaceClassification === 'allocation_holding') return 'live';
-  if (organisation.workspaceClassification === 'training' || organisation.testAccount) return 'training';
-  if (organisation.status === 'live' || organisation.status === 'paused') return 'live';
-  return 'training';
-}
-
-export function usesSandboxDummyPack(organisation: Pick<PharmacyTenant, 'id' | 'name' | 'tradingName' | 'testAccount' | 'workspaceClassification'> | null | undefined, localPreview: boolean) {
-  if (organisation) return isTrainingDirectoryPharmacy(organisation);
-  return localPreview;
 }
 
 export function trainingWorkspace(organisationId: string) {

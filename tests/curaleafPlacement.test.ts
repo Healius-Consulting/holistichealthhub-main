@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { curaleafPlacementUnlocked, snapshotQuoteFromCatalogue } from '../src/utils/curaleafPlacement.ts';
 
-test('placement stays locked in training, local preview, and Curaleaf test', () => {
+test('placement stays locked in training and local preview', () => {
   assert.equal(curaleafPlacementUnlocked({
     workspaceMode: 'training',
     localPreview: false,
@@ -18,18 +18,18 @@ test('placement stays locked in training, local preview, and Curaleaf test', () 
   assert.equal(curaleafPlacementUnlocked({
     workspaceMode: 'live',
     localPreview: false,
-    catalogueSource: 'curaleaf',
-    catalogueEnvironment: 'test',
-  }), false);
-  assert.equal(curaleafPlacementUnlocked({
-    workspaceMode: 'live',
-    localPreview: false,
     catalogueSource: 'unavailable',
     catalogueEnvironment: 'production',
   }), false);
 });
 
-test('placement unlocks only on a live workspace with production Curaleaf', () => {
+test('placement unlocks on Test and Live when Curaleaf is connected, including sandbox keys', () => {
+  assert.equal(curaleafPlacementUnlocked({
+    workspaceMode: 'test',
+    localPreview: false,
+    catalogueSource: 'curaleaf',
+    catalogueEnvironment: 'test',
+  }), true);
   assert.equal(curaleafPlacementUnlocked({
     workspaceMode: 'live',
     localPreview: false,

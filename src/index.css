@@ -184,6 +184,7 @@
 }
 
 .status-badge--live { color: #075b37; background: #e5f7ed; border-color: #98d7b5; }
+.status-badge--test { color: #154f82; background: #eaf4ff; border-color: #afd1ef; }
 .status-badge--intake_live { color: #154f82; background: #eaf4ff; border-color: #afd1ef; }
 .status-badge--paused { color: #7a4011; background: #fff1dc; border-color: #edc588; }
 .status-badge--onboarding { color: #154f82; background: #eaf4ff; border-color: #afd1ef; }
@@ -808,6 +809,27 @@ html{
   border-radius: var(--radius-sm);
   background: var(--amber-500);
   color: #111827;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.test-mode-banner{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 24px;
+  border-bottom: 1px solid var(--info-500, #60a5fa);
+  background: var(--info-50);
+  color: var(--info-700);
+  font-size: var(--font-xs);
+}
+
+.test-mode-banner strong{
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--info-500, #3b82f6);
+  color: #fff;
   text-transform: uppercase;
   letter-spacing: .04em;
 }
@@ -3361,6 +3383,7 @@ html[data-enhanced-focus='true'] :is(button, a, input, select, textarea, [tabind
 }
 
 .tenant-status--live{ color: var(--green-100); background: var(--green-50); }
+.tenant-status--test{ color: var(--info-700); background: var(--info-50); }
 .tenant-status--training{ color: var(--amber-700); background: var(--amber-50); }
 .tenant-status--paused{ color: var(--red-100, #991b1b); background: var(--red-50, #fef2f2); }
 .tenant-status--intake_live{ color: var(--info-700); background: var(--info-50); }
@@ -3616,7 +3639,7 @@ html[data-enhanced-focus='true'] :is(button, a, input, select, textarea, [tabind
 .header-icon-button span{ display: none; }
 .header-icon-button{ width: 36px; justify-content: center; padding: 0; }
 .accessibility-panel{ position: fixed; top: 74px; right: 12px; width: calc(100vw - 24px); max-height: calc(100dvh - 88px); }
-:is(.training-mode-banner, .intake-live-banner, .paused-mode-banner){ align-items: flex-start; padding: 8px 14px; }
+:is(.training-mode-banner, .test-mode-banner, .intake-live-banner, .paused-mode-banner){ align-items: flex-start; padding: 8px 14px; }
 }
 
 @media (max-width: 480px) {
@@ -5212,8 +5235,8 @@ html[data-theme='dark'] .accessibility-panel{
 }
 
 @media (max-width: 600px) {
-:is(.training-mode-banner, .intake-live-banner, .paused-mode-banner){ display: grid; gap: 6px; }
-:is(.training-mode-banner, .intake-live-banner, .paused-mode-banner) strong{ justify-self: start; }
+:is(.training-mode-banner, .test-mode-banner, .intake-live-banner, .paused-mode-banner){ display: grid; gap: 6px; }
+:is(.training-mode-banner, .test-mode-banner, .intake-live-banner, .paused-mode-banner) strong{ justify-self: start; }
 }
 
 html[data-theme='dark'] :is(.rx-draft-tab__avatar, .rx-record-evidence, .payment-ledger-row__icon){ background-color: var(--bg-elevated); }
@@ -8694,8 +8717,8 @@ html.modal-open .page-container{ overflow: hidden; }
 .app-header{ min-height: 76px; height: auto; padding: 12px 14px; }
 .app-header h1{ max-width: none; font-size: 21px; white-space: normal; }
 .app-header__eyebrow{ margin-bottom: 3px; font-size: 10px; }
-:is(.training-mode-banner, .intake-live-banner, .paused-mode-banner){ align-items: flex-start; gap: 8px; padding: 8px 14px; font-size: 11px; line-height: 1.4; }
-:is(.training-mode-banner, .intake-live-banner, .paused-mode-banner) strong{ margin-top: 1px; font-size: 9px; }
+:is(.training-mode-banner, .test-mode-banner, .intake-live-banner, .paused-mode-banner){ align-items: flex-start; gap: 8px; padding: 8px 14px; font-size: 11px; line-height: 1.4; }
+:is(.training-mode-banner, .test-mode-banner, .intake-live-banner, .paused-mode-banner) strong{ margin-top: 1px; font-size: 9px; }
 .provider-notice{ grid-template-columns: 30px minmax(0, 1fr); }
 .provider-notice__action{ grid-column: 2; justify-self: start; }
 .pricing-brief__copy{ align-items: flex-start; }
@@ -11566,6 +11589,7 @@ html[data-theme='dark'] :is(.priority-action--quiet, .workspace-back-button){
 }
 
 html[data-theme='dark'] :is(.pill-green, .tenant-status--live){ color: var(--green-100); background: var(--green-50); }
+html[data-theme='dark'] :is(.pill-info, .tenant-status--test){ color: var(--info-700); background: var(--info-50); }
 html[data-theme='dark'] .pill-amber{ color: var(--amber-700); background: var(--amber-50); }
 html[data-theme='dark'] .pill-red{ color: var(--red-700); background: var(--red-50); }
 html[data-theme='dark'] .pill-info{ color: var(--info-700); background: var(--info-50); }
@@ -16443,7 +16467,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 @media print{
-  .workspace-navigation, .workspace-page-header, .training-mode-banner, .intake-live-banner, .paused-mode-banner, .order-crm-summary, .order-crm-controls, .order-crm-list, .order-crm-record__actions{ display: none !important; }
+  .workspace-navigation, .workspace-page-header, .training-mode-banner, .test-mode-banner, .intake-live-banner, .paused-mode-banner, .order-crm-summary, .order-crm-controls, .order-crm-list, .order-crm-record__actions{ display: none !important; }
   .app-main, .page-container, .order-crm, .order-crm-workspace, .order-crm-detail{ width: 100% !important; margin: 0 !important; padding: 0 !important; border: 0 !important; box-shadow: none !important; }
   .order-crm-workspace, .order-crm-record__body{ display: block !important; }
 }

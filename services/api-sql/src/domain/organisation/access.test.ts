@@ -23,7 +23,7 @@ describe('pharmacy intake access', () => {
     assert.equal(canReceiveReferral(organisation), true);
     assert.equal(canReceiveReferral({ ...organisation, status: 'INTAKE_LIVE' }), true);
     assert.equal(canReceiveReferral({ ...organisation, classification: 'ALLOCATION_HOLDING' }), true);
-    assert.equal(canReceiveReferral({ ...organisation, classification: 'TRAINING' }), false);
+    assert.equal(canReceiveReferral({ ...organisation, classification: 'TRAINING' }), true);
     assert.equal(canReceiveReferral({ ...organisation, status: 'PAUSED' }), false);
     assert.equal(canAcceptPublicIntake({ ...organisation, status: 'ONBOARDING', intakeEnabled: false }), false);
     assert.equal(canAcceptPublicIntake({ ...organisation, gphcNumber: 'TRAINING-PHARM1', status: 'ONBOARDING' }), false);
@@ -35,13 +35,18 @@ describe('pharmacy intake access', () => {
     assert.equal(pharmacyOperationalAccess({ ...organisation, classification: 'ALLOCATION_HOLDING' }), true);
     assert.equal(pharmacyOperationalAccess({ ...organisation, status: 'INTAKE_LIVE' }), false);
     assert.equal(pharmacyOperationalAccess({ ...organisation, status: 'ONBOARDING' }), false);
-    assert.equal(pharmacyOperationalAccess({ ...organisation, classification: 'TRAINING' }), false);
+    assert.equal(pharmacyOperationalAccess({ ...organisation, classification: 'TRAINING' }), true);
+    assert.equal(pharmacyOperationalAccess({
+      ...organisation,
+      id: '70913a30-71c3-4a41-952e-d532927af58c',
+      classification: 'TRAINING',
+    }), false);
     assert.equal(pharmacyOperationalAccess({ ...organisation, status: 'PAUSED' }), true);
     assert.equal(canActivateReferredPatient(organisation), true);
     assert.equal(canActivateReferredPatient({ ...organisation, status: 'PAUSED' }), false);
     assert.equal(canActivateReferredPatient({ ...organisation, status: 'ONBOARDING' }), true);
     assert.equal(canActivateReferredPatient({ ...organisation, status: 'INTAKE_LIVE' }), true);
-    assert.equal(canActivateReferredPatient({ ...organisation, classification: 'TRAINING' }), false);
+    assert.equal(canActivateReferredPatient({ ...organisation, classification: 'TRAINING' }), true);
     assert.equal(canActivateReferredPatient({
       ...organisation,
       id: '70913a30-71c3-4a41-952e-d532927af58c',
@@ -50,8 +55,10 @@ describe('pharmacy intake access', () => {
     }), false);
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'ONBOARDING' }), 'training');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'INTAKE_LIVE' }), 'training');
-    assert.equal(pharmacyWorkspaceMode(organisation), 'live');
-    assert.equal(pharmacyWorkspaceMode({ ...organisation, classification: 'ALLOCATION_HOLDING', status: 'ONBOARDING' }), 'live');
+    assert.equal(pharmacyWorkspaceMode(organisation), 'test');
+    assert.equal(pharmacyWorkspaceMode(organisation, { curaleafProduction: true }), 'live');
+    assert.equal(pharmacyWorkspaceMode({ ...organisation, classification: 'ALLOCATION_HOLDING', status: 'ONBOARDING' }), 'test');
+    assert.equal(pharmacyWorkspaceMode({ ...organisation, classification: 'ALLOCATION_HOLDING', status: 'ONBOARDING' }, { curaleafProduction: true }), 'live');
     assert.equal(pharmacyWorkspaceMode({ ...organisation, status: 'PAUSED' }), 'paused');
     assert.equal(pharmacyIntakeDirectoryAccess({ ...organisation, status: 'ONBOARDING' }), true);
     assert.equal(pharmacyIntakeDirectoryAccess({
@@ -66,7 +73,7 @@ describe('pharmacy intake access', () => {
       id: '70913a30-71c3-4a41-952e-d532927af58c',
       name: 'Primary Branch',
     });
-    assert.deepEqual(sandbox, { patients: false, orders: true, pendingEnquiries: false });
+    assert.deepEqual(sandbox, { patients: false, orders: false, pendingEnquiries: false });
     const paused = pharmacyPortalRecordAccess({ ...organisation, status: 'PAUSED' });
     assert.deepEqual(paused, { patients: true, orders: true, pendingEnquiries: false });
   });

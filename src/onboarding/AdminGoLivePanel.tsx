@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react';
 import type { PharmacyTenant } from '../context/AppContext';
 import type { GoLiveReadiness } from '../shared/contracts';
 import { getGoLiveReadiness, isApiConfigured, revertLiveOrganisation, updateAdminPharmacySetupTask } from '../shared/api';
+import { isTrainingDirectoryPharmacy } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 
 interface AdminGoLivePanelProps {
@@ -16,7 +17,7 @@ interface AdminGoLivePanelProps {
 
 const INTAKE_EVIDENCE = 'HHH logged the intake call.';
 export const GO_LIVE_CURALEAF_TEST_ACK =
-  'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Manage → Curaleaf.';
+  'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Manage → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
 
 export function AdminGoLivePanel({
   organisation,
@@ -28,7 +29,7 @@ export function AdminGoLivePanel({
 }: AdminGoLivePanelProps) {
   const liveWorkspace = organisation.status === 'live';
   const paused = organisation.status === 'paused';
-  const trainingTenant = organisation.workspaceClassification === 'training';
+  const trainingTenant = isTrainingDirectoryPharmacy(organisation);
   const [readiness, setReadiness] = useState<GoLiveReadiness | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loggingIntake, setLoggingIntake] = useState(false);
@@ -104,7 +105,7 @@ export function AdminGoLivePanel({
         <div>
           <p className="section-label">Go live</p>
           <h2>Pharmacy workspace</h2>
-          <p>Log the intake call, then flip the workspace live. If Curaleaf is still on test, confirm that the pharmacy has been told not to create or place orders until live credentials are saved under Manage → Curaleaf. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
+          <p>Log the intake call, then open the pharmacy workspace. Test uses this pharmacy's Curaleaf and Worldpay sandbox keys so staff can run the full order path. Live starts when production Curaleaf credentials are saved under Manage → Curaleaf. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
         </div>
         {liveWorkspace ? (
           <button type="button" className="btn btn-secondary btn-sm" disabled={goLiveBusy || reverting} onClick={() => void revertLive()}>
@@ -117,7 +118,7 @@ export function AdminGoLivePanel({
             disabled={goLiveBusy || !canFlip}
             onClick={() => onFlipLive({ acknowledgedCuraleafTest: needsCuraleafAck })}
           >
-            {goLiveBusy ? 'Flipping…' : 'Flip workspace to live'}
+            {goLiveBusy ? 'Opening…' : curaleafProduction ? 'Flip workspace to live' : 'Open Test workspace'}
           </button>
         )}
       </div>
@@ -186,7 +187,7 @@ export function AdminGoLivePanel({
         <p className="admin-golive-panel__hint">Unpause this pharmacy before flipping the workspace to live.</p>
       ) : null}
       {trainingTenant && !liveWorkspace ? (
-        <p className="admin-golive-panel__hint">Training tenants stay in the training workspace.</p>
+        <p className="admin-golive-panel__hint">Training example pharmacies stay in the Training workspace.</p>
       ) : null}
     </section>
   );

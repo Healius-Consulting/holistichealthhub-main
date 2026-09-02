@@ -6,7 +6,7 @@ const panel = readFileSync(new URL('../src/onboarding/AdminGoLivePanel.tsx', imp
 const readiness = readFileSync(new URL('../services/api-sql/src/domain/organisation/operational-readiness.ts', import.meta.url), 'utf8');
 const router = readFileSync(new URL('../services/api-sql/src/transport/portal/setup.router.ts', import.meta.url), 'utf8');
 
-const ACK = 'This pharmacy has been advised not to create or place orders until Curaleaf is switched from test to live under Manage → Curaleaf.';
+const ACK = 'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Manage → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
 const curaleafPanel = readFileSync(new URL('../src/components/CuraleafConnectionPanel.tsx', import.meta.url), 'utf8');
 
 test('admin go-live requires the intake call, not Curaleaf production, and warns before a test flip', () => {
@@ -15,7 +15,8 @@ test('admin go-live requires the intake call, not Curaleaf production, and warns
   assert.match(panel, new RegExp(ACK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(panel, /acknowledgedCuraleafTest: needsCuraleafAck/);
   assert.match(panel, /onOpenCuraleaf/);
-  assert.match(panel, /Replace with live credentials/);
+  assert.match(panel, /Open Test workspace/);
+  assert.match(panel, /Flip workspace to live/);
   assert.doesNotMatch(panel, /Integrations on Overview/);
   assert.doesNotMatch(panel, /Platform walkthrough/);
   assert.doesNotMatch(panel, /Log platform walkthrough/);
