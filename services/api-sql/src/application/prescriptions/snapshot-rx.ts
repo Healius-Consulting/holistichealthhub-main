@@ -11,22 +11,53 @@ export function snapshotRxList(snapshot: unknown): Array<Record<string, unknown>
 }
 
 export function snapshotRxKey(rx: Record<string, unknown> | undefined, index: number): string {
-  // Snapshot sub-orders are an integration correlation map, not the canonical
-  // prescription table. Keep their explicit client correlation stable even after
-  // the normalized HHH prescription UUID is stamped on the same record.
-  const clientKey = String(rx?.clientKey ?? '').trim();
-  if (clientKey) return clientKey;
-  // Compatibility for snapshots created before clientKey and the normalised HHH
-  // prescription UUID were stamped explicitly.
-  const id = String(rx?.id ?? '').trim();
-  if (id) return id;
-  const hhhPrescriptionId = String(rx?.hhhPrescriptionId ?? '').trim();
-  if (hhhPrescriptionId) return hhhPrescriptionId;
-  // Old manual-upload snapshots sometimes used the attachment as identity. Never
-  // write this shape again; retain it only so historical orders remain readable.
-  const fileId = String(rx?.fileId ?? '').trim();
-  if (fileId) return fileId;
-  return `rx-${index}`;
+  return prescriptionCorrelationKeys(rx)[0] ?? `rx-${index}`;
+}
+
+/** Keys that can identify one snapshot prescription, in lookup order. */
+export function prescriptionCorrelationKeys(rx: Record<string, unknown> | undefined): string[] {
+  if (!rx) return [];
+  const keys = [
+    String(rx.clientKey ?? '').trim(),
+    String(rx.id ?? '').trim(),
+    String(rx.hhhPrescriptionId ?? '').trim(),
+    String(rx.fileId ?? '').trim(),
+  ].filter(Boolean);
+  return [...new Set(keys)];
+}
+
+function compactKey(value: string) {
+  return value.replaceAll('-', '').toLowerCase();
+}
+
+export function lookupKeyedRecord<T>(map: Record<string, T> | null | undefined, rx: Record<string, unknown> | undefined): T | undefined {
+  if (!map) return undefined;
+  for (const key of prescriptionCorrelationKeys(rx)) {
+    if (map[key]) return map[key];
+    const compact = compactKey(key);
+    if (!compact) continue;
+    for (const [existing, value] of Object.entries(map)) {
+      if (compactKey(existing) === compact) return value;
+    }
+  }
+  const curaleafId = String(rx?.curaleafPrescriptionId ?? '').trim();
+  if (!curaleafId) return undefined;
+  return Object.values(map).find(value => {
+    const record = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+    return String(record?.prescriptionId ?? '').trim() === curaleafId;
+  });
+}
+
+/** Flow map aliases that cannot collide with a sibling's file attachment. */
+export function prescriptionFlowAliasKeys(rx: Record<string, unknown> | undefined, index: number): string[] {
+  const canonical = snapshotRxKey(rx, index);
+  const aliases = [
+    canonical,
+    String(rx?.clientKey ?? '').trim(),
+    String(rx?.id ?? '').trim(),
+    String(rx?.hhhPrescriptionId ?? '').trim(),
+  ].filter(Boolean);
+  return [...new Set(aliases)];
 }
 
 export function compactOrderReferenceToken(orderNumber: string | null | undefined, orderId: string): string {
@@ -73,15 +104,25 @@ export function rxHasPurchaseOrder(snapshot: unknown, rxKey: string): boolean {
   return Boolean(id);
 }
 
+export function snapshotPrescriptionHasPurchaseOrder(
+  snapshot: unknown,
+  rx: Record<string, unknown> | undefined,
+  index: number,
+): boolean {
+  const subOrders = curaleafSubOrders(snapshot);
+  const sub = lookupKeyedRecord(subOrders, rx) ?? subOrders[snapshotRxKey(rx, index)];
+  return Boolean(String(sub?.purchaseOrderId || sub?.id || '').trim());
+}
+
 export function allSnapshotRxsHavePurchaseOrders(snapshot: unknown): boolean {
   const list = snapshotRxList(snapshot);
   if (!list.length) return false;
-  return list.every((rx, index) => rxHasPurchaseOrder(snapshot, snapshotRxKey(rx, index)));
+  return list.every((rx, index) => snapshotPrescriptionHasPurchaseOrder(snapshot, rx, index));
 }
 
 export function pendingPlacementRxIndexes(snapshot: unknown): number[] {
   return snapshotRxList(snapshot).flatMap((rx, index) => (
-    rxHasPurchaseOrder(snapshot, snapshotRxKey(rx, index)) ? [] : [index]
+    snapshotPrescriptionHasPurchaseOrder(snapshot, rx, index) ? [] : [index]
   ));
 }
 

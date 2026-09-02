@@ -4,10 +4,12 @@ import {
   allSnapshotRxsHavePurchaseOrders,
   compactOrderReferenceToken,
   customerReferenceForRx,
+  lookupKeyedRecord,
   packIdsForRx,
   pendingPlacementRxIndexes,
   pharmacyReferencePrefix,
   rxHasPurchaseOrder,
+  snapshotPrescriptionHasPurchaseOrder,
   snapshotRxKey,
   snapshotRxList,
 } from './snapshot-rx.js';
@@ -69,5 +71,34 @@ describe('snapshot Rx helpers', () => {
       prescriptions: [{ id: '1' }, { id: '2' }],
     }), [0, 1]);
     assert.deepEqual(packIdsForRx({ items: [{ packId: 'pack-a' }, { productId: 'pack-b' }] }), ['pack-a', 'pack-b']);
+  });
+
+  it('looks up a sub-order by clientKey, compact HHH id, or Curaleaf prescription id', () => {
+    const subOrders = {
+      3802: { purchaseOrderId: 'po-a', prescriptionId: 'curaleaf-a' },
+      3803: { purchaseOrderId: 'po-b', prescriptionId: 'curaleaf-b' },
+    };
+    assert.equal(lookupKeyedRecord(subOrders, { clientKey: '3802', fileId: 'file-1' })?.purchaseOrderId, 'po-a');
+    assert.equal(lookupKeyedRecord({
+      '7527cfd756cb4cbb9637e77e191e21de': { purchaseOrderId: 'po-compact' },
+    }, { hhhPrescriptionId: '7527cfd7-56cb-4cbb-9637-e77e191e21de' })?.purchaseOrderId, 'po-compact');
+    assert.equal(lookupKeyedRecord(subOrders, { fileId: 'file-1', curaleafPrescriptionId: 'curaleaf-b' })?.purchaseOrderId, 'po-b');
+  });
+
+  it('treats a clientKey-keyed purchase order as already placed even when lookup starts from other identities', () => {
+    const snapshot = {
+      prescriptions: [
+        { clientKey: '3802', fileId: 'file-1', curaleafPrescriptionId: 'curaleaf-a' },
+        { clientKey: '3803', fileId: 'file-2', curaleafPrescriptionId: 'curaleaf-b' },
+      ],
+      curaleafSubOrders: {
+        3802: { purchaseOrderId: 'po-a', prescriptionId: 'curaleaf-a' },
+        3803: { purchaseOrderId: 'po-b', prescriptionId: 'curaleaf-b' },
+      },
+    };
+    assert.equal(snapshotPrescriptionHasPurchaseOrder(snapshot, snapshot.prescriptions[0], 0), true);
+    assert.equal(snapshotPrescriptionHasPurchaseOrder(snapshot, snapshot.prescriptions[1], 1), true);
+    assert.deepEqual(pendingPlacementRxIndexes(snapshot), []);
+    assert.equal(allSnapshotRxsHavePurchaseOrders(snapshot), true);
   });
 });

@@ -1,9 +1,49 @@
 import type { PortalCuraleafOrderState, PortalOrderRecord, PrescriptionFlowRecord } from '../shared/contracts';
 
-export function portalPrescriptionKey(prescription: { id?: string; fileId?: string }) {
-  const id = String(prescription.id || '').trim();
-  if (id) return id;
-  return String(prescription.fileId || '').trim();
+export type PortalPrescriptionIdentity = {
+  id?: string;
+  clientKey?: string;
+  hhhPrescriptionId?: string;
+  fileId?: string;
+  curaleafPrescriptionId?: string;
+};
+
+export function portalPrescriptionCorrelationKeys(prescription: PortalPrescriptionIdentity): string[] {
+  const keys = [
+    String(prescription.clientKey || '').trim(),
+    String(prescription.id || '').trim(),
+    String(prescription.hhhPrescriptionId || '').trim(),
+    String(prescription.fileId || '').trim(),
+  ].filter(Boolean);
+  return [...new Set(keys)];
+}
+
+export function portalPrescriptionKey(prescription: PortalPrescriptionIdentity) {
+  return portalPrescriptionCorrelationKeys(prescription)[0] ?? '';
+}
+
+function compactKey(value: string) {
+  return value.replaceAll('-', '').toLowerCase();
+}
+
+function lookupKeyedRecord<T extends object>(
+  map: Record<string, T> | null | undefined,
+  prescription: PortalPrescriptionIdentity,
+): T | undefined {
+  if (!map) return undefined;
+  for (const key of portalPrescriptionCorrelationKeys(prescription)) {
+    if (map[key]) return map[key];
+    const compact = compactKey(key);
+    if (!compact) continue;
+    for (const [existing, value] of Object.entries(map)) {
+      if (compactKey(existing) === compact) return value;
+    }
+  }
+  const curaleafId = String(prescription.curaleafPrescriptionId || '').trim();
+  if (!curaleafId) return undefined;
+  return Object.values(map).find(value => (
+    String((value as { prescriptionId?: string }).prescriptionId || '').trim() === curaleafId
+  ));
 }
 
 export function portalPrescriptionIsMultiRx(record: Pick<PortalOrderRecord, 'prescriptions'>) {
@@ -12,30 +52,18 @@ export function portalPrescriptionIsMultiRx(record: Pick<PortalOrderRecord, 'pre
 
 export function portalPrescriptionFlow(
   record: Pick<PortalOrderRecord, 'prescriptionFlow'>,
-  prescription: { id?: string; fileId?: string },
+  prescription: PortalPrescriptionIdentity,
 ): PrescriptionFlowRecord | undefined {
-  const flow = record.prescriptionFlow;
-  if (!flow) return undefined;
-  const key = portalPrescriptionKey(prescription);
-  if (key && flow[key]) return flow[key];
-  const fileId = String(prescription.fileId || '').trim();
-  if (fileId && flow[fileId]) return flow[fileId];
-  return undefined;
+  return lookupKeyedRecord(record.prescriptionFlow, prescription);
 }
 
-/** Sub-orders are keyed by Rx id. Never attach the order-level Curaleaf PO to every card. */
+/** Sub-orders are keyed by Rx correlation. Never attach the order-level Curaleaf PO to every card. */
 export function resolvePortalPrescriptionCuraleaf(
   record: Pick<PortalOrderRecord, 'curaleaf' | 'curaleafSubOrders' | 'prescriptions'>,
-  prescription: { id?: string; fileId?: string },
+  prescription: PortalPrescriptionIdentity,
 ): PortalCuraleafOrderState | undefined {
-  const subs = record.curaleafSubOrders && typeof record.curaleafSubOrders === 'object'
-    ? record.curaleafSubOrders
-    : {};
-  const key = portalPrescriptionKey(prescription);
-  const fromId = key ? subs[key] : undefined;
-  const fileId = String(prescription.fileId || '').trim();
-  const fromFile = fileId && fileId !== key ? subs[fileId] : undefined;
-  if (fromId || fromFile) return fromId ?? fromFile;
+  const fromSub = lookupKeyedRecord(record.curaleafSubOrders, prescription);
+  if (fromSub) return fromSub;
   if (portalPrescriptionIsMultiRx(record)) return undefined;
   return record.curaleaf;
 }
@@ -74,7 +102,7 @@ export function shipmentsForPrescription<T extends { items?: Array<{ productId?:
 
 export function portalPrescriptionHasPurchaseOrder(
   record: Pick<PortalOrderRecord, 'curaleaf' | 'curaleafSubOrders' | 'prescriptions' | 'prescriptionFlow'>,
-  prescription: { id?: string; fileId?: string },
+  prescription: PortalPrescriptionIdentity,
 ): boolean {
   const flow = portalPrescriptionFlow(record, prescription);
   const sub = resolvePortalPrescriptionCuraleaf(record, prescription);

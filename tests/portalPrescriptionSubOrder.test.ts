@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { PortalOrderRecord } from '../src/shared/contracts.ts';
 import {
   fulfilmentLinesForPrescription,
+  portalPrescriptionFlow,
   resolvePortalPrescriptionCuraleaf,
   shipmentsForPrescription,
 } from '../src/utils/portalPrescriptionSubOrder.ts';
@@ -36,6 +37,34 @@ test('multi-Rx mapping keys sub-orders by prescription id, not fileId', () => {
 test('fileId must not attach the order-level Curaleaf PO to every card', () => {
   const cloned = resolvePortalPrescriptionCuraleaf(paidMulti, { id: 'rx-2', fileId: 'file-1' });
   assert.equal(cloned, undefined);
+});
+
+test('clientKey snapshots attach each purchase order without an id field', () => {
+  const record: Pick<PortalOrderRecord, 'curaleaf' | 'curaleafSubOrders' | 'prescriptions' | 'prescriptionFlow'> = {
+    prescriptions: [
+      { clientKey: '3802', fileId: 'file-1', curaleafPrescriptionId: 'curaleaf-a' } as PortalOrderRecord['prescriptions'][number],
+      { clientKey: '3803', fileId: 'file-2', curaleafPrescriptionId: 'curaleaf-b' } as PortalOrderRecord['prescriptions'][number],
+    ],
+    curaleaf: {
+      status: 'purchase_order_submitted',
+      customerReference: '1DZ-81DB74B60D-P2',
+      purchaseOrderId: 'po-last',
+    },
+    curaleafSubOrders: {
+      3802: { status: 'purchase_order_submitted', purchaseOrderId: 'po-1', prescriptionId: 'curaleaf-a' },
+      3803: { status: 'purchase_order_submitted', purchaseOrderId: 'po-2', prescriptionId: 'curaleaf-b' },
+    },
+    prescriptionFlow: {
+      3802: { id: '3802', state: 'PLACED', payable: true, expiryDate: '2026-09-30', purchaseOrderId: 'po-1', shipmentIds: [], lines: [] },
+      3803: { id: '3803', state: 'PLACED', payable: true, expiryDate: '2026-09-30', purchaseOrderId: 'po-2', shipmentIds: [], lines: [] },
+    },
+  };
+  const first = { clientKey: '3802', fileId: 'file-1', curaleafPrescriptionId: 'curaleaf-a' };
+  const second = { clientKey: '3803', fileId: 'file-2', curaleafPrescriptionId: 'curaleaf-b' };
+  assert.equal(resolvePortalPrescriptionCuraleaf(record, first)?.purchaseOrderId, 'po-1');
+  assert.equal(resolvePortalPrescriptionCuraleaf(record, second)?.purchaseOrderId, 'po-2');
+  assert.equal(portalPrescriptionFlow(record, first)?.purchaseOrderId, 'po-1');
+  assert.equal(portalPrescriptionFlow(record, second)?.purchaseOrderId, 'po-2');
 });
 
 test('single-Rx orders may still use the order-level Curaleaf record', () => {

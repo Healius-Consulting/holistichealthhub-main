@@ -26,8 +26,10 @@ import { serialReuseUntilDate } from '../../application/prescriptions/serial-reu
 import {
   curaleafSubOrders,
   filterRecordsByPackIds,
+  lookupKeyedRecord,
   packIdFromRecord,
   packIdsForRx,
+  prescriptionFlowAliasKeys,
   snapshotRxKey,
 } from '../../application/prescriptions/snapshot-rx.js';
 
@@ -532,10 +534,13 @@ export function toPortalOrder(order: PortalOrderSource) {
   const lineItems = lineItemsWithOwnership.map(({ prescriptionId: _prescriptionId, localPrescriptionId: _localPrescriptionId, ...item }) => item);
   const hasExplicitLineOwnership = lineItemsWithOwnership.some(item => item.prescriptionId || item.localPrescriptionId);
   const prescriptions = Array.isArray(rawPrescriptions) && rawPrescriptions.length > 0 ? rawPrescriptions.map((rx: any, index: number) => {
-    const rxKey = snapshotRxKey(rx && typeof rx === 'object' ? rx : {}, index);
-    const sub = snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
-      ? (snapshot.curaleafSubOrders as Record<string, any>)[rxKey]
-      : null;
+    const rxRecord = rx && typeof rx === 'object' ? rx as Record<string, unknown> : {};
+    const sub = lookupKeyedRecord(
+      snapshot?.curaleafSubOrders && typeof snapshot.curaleafSubOrders === 'object'
+        ? snapshot.curaleafSubOrders as Record<string, any>
+        : null,
+      rxRecord,
+    ) ?? null;
     const snapshotLines = Array.isArray(snapshot?.lineItems) ? snapshot.lineItems as Array<Record<string, unknown>> : [];
     const localId = String(rx?.clientKey ?? rx?.id ?? '');
     const sqlId = String(rx?.hhhPrescriptionId ?? '');
@@ -633,7 +638,7 @@ export function toPortalOrder(order: PortalOrderSource) {
     const rxRecord = rx && typeof rx === 'object' ? rx as Record<string, unknown> : {};
     const rxKey = snapshotRxKey(rxRecord, index);
     const packIds = new Set(packIdsForRx(rxRecord));
-    const sub = subOrders[rxKey] ?? null;
+    const sub = lookupKeyedRecord(subOrders, rxRecord) ?? subOrders[rxKey] ?? null;
     const overlappingLines = filterRecordsByPackIds(lines, packIds);
     const poPackIds = new Set(
       ([
@@ -698,7 +703,7 @@ export function toPortalOrder(order: PortalOrderSource) {
     const rxCheckedIn = rxLines.some(line => Number(line.received || 0) > 0 || Number(line.collected || 0) > 0);
     const rxRemainingOpen = rxCheckedIn && rxLines.some(line => Number(line.remaining || 0) > 0 || Number(line.received || 0) < Number(line.ordered || 0));
     const rxDispatch = rxHasPo ? dispatchStatusFromLines(rxShipments, rxLines) : dispatchStatus;
-    prescriptionFlow[rxKey] = {
+    const flowRecord = {
       id: rxKey,
       orderId: rxKey,
       state: reviewBlocking && quoteReview?.type === 'out_of_stock' ? 'HELD_STOCK'
@@ -722,6 +727,9 @@ export function toPortalOrder(order: PortalOrderSource) {
       latestShipmentAt: rxHasPo ? latestShipmentCreatedAt(rxShipments) : null,
       goodsInAt: rxCheckedIn ? (sub?.goodsInAt ?? persistedCuraleaf?.goodsInAt ?? po?.goodsInAt ?? null) : null,
     };
+    for (const alias of prescriptionFlowAliasKeys(rxRecord, index)) {
+      prescriptionFlow[alias] = flowRecord;
+    }
   }
 
   const portalFulfilment = isCancelledOrder

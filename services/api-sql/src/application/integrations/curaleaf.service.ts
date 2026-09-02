@@ -27,7 +27,8 @@ import {
   customerReferenceForRx,
   curaleafPlacementTargets,
   curaleafSubOrders,
-  rxHasPurchaseOrder,
+  lookupKeyedRecord,
+  snapshotPrescriptionHasPurchaseOrder,
   snapshotRxKey,
   snapshotRxList,
 } from '../prescriptions/snapshot-rx.js';
@@ -773,12 +774,15 @@ export async function executeCuraleafOrderPlacement(
 
   const recordedPurchaseOrder = existingCuraleafPurchaseOrder(order);
   const rxIndex = order.__placementRxIndex ?? 0;
-  const rxKey = snapshotRxKey(snapshotRxList(order.quoteSnapshot)[rxIndex] || {}, rxIndex);
-  if (rxHasPurchaseOrder(order.quoteSnapshot, rxKey)) {
+  const rxRecord = snapshotRxList(order.quoteSnapshot)[rxIndex] || {};
+  const rxKey = snapshotRxKey(rxRecord, rxIndex);
+  const recordedSubOrder = lookupKeyedRecord(curaleafSubOrders(order.quoteSnapshot), rxRecord)
+    ?? curaleafSubOrders(order.quoteSnapshot)[rxKey];
+  if (snapshotPrescriptionHasPurchaseOrder(order.quoteSnapshot, rxRecord, rxIndex)) {
     return {
       skipped: true,
       reason: 'Purchase order already recorded for this prescription',
-      purchaseOrder: curaleafSubOrders(order.quoteSnapshot)[rxKey] ?? recordedPurchaseOrder,
+      purchaseOrder: recordedSubOrder ?? recordedPurchaseOrder,
       prescriptionId: null,
       prescriberId: null,
     };
@@ -800,7 +804,7 @@ export async function executeCuraleafOrderPlacement(
     connection.organisationId,
   );
   let snapshot = (order.quoteSnapshot ?? {}) as Record<string, unknown>;
-  const priorFromSub = curaleafSubOrders(snapshot)[rxKey];
+  const priorFromSub = lookupKeyedRecord(curaleafSubOrders(snapshot), rxRecord) ?? curaleafSubOrders(snapshot)[rxKey];
   const priorCuraleaf = (priorFromSub || (rxIndex === 0 && snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
     ? snapshot.curaleaf
     : null)) as {

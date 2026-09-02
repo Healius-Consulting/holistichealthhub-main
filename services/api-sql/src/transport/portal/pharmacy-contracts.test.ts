@@ -1454,4 +1454,59 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.prescriptionFlow?.['2']?.state, 'PENDING_PLACEMENT');
     assert.equal(mapped.prescriptionFlow?.['2']?.lines.length, 0);
   });
+
+  it('attaches each purchase order when snapshots use clientKey instead of id', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-09-02T23:29:27.000Z',
+      fulfilmentStatus: 'SUPPLIER_PROCESSING',
+      quoteSnapshot: {
+        lineItems: [
+          { packId: 'pack-a', productId: 'pack-a', quantity: 1, unitPricePence: 8500, localPrescriptionId: '3802' },
+          { packId: 'pack-b', productId: 'pack-b', quantity: 1, unitPricePence: 2795, localPrescriptionId: '3802' },
+          { packId: 'pack-a', productId: 'pack-a', quantity: 1, unitPricePence: 8500, localPrescriptionId: '3803' },
+        ],
+        prescriptions: [
+          {
+            clientKey: '3802',
+            hhhPrescriptionId: '7527cfd756cb4cbb9637e77e191e21de',
+            fileId: 'file-1',
+            curaleafPrescriptionId: 'bc5b9b38-b3a7-48ee-b8d9-1e53c2ca0a9b',
+            serialNumber: 'SK1',
+            issueDate: '2026-09-03',
+            items: [{ packId: 'pack-a', quantity: 1 }, { packId: 'pack-b', quantity: 1 }],
+          },
+          {
+            clientKey: '3803',
+            hhhPrescriptionId: '7d877784997b4cb2a54f59ad5bc5b108',
+            fileId: 'file-2',
+            curaleafPrescriptionId: 'b4b600da-f045-40ec-8cda-08c16fc9975b',
+            serialNumber: 'SK2',
+            issueDate: '2026-09-03',
+            items: [{ packId: 'pack-a', quantity: 1 }],
+          },
+        ],
+        curaleafSubOrders: {
+          3802: {
+            prescriptionId: 'bc5b9b38-b3a7-48ee-b8d9-1e53c2ca0a9b',
+            purchaseOrderId: 'a35d4cd7-0d1a-4cc3-8897-eac0b7e8c3d4',
+            customerReference: '1DZ-81DB74B60D-P1',
+            status: 'purchase_order_submitted',
+          },
+          3803: {
+            prescriptionId: 'b4b600da-f045-40ec-8cda-08c16fc9975b',
+            purchaseOrderId: '068f2749-22ab-43e5-b685-839cf503a828',
+            customerReference: '1DZ-81DB74B60D-P2',
+            status: 'purchase_order_submitted',
+          },
+        },
+      },
+    });
+    assert.equal(mapped.prescriptionFlow?.['3802']?.purchaseOrderId, 'a35d4cd7-0d1a-4cc3-8897-eac0b7e8c3d4');
+    assert.equal(mapped.prescriptionFlow?.['3803']?.purchaseOrderId, '068f2749-22ab-43e5-b685-839cf503a828');
+    assert.equal(mapped.prescriptionFlow?.['7527cfd756cb4cbb9637e77e191e21de']?.purchaseOrderId, 'a35d4cd7-0d1a-4cc3-8897-eac0b7e8c3d4');
+    assert.equal(mapped.prescriptions?.[0]?.curaleafPrescriptionId, 'bc5b9b38-b3a7-48ee-b8d9-1e53c2ca0a9b');
+    assert.equal(mapped.prescriptions?.[1]?.curaleafPrescriptionId, 'b4b600da-f045-40ec-8cda-08c16fc9975b');
+  });
 });
