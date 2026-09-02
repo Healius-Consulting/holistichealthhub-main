@@ -21,11 +21,9 @@ import {
 import {
   prescriptionFileIdsFromRx,
   prescriptionFileIdsFromSnapshot,
-  purgeOrderPrescriptionFiles,
 } from '../prescriptions/prescription-file-purge.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import {
-  allSnapshotRxsHavePurchaseOrders,
   customerReferenceForRx,
   curaleafPlacementTargets,
   curaleafSubOrders,
@@ -786,9 +784,6 @@ export async function executeCuraleafOrderPlacement(
     };
   }
   if (recordedPurchaseOrder && snapshotRxList(order.quoteSnapshot).length <= 1) {
-    await purgeOrderPrescriptionFiles(connection.organisationId, order.quoteSnapshot).catch(error =>
-      console.warn('[Prescription file] Purge after recorded PO note:', error),
-    );
     return {
       skipped: true,
       reason: 'Purchase order already recorded for this order',
@@ -838,11 +833,6 @@ export async function executeCuraleafOrderPlacement(
           fulfilmentStatus: 'EXCEPTION',
         });
         return { skipped: true, reason: 'Curaleaf purchase order was cancelled' };
-      }
-      if (snapshotRxList(order.quoteSnapshot).length <= 1) {
-        await purgeOrderPrescriptionFiles(connection.organisationId, snapshot).catch(error =>
-          console.warn('[Prescription file] Purge after existing PO note:', error),
-        );
       }
       return {
         skipped: true,
@@ -1364,12 +1354,6 @@ export async function executeCuraleafOrderPlacement(
       customerReferenceFallback: customerReference,
       fulfilmentStatus: 'SUPPLIER_PROCESSING',
     });
-    const placedSnapshot = (await new SqlOrderRepository().findOrderById(order.id, connection.organisationId))?.quoteSnapshot ?? snapshot;
-    if (allSnapshotRxsHavePurchaseOrders(placedSnapshot) || snapshotRxList(placedSnapshot).length <= 1) {
-      await purgeOrderPrescriptionFiles(connection.organisationId, placedSnapshot).catch(error =>
-        console.warn('[Prescription file] Purge after purchase-order-from-prescriptions note:', error),
-      );
-    }
   } catch (poErr) {
     console.warn('[Curaleaf] Purchase order from prescription failed.', {
       code: poErr instanceof HttpError ? poErr.code : 'CURALEAF_PURCHASE_ORDER_FAILED',

@@ -650,6 +650,13 @@ export function deletePrescriptionFile(id: string, organisationId: string) {
   return apiRequest<void>(`/v1/portal/prescription-files/${encodeURIComponent(id)}?organisationId=${encodeURIComponent(organisationId)}`, { method: 'DELETE' });
 }
 
+export function getPrescriptionFileDownloadUrl(id: string, organisationId: string) {
+  return apiRequest<{ downloadUrl: string; expiresAt: string }>(
+    `/v1/portal/prescription-files/${encodeURIComponent(id)}/download-url?organisationId=${encodeURIComponent(organisationId)}`,
+    { skipGetCache: true },
+  );
+}
+
 export function checkPrescriptionSerialAvailability(input: {
   organisationId: string;
   serialNumber?: string;

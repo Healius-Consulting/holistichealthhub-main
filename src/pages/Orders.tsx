@@ -46,7 +46,8 @@ import {
   type Prescription,
 } from '../context/AppContext';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { confirmPortalOrderRefund, createPortalOrderRefund, handoutPortalOrder, placePrescriptionManually, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
+import { ApiRequestError, confirmPortalOrderRefund, createPortalOrderRefund, getPrescriptionFileDownloadUrl, handoutPortalOrder, placePrescriptionManually, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
+import { isPersistedPrescriptionFileId, orderPrescriptionCopyViewable } from '../utils/prescriptionFile';
 import { compactPatientName } from '../utils/patientName';
 import {
   orderAwaitingSupplierShipmentProductNames,
@@ -105,6 +106,19 @@ import {
 } from '../utils/prescriptionWorkItems';
 type ManualPaymentForm = { tender: ManualTender; reference: string; notes: string; confirmed: boolean };
 type GoodsReceiptDraft = { quantities: Record<string, number>; batches: Record<string, string>; expiries: Record<string, string>; note: string };
+
+function openTrainingPrescriptionPreview() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123">
+    <rect width="100%" height="100%" fill="#f7f4ef"/>
+    <rect x="48" y="48" width="698" height="1027" fill="#fffdf8" stroke="#8a8175" stroke-width="2"/>
+    <text x="397" y="220" text-anchor="middle" font-family="Georgia, serif" font-size="28" fill="#3f3a34">Training prescription copy</text>
+    <text x="397" y="268" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" fill="#6b645c">Local preview only. Nothing is stored.</text>
+  </svg>`;
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return Boolean(opened);
+}
 
 /**
  * Field-scoped search. One fuzzy match across every field makes a PO reference
@@ -1448,6 +1462,7 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
 }) {
   const [showOrderDetails, setShowOrderDetails] = useState(false);
   const [copiedDetailKey, setCopiedDetailKey] = useState<string | null>(null);
+  const [viewingPrescriptionCopy, setViewingPrescriptionCopy] = useState(false);
   const { state, dispatch } = useApp();
   const { order, patient, stage } = record;
   const prescriptionWorkItems = buildPrescriptionWorkItems(record).filter(item => item.prescription);
@@ -1523,6 +1538,36 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
     });
   };
 
+  const viewablePrescription = selectedPrescription ?? order.prescriptions[0] ?? null;
+  const prescriptionCopyClosed = ['collected', 'cancelled', 'rejected', 'archived'].includes(selectedStage);
+  const canViewPrescriptionCopy = orderPrescriptionCopyViewable(viewablePrescription?.fileId, prescriptionCopyClosed);
+
+  const openPrescriptionCopy = async () => {
+    const fileId = viewablePrescription?.fileId?.trim();
+    if (!fileId || viewingPrescriptionCopy) return;
+    setViewingPrescriptionCopy(true);
+    try {
+      if (!isPersistedPrescriptionFileId(fileId) || isLocalPortalPreview) {
+        if (!openTrainingPrescriptionPreview()) {
+          dispatch({ type: 'ADD_TOAST', message: 'Allow pop-ups to view the prescription copy.', toastType: 'warning' });
+        }
+        return;
+      }
+      const { downloadUrl } = await getPrescriptionFileDownloadUrl(fileId, state.currentOrganisationId);
+      const opened = window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      if (!opened) dispatch({ type: 'ADD_TOAST', message: 'Allow pop-ups to view the prescription copy.', toastType: 'warning' });
+    } catch (error) {
+      const missing = error instanceof ApiRequestError && (error.status === 404 || error.code === 'NOT_FOUND');
+      dispatch({
+        type: 'ADD_TOAST',
+        message: missing ? 'The prescription copy is no longer available.' : 'The prescription copy could not be opened.',
+        toastType: 'error',
+      });
+    } finally {
+      setViewingPrescriptionCopy(false);
+    }
+  };
+
   const handleCopy = (key: string, text: string) => {
     void navigator.clipboard.writeText(text);
     setCopiedDetailKey(key);
@@ -1558,6 +1603,18 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
           <div className="order-crm-record__actions" role="group" aria-label="Order actions">
             {canFullHandout && selectedPrescription ? <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => onOpenHandout(selectedPrescription, false)}><Check size={13} /> Handout</button> : null}
             {mayCallCuraleafToCancel ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => onCallCuraleaf(selectedPrescription ?? undefined)}><PhoneCall size={13} aria-hidden="true" /> Call Curaleaf to cancel</button> : null}
+            {canViewPrescriptionCopy ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={viewingPrescriptionCopy}
+                aria-busy={viewingPrescriptionCopy}
+                onClick={() => void openPrescriptionCopy()}
+              >
+                <FileText size={13} aria-hidden="true" />
+                {viewingPrescriptionCopy ? 'Opening…' : 'View prescription'}
+              </button>
+            ) : null}
             {order.patientId ? (
               <button type="button" className="btn btn-secondary btn-sm" onClick={openPatientRecord}><User size={13} aria-hidden="true" /> Open patient</button>
             ) : null}

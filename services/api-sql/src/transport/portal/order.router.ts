@@ -1605,6 +1605,11 @@ export function createPortalOrderRouter(): Router {
           status: 'COMPLETED',
           fulfilmentStatus: 'COLLECTED',
         });
+        await purgeOrderPrescriptionFiles(scope.organisationId, snapshot).catch(error =>
+          console.warn('[Prescription file] Purge after collection:', {
+            error: error instanceof Error ? error.message : 'Unknown purge error',
+          }),
+        );
       }
 
       const pharmacyRecipients = await listPharmacyRecipients(scope.organisationId, { identityRepo, organisationRepo });

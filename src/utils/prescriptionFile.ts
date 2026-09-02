@@ -2,6 +2,17 @@ export const PRESCRIPTION_FILE_ACCEPT = 'application/pdf,.pdf,image/jpeg,.jpg,.j
 export const MAX_PRESCRIPTION_FILE_BYTES = 16_000_000;
 export const PRESCRIPTION_SIGNATURE_PREFIX_BYTES = 1024;
 
+export function isPersistedPrescriptionFileId(fileId: string | null | undefined): fileId is string {
+  const trimmed = fileId?.trim() ?? '';
+  return trimmed.length > 0 && !trimmed.startsWith('training-file-');
+}
+
+/** Staff can open a stored copy until the prescription is collected, cancelled, or archived. */
+export function orderPrescriptionCopyViewable(fileId: string | null | undefined, unavailable: boolean): boolean {
+  if (unavailable) return false;
+  return Boolean(fileId?.trim());
+}
+
 export type PrescriptionContentType = 'application/pdf' | 'image/jpeg' | 'image/png';
 
 const MIME_ALIASES: Record<string, PrescriptionContentType> = {
