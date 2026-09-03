@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { HttpError } from '../../domain/common/errors.js';
 import { reconcileWorldpayPaymentRecord } from '../../application/payments/worldpay-reconciliation.js';
 import { isUsablePublicPaymentLookup, publicPaymentStatusBody, transactionReferenceFromWorldpayWebhook } from '../../application/payments/worldpay-query.js';
+import { buildPublicPaymentReceipt } from '../../application/payments/public-receipt.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
@@ -66,10 +67,10 @@ export function createPublicPaymentRouter(): Router {
   });
 
   // GET /v1/public/receipts/:receiptHash - Look up public receipt token
-  router.get('/public/receipts/:receiptHash', async (req: Request, res: Response, next: NextFunction) => {
+  router.get('/public/receipts/:receiptHash', publicPaymentStatusLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const receiptHash = req.params.receiptHash;
-      if (!receiptHash || typeof receiptHash !== 'string' || receiptHash.length !== 64) {
+      const receiptHash = String(req.params.receiptHash || '').trim().toLowerCase();
+      if (!receiptHash || receiptHash.length !== 64 || !/^[a-f0-9]{64}$/.test(receiptHash)) {
         throw new HttpError(404, 'Receipt not found.', 'NOT_FOUND');
       }
 
@@ -78,13 +79,16 @@ export function createPublicPaymentRouter(): Router {
         throw new HttpError(404, 'Receipt not found.', 'NOT_FOUND');
       }
 
-      res.status(200).json({
-        id: payment.id,
-        amountPence: payment.amountPence,
-        currency: payment.currency,
-        status: payment.status.toLowerCase(),
-        createdAt: payment.createdAt,
-      });
+      const [order, refunds] = await Promise.all([
+        orderRepo.findOrderById(payment.orderId, payment.organisationId).catch(() => null),
+        paymentRepo.listRefundsByOrderId(payment.orderId, payment.organisationId).catch(() => []),
+      ]);
+
+      res.status(200).json(buildPublicPaymentReceipt({
+        payment,
+        orderNumber: order?.orderNumber ?? null,
+        completedRefunds: refunds,
+      }));
     } catch (error) {
       next(error);
     }

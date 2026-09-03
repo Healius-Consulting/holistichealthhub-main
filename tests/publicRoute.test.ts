@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canonicalEligibilityRedirect, publicHeaderVariant, resolvePublicView } from '../apps/public/src/publicRoute.ts';
+import { canonicalEligibilityRedirect, parsePublicReceiptHash, publicHeaderVariant, resolvePublicView } from '../apps/public/src/publicRoute.ts';
 
 test('legacy pharmacy QR URLs open the eligibility form from the public root', () => {
   assert.equal(
@@ -17,6 +17,16 @@ test('the canonical eligibility path and payment return paths retain their views
   assert.equal(resolvePublicView('/payment/success', ''), 'payment-complete');
   assert.equal(resolvePublicView('/payments/cancelled/', ''), 'payment-cancelled');
   assert.equal(resolvePublicView('/payment/cancelled', ''), 'payment-cancelled');
+});
+
+test('patient payment receipt hashes open the receipt view', () => {
+  const hash = '6a68fcc99544d3ba835649c1ae690b8b6aeb4be84e9748180251d427a036cf8a';
+  assert.equal(resolvePublicView(`/receipt/${hash}`, ''), 'receipt');
+  assert.equal(resolvePublicView(`/receipt/${hash}/`, ''), 'receipt');
+  assert.equal(parsePublicReceiptHash(`/receipt/${hash}`), hash);
+  assert.equal(parsePublicReceiptHash('/receipt/not-a-hash'), null);
+  assert.equal(resolvePublicView('/receipt/short', ''), 'site');
+  assert.equal(resolvePublicView('/receipt/', ''), 'site');
 });
 
 test('unknown root modes remain on the public site', () => {

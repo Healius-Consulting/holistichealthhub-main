@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../../../src/index.css';
 import EligibilityApp from '../../eligibility/src/EligibilityApp';
+import PaymentReceipt from '../../../src/pages/PaymentReceipt';
 import PaymentReturn from '../../../src/pages/PaymentReturn';
 import { readPublicAppCheckToken } from '../../../src/auth/appCheck';
 import { setApiSecurityTokenProvider } from '../../../src/shared/api';
@@ -21,6 +22,7 @@ export function PublicApp() {
   const view = resolvePublicView(location.pathname, location.search);
   if (view === 'payment-complete') return <PaymentReturn status="complete" />;
   if (view === 'payment-cancelled') return <PaymentReturn status="cancelled" />;
+  if (view === 'receipt') return <PaymentReceipt />;
   if (view === 'eligibility') return <EligibilityApp />;
   return <PublicSite />;
 }

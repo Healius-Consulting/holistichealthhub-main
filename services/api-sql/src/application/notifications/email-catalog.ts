@@ -296,20 +296,25 @@ export const EMAILS = {
     schedule: 'immediate',
     summary: 'Sent when pharmacy confirms a completed refund.',
     render: (payload) => {
-      const { firstName, orderNumber, amount, pharmacyDetails } = fields(payload);
+      const { firstName, orderNumber, amount, receiptHash, pharmacyDetails } = fields(payload);
       return render({
         kind: 'patient_refunded',
         payload,
         subject: 'Your payment has been refunded',
         preheader: 'A refund has been completed for your order.',
         title: 'Payment refunded',
-        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nA refund${amount ? ` of ${amount}` : ''} has been completed${orderNumber ? ` for order ${value(payload, 'orderNumber')}` : ''}. It can take a few working days to appear on the original payment method.\n`,
+        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nA refund${amount ? ` of ${amount}` : ''} has been completed${orderNumber ? ` for order ${value(payload, 'orderNumber')}` : ''}. It can take a few working days to appear on the original payment method.\n${receiptHash ? `Receipt: ${paymentReceiptUrl(receiptHash)}\n` : ''}`,
         paragraphs: [
           `Hi ${firstName},`,
           `A refund${amount ? ` of <strong>${escapeHtml(amount)}</strong>` : ''} has been completed${orderNumber ? ` for order <strong>${orderNumber}</strong>` : ''}. It can take a few working days to appear on the original payment method.`,
         ],
+        highlight: amount ? { label: 'Refund', value: amount } : undefined,
+        cta: receiptHash ? { label: 'View receipt', href: paymentReceiptUrl(receiptHash) } : undefined,
         detailsTitle: 'Pharmacy contact details',
-        details: pharmacyDetails,
+        details: [
+          ...(value(payload, 'orderNumber') ? [{ label: 'Order reference', value: value(payload, 'orderNumber') }] : []),
+          ...pharmacyDetails,
+        ],
       });
     },
   },

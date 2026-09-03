@@ -1669,6 +1669,7 @@ export function createPortalOrderRouter(): Router {
             amountPence: nextRefund.amountPence,
             currency: order.currency || 'GBP',
             orderNumber: order.orderNumber,
+            receiptHash: payment.receiptHash || undefined,
             ...pharmacyEmailContext(organisation),
           },
           keyParts: ['patient-refunded', orderId, refundId],

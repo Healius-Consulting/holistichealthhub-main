@@ -181,6 +181,7 @@ async function reconcilePreparedWorldpayRefund(
         amountPence: Number(refund.amountPence),
         currency: refund.currency || payment.currency,
         orderNumber: order.orderNumber,
+        receiptHash: payment.receiptHash || undefined,
         ...pharmacyEmailContext(organisation),
       },
       keyParts: ['patient-refunded', order.id, refund.id],

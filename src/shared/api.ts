@@ -562,8 +562,20 @@ export function getPublicPaymentStatus(params: { ref?: string; receipt?: string;
   return apiRequest<PublicPaymentStatusResponse>(`/v1/public/payments/status?${query.toString()}`, { skipGetCache: true });
 }
 
+export type PublicPaymentReceiptResponse = {
+  id: string;
+  amountPence: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  updatedAt?: string | null;
+  orderNumber?: string | null;
+  refundedAmountPence?: number | null;
+  partial?: boolean;
+};
+
 export function getPublicPaymentReceipt(token: string) {
-  return apiRequest<{ status: 'pending' | 'paid' | 'failed' | 'expired'; message: string }>(`/v1/public/receipts/${encodeURIComponent(token)}`);
+  return apiRequest<PublicPaymentReceiptResponse>(`/v1/public/receipts/${encodeURIComponent(token)}`, { skipGetCache: true });
 }
 
 export function attachPrescriptionRenewal(orderId: string, prescriptionId: string, input: { organisationId: string; renewedPrescription: Record<string, unknown> }) {

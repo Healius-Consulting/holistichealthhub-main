@@ -64,6 +64,8 @@ describe('email template renderer', () => {
     assert.match(rendered.html, /cid:email-header-logo/);
     assert.match(rendered.html, /cid:email-curaleaf-logo/);
     assert.match(rendered.html, /Powered by/);
+    assert.match(rendered.html, /View receipt/);
+    assert.match(rendered.html, /holistichealthhub\.live\/receipt\/a{64}/);
   });
 
   it('renders a pharmacy dispatch update', () => {
@@ -115,9 +117,13 @@ describe('email template renderer', () => {
       amountPence: 8900,
       currency: 'GBP',
       orderNumber: 'ORD-890',
+      receiptHash: 'b'.repeat(64),
     });
     assert.match(refunded.subject, /refunded/);
     assert.match(refunded.html, /ORD-890/);
+    assert.match(refunded.html, /View receipt/);
+    assert.match(refunded.html, /holistichealthhub\.live\/receipt\/b{64}/);
+    assert.match(refunded.text, /Receipt: https:\/\/holistichealthhub\.live\/receipt\/b{64}/);
 
     const ready = renderEmailTemplate('patient_ready_for_collection', {
       firstName: 'Avery',

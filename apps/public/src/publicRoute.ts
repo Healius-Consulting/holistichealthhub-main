@@ -1,9 +1,11 @@
 import { normaliseEligibilitySearch, parseEligibilityReferralRoute } from '../../eligibility/src/referralRoute.ts';
+import { parsePublicReceiptHash } from '../../../src/utils/publicReceiptHash.ts';
 
-export type PublicView = 'site' | 'eligibility' | 'payment-complete' | 'payment-cancelled';
+export type PublicView = 'site' | 'eligibility' | 'payment-complete' | 'payment-cancelled' | 'receipt';
 
 export const CANONICAL_ELIGIBILITY_ORIGIN = 'https://holistichealthhub.live';
 export const LEGACY_PUBLIC_HOST = 'holistichealthhub.cc';
+export { parsePublicReceiptHash };
 /**
  * Hosts whose *tokenised eligibility* URLs canonicalise onto the brand origin.
  *
@@ -47,6 +49,7 @@ export function resolvePublicView(pathname: string, search: string): PublicView 
     path === '/payment-declined' ||
     path === '/payment/failed'
   ) return 'payment-cancelled';
+  if (parsePublicReceiptHash(path)) return 'receipt';
   return 'site';
 }
 
