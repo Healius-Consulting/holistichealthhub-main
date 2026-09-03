@@ -12,6 +12,7 @@ import {
   snapshotPrescriptionHasPurchaseOrder,
   snapshotRxKey,
   snapshotRxList,
+  rxKeyForCuraleafIdentity,
 } from './snapshot-rx.js';
 
 describe('snapshot Rx helpers', () => {
@@ -100,5 +101,29 @@ describe('snapshot Rx helpers', () => {
     assert.equal(snapshotPrescriptionHasPurchaseOrder(snapshot, snapshot.prescriptions[1], 1), true);
     assert.deepEqual(pendingPlacementRxIndexes(snapshot), []);
     assert.equal(allSnapshotRxsHavePurchaseOrders(snapshot), true);
+  });
+
+  it('resolves a polled purchase order or prescription onto one multi-Rx sub-order key', () => {
+    const snapshot = {
+      prescriptions: [
+        { clientKey: '3802', curaleafPrescriptionId: 'curaleaf-a' },
+        { clientKey: '3803', curaleafPrescriptionId: 'curaleaf-b' },
+      ],
+      curaleafSubOrders: {
+        3802: { purchaseOrderId: 'po-a', prescriptionId: 'curaleaf-a', prescriberId: 'prescriber-a' },
+        3803: { purchaseOrderId: 'po-b', prescriptionId: 'curaleaf-b', prescriberId: 'prescriber-b' },
+      },
+    };
+    assert.equal(rxKeyForCuraleafIdentity(snapshot, { purchaseOrderId: 'po-b' }), '3803');
+    assert.equal(rxKeyForCuraleafIdentity(snapshot, { prescriptionId: 'curaleaf-a' }), '3802');
+    assert.equal(rxKeyForCuraleafIdentity(snapshot, { prescriberId: 'prescriber-b' }), '3803');
+    assert.equal(rxKeyForCuraleafIdentity(snapshot, { purchaseOrderId: 'missing' }), null);
+  });
+
+  it('does not fall back to the first prescription when a multi-Rx poll cannot be keyed', () => {
+    assert.equal(rxKeyForCuraleafIdentity({
+      prescriptions: [{ id: '1' }, { id: '2' }],
+      curaleaf: { purchaseOrderId: 'po-order-level' },
+    }, { purchaseOrderId: 'po-order-level' }), null);
   });
 });

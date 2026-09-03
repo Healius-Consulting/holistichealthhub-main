@@ -98,6 +98,63 @@ export function curaleafSubOrders(snapshot: unknown): Record<string, Record<stri
   return next;
 }
 
+function uniqueSubOrderKey(
+  matches: Array<[string, Record<string, unknown>]>,
+): string | null {
+  const keys = [...new Set(matches.map(([key]) => key))];
+  return keys.length === 1 ? keys[0]! : null;
+}
+
+/**
+ * Which snapshot prescription a polled Curaleaf PO / prescription / prescriber belongs to.
+ * Multi-Rx must match a sub-order; it never falls back to order-level `curaleaf`.
+ */
+export function rxKeyForCuraleafIdentity(
+  snapshot: unknown,
+  input: {
+    purchaseOrderId?: string | null;
+    prescriptionId?: string | null;
+    prescriberId?: string | null;
+  },
+): string | null {
+  const rxList = snapshotRxList(snapshot);
+  const subOrders = Object.entries(curaleafSubOrders(snapshot));
+  const purchaseOrderId = String(input.purchaseOrderId ?? '').trim();
+  const prescriptionId = String(input.prescriptionId ?? '').trim();
+  const prescriberId = String(input.prescriberId ?? '').trim();
+
+  if (purchaseOrderId) {
+    const matched = uniqueSubOrderKey(subOrders.filter(([, record]) => (
+      String(record.purchaseOrderId || record.id || '').trim() === purchaseOrderId
+    )));
+    if (matched) return matched;
+  }
+
+  if (prescriptionId) {
+    const fromSub = uniqueSubOrderKey(subOrders.filter(([, record]) => (
+      String(record.prescriptionId ?? '').trim() === prescriptionId
+    )));
+    if (fromSub) return fromSub;
+    const fromRx = rxList.flatMap((rx, index) => (
+      String(rx.curaleafPrescriptionId ?? '').trim() === prescriptionId
+        ? [[snapshotRxKey(rx, index), rx] as [string, Record<string, unknown>]]
+        : []
+    ));
+    const matchedRx = uniqueSubOrderKey(fromRx);
+    if (matchedRx) return matchedRx;
+  }
+
+  if (prescriberId) {
+    const fromSub = uniqueSubOrderKey(subOrders.filter(([, record]) => (
+      String(record.prescriberId ?? '').trim() === prescriberId
+    )));
+    if (fromSub) return fromSub;
+  }
+
+  if (rxList.length === 1) return snapshotRxKey(rxList[0], 0);
+  return null;
+}
+
 export function rxHasPurchaseOrder(snapshot: unknown, rxKey: string): boolean {
   const sub = curaleafSubOrders(snapshot)[rxKey];
   const id = String(sub?.purchaseOrderId || sub?.id || '').trim();

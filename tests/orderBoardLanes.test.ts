@@ -116,6 +116,23 @@ test('a split order with collectable packs stays in the handout queue', () => {
   assert.equal(orderSplitCardLabel({ order, stage }), '2/5 ready');
 });
 
+test('partial collection with remainder awaiting dispatch sits with Curaleaf, not ready to collect', () => {
+  const order = {
+    date: new Date(),
+    payment: { status: 'paid' },
+    prescriptions: [{
+      status: 'partially-received',
+      fulfilmentLines: [line({ ordered: 2, shipped: 1, received: 1, remaining: 1, allocated: 2, collected: 1 })],
+    }],
+  } as PatientOrder;
+  const stage = orderStage(order).stage;
+  assert.equal(stage, 'curaleaf-approved');
+  assert.equal(orderBoardLane({ order, stage }), 'curaleaf');
+  assert.equal(recordReadyToCollect({ order, stage }), false);
+  assert.equal(orderBoardSection({ order, stage }, 'curaleaf', 'x').key, 'preparing');
+  assert.equal(orderSplitCardLabel({ order, stage }), '1/2 collected');
+});
+
 test('split card label names the stage the fraction refers to', () => {
   const inTransit = {
     date: new Date(),
@@ -182,23 +199,20 @@ test('a section heading and the card tag under it never say the same thing twice
   assert.equal(orderBoardSection(record({}, 'rejected'), 'needs-action', 'Quote review').key, orderBoardSlug('Quote review'));
 });
 
-test('split sections separate what can be handed out now from what has not landed', () => {
-  const someHere = {
-    date: new Date(),
-    payment: { status: 'paid' },
-    prescriptions: [{ status: 'partially-received', fulfilmentLines: [line({ ordered: 2, shipped: 1, received: 1, remaining: 1, allocated: 1 })] }],
-  } as PatientOrder;
+test('the split lane is inbound only and does not invent part-here headings', () => {
   const noneHere = {
     date: new Date(),
     payment: { status: 'paid' },
     prescriptions: [{ status: 'dispatched', fulfilmentLines: [line({ ordered: 2, shipped: 1, received: 0, remaining: 1, allocated: 1 })] }],
   } as PatientOrder;
-  assert.equal(orderBoardSection({ order: someHere, stage: 'dispatched' }, 'split', 'x').key, 'split-here');
+  const someHere = {
+    date: new Date(),
+    payment: { status: 'paid' },
+    prescriptions: [{ status: 'partially-received', fulfilmentLines: [line({ ordered: 2, shipped: 1, received: 1, remaining: 1, allocated: 1 })] }],
+  } as PatientOrder;
+  assert.equal(orderBoardLane({ order: noneHere, stage: 'dispatched' }), 'split');
   assert.equal(orderBoardSection({ order: noneHere, stage: 'dispatched' }, 'split', 'x').key, 'split-inbound');
-  // Actionable first.
-  assert.equal(
-    orderBoardSection({ order: someHere, stage: 'dispatched' }, 'split', 'x').rank
-      < orderBoardSection({ order: noneHere, stage: 'dispatched' }, 'split', 'x').rank,
-    true,
-  );
+  // Packs on the shelf leave Split delivery, so those headings never appear live.
+  assert.equal(orderBoardLane({ order: someHere, stage: 'ready' }), 'ready');
+  assert.notEqual(orderBoardSection({ order: someHere, stage: 'ready' }, orderBoardLane({ order: someHere, stage: 'ready' }), 'x').key, 'split-here');
 });

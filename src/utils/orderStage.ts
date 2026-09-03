@@ -298,10 +298,16 @@ function prescriptionHasInTransitPacks(prescription: OrderPrescription) {
 }
 
 function prescriptionReadyForCollection(prescription: OrderPrescription) {
-  if (!prescriptionHasCheckedInPacks(prescription)) return false;
-  // In this pharmacy workflow physical check-in is the ready decision. Keep
-  // legacy `received` records collectable too so they cannot become shelf stock
-  // stranded between two UI stages after this rule changes.
+  if (prescriptionUsesPackProgress(prescription)) {
+    if (prescriptionUncollectedReadyPacks(prescription) <= 0) return false;
+  } else if (prescription.status === 'ready') {
+    return true;
+  } else if (!prescriptionHasCheckedInPacks(prescription)) {
+    return false;
+  }
+  // Physical check-in is the ready decision, but only while those packs are
+  // still on the shelf. Once they have been handed over, a supplier remainder
+  // is a Curaleaf wait, not a collection queue item.
   return ['received', 'partially-received', 'ready'].includes(prescription.status)
     || Object.values(prescription.shipmentStates ?? {}).some(state =>
       state === 'received' || state === 'partially_received' || state === 'ready_for_collection',
@@ -324,9 +330,9 @@ function orderHasOpenRemainder(order: PatientOrder) {
   );
 }
 
-/** Partial split: some packs checked in at pharmacy while supplier remainder is still open. */
+/** Partial split: some packs are on the dispensary shelf while the supplier remainder is still open. */
 export function orderHasPartialPharmacyReceipt(order: PatientOrder) {
-  if (!orderHasOpenRemainder(order)) return false;
+  if (!orderHasOpenRemainder(order) || !orderHasUncollectedReceivedPacks(order)) return false;
   return order.prescriptions.some(prescription => {
     if (!prescriptionHasCheckedInPacks(prescription)) return false;
     if (!prescriptionUsesPackProgress(prescription)) return prescription.status === 'partially-received';
@@ -449,6 +455,11 @@ export function orderStage(order: PatientOrder, now = new Date()): { stage: Orde
   // still in transit. The remaining quantities stay visible as split fulfilment.
   if (readyForCollection) return { stage: 'ready', unresolvedReason };
   if (hasInTransitPacks) return { stage: 'dispatched', unresolvedReason };
+  // Arrived packs already collected, remainder still owed: wait on Curaleaf,
+  // not the handout queue.
+  if (orderHasPartialCollection(order) && remainingOpen && !orderHasUncollectedReceivedPacks(order)) {
+    return { stage: 'curaleaf-approved', unresolvedReason };
+  }
   if (orderHasPartialPharmacyReceipt(order)) return { stage: 'dispatched', unresolvedReason };
   const usesPackProgress = order.prescriptions.some(prescriptionUsesPackProgress);
   if (deliveredAtPharmacy || (!usesPackProgress && statuses.some(status => status === 'received' || status === 'partially-received'))) {

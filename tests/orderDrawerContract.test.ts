@@ -5,11 +5,15 @@ import test from 'node:test';
 const ordersSource = readFileSync(new URL('../src/pages/Orders.tsx', import.meta.url), 'utf8');
 const cssSource = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
 
-test('the live order record uses one order-level Pharmacy placement rail', () => {
-  assert.match(ordersSource, /<OrderPlacementRail order=\{order\}/);
-  assert.match(ordersSource, /buildOrderStageRail\(order\)/);
-  assert.doesNotMatch(ordersSource, /rail\.placement/);
+test('the live order record uses a per-prescription Pharmacy placement rail', () => {
+  assert.doesNotMatch(ordersSource, /function OrderPlacementRail/);
+  assert.doesNotMatch(ordersSource, /<OrderPlacementRail /);
+  assert.match(ordersSource, /<PrescriptionStageRail order=\{order\} prescription=\{prescription\}/);
+  assert.match(ordersSource, /rail\.placement/);
   assert.match(ordersSource, /label="Prescription fulfilment" steps=\{rail\.dispensing\}/);
+  assert.doesNotMatch(ordersSource, /All prescriptions placed/);
+  assert.doesNotMatch(ordersSource, /Waiting for remaining prescriptions/);
+  assert.doesNotMatch(ordersSource, /prescriptions placed/);
 });
 
 test('Curaleaf support controls never fall back to an HHH order reference as a PO', () => {

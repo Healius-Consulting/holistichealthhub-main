@@ -253,16 +253,24 @@ test('a fully ready order still reads as fully ready', () => {
   assert.equal(ready!.detail, 'Patient notified');
 });
 
-test('an unplaced prescription card has no duplicate placement rail or dispensing steps', () => {
+test('an unplaced prescription card shows placement and no dispensing steps', () => {
   const clinic = { ...unplacedPrescription, entryMode: 'clinic' as const, clinicScanId: 'scan-1', status: 'awaiting-approval' as const };
   const order = orderWith({
     payment: { ...partialOrder.payment, status: 'paid' },
     prescriptions: [clinic],
   });
   const rail = buildPrescriptionStageRail(order, clinic);
+  assert.deepEqual(rail.placement?.map(entry => entry.key), ['prescriber', 'prescription', 'purchase-order']);
   assert.equal(rail.dispensing, null);
   assert.equal(rail.route, 'clinic_barcode');
-  assert.deepEqual(buildOrderStageRail(order).pharmacyPlacement.map(entry => entry.key), ['payment', 'prescriber', 'prescription', 'purchase-order']);
+  assert.equal(rail.placement?.find(step => step.key === 'purchase-order')?.detail, 'Waiting for Curaleaf');
+  assert.doesNotMatch(rail.placement?.map(step => step.detail).join(' ') ?? '', /All prescriptions|remaining prescriptions/i);
+});
+
+test('a placed prescription hides Pharmacy placement and shows fulfilment', () => {
+  const rail = buildPrescriptionStageRail(partialOrder, tenPackPrescription);
+  assert.equal(rail.placement, null);
+  assert.ok(rail.dispensing);
 });
 
 test('HHH repair audit events appear in the order activity log', () => {
@@ -280,7 +288,7 @@ test('HHH repair audit events appear in the order activity log', () => {
   assert.match(repaired?.detail ?? '', /1DZ-816507F909-P1/);
 });
 
-test('a placed sibling shows dispensing steps while an unplaced sibling does not', () => {
+test('a placed sibling shows dispensing while an unplaced sibling keeps its own placement rail', () => {
   const clinic = { ...unplacedPrescription, id: 201, entryMode: 'clinic' as const, clinicScanId: 'scan-1', status: 'awaiting-approval' as const };
   const manualPlaced = { ...tenPackPrescription, id: 202, entryMode: 'manual' as const };
   const order = orderWith({
@@ -290,14 +298,14 @@ test('a placed sibling shows dispensing steps while an unplaced sibling does not
   const pending = buildPrescriptionStageRail(order, clinic);
   const placed = buildPrescriptionStageRail(order, manualPlaced);
   assert.equal(pending.dispensing, null);
+  assert.ok(pending.placement);
   assert.equal(pending.route, 'clinic_barcode');
+  assert.notEqual(pending.placement?.find(step => step.key === 'purchase-order')?.state, 'complete', 'one placed sibling must not complete the unplaced prescription PO step');
+  assert.equal(placed.placement, null, 'a placed prescription hides Pharmacy placement');
   assert.deepEqual(placed.dispensing?.map(entry => entry.key), ['ordered', 'dispensed', 'in-transit', 'checked-in', 'ready', 'collected']);
   assert.equal(placed.route, 'manual');
-  const placement = buildOrderStageRail(order).pharmacyPlacement;
-  const poStep = placement.find(step => step.key === 'purchase-order');
-  assert.notEqual(poStep?.state, 'complete', 'one placed sibling must not complete the whole-order PO step');
-  const chrome = `${placement.map(step => `${step.label} ${step.detail}`).join(' ')} ${placed.dispensing?.map(step => `${step.label} ${step.detail}`).join(' ')}`;
-  assert.doesNotMatch(chrome, /RX-|serial|file-2|S2/i);
+  const chrome = `${pending.placement?.map(step => `${step.label} ${step.detail}`).join(' ')} ${placed.dispensing?.map(step => `${step.label} ${step.detail}`).join(' ')}`;
+  assert.doesNotMatch(chrome, /All prescriptions|remaining prescriptions|RX-|serial|file-2|S2/i);
 });
 
 test('zero allocation uses the agreed supplier wording', () => {

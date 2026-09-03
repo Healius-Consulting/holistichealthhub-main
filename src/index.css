@@ -13811,6 +13811,12 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   line-height: 1.4;
 }
 .order-placement-progress__summary strong{ color: var(--text-primary); }
+.order-rx-card .order-placement-progress--rx{
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+}
 
 .order-stage-rail__lane + .order-stage-rail__lane{
   margin-top: 14px;

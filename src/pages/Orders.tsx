@@ -89,7 +89,7 @@ import {
   quoteReviewIsOpen,
   type OrderBoardLane,
 } from '../utils/orderBoardLanes';
-import { buildOrderStageRail, buildOrderTimelineEvents, buildPrescriptionStageRail, type OrderStageStep } from '../utils/orderTimeline';
+import { buildOrderTimelineEvents, buildPrescriptionStageRail, type OrderStageStep } from '../utils/orderTimeline';
 import { visiblePaymentGateCheck } from '../utils/quoteGate';
 import RecordDialog from '../components/RecordDialog';
 import {
@@ -579,8 +579,8 @@ export default function Orders() {
           if (existing) existing.items.push(item);
           else sections.push({ ...section, items: [item] });
         }
-        // Stable by first appearance, then by the section's own rank so the actionable
-        // group ("Part here to hand over") sits above the purely inbound one.
+        // Stable by first appearance, then by the section's own rank so earlier
+        // pipeline waits sit above later ones inside the same lane.
         sections.sort((left, right) => left.rank - right.rank);
         return { ...lane, items, sections };
       })
@@ -1484,7 +1484,6 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
   const cancellationResolution = orderCancellationResolution(order);
   const typedResolutionClosed = ['REPLACED', 'REFUNDED', 'SPLIT_RESOLVED'].includes(order.resolution?.status ?? '');
   const cancellationClosed = ['resolved', 'refunded'].includes(cancellationResolution) || typedResolutionClosed;
-  const allPlaced = order.prescriptions.length > 0 && order.prescriptions.every(prescription => Boolean(prescription.purchaseOrderId));
   const placedCount = order.prescriptions.filter(prescription => Boolean(prescription.purchaseOrderId)).length;
   const purchaseOrderReferences = [...new Set(order.prescriptions.flatMap(prescription => prescription.purchaseOrderId ? [prescription.purchaseOrderId] : []))];
   const sharesLegacyPurchaseOrder = placedCount > 1 && new Set(order.prescriptions.filter(prescription => prescription.placed && prescription.purchaseOrderId).map(prescription => prescription.purchaseOrderId)).size === 1;
@@ -1694,7 +1693,6 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
       <div className="order-crm-record__body">
         <section className="order-crm-main">
           <div className="order-crm-section-heading"><span><small>Prescription fulfilment</small><strong>{order.prescriptions.length} prescription{order.prescriptions.length === 1 ? '' : 's'}</strong></span><FileText size={16} /></div>
-          <OrderPlacementRail order={order} />
           {sharesLegacyPurchaseOrder ? (
             <p className="order-crm-legacy-po" role="note">One Curaleaf purchase order covers more than one prescription on this order.</p>
           ) : null}
@@ -1719,12 +1717,6 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
               onOpenHandout={(partial, shipmentId) => onOpenHandout(selectedPrescription, partial, shipmentId)}
             /> : null}
           </div>
-
-          {stage === 'paid' && !allPlaced && !busy && !reviewOpen && !showSupplierCancel ? (
-            <div className="order-crm-next-action order-crm-next-action--waiting">
-              <Clock3 size={16} /><span><strong>Waiting for Curaleaf on remaining prescriptions</strong><small>No action is needed on prescriptions that are already placed. Remaining scripts update here when Curaleaf accepts them.</small></span>
-            </div>
-          ) : null}
 
           {stage === 'awaiting-payment' && order.payment.route === 'worldpay' ? (
             <div className="order-crm-next-action order-crm-next-action--waiting">
@@ -2430,32 +2422,22 @@ function StageRailLane({ label, note, steps }: { label: string; note?: string | 
   );
 }
 
-/** Payment is deliberately represented once, at order level. */
-function OrderPlacementRail({ order }: { order: PatientOrder }) {
-  const rail = buildOrderStageRail(order);
-  const placed = order.prescriptions.filter(prescription => Boolean(prescription.purchaseOrderId)).length;
-  return (
-    <section className="order-placement-progress" aria-label="Pharmacy placement">
-      <div className="order-stage-rail order-stage-rail--placement">
-        <StageRailLane
-          label="Pharmacy placement"
-          note={rail.route === 'clinic_barcode' ? 'Clinic QR' : 'Manual entry'}
-          steps={rail.pharmacyPlacement}
-        />
-      </div>
-      {order.prescriptions.length > 1 ? (
-        <p className="order-placement-progress__summary">
-          <strong>{placed} of {order.prescriptions.length} prescriptions placed</strong>
-          <span>{placed === order.prescriptions.length ? 'Every prescription has its own Curaleaf PO.' : 'Placed prescriptions continue below; the remainder stay in placement.'}</span>
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-/** A six-step rail exists only after this prescription has a real Curaleaf PO. */
+/** Payment stays on the order header. This rail is one prescription's placement or fulfilment. */
 function PrescriptionStageRail({ order, prescription }: { order: PatientOrder; prescription: Prescription }) {
   const rail = buildPrescriptionStageRail(order, prescription);
+  if (rail.placement) {
+    return (
+      <section className="order-placement-progress order-placement-progress--rx" aria-label="Pharmacy placement">
+        <div className="order-stage-rail order-stage-rail--placement">
+          <StageRailLane
+            label="Pharmacy placement"
+            note={rail.route === 'clinic_barcode' ? 'Clinic QR' : 'Manual entry'}
+            steps={rail.placement}
+          />
+        </div>
+      </section>
+    );
+  }
   if (!rail.dispensing) return null;
   return (
     <div className="order-stage-rail">
@@ -2759,12 +2741,6 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
           </div>
         </header>
         <PrescriptionStageRail order={order} prescription={prescription} />
-        {!prescription.purchaseOrderId ? (
-          <p className="order-rx-placement-pending" role="status">
-            <Clock3 size={15} aria-hidden="true" />
-            <span><strong>No Curaleaf PO created yet</strong><small>This prescription remains in the order-level Pharmacy placement stage above.</small></span>
-          </p>
-        ) : null}
         {prescription.manualPlaceRequired ? (
           <div className="order-ready-control">
             <span>

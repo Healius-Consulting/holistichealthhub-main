@@ -341,6 +341,7 @@ test('partial collection with supplier remainder does not keep an in-transit del
   assert.equal(orderHasUncollectedReceivedPacks(order), false);
   assert.equal(orderAwaitingSupplierShipmentProductNames(order).length, 1);
   assert.equal(prescriptionStatusLabel(order.prescriptions[0]!), 'Part Collected');
+  assert.equal(orderStage(order).stage, 'curaleaf-approved');
 });
 
 test('partial Curaleaf allocation before courier is split dispensed', () => {

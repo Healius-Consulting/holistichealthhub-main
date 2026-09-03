@@ -22,6 +22,7 @@ import { advanceFulfilmentStatus } from '../orders/curaleaf-fulfilment.js';
 import { listPharmacyRecipients, queueEmailToRecipients } from '../notifications/email-outbox.js';
 import { curaleafApiRequest } from '../integrations/curaleaf.service.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
+import { curaleafSubOrders, rxKeyForCuraleafIdentity, snapshotRxList } from '../prescriptions/snapshot-rx.js';
 import { recordVerifiedPrescriberInDirectory } from '../prescriptions/verified-prescriber-directory.js';
 import type { CuraleafPurchaseOrderLike, CuraleafShipmentLike } from '../orders/curaleaf-fulfilment.js';
 import { supplierShipmentRowInput } from './poll-curaleaf-shipment-row.js';
@@ -63,6 +64,28 @@ async function sqlOrderIdsForPrescription(
 ) {
   if (!deps.prescriptionRepo || !prescriptionId) return [];
   return deps.prescriptionRepo.findOrderIdsBySupplierPrescriptionId(organisationId, prescriptionId);
+}
+
+function snapshotRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function curaleafIdentityForPoll(
+  snapshot: unknown,
+  input: {
+    purchaseOrderId?: string | null;
+    prescriptionId?: string | null;
+    prescriberId?: string | null;
+  },
+) {
+  const rxKey = rxKeyForCuraleafIdentity(snapshot, input);
+  if (snapshotRxList(snapshot).length > 1 && !rxKey) {
+    return { rxKey: null as string | null, prior: {} as Record<string, unknown>, skip: true };
+  }
+  const subOrders = curaleafSubOrders(snapshot);
+  const prior = (rxKey && subOrders[rxKey])
+    || snapshotRecord(snapshotRecord(snapshot).curaleaf);
+  return { rxKey, prior, skip: false };
 }
 
 async function persistSupplierCancellation(
@@ -225,9 +248,15 @@ async function pollKind(
           const snapshot = order.quoteSnapshot && typeof order.quoteSnapshot === 'object'
             ? order.quoteSnapshot as Record<string, unknown>
             : {};
-          const prior = snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
-            ? snapshot.curaleaf as Record<string, unknown>
-            : {};
+          const identity = curaleafIdentityForPoll(snapshot, {
+            purchaseOrderId: String(purchaseOrder.id || purchaseOrder.purchaseOrderId || ''),
+          });
+          if (identity.skip) {
+            console.warn('[Curaleaf poll] Purchase order update skipped; prescription key could not be resolved.', {
+              code: 'MISSING_RX_KEY',
+            });
+            continue;
+          }
           const poState = String(purchaseOrder.state || purchaseOrder.purchaseOrderState || 'CREATED').toUpperCase();
           const fulfilmentStatus = lockedFulfilment.has(String(order.fulfilmentStatus || ''))
             ? undefined
@@ -239,11 +268,12 @@ async function pollKind(
             orderId: order.id,
             patientId: order.patientId,
             snapshot: order.quoteSnapshot,
-            prescriptionId: typeof prior.prescriptionId === 'string' ? prior.prescriptionId : null,
-            prescriberId: typeof prior.prescriberId === 'string' ? prior.prescriberId : null,
+            prescriptionId: typeof identity.prior.prescriptionId === 'string' ? identity.prior.prescriptionId : null,
+            prescriberId: typeof identity.prior.prescriberId === 'string' ? identity.prior.prescriberId : null,
             purchaseOrder: record,
             customerReferenceFallback: order.orderNumber,
             fulfilmentStatus,
+            rxKey: identity.rxKey,
           });
         }
       }
@@ -279,20 +309,25 @@ async function pollKind(
             const snapshot = order.quoteSnapshot && typeof order.quoteSnapshot === 'object'
               ? order.quoteSnapshot as Record<string, unknown>
               : {};
-            const prior = snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
-              ? snapshot.curaleaf as Record<string, unknown>
-              : {};
-            await persistCuraleafPrescriptionIdentity({
-              organisationId: order.organisationId,
-              orderId: order.id,
-              patientId: order.patientId,
-              snapshot,
-              prescriptionId: String(record.id || ''),
-              prescriberId: typeof prior.prescriberId === 'string' ? prior.prescriberId : null,
-              prescriptionState,
-              purchaseOrder: null,
-              fulfilmentStatus: prescriptionState === 'EXPIRED' || prescriptionState === 'FULFILLED' ? 'EXCEPTION' : 'SUPPLIER_PENDING',
-            });
+            const identity = curaleafIdentityForPoll(snapshot, { prescriptionId: String(record.id || '') });
+            if (identity.skip) {
+              console.warn('[Curaleaf poll] Prescription update skipped; prescription key could not be resolved.', {
+                code: 'MISSING_RX_KEY',
+              });
+            } else {
+              await persistCuraleafPrescriptionIdentity({
+                organisationId: order.organisationId,
+                orderId: order.id,
+                patientId: order.patientId,
+                snapshot,
+                prescriptionId: String(record.id || ''),
+                prescriberId: typeof identity.prior.prescriberId === 'string' ? identity.prior.prescriberId : null,
+                prescriptionState,
+                purchaseOrder: null,
+                fulfilmentStatus: prescriptionState === 'EXPIRED' || prescriptionState === 'FULFILLED' ? 'EXCEPTION' : 'SUPPLIER_PENDING',
+                rxKey: identity.rxKey,
+              });
+            }
             if (prescriptionState === 'ACTIVE') {
               const { executeCuraleafOrderPlacement } = await import('../integrations/curaleaf.service.js');
               await executeCuraleafOrderPlacement(connection, order).catch(error => {
@@ -331,20 +366,25 @@ async function pollKind(
           const snapshot = order.quoteSnapshot && typeof order.quoteSnapshot === 'object'
             ? order.quoteSnapshot as Record<string, unknown>
             : {};
-          const prior = snapshot.curaleaf && typeof snapshot.curaleaf === 'object'
-            ? snapshot.curaleaf as Record<string, unknown>
-            : {};
-          await persistCuraleafPrescriptionIdentity({
-            organisationId: order.organisationId,
-            orderId: order.id,
-            patientId: order.patientId,
-            snapshot,
-            prescriptionId: typeof prior.prescriptionId === 'string' ? prior.prescriptionId : null,
-            prescriberId: String(record.id || ''),
-            prescriberState: prescriberState as 'UNVERIFIED' | 'VERIFIED',
-            purchaseOrder: null,
-            fulfilmentStatus: 'SUPPLIER_PENDING',
-          });
+          const identity = curaleafIdentityForPoll(snapshot, { prescriberId: String(record.id || '') });
+          if (identity.skip) {
+            console.warn('[Curaleaf poll] Prescriber update skipped; prescription key could not be resolved.', {
+              code: 'MISSING_RX_KEY',
+            });
+          } else {
+            await persistCuraleafPrescriptionIdentity({
+              organisationId: order.organisationId,
+              orderId: order.id,
+              patientId: order.patientId,
+              snapshot,
+              prescriptionId: typeof identity.prior.prescriptionId === 'string' ? identity.prior.prescriptionId : null,
+              prescriberId: String(record.id || ''),
+              prescriberState: prescriberState as 'UNVERIFIED' | 'VERIFIED',
+              purchaseOrder: null,
+              fulfilmentStatus: 'SUPPLIER_PENDING',
+              rxKey: identity.rxKey,
+            });
+          }
           if (prescriberState === 'VERIFIED') {
             const { executeCuraleafOrderPlacement } = await import('../integrations/curaleaf.service.js');
             await executeCuraleafOrderPlacement(connection, order).catch(error => {

@@ -43,7 +43,9 @@ export function recordNeedsAction(record: OrderLaneInput) {
 }
 
 export function recordReadyToCollect(record: OrderLaneInput) {
-  return !recordNeedsAction(record) && (record.stage === 'ready' || record.stage === 'delivered');
+  if (recordNeedsAction(record)) return false;
+  if (orderHasPartialCollection(record.order) && !orderHasUncollectedReceivedPacks(record.order)) return false;
+  return record.stage === 'ready' || record.stage === 'delivered';
 }
 
 export type OrderBoardLane =
@@ -71,12 +73,11 @@ export const ORDER_BOARD_LANES: Array<{ key: OrderBoardLane; label: string; deta
  *
  *   1. needs-action   — an exception outranks wherever the packs happen to be.
  *   2. awaiting-payment — no money, no pipeline position worth showing.
- *   3. ready          — if any pack can be handed over now, the order belongs in the
- *                       handout queue even when the rest of it is still split. The
- *                       split state is not lost: the card carries the stage-aware tag.
- *   4. split          — takes precedence over with-Curaleaf and checked-in, because
- *                       "half of it is here" is the fact staff act on, not the stage of
- *                       whichever half moved last.
+ *   3. ready          — only while a pack can be handed over now. Once arrived
+ *                       packs are collected, a supplier remainder is With Curaleaf.
+ *                       The split fraction stays on the card.
+ *   4. split          — inbound split only (none of it here yet). After a partial
+ *                       collection the live wait is With Curaleaf, not Split delivery.
  *   5. goods-in / curaleaf — plain stage buckets. Placement and dispensing sit in one
  *                       lane: from the counter they are the same wait, and splitting
  *                       them cost a whole column that the board has to scroll past.
@@ -87,8 +88,16 @@ export const ORDER_BOARD_LANES: Array<{ key: OrderBoardLane; label: string; deta
 export function orderBoardLane(record: OrderLaneInput): OrderBoardLane {
   if (recordActionException(record)) return 'needs-action';
   if (record.stage === 'awaiting-payment') return 'awaiting-payment';
-  if (record.stage === 'ready' || record.stage === 'delivered') return 'ready';
-  if (orderIsSplitFulfilment(record.order)) return 'split';
+  const remainderAwaitingSupplier = orderHasPartialCollection(record.order)
+    && !orderHasUncollectedReceivedPacks(record.order);
+  if (!remainderAwaitingSupplier && (record.stage === 'ready' || record.stage === 'delivered')) {
+    return 'ready';
+  }
+  const split = orderIsSplitFulfilment(record.order);
+  const snapshot = split ? orderSplitPackSnapshot(record.order) : null;
+  // Inbound split only: nothing collected, nothing on the shelf. After a partial
+  // collection the remainder is a Curaleaf wait.
+  if (split && !remainderAwaitingSupplier && (snapshot?.collected ?? 0) === 0) return 'split';
   return 'curaleaf';
 }
 
@@ -109,15 +118,15 @@ export interface OrderBoardSection {
 }
 
 /*
- * Split sections answer the only question the counter has about a split order: is any
- * of it physically here? Where the remainder sits is a moving target and belongs on the
- * card tag ("1/2 in transit"), not in a heading that would go stale row by row.
+ * Split delivery is inbound only: nothing collected, nothing on the shelf. Collectable
+ * packs sit in Ready to collect and a post-handover remainder sits With Curaleaf, so
+ * this lane never needs "part here" / "part already collected" headings.
  */
-const SPLIT_SECTIONS = {
-  atPharmacy: { key: 'split-here', label: 'Part here to hand over', rank: 0 },
-  collected: { key: 'split-collected', label: 'Part already collected', rank: 1 },
-  inbound: { key: 'split-inbound', label: 'None arrived yet', rank: 2 },
-} as const;
+const SPLIT_INBOUND_SECTION: OrderBoardSection = {
+  key: 'split-inbound',
+  label: 'None arrived yet',
+  rank: 0,
+};
 
 const CURALEAF_SECTIONS: Partial<Record<OrderStage, OrderBoardSection>> = {
   paid: { key: 'to-send', label: 'To send', rank: 0 },
@@ -139,12 +148,7 @@ export function orderBoardSection(record: OrderLaneInput, lane: OrderBoardLane, 
   if (lane === 'curaleaf') {
     return CURALEAF_SECTIONS[record.stage] ?? { key: 'with-supplier', label: 'With Curaleaf', rank: 4 };
   }
-  if (lane === 'split') {
-    const split = orderSplitPackSnapshot(record.order);
-    if (split.atPharmacy > 0) return SPLIT_SECTIONS.atPharmacy;
-    if (split.collected > 0) return SPLIT_SECTIONS.collected;
-    return SPLIT_SECTIONS.inbound;
-  }
+  if (lane === 'split') return SPLIT_INBOUND_SECTION;
   const meta = ORDER_BOARD_LANES.find(entry => entry.key === lane);
   return { key: lane, label: meta?.label ?? lane, rank: 0 };
 }
