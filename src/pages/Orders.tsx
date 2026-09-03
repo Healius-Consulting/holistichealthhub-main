@@ -2515,7 +2515,7 @@ function StageRailLane({ label, note, steps }: { label: string; note?: string | 
             </span>
             <span className="order-stage-rail__copy">
               <strong>{entry.label}</strong>
-              <small>{entry.detail}</small>
+              {entry.detail ? <small>{entry.detail}</small> : null}
             </span>
           </li>
         ))}

@@ -408,9 +408,9 @@ function dispensingStepState(complete: boolean, some: boolean, active: boolean):
 }
 
 /**
- * Build Ordered → Collected steps. Pack progress lives on consignments in the
- * prescription list; the rail only surfaces a count on Collected when some
- * packs have been handed over (`2/4 collected`).
+ * Packs currently sitting on each stage (exclusive buckets). Counts are shown
+ * only where packs are now; "Awaiting …" only when packs are waiting on that
+ * stage — not on empty later steps.
  */
 function buildDispensingSteps(input: {
   ordered: number;
@@ -421,49 +421,79 @@ function buildDispensingSteps(input: {
   readyPacks: number;
 }): OrderStageStep[] {
   const ordered = input.ordered;
-  const dispensedComplete = ordered > 0 && input.allocated >= ordered;
+  const atClinic = Math.max(0, ordered - input.shipped);
+  const inTransit = Math.max(0, input.shipped - input.received);
+  const onShelf = Math.max(0, input.received - input.collected);
+  const fraction = (n: number) => `${n}/${ordered}`;
+
+  const dispensedComplete = ordered > 0 && input.allocated >= ordered && atClinic === 0;
   const shippedComplete = ordered > 0 && input.shipped >= ordered;
   const receivedComplete = ordered > 0 && input.received >= ordered;
   const collectedComplete = ordered > 0 && input.collected >= ordered;
-  const readyComplete = ordered > 0 && input.readyPacks >= ordered;
-  const readySome = input.readyPacks > 0;
+  const readyComplete = ordered > 0 && input.readyPacks >= ordered && onShelf === 0;
+  const readySome = input.readyPacks > 0 || onShelf > 0;
+
+  const dispensedDetail = dispensedComplete
+    ? 'Allocated'
+    : atClinic > 0 && ordered > 0
+      ? `${fraction(atClinic)} awaiting`
+      : '';
+  const inTransitDetail = shippedComplete
+    ? 'Dispatched'
+    : inTransit > 0 && ordered > 0
+      ? fraction(inTransit)
+      : '';
+  const arrivedDetail = receivedComplete
+    ? 'Verified'
+    : inTransit > 0
+      ? 'Awaiting delivery'
+      : input.received > 0
+        ? 'Verified'
+        : '';
+  const readyDetail = readyComplete
+    ? 'Patient notified'
+    : onShelf > 0 && ordered > 0
+      ? fraction(onShelf)
+      : '';
   const collectedDetail = collectedComplete
     ? 'Handed to patient'
     : input.collected > 0 && ordered > 0
-      ? `${input.collected}/${ordered} collected`
-      : 'Awaiting collection';
+      ? `${fraction(input.collected)} collected`
+      : onShelf > 0
+        ? 'Awaiting collection'
+        : '';
 
   return [
     step('ordered', 'Ordered', 'PO sent', 'complete'),
     step(
       'dispensed',
       'Dispensed by Clinic',
-      dispensedComplete ? 'Allocated' : 'Awaiting clinic allocation',
-      dispensingStepState(dispensedComplete, input.allocated > 0, true),
+      dispensedDetail,
+      dispensingStepState(dispensedComplete, input.allocated > 0 || atClinic > 0, true),
     ),
     step(
       'in-transit',
       'In transit',
-      shippedComplete ? 'Dispatched' : 'Awaiting dispatch',
-      dispensingStepState(shippedComplete, input.shipped > 0, dispensedComplete),
+      inTransitDetail,
+      dispensingStepState(shippedComplete, input.shipped > 0, dispensedComplete || atClinic === 0),
     ),
     step(
       'checked-in',
       'Arrived at Pharmacy',
-      receivedComplete ? 'Verified' : 'Awaiting delivery',
-      dispensingStepState(receivedComplete, input.received > 0, input.shipped > 0),
+      arrivedDetail,
+      dispensingStepState(receivedComplete, input.received > 0, inTransit > 0),
     ),
     step(
       'ready',
       'Ready',
-      readyComplete ? 'Patient notified' : 'Awaiting goods-in',
-      readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending',
+      readyDetail,
+      readyComplete ? 'complete' : readySome || onShelf > 0 ? 'partial' : receivedComplete ? 'active' : 'pending',
     ),
     step(
       'collected',
       'Collected',
       collectedDetail,
-      dispensingStepState(collectedComplete, input.collected > 0, readyComplete),
+      dispensingStepState(collectedComplete, input.collected > 0, readyComplete || onShelf > 0),
     ),
   ];
 }
