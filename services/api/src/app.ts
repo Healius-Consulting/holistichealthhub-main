@@ -2691,6 +2691,8 @@ app.post('/v1/portal/orders/:id/refunds/manual', async (request, response, next)
       organisationId: idSchema.optional(),
       reason: z.enum(['patient_cancelled', 'replacement_price_changed']),
       resolution: z.enum(['cancel', 'replace_new_payment']),
+      scope: z.enum(['full', 'partial']),
+      amountPence: z.number().int().positive(),
     }).parse(request.body);
     const organisationId = tenantFor(request, input.organisationId);
     const orderId = idSchema.parse(request.params.id);
@@ -2700,7 +2702,17 @@ app.post('/v1/portal/orders/:id/refunds/manual', async (request, response, next)
       throw new HttpError(409, 'Curaleaf must confirm cancellation before the patient refund can be prepared.', 'CURALEAF_CANCELLATION_REQUIRED');
     }
     if (!['paid', 'refund_required'].includes(String(order.paymentStatus))) throw new HttpError(409, 'Only a paid order can be refunded.', 'PAYMENT_REQUIRED');
-    if (order.refund && typeof order.refund === 'object') return response.status(200).json(order.refund);
+    const paidPence = Number(order.totalPence ?? 0);
+    if (input.amountPence > paidPence) throw new HttpError(409, 'The refund cannot exceed the settled payment.', 'REFUND_AMOUNT_EXCEEDS_PAYMENT');
+    if (input.scope === 'full' && input.amountPence !== paidPence) throw new HttpError(409, 'A full refund must return the settled payment.', 'REFUND_COMPOSITION_INVALID');
+    const requestedPence = input.amountPence;
+    if (order.refund && typeof order.refund === 'object') {
+      const existingAmount = Number((order.refund as { amountPence?: number }).amountPence || 0);
+      if (existingAmount && existingAmount !== requestedPence) {
+        throw new HttpError(409, 'A refund is already open on this order for a different amount.', 'REFUND_ALREADY_OPEN');
+      }
+      return response.status(200).json(order.refund);
+    }
 
     const paymentId = typeof order.paymentId === 'string' ? order.paymentId : '';
     const paymentSnapshot = paymentId ? await firestore.collection('payments').doc(paymentId).get() : null;
@@ -2716,7 +2728,7 @@ app.post('/v1/portal/orders/:id/refunds/manual', async (request, response, next)
       orderId,
       lineId: 'order',
       pharmacyId: organisationId,
-      amountPence: Number(order.totalPence ?? 0),
+      amountPence: requestedPence,
       originalPaymentRef: paymentReference,
       paymentRoute,
       cause: input.reason,
@@ -2726,6 +2738,7 @@ app.post('/v1/portal/orders/:id/refunds/manual', async (request, response, next)
       id: refund.id,
       status: refund.status,
       amountPence: refund.amountPence,
+      scope: input.scope,
       method: paymentRoute === 'worldpay' ? 'worldpay_portal' : 'pharmacy_manual',
       paymentReference,
       transactionReference,

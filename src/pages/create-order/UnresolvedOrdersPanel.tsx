@@ -20,7 +20,6 @@ export default function UnresolvedOrdersPanel({
   onSelect,
   onApply,
 }: UnresolvedOrdersPanelProps) {
-  const selectedEntry = entries.find(entry => entry.order.id === selectedOrderId);
   return (
     <details className="rx-unresolved-panel rx-unresolved-drawer card" aria-label="Unresolved archived and rejected orders">
       <summary className="rx-unresolved-panel__header">
@@ -75,12 +74,6 @@ export default function UnresolvedOrdersPanel({
             <RefreshCw size={14} />
             Use this draft as replacement
           </button>
-          <span>
-            Carries the serial when it is still inside 24 days, and the stored scan when it is still on file. Curaleaf receives a new prescription record
-            {selectedEntry?.order.payment.status === 'paid'
-              ? '. The existing verified payment is carried over, so no second payment request is created.'
-              : '.'}
-          </span>
         </footer>
       </div>
     </details>

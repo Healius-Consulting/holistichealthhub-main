@@ -484,6 +484,7 @@ export function createPortalPaymentRouter(): Router {
         currency: order.currency || 'GBP',
         route: 'WORLDPAY',
         transactionReference: session.transactionReference,
+        providerPaymentId: session.providerPaymentId,
         hostedPaymentUrl: session.url,
         linkExpiresAt: session.expiresAt,
         baselineQuoteCheckId: baseline.id,

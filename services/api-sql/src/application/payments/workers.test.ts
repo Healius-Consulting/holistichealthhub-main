@@ -9,6 +9,7 @@ import {
   transactionReferenceFromWorldpayWebhook,
   worldpayIdentityMatches,
   worldpayPaymentStatus,
+  worldpayRefundAction,
   worldpayStatusToSql,
   verifyWorldpayRefund,
 } from './worldpay-query.js';
@@ -60,6 +61,26 @@ describe('Worldpay Payment Queries', () => {
     assert.equal(result.paymentStatus, 'pending');
   });
 
+  it('normalises the detailed payment resource used for events and refund actions', () => {
+    const result = normaliseWorldpayPaymentQuery({
+      transactionReference: 'HHH-order-123-abcd1234',
+      paymentId: 'payment-456',
+      lastEvent: 'refundRequestSubmitted',
+      entity: 'PO1234567890',
+      value: { amount: 12500, currency: 'GBP' },
+      events: [{ eventName: 'refundRequested', refundReference: 'refund-1' }],
+      _links: { 'cardPayments:refund': { href: '/payments/settlements/refunds/full/token' } },
+    }, 'HHH-order-123-abcd1234');
+
+    assert.equal(result.found, true);
+    assert.equal(result.paymentId, 'payment-456');
+    assert.equal(result.paymentStatus, 'refund_required');
+    assert.deepEqual(worldpayRefundAction(result.payment, false), {
+      href: '/payments/settlements/refunds/full/token',
+      style: 'card-payments',
+    });
+  });
+
   it('only settlement progress is considered paid', () => {
     assert.equal(worldpayPaymentStatus('authorized'), 'pending');
     assert.equal(worldpayPaymentStatus('authorizationSucceeded'), 'pending');
@@ -73,6 +94,19 @@ describe('Worldpay Payment Queries', () => {
     assert.equal(worldpayPaymentStatus('partialRefundSucceeded'), 'refunded');
   });
 
+  it('extracts refund actions from both supported Worldpay response families', () => {
+    assert.deepEqual(worldpayRefundAction({
+      _links: { 'cardPayments:refund': { href: '/payments/refunds/full/token' } },
+    }, false), { href: '/payments/refunds/full/token', style: 'card-payments' });
+    assert.deepEqual(worldpayRefundAction({
+      _actions: { partiallyRefundPayment: { href: 'https://try.access.worldpay.com/api/payments/token/partialRefunds' } },
+    }, true), {
+      href: 'https://try.access.worldpay.com/api/payments/token/partialRefunds',
+      style: 'payments-api',
+    });
+    assert.equal(worldpayRefundAction({ _links: { self: { href: '/payment' } } }, false), null);
+  });
+
   it('verifies a full refund from the terminal provider state and original identity', () => {
     const query = normaliseWorldpayPaymentQuery({ _embedded: { payments: [{
       transactionReference: 'HHH-1', paymentId: 'pay-1', lastEvent: 'refunded', entity: 'PO1',
@@ -82,6 +116,31 @@ describe('Worldpay Payment Queries', () => {
       query, transactionReference: 'HHH-1', paymentId: 'pay-1', paymentAmountPence: 1000,
       refundAmountPence: 1000, currency: 'GBP', expectedEntityId: 'PO1', externalReference: 'manual-command',
     }).verified, true);
+  });
+
+  it('does not mistake a terminal partial refund for a full refund', () => {
+    const query = normaliseWorldpayPaymentQuery({ _embedded: { payments: [{
+      transactionReference: 'HHH-1', paymentId: 'pay-1', lastEvent: 'partiallyRefunded', entity: 'PO1',
+      value: { amount: 1000, currency: 'GBP' },
+    }] } }, 'HHH-1');
+    assert.equal(verifyWorldpayRefund({
+      query, transactionReference: 'HHH-1', paymentId: 'pay-1', paymentAmountPence: 1000,
+      refundAmountPence: 1000, currency: 'GBP', expectedEntityId: 'PO1', externalReference: 'refund-1',
+    }).verified, false);
+  });
+
+  it('treats a provider refund failure as terminal rather than pending', () => {
+    const query = normaliseWorldpayPaymentQuery({ _embedded: { payments: [{
+      transactionReference: 'HHH-1', paymentId: 'pay-1', lastEvent: 'refundFailed', entity: 'PO1',
+      value: { amount: 1000, currency: 'GBP' },
+    }] } }, 'HHH-1');
+    const result = verifyWorldpayRefund({
+      query, transactionReference: 'HHH-1', paymentId: 'pay-1', paymentAmountPence: 1000,
+      refundAmountPence: 1000, currency: 'GBP', expectedEntityId: 'PO1', externalReference: 'refund-1',
+    });
+    assert.equal(result.verified, false);
+    assert.equal(result.pending, false);
+    assert.equal(result.reason, 'provider_refund_failed');
   });
 
   it('requires exact reference, amount and currency evidence for a partial refund', () => {

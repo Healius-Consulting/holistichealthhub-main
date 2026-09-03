@@ -14,7 +14,7 @@ This note is the operational companion to `dataconnect/schema/schema.gql`. The s
 | --- | --- | --- |
 | Curaleaf Laboratories Customer API (Rocky) OpenAPI 3.1 spec `1.0` | `https://api.curaleaflaboratories.dev` | Full path inventory from `/openapi.json` |
 | Primary Pharmacy write key | Secret `hhh-curaleaf-<org>-europe-west2` | GET every published collection, GET-by-id, `stateFilter`, `purchaseOrderId`, `formulaId`, events **without** `after`, POST `/v1/quotes/` only. No PO/prescription writes. |
-| Worldpay Access | Try host `https://try.access.worldpay.com` | Payment Queries `GET /paymentQueries/payments?transactionReference=` using the pharmacy Worldpay secret. No HPP create. |
+| Worldpay Access | Try host `https://try.access.worldpay.com` | Payment Queries first resolves `GET /paymentQueries/payments?transactionReference=`, then retrieves `GET /paymentQueries/payments/{paymentId}` for lifecycle events and refund actions, using the pharmacy Worldpay secret. Refund actions must be verified in Try before live enablement. |
 | Firebase SQL Connect | `hhh-platform-service` europe-west2 | Inline GraphQL read of Primary Pharmacy orders, payments, refunds, lines, prescriptions, shipments, receipts, placement events, integration operations. Operational fields only. |
 
 HHH runtime (`services/api-sql`) already defaults Rocky to the **sandbox** host. Production Rocky is `https://api.curaleaflaboratories.co.uk`. Same routes; do not mix keys across hosts.
@@ -203,14 +203,17 @@ No `DELETE /v1/purchase-orders/{id}`. Any leftover cancel-and-archive client is 
 
 ## 4. Worldpay: routes, states, and the SQL hole
 
-Worldpay is **payment only**. It never talks to Rocky. HHH must never auto-move money; refunds are always a staff task with a manual reference.
+Worldpay is **payment only**. It never talks to Rocky. HHH never initiates money movement from a webhook or cancellation event. An authenticated pharmacy staff refund action may submit a refund through the provider API; completion still requires provider evidence.
+
+Each pharmacy asks its Worldpay Implementation Manager to register `https://europe-west2-hhh26-4ebd2.cloudfunctions.net/apiLondon/v1/public/payments/worldpay/webhook` for payment lifecycle events. The webhook payload is only a reconciliation signal; HHH authenticates with that pharmacy's stored API username/password and independently verifies the transaction reference, amount, currency, entity and refund evidence through Payment Queries.
 
 ### 4.1 Calls HHH already makes
 
 | Call | Host | Media type | Purpose |
 | --- | --- | --- | --- |
 | `POST /payment_pages` | `try.access.worldpay.com` (live: `access.worldpay.com`) | `application/vnd.worldpay.payment_pages-v1.hal+json` | Create HPP / PayByLink. Body: `transactionReference`, `merchant.entity`, `narrative.line1` (24 chars), `value.{currency,amount pence}`, `expiry` seconds, `resultURLs`, optional `customisation_id`. Success: `url` or `_links.redirect.href`. |
-| `GET /paymentQueries/payments?transactionReference=` | same host | `application/vnd.worldpay.payment-queries-v1.hal+json` | Settlement truth. HAL `{ _embedded.payments[], _links }`. Match `transactionReference`, amount, currency, merchant entity. |
+| `GET /paymentQueries/payments?transactionReference=` then `GET /paymentQueries/payments/{paymentId}` | same host | `application/vnd.worldpay.payment-queries-v1.hal+json` | Resolve the payment summary, then retrieve settlement truth, event history and current action links. Match `paymentId`, `transactionReference`, amount, currency and merchant entity. |
+| Provider refund action returned by the payment resource | same host only | Link-specific Card Payments media type, or `application/json` + `WP-Api-Version` for `_actions` | Staff-initiated full/partial refund. Follow only an HTTPS action on the configured Worldpay host. `202` means accepted, not completed. |
 
 Credential check with a random reference returned **200** and `_embedded.payments: []` — not found is a valid 200.
 
@@ -298,7 +301,7 @@ Keep these — they are product, not duplicates of Rocky — but store them as c
 | Quote review hold | snapshot `quoteReview` | Column `quote_review_status` + optional top-up `Payment`. |
 | Pharmacy goods-in / collection | `FulfilmentStatus` + snapshot lines | `Shipment` + `GoodsReceipt` + `Order.collectedAt` (already in schema). |
 
-HHH never auto-refunds Worldpay. `PaymentStatus.REFUND_REQUIRED` means “staff must refund”, not “call Worldpay refund API”.
+HHH never auto-refunds Worldpay from provider events. `PaymentStatus.REFUND_REQUIRED` means a staff-prepared refund remains open; the staff action may submit it to Worldpay, while webhook/reconciliation can only verify and complete that existing record.
 
 ---
 
@@ -453,10 +456,17 @@ if paid:
   Prepare-refund:
        insert Refund PENDING_CONFIRMATION
        Order.paymentStatus = REFUND_REQUIRED
-  Confirm reference:
-       Refund COMPLETED
-       Order.paymentStatus = REFUNDED
-       never call Worldpay refund API
+       if Payment.route = WORLDPAY:
+         follow the provider refund/partial-refund action
+         202 -> Refund VERIFICATION_PENDING
+         timeout/5xx -> outcome unknown; do not retry or offer manual fallback
+         definitive missing/rejected action -> retain portal confirmation recovery
+       if Payment.route = MANUAL:
+         retain ePOS reference confirmation
+  Complete:
+       only provider proof or the manual confirmation path may set Refund COMPLETED
+       full -> Payment/Order REFUNDED; partial -> Payment/Order PAID
+       webhook never creates or submits a refund
 ```
 
 Query for the Orders “Refund due” filter:

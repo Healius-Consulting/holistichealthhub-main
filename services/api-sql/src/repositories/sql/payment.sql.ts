@@ -15,6 +15,7 @@ const PAYMENT_FIELDS = `
   route
   receiptHash
   transactionReference
+  providerPaymentId
   hostedPaymentUrl
   linkExpiresAt
   providerPayload
@@ -64,7 +65,7 @@ const LIST_PENDING_WORLDPAY_PAYMENTS_GQL = `
     payments(
       where: {
         route: { eq: WORLDPAY }
-        status: { eq: PENDING }
+        status: { in: [PENDING, REFUND_REQUIRED] }
       }
       limit: $limit
     ) {
@@ -98,6 +99,7 @@ const CREATE_PAYMENT_GQL = `
     $currency: String!
     $route: PaymentRoute!
     $transactionReference: String
+    $providerPaymentId: String
     $receiptHash: String
     $hostedPaymentUrl: String
     $linkExpiresAt: Timestamp
@@ -115,6 +117,7 @@ const CREATE_PAYMENT_GQL = `
       currency: $currency
       route: $route
       transactionReference: $transactionReference
+      providerPaymentId: $providerPaymentId
       receiptHash: $receiptHash
       hostedPaymentUrl: $hostedPaymentUrl
       linkExpiresAt: $linkExpiresAt
@@ -179,6 +182,19 @@ const UPDATE_PAYMENT_OUTCOME_GQL = `
       data: {
         status: $status
         receiptHash: $receiptHash
+        providerPayload: $providerPayload
+        updatedAt_expr: "request.time"
+      }
+    )
+  }
+`;
+
+const UPDATE_PAYMENT_PROVIDER_GQL = `
+  mutation UpdatePaymentProvider($id: UUID!, $providerPaymentId: String, $providerPayload: Any) {
+    payment_update(
+      key: { id: $id }
+      data: {
+        providerPaymentId: $providerPaymentId
         providerPayload: $providerPayload
         updatedAt_expr: "request.time"
       }
@@ -589,6 +605,7 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
     currency: string;
     route: 'MANUAL' | 'WORLDPAY';
     transactionReference?: string | null;
+    providerPaymentId?: string | null;
     receiptHash?: string | null;
     hostedPaymentUrl?: string | null;
     linkExpiresAt?: string | null;
@@ -612,6 +629,7 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
           currency: data.currency,
           route: data.route,
           transactionReference: data.transactionReference ?? null,
+          providerPaymentId: data.providerPaymentId ?? null,
           receiptHash: data.receiptHash ?? null,
           hostedPaymentUrl: data.hostedPaymentUrl ?? null,
           linkExpiresAt: data.linkExpiresAt ?? null,
@@ -644,7 +662,7 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
     markOrderPaid?: boolean;
     updateOrderPaymentStatus?: boolean;
   }): Promise<void> {
-    if (data.markOrderPaid || data.status === 'PAID') {
+    if (data.markOrderPaid || (data.status === 'PAID' && data.updateOrderPaymentStatus !== false)) {
       await this.updatePaymentStatus(data.id, 'PAID', data.orderId, data.receiptHash);
       if (data.providerPayload !== undefined) {
         await dataConnect.executeGraphql<any, any>(UPDATE_PAYMENT_OUTCOME_GQL, {
@@ -671,6 +689,16 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
         variables: { id: data.orderId, paymentStatus: data.status },
       });
     }
+  }
+
+  async updatePaymentProvider(data: { id: string; providerPaymentId?: string | null; providerPayload?: unknown }): Promise<void> {
+    await dataConnect.executeGraphql(UPDATE_PAYMENT_PROVIDER_GQL, {
+      variables: {
+        id: data.id,
+        providerPaymentId: data.providerPaymentId ?? null,
+        providerPayload: data.providerPayload ?? null,
+      },
+    });
   }
 
   async createRefund(data: {
@@ -748,7 +776,7 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
 
   async markRefundVerification(data: {
     id: string;
-    status: 'VERIFICATION_PENDING' | 'RECONCILIATION_REQUIRED' | 'COMPLETED' | 'FAILED';
+    status: 'PENDING_CONFIRMATION' | 'VERIFICATION_PENDING' | 'RECONCILIATION_REQUIRED' | 'COMPLETED' | 'FAILED';
     externalReference?: string | null;
     confirmedByUid?: string | null;
     verificationStatus: string;

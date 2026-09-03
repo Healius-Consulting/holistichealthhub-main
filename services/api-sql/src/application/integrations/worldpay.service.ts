@@ -5,6 +5,7 @@ import { HttpError } from '../../domain/common/errors.js';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
 import {
   normaliseWorldpayPaymentQuery,
+  worldpayRefundAction,
   type WorldpayPaymentQuery,
 } from '../payments/worldpay-query.js';
 
@@ -13,8 +14,15 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const SECRET_REGION = 'europe-west2';
 const HPP_MEDIA_TYPE = 'application/vnd.worldpay.payment_pages-v1.hal+json';
 const PAYMENT_QUERIES_MEDIA_TYPE = 'application/vnd.worldpay.payment-queries-v1.hal+json';
+const CARD_PAYMENTS_MEDIA_TYPES = [
+  'application/vnd.worldpay.payments-v7+json',
+  'application/vnd.worldpay.payments-v6+json',
+  'application/vnd.worldpay.payments-v5+json',
+] as const;
+const PAYMENTS_API_VERSION = '2024-06-01';
 export const WORLDPAY_TRY_BASE_URL = 'https://try.access.worldpay.com';
 export const WORLDPAY_LIVE_BASE_URL = 'https://access.worldpay.com';
+export const WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS = 72 * 60 * 60;
 
 export type WorldpayCredential = {
   username: string;
@@ -28,6 +36,15 @@ export type WorldpaySessionResult = {
   providerPaymentId?: string;
   expiresAt: string;
   raw?: unknown;
+};
+
+export type WorldpayRefundSubmission = {
+  accepted: true;
+  commandId: string | null;
+  paymentId: string | null;
+  reference: string;
+  providerStatus: string | null;
+  raw: Record<string, unknown>;
 };
 
 export type WorldpayConnectionValidation = {
@@ -295,6 +312,100 @@ async function worldpayFetch(url: URL, init: RequestInit, credential: WorldpayCr
   }
 }
 
+export function safeWorldpayActionUrl(href: string, baseUrl: string): URL {
+  let url: URL;
+  try {
+    url = new URL(href, baseUrl);
+  } catch {
+    throw new HttpError(502, 'Worldpay returned an invalid refund action.', 'WORLDPAY_REFUND_LINK_INVALID');
+  }
+  const allowedOrigin = new URL(baseUrl).origin;
+  if (url.protocol !== 'https:' || url.origin !== allowedOrigin || url.username || url.password) {
+    throw new HttpError(502, 'Worldpay returned an untrusted refund action.', 'WORLDPAY_REFUND_LINK_INVALID');
+  }
+  return url;
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+async function refundResponseBody(response: Response): Promise<Record<string, unknown>> {
+  try {
+    const value = await response.json();
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function submitWorldpayRefund(input: {
+  connection: IntegrationConnectionRecord | null;
+  organisationId: string;
+  transactionReference: string;
+  amountPence: number;
+  currency: string;
+  reference: string;
+  full: boolean;
+}): Promise<WorldpayRefundSubmission> {
+  const credential = await requireStoredWorldpayCredential(input.connection, input.organisationId);
+  const queried = await queryWorldpayPayment(input.connection, input.organisationId, input.transactionReference);
+  if (!queried.queried) {
+    throw new HttpError(503, queried.reason, 'WORLDPAY_REFUND_QUERY_UNAVAILABLE');
+  }
+  if (!queried.query.found || !queried.query.payment) {
+    throw new HttpError(409, 'Worldpay could not find the settled payment.', 'WORLDPAY_REFUND_PAYMENT_MISSING');
+  }
+  const action = worldpayRefundAction(queried.query.payment, !input.full);
+  if (!action) {
+    throw new HttpError(409, 'Worldpay did not offer a refund action for this payment.', 'WORLDPAY_REFUND_LINK_MISSING');
+  }
+
+  const baseUrl = worldpayBaseUrl(input.connection?.environment);
+  const url = safeWorldpayActionUrl(action.href, baseUrl);
+  const partialBody = {
+    reference: input.reference,
+    value: { amount: input.amountPence, currency: input.currency },
+  };
+  const attempts = action.style === 'payments-api' ? ['application/json'] : [...CARD_PAYMENTS_MEDIA_TYPES];
+  let response: Response | null = null;
+  for (const mediaType of attempts) {
+    response = await worldpayFetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: mediaType,
+        'Content-Type': mediaType,
+        ...(action.style === 'payments-api' ? { 'WP-Api-Version': PAYMENTS_API_VERSION } : {}),
+      },
+      body: input.full && action.style === 'card-payments' ? undefined : JSON.stringify(input.full ? {} : partialBody),
+    }, credential);
+    if (response.status !== 415 || mediaType === attempts.at(-1)) break;
+  }
+  if (!response) {
+    throw new HttpError(502, 'Worldpay did not accept the refund request.', 'WORLDPAY_REFUND_OUTCOME_UNKNOWN');
+  }
+  const body = await refundResponseBody(response);
+  if (response.status !== 202) {
+    const ambiguous = response.status >= 500 || response.status === 408 || response.status === 429;
+    throw new HttpError(
+      ambiguous ? 503 : 409,
+      ambiguous
+        ? 'Worldpay may have received the refund request, but its outcome is not yet known.'
+        : `Worldpay rejected the refund request (${response.status}).`,
+      ambiguous ? 'WORLDPAY_REFUND_OUTCOME_UNKNOWN' : 'WORLDPAY_REFUND_REJECTED',
+    );
+  }
+  return {
+    accepted: true,
+    commandId: stringField(body, 'commandId'),
+    paymentId: stringField(body, 'paymentId') ?? queried.query.paymentId,
+    reference: input.reference,
+    providerStatus: stringField(body, 'outcome') ?? stringField(body, 'lastEvent'),
+    raw: body,
+  };
+}
+
 export async function queryWorldpayPayment(
   connection: IntegrationConnectionRecord | null,
   organisationId: string,
@@ -320,9 +431,35 @@ export async function queryWorldpayPayment(
   } catch {
     return { queried: false, reason: 'Payment Queries returned invalid JSON.' };
   }
+  const summary = normaliseWorldpayPaymentQuery(body, transactionReference);
+  if (!summary.found || !summary.paymentId) {
+    return {
+      queried: true,
+      query: summary,
+      expectedEntityId: credential.entityId,
+    };
+  }
+
+  // Transaction-reference lookup returns summary data only. The payment detail
+  // resource carries the event history and current lifecycle action links.
+  const detailUrl = new URL(`/paymentQueries/payments/${encodeURIComponent(summary.paymentId)}`, baseUrl);
+  const detailResponse = await worldpayFetch(detailUrl, {}, credential);
+  if (!detailResponse.ok) {
+    return { queried: false, reason: `Payment Queries detail returned ${detailResponse.status}.` };
+  }
+  let detailBody: unknown;
+  try {
+    detailBody = await detailResponse.json();
+  } catch {
+    return { queried: false, reason: 'Payment Queries detail returned invalid JSON.' };
+  }
+  const detail = normaliseWorldpayPaymentQuery(detailBody, transactionReference);
+  if (!detail.found || detail.paymentId !== summary.paymentId) {
+    return { queried: false, reason: 'Payment Queries detail did not match the requested payment.' };
+  }
   return {
     queried: true,
-    query: normaliseWorldpayPaymentQuery(body, transactionReference),
+    query: detail,
     expectedEntityId: credential.entityId,
   };
 }
@@ -341,7 +478,7 @@ export async function createWorldpayHostedSession(
     cancelUrl?: string;
   }
 ): Promise<WorldpaySessionResult> {
-  const expirySeconds = input.expirySeconds || 86400 * 7;
+  const expirySeconds = input.expirySeconds || WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS;
   const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
   const credential = await requireStoredWorldpayCredential(connection, organisationId);
   const baseUrl = worldpayBaseUrl(connection?.environment);

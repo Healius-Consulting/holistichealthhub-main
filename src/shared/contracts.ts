@@ -839,7 +839,9 @@ export interface OrderRefundState {
   id: string;
   status: 'pending_confirmation' | 'verifying' | 'reconciliation_required' | 'completed';
   amountPence: number;
-  method: 'worldpay_portal' | 'pharmacy_manual';
+  scope?: 'full' | 'partial';
+  lines?: Array<{ key: string; kind: 'medicine' | 'dispensing' | 'delivery'; label: string; amountPence: number; percent?: number }>;
+  method: 'worldpay_api' | 'worldpay_portal' | 'pharmacy_manual';
   paymentReference: string;
   transactionReference?: string | null;
   reason: 'patient_cancelled' | 'replacement_price_changed';

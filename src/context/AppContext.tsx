@@ -679,7 +679,7 @@ export type Action =
   | { type: 'START_MANUAL_PAYMENT'; orderId: number }
   | { type: 'CARRY_OVER_PAYMENT'; orderId: number; sourceOrderId: number }
   | { type: 'SET_REDO_PRICE_RESOLUTION'; orderId: number; resolution: RedoPriceResolution | undefined }
-  | { type: 'START_ORDER_REFUND'; orderId: number; reason: OrderRefundState['reason']; resolution: OrderRefundState['resolution'] }
+  | { type: 'START_ORDER_REFUND'; orderId: number; reason: OrderRefundState['reason']; resolution: OrderRefundState['resolution']; amountPence?: number; scope?: OrderRefundState['scope']; lines?: OrderRefundState['lines'] }
   | { type: 'CONFIRM_ORDER_REFUND'; orderId: number; externalReference: string }
   | { type: 'SET_ORDER_REFUND'; orderId: number; refund: OrderRefundState }
   | { type: 'REQUEST_ORDER_CANCELLATION'; orderId: number; reason: OrderCancellationState['reason']; note?: string }
@@ -1911,7 +1911,9 @@ function reducer(state: AppState, action: Action): AppState {
           refund: {
             id: `training-refund-${order.id}`,
             status: 'pending_confirmation',
-            amountPence: Math.round(order.payment.amount * 100),
+            amountPence: action.amountPence ?? Math.round(order.payment.amount * 100),
+            scope: action.scope,
+            lines: action.lines,
             method: order.payment.route === 'worldpay' ? 'worldpay_portal' : 'pharmacy_manual',
             paymentReference: order.payment.ref ?? `ORDER-${order.id}`,
             reason: action.reason,

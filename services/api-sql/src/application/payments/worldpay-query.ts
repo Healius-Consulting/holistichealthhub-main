@@ -19,12 +19,42 @@ export type WorldpayPaymentQuery = {
   payment: Record<string, unknown> | null;
 };
 
+export type WorldpayRefundAction = {
+  href: string;
+  style: 'card-payments' | 'payments-api';
+};
+
 function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function string(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function linkedHref(container: Record<string, unknown> | null, keys: string[]): string | null {
+  for (const key of keys) {
+    const href = string(object(container?.[key])?.href);
+    if (href) return href;
+  }
+  return null;
+}
+
+/** Resolve only documented refund actions. The caller must still validate the URL host. */
+export function worldpayRefundAction(
+  payment: Record<string, unknown> | null,
+  partial: boolean,
+): WorldpayRefundAction | null {
+  if (!payment) return null;
+  const actions = object(payment._actions);
+  const modernHref = linkedHref(actions, partial ? ['partiallyRefundPayment'] : ['refundPayment']);
+  if (modernHref) return { href: modernHref, style: 'payments-api' };
+
+  const links = object(payment._links);
+  const linkHref = linkedHref(links, partial
+    ? ['cardPayments:partialRefund', 'payments:partialRefund', 'partialRefund']
+    : ['cardPayments:refund', 'payments:refund', 'refund']);
+  return linkHref ? { href: linkHref, style: 'card-payments' } : null;
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -134,6 +164,7 @@ export function verifyWorldpayRefund(input: {
   currency: string;
   expectedEntityId: string;
   externalReference: string;
+  alternateReferences?: string[];
 }): WorldpayRefundVerification {
   const identityMatches = worldpayIdentityMatches({
     query: input.query,
@@ -143,6 +174,10 @@ export function verifyWorldpayRefund(input: {
     expectedEntityId: input.expectedEntityId,
   });
   if (!identityMatches) return { verified: false, pending: false, reason: 'payment_identity_mismatch', evidence: null };
+  const providerStatus = normalisedStatus(input.query.providerStatus);
+  if (providerStatus.includes('refund') && (providerStatus.includes('failed') || providerStatus.includes('refused'))) {
+    return { verified: false, pending: false, reason: 'provider_refund_failed', evidence: null };
+  }
   if (input.query.paymentStatus === 'refund_required') {
     return { verified: false, pending: true, reason: 'provider_refund_pending', evidence: null };
   }
@@ -150,7 +185,8 @@ export function verifyWorldpayRefund(input: {
     return { verified: false, pending: false, reason: 'provider_refund_not_completed', evidence: null };
   }
 
-  if (input.refundAmountPence === input.paymentAmountPence) {
+  if (input.refundAmountPence === input.paymentAmountPence
+    && !providerStatus.includes('partial')) {
     return {
       verified: true,
       pending: false,
@@ -164,13 +200,14 @@ export function verifyWorldpayRefund(input: {
     };
   }
 
+  const acceptedReferences = new Set([input.externalReference, ...(input.alternateReferences ?? [])].filter(Boolean));
   const exact = refundEvidenceCandidates(input.query.payment).find(candidate => {
     const status = worldpayPaymentStatus(refundEvidenceStatus(candidate));
     const reference = refundEvidenceReference(candidate);
     const value = refundEvidenceValue(candidate);
     const parentPaymentId = string(candidate.originalPaymentId) ?? string(candidate.parentPaymentId);
     return status === 'refunded'
-      && reference === input.externalReference
+      && Boolean(reference && acceptedReferences.has(reference))
       && value.amountPence === input.refundAmountPence
       && value.currency === input.currency
       && (!parentPaymentId || parentPaymentId === input.paymentId);
@@ -203,11 +240,13 @@ export function worldpayStatusToSql(status: WorldpayPaymentStatus): 'PENDING' | 
 export function normaliseWorldpayPaymentQuery(value: unknown, transactionReference: string): WorldpayPaymentQuery {
   const response = object(value);
   const embedded = object(response?._embedded);
-  const candidates = Array.isArray(embedded?.payments)
-    ? embedded.payments
-    : Array.isArray(response?.payments)
-      ? response.payments
-      : [];
+  const candidates = string(response?.transactionReference) === transactionReference
+    ? [response]
+    : Array.isArray(embedded?.payments)
+      ? embedded.payments
+      : Array.isArray(response?.payments)
+        ? response.payments
+        : [];
   const payment = candidates.map(object).find(candidate => string(candidate?.transactionReference) === transactionReference) ?? null;
   if (!payment) {
     return {

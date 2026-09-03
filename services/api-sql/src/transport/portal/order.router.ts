@@ -2,8 +2,9 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
 import { assertCuraleafTestPaymentAllowed } from '../../domain/organisation/curaleaf-payment-lock.js';
-import { queryWorldpayPayment } from '../../application/integrations/worldpay.service.js';
+import { queryWorldpayPayment, submitWorldpayRefund } from '../../application/integrations/worldpay.service.js';
 import { verifyWorldpayRefund } from '../../application/payments/worldpay-query.js';
+import { catalogFromPortalOrderSources, resolveStaffRefund } from '../../application/payments/refund-composition.js';
 import { assertCuraleafSerialAvailableForCreate, executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
 import { curaleafOwnsCancellation, curaleafRequiresSupplierCancel, stampCuraleafCancellationOnSnapshot, supplierCancellationAlreadyConfirmed } from '../../application/integrations/curaleaf-events.js';
 import {
@@ -1230,6 +1231,11 @@ export function createPortalOrderRouter(): Router {
         organisationId: z.string().optional(),
         reason: z.enum(['patient_cancelled', 'replacement_price_changed']),
         resolution: z.enum(['cancel', 'replace_new_payment']),
+        scope: z.enum(['full', 'partial']),
+        amountPence: z.number().int().positive(),
+        includedMedicineIds: z.array(z.string().trim().min(1).max(80)).max(80).optional(),
+        dispensingPercent: z.union([z.literal(0), z.literal(25), z.literal(50), z.literal(75), z.literal(100)]).optional(),
+        deliveryPercent: z.union([z.literal(0), z.literal(25), z.literal(50), z.literal(75), z.literal(100)]).optional(),
       }).parse(req.body);
 
       const order = await orderRepo.findOrderById(orderId, scope.organisationId);
@@ -1256,24 +1262,32 @@ export function createPortalOrderRouter(): Router {
       const allocations = await paymentRepo.listPaymentAllocations(payment.id, scope.organisationId);
       const activeAllocation = allocations.find(row => row.orderId === orderId && row.status === 'ACTIVE');
       const sourceLines = await orderLineRepo.listByOrderId(orderId);
-      const curaleaf = snapshot.curaleaf && typeof snapshot.curaleaf === 'object' ? snapshot.curaleaf : {};
-      let refundAmountPence: number;
-      try {
-        refundAmountPence = replacementAllocationAmount({
-          activeAllocationPence: Number(activeAllocation?.amountPence ?? payment.amountPence),
-          hasPurchaseOrder: Boolean(curaleaf.purchaseOrderId || curaleaf.purchaseOrderState || curaleaf.shipments?.length),
-          sourceLines,
-          fulfilmentLines: Array.isArray(curaleaf.lines) ? curaleaf.lines : [],
-        });
-      } catch (error) {
-        throw new HttpError(409, error instanceof Error ? error.message : 'The refund value requires reconciliation.', 'REFUND_AMOUNT_RECONCILIATION');
+      const snapshotLineItems = Array.isArray(snapshot.lineItems) ? snapshot.lineItems : Array.isArray(snapshot.items) ? snapshot.items : [];
+      const catalog = catalogFromPortalOrderSources({
+        orderLines: sourceLines,
+        snapshotLineItems,
+        dispensingFeePence: Number(order.dispensingFeePence || 0),
+        pharmacyDeliveryPence: Number(order.pharmacyDeliveryPence || 0),
+        paidPence: Number(payment.amountPence || order.totalPence || 0),
+      });
+      const resolved = resolveStaffRefund(catalog, input);
+      if (!resolved.composed) throw new HttpError(409, resolved.error, 'REFUND_COMPOSITION_INVALID');
+      const refundAmountPence = resolved.composed.amountPence;
+      const refundScope = resolved.composed.scope;
+      const refundLines = resolved.composed.lines;
+      const existingOpen = existingRefunds.find(row => ['PENDING_CONFIRMATION', 'VERIFICATION_PENDING', 'RECONCILIATION_REQUIRED'].includes(String(row.status).toUpperCase()));
+      if (existingOpen && Number(existingOpen.amountPence) !== refundAmountPence) {
+        throw new HttpError(409, 'A refund is already open on this order for a different amount.', 'REFUND_ALREADY_OPEN');
       }
       const refundState = {
         ...pendingManualRefund(order, scope.uid),
         amountPence: refundAmountPence,
+        scope: refundScope,
+        lines: refundLines,
         partial: refundAmountPence < Number(payment.amountPence),
       };
-      const storedRefund = existingRefunds.find(row => ['PENDING_CONFIRMATION', 'VERIFICATION_PENDING', 'RECONCILIATION_REQUIRED'].includes(String(row.status).toUpperCase()))
+      const transactionReference = String(payment.transactionReference || '').trim();
+      const storedRefund = existingOpen
         ?? await paymentRepo.createRefund({
           organisationId: scope.organisationId,
           orderId,
@@ -1281,7 +1295,7 @@ export function createPortalOrderRouter(): Router {
           amountPence: refundState.amountPence,
           currency: order.currency || 'GBP',
           cause: input.reason,
-          route: String(order.paymentRoute || '').toUpperCase() === 'WORLDPAY' ? 'WORLDPAY' : 'MANUAL',
+          route: payment.route,
           status: 'PENDING_CONFIRMATION',
           idempotencyKey: `manual-refund:${scope.organisationId}:${orderId}`,
         });
@@ -1315,12 +1329,135 @@ export function createPortalOrderRouter(): Router {
         paymentStatus: 'REFUND_REQUIRED',
         cancelledAt: new Date().toISOString(),
       });
+      await paymentRepo.updatePaymentOutcome({
+        id: payment.id,
+        orderId,
+        status: 'REFUND_REQUIRED',
+        providerPayload: payment.providerPayload,
+        updateOrderPaymentStatus: false,
+      });
 
       await purgeOrderPrescriptionFiles(scope.organisationId, order.quoteSnapshot).catch(error =>
         console.warn('[Prescription file] Purge after cancellation note:', error),
       );
 
-      res.status(201).json({ ...refundState, id: storedRefund.id });
+      if (payment.route !== 'WORLDPAY') {
+        res.status(201).json({ ...refundState, id: storedRefund.id, method: 'pharmacy_manual' });
+        return;
+      }
+
+      const priorVerification = String(storedRefund.verificationStatus || '');
+      if (existingOpen && priorVerification) {
+        const storedStatus = String(storedRefund.status).toUpperCase();
+        const portalStatus = storedStatus === 'VERIFICATION_PENDING' ? 'verifying'
+          : storedStatus === 'RECONCILIATION_REQUIRED' ? 'reconciliation_required'
+            : 'pending_confirmation';
+        const priorPayload = storedRefund.verificationPayload && typeof storedRefund.verificationPayload === 'object'
+          ? storedRefund.verificationPayload as Record<string, unknown>
+          : {};
+        res.status(storedStatus === 'VERIFICATION_PENDING' ? 202 : 200).json({
+          ...refundState,
+          id: storedRefund.id,
+          status: portalStatus,
+          method: typeof priorPayload.requestReference === 'string' && priorVerification !== 'worldpay_api_unavailable'
+            ? 'worldpay_api'
+            : 'worldpay_portal',
+          externalReference: storedRefund.externalReference ?? undefined,
+          paymentReference: transactionReference || refundState.paymentReference,
+          transactionReference: transactionReference || undefined,
+          verificationReference: priorVerification,
+        });
+        return;
+      }
+
+      const providerPayload = payment.providerPayload && typeof payment.providerPayload === 'object' && !Array.isArray(payment.providerPayload)
+        ? payment.providerPayload as Record<string, unknown>
+        : {};
+      const requestReference = `refund-${storedRefund.id}`;
+      try {
+        if (!transactionReference) {
+          throw new HttpError(409, 'The Worldpay transaction reference is missing.', 'WORLDPAY_REFUND_PAYMENT_MISSING');
+        }
+        const connection = await integrationRepo.findConnection(scope.organisationId, 'WORLDPAY').catch(() => null);
+        const submission = await submitWorldpayRefund({
+          connection,
+          organisationId: scope.organisationId,
+          transactionReference,
+          amountPence: refundAmountPence,
+          currency: payment.currency,
+          reference: requestReference,
+          full: refundAmountPence === Number(payment.amountPence),
+        });
+        const externalReference = submission.commandId || submission.reference;
+        const verificationPayload = {
+          transactionReference,
+          requestReference: submission.reference,
+          commandId: submission.commandId,
+          paymentId: submission.paymentId,
+          providerStatus: submission.providerStatus,
+        };
+        await Promise.all([
+          paymentRepo.markRefundVerification({
+            id: storedRefund.id,
+            status: 'VERIFICATION_PENDING',
+            externalReference,
+            confirmedByUid: scope.uid,
+            verificationStatus: 'worldpay_refund_submitted',
+            verificationPayload,
+          }),
+          paymentRepo.updatePaymentProvider({
+            id: payment.id,
+            providerPaymentId: submission.paymentId ?? payment.providerPaymentId,
+            providerPayload: { ...providerPayload, refundSubmission: verificationPayload },
+          }),
+        ]);
+        res.status(202).json({
+          ...refundState,
+          id: storedRefund.id,
+          status: 'verifying',
+          method: 'worldpay_api',
+          paymentReference: transactionReference,
+          transactionReference,
+          externalReference,
+          verificationReference: 'worldpay_refund_submitted',
+        });
+      } catch (error) {
+        const code = error instanceof HttpError ? error.code : 'WORLDPAY_REFUND_OUTCOME_UNKNOWN';
+        const ambiguous = ['WORLDPAY_TIMEOUT', 'WORLDPAY_UNAVAILABLE', 'WORLDPAY_REFUND_QUERY_UNAVAILABLE', 'WORLDPAY_REFUND_OUTCOME_UNKNOWN'].includes(code);
+        await paymentRepo.markRefundVerification({
+          id: storedRefund.id,
+          status: ambiguous ? 'VERIFICATION_PENDING' : 'PENDING_CONFIRMATION',
+          externalReference: requestReference,
+          confirmedByUid: scope.uid,
+          verificationStatus: ambiguous ? 'worldpay_submission_outcome_unknown' : 'worldpay_api_unavailable',
+          verificationPayload: { transactionReference, requestReference, errorCode: code },
+        });
+        if (ambiguous) {
+          res.status(202).json({
+            ...refundState,
+            id: storedRefund.id,
+            status: 'verifying',
+            method: 'worldpay_api',
+            paymentReference: transactionReference,
+            transactionReference,
+            externalReference: requestReference,
+            verificationReference: 'worldpay_submission_outcome_unknown',
+            verificationMessage: 'Worldpay may have received the refund. HHH will verify the outcome before another refund can be attempted.',
+          });
+          return;
+        }
+        res.status(200).json({
+          ...refundState,
+          id: storedRefund.id,
+          status: 'pending_confirmation',
+          method: 'worldpay_portal',
+          paymentReference: transactionReference,
+          transactionReference,
+          externalReference: requestReference,
+          verificationReference: 'worldpay_api_unavailable',
+          verificationMessage: error instanceof Error ? error.message : 'Worldpay could not accept an API refund.',
+        });
+      }
     } catch (error) {
       next(error);
     }
@@ -1501,6 +1638,13 @@ export function createPortalOrderRouter(): Router {
         orderId,
         organisationId: scope.organisationId,
         fullyRefunded: Number(sqlRefund.amountPence) >= Number(payment.amountPence),
+      });
+      await paymentRepo.updatePaymentOutcome({
+        id: payment.id,
+        orderId,
+        status: Number(sqlRefund.amountPence) >= Number(payment.amountPence) ? 'REFUNDED' : 'PAID',
+        providerPayload: payment.providerPayload,
+        updateOrderPaymentStatus: false,
       });
       await serialRepo.endLiveForOrder(scope.organisationId, orderId, 'refunded').catch(() => undefined);
 

@@ -464,7 +464,16 @@ export function recordPortalCuraleafCancellation(orderId: string, input: {
   });
 }
 
-export function createPortalOrderRefund(orderId: string, input: { organisationId: string; reason?: 'patient_cancelled'; resolution?: 'cancel' }) {
+export function createPortalOrderRefund(orderId: string, input: {
+  organisationId: string;
+  reason?: 'patient_cancelled';
+  resolution?: 'cancel';
+  scope: 'full' | 'partial';
+  amountPence: number;
+  includedMedicineIds?: string[];
+  dispensingPercent?: 0 | 25 | 50 | 75 | 100;
+  deliveryPercent?: 0 | 25 | 50 | 75 | 100;
+}) {
   return apiRequest<import('./contracts').OrderRefundState>(`/v1/portal/orders/${encodeURIComponent(orderId)}/refunds/manual`, {
     method: 'POST',
     body: JSON.stringify(input),

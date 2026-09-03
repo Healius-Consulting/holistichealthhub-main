@@ -101,11 +101,20 @@ export type SqlRefundRow = {
   confirmedAt?: string | null;
   confirmedByUid?: string | null;
   verificationStatus?: string | null;
+  verificationPayload?: unknown;
   verifiedAt?: string | null;
 };
 
 export function portalRefundFromSql(row: SqlRefundRow) {
   const status = String(row.status || '').toUpperCase();
+  const verification = asRecord(row.verificationPayload);
+  const verificationStatus = String(row.verificationStatus || '');
+  const worldpayApi = String(row.route || '').toUpperCase() === 'WORLDPAY'
+    && typeof verification.requestReference === 'string'
+    && verificationStatus !== 'worldpay_api_unavailable';
+  const paymentReference = typeof verification.transactionReference === 'string'
+    ? verification.transactionReference
+    : row.externalReference || row.id;
   return {
     id: row.id,
     status: status === 'COMPLETED' ? 'completed' as const
@@ -113,9 +122,11 @@ export function portalRefundFromSql(row: SqlRefundRow) {
         : ['RECONCILIATION_REQUIRED', 'FAILED'].includes(status) ? 'reconciliation_required' as const
           : 'pending_confirmation' as const,
     amountPence: Math.max(0, Number(row.amountPence || 0)),
-    method: String(row.route || '').toUpperCase() === 'WORLDPAY' ? 'worldpay_portal' as const : 'pharmacy_manual' as const,
-    paymentReference: row.externalReference || row.id,
-    transactionReference: row.externalReference || row.id,
+    method: String(row.route || '').toUpperCase() === 'WORLDPAY'
+      ? worldpayApi ? 'worldpay_api' as const : 'worldpay_portal' as const
+      : 'pharmacy_manual' as const,
+    paymentReference,
+    transactionReference: paymentReference,
     reason: row.cause || 'patient_cancelled',
     resolution: 'cancel' as const,
     requestedAt: row.createdAt || undefined,
@@ -124,6 +135,11 @@ export function portalRefundFromSql(row: SqlRefundRow) {
     confirmedAt: row.confirmedAt || undefined,
     confirmedBy: row.confirmedByUid || undefined,
     verificationReference: row.verificationStatus || undefined,
+    verificationMessage: verificationStatus === 'worldpay_submission_outcome_unknown'
+      ? 'Worldpay may have received the refund. HHH will verify the outcome before another refund can be attempted.'
+      : verificationStatus === 'worldpay_refund_not_observed'
+        ? 'Worldpay has not reported the submitted refund. Finance reconciliation is required before another attempt.'
+        : undefined,
     verifiedAt: row.verifiedAt || undefined,
   };
 }

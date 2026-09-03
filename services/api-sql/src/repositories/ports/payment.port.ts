@@ -18,6 +18,7 @@ export interface PaymentRecord {
   currency: string;
   route: 'MANUAL' | 'WORLDPAY';
   transactionReference?: string | null;
+  providerPaymentId?: string | null;
   receiptHash: string | null;
   hostedPaymentUrl?: string | null;
   linkExpiresAt?: string | null;
@@ -106,6 +107,7 @@ export interface PaymentRepositoryPort {
     currency: string;
     route: 'MANUAL' | 'WORLDPAY';
     transactionReference?: string | null;
+    providerPaymentId?: string | null;
     receiptHash?: string | null;
     hostedPaymentUrl?: string | null;
     linkExpiresAt?: string | null;
@@ -124,6 +126,7 @@ export interface PaymentRepositoryPort {
     markOrderPaid?: boolean;
     updateOrderPaymentStatus?: boolean;
   }): Promise<void>;
+  updatePaymentProvider(data: { id: string; providerPaymentId?: string | null; providerPayload?: unknown }): Promise<void>;
   createRefund(data: {
     organisationId: string;
     orderId: string;
@@ -146,7 +149,7 @@ export interface PaymentRepositoryPort {
   }): Promise<void>;
   markRefundVerification(data: {
     id: string;
-    status: 'VERIFICATION_PENDING' | 'RECONCILIATION_REQUIRED' | 'COMPLETED' | 'FAILED';
+    status: 'PENDING_CONFIRMATION' | 'VERIFICATION_PENDING' | 'RECONCILIATION_REQUIRED' | 'COMPLETED' | 'FAILED';
     externalReference?: string | null;
     confirmedByUid?: string | null;
     verificationStatus: string;

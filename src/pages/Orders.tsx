@@ -30,6 +30,7 @@ import {
   X,
   XCircle,
   PhoneCall,
+  Send,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -49,6 +50,9 @@ import { useModalFocus } from '../accessibility/useModalFocus';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { isOpenPharmacyWorkspace } from '../training/workspace';
 import { ApiRequestError, confirmPortalOrderRefund, createPortalOrderRefund, getPrescriptionFileDownloadUrl, handoutPortalOrder, placePrescriptionManually, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
+import { OrderRefundDialog } from './orders/OrderRefundDialog';
+import { catalogFromPatientOrder, type RefundRequestInput } from '../utils/orderRefundCatalog';
+import { composeRefund } from '../utils/refundComposition';
 import { isPersistedPrescriptionFileId, orderPrescriptionCopyViewable } from '../utils/prescriptionFile';
 import { compactPatientName } from '../utils/patientName';
 import {
@@ -717,19 +721,48 @@ export default function Orders() {
     }
   };
 
-  const requestRefund = async (order: PatientOrder) => {
-    if (order.refund || refundBusyOrderId) return;
+  const requestRefund = async (order: PatientOrder, composition: RefundRequestInput) => {
+    if (order.refund || refundBusyOrderId) return false;
     setRefundBusyOrderId(order.id);
     try {
+      let submittedMethod: NonNullable<PatientOrder['refund']>['method'] | null = null;
       if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
-        const refund = await createPortalOrderRefund(order.backendId, { organisationId: state.currentOrganisationId, reason: 'patient_cancelled', resolution: 'cancel' });
+        const refund = await createPortalOrderRefund(order.backendId, {
+          organisationId: state.currentOrganisationId,
+          reason: 'patient_cancelled',
+          resolution: 'cancel',
+          scope: composition.scope,
+          amountPence: composition.amountPence,
+          includedMedicineIds: composition.includedMedicineIds,
+          dispensingPercent: composition.dispensingPercent,
+          deliveryPercent: composition.deliveryPercent,
+        });
+        submittedMethod = refund.method;
         dispatch({ type: 'SET_ORDER_REFUND', orderId: order.id, refund });
       } else {
-        dispatch({ type: 'START_ORDER_REFUND', orderId: order.id, reason: 'patient_cancelled', resolution: 'cancel' });
+        dispatch({
+          type: 'START_ORDER_REFUND',
+          orderId: order.id,
+          reason: 'patient_cancelled',
+          resolution: 'cancel',
+          amountPence: composition.amountPence,
+          scope: composition.scope,
+          lines: composeRefund(catalogFromPatientOrder(order), composition).lines,
+        });
       }
-      dispatch({ type: 'ADD_TOAST', message: `Refund task created for ${orderReference(order)}. Complete it in ${order.payment.route === 'worldpay' ? 'Worldpay' : 'the pharmacy payment system'}, then record the confirmation.`, toastType: 'warning' });
+      dispatch({
+        type: 'ADD_TOAST',
+        message: order.payment.route === 'worldpay'
+          ? submittedMethod === 'worldpay_portal'
+            ? `Worldpay API refund is unavailable for ${orderReference(order)}. Complete it in the Worldpay portal and record the reference.`
+            : `Refund submitted to Worldpay for ${orderReference(order)}. Waiting for confirmation.`
+          : `Refund task created for ${orderReference(order)}. Complete it in the pharmacy payment system, then record the confirmation.`,
+        toastType: 'warning',
+      });
+      return true;
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The refund task could not be created.', toastType: 'error' });
+      return false;
     } finally { setRefundBusyOrderId(null); }
   };
 
@@ -1107,11 +1140,12 @@ export default function Orders() {
               paymentLinkBusy={paymentLinkBusyOrderId === record.order.id}
               refundReference={refundReferences[record.order.id] ?? ''}
               onRefundReferenceChange={value => setRefundReferences(current => ({ ...current, [record.order.id]: value }))}
-              onRequestRefund={() => void requestRefund(record.order)}
+              onRequestRefund={composition => requestRefund(record.order, composition)}
               onConfirmRefund={() => void confirmRefund(record.order)}
               refundBusy={refundBusyOrderId === record.order.id}
               quoteReviewBusy={quoteReviewBusyOrderId === record.order.id}
               onQuoteReviewResolve={action => void handleQuoteReviewResolve(record.order, action)}
+              onCloseRecord={() => closeOrderRecord(entry.id)}
               cancellationEditorOpen={cancelOrderId === record.order.id}
               cancellationNote={cancelNote}
               cancellationBusy={cancellationBusyOrderId === record.order.id}
@@ -1228,7 +1262,7 @@ export default function Orders() {
             </div>
 
             <footer className="curaleaf-call-modal__footer">
-              <button type="button" className="btn btn-primary" onClick={() => setChaseDeliveryModal(null)}>Done</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setChaseDeliveryModal(null)}><Check size={13} /> Done</button>
             </footer>
           </section>
         </div>,
@@ -1310,7 +1344,7 @@ export default function Orders() {
             </div>
 
             <footer className="curaleaf-call-modal__footer">
-              <button type="button" className="btn btn-primary" onClick={() => setCallCuraleafModal(null)}>Done</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setCallCuraleafModal(null)}><Check size={13} /> Done</button>
             </footer>
           </section>
         </div>,
@@ -1332,9 +1366,9 @@ export default function Orders() {
               </p>
             </div>
             <footer>
-              <button type="button" className="btn btn-secondary" disabled={handoutBusy} onClick={() => { setHandoutOrderId(null); setHandoutPrescriptionId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); }}>Cancel</button>
-              <button type="button" className="btn btn-primary" disabled={handoutBusy} onClick={() => void handleOrderHandout(handoutOrder, handoutPrescriptionId, handoutPartial, handoutShipmentId)}>
-                <Check size={14} /> {handoutBusy ? 'Recording handover…' : handoutOrder.prescriptions.length > 1 ? 'Confirm prescription handover' : handoutPartial ? 'Confirm partial handover' : 'Confirm handover'}
+              <button type="button" className="btn btn-secondary btn-sm" disabled={handoutBusy} onClick={() => { setHandoutOrderId(null); setHandoutPrescriptionId(null); setHandoutPartial(false); setHandoutShipmentId(undefined); }}><X size={13} /> Cancel</button>
+              <button type="button" className="btn btn-primary btn-sm" disabled={handoutBusy} onClick={() => void handleOrderHandout(handoutOrder, handoutPrescriptionId, handoutPartial, handoutShipmentId)}>
+                <Check size={13} /> {handoutBusy ? 'Recording handover…' : handoutOrder.prescriptions.length > 1 ? 'Confirm prescription handover' : handoutPartial ? 'Confirm partial handover' : 'Confirm handover'}
               </button>
             </footer>
           </section>
@@ -1457,7 +1491,7 @@ function ReplacementLineage({ order, allOrders }: { order: PatientOrder; allOrde
   );
 }
 
-function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onCallCuraleaf, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, cancellationEditorOpen, cancellationNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onRequestCancellation, onChaseDelivery }: {
+function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now, placementConfirmation, handoutBusy, onOpenHandout, manualForm, onManualFormChange, onRecordManual, onRedo, busy, receiptDrafts, fulfilmentBusyRxId, onReceiptDraftChange, onSavePartial, onConfirmDelivery, onCallCuraleaf, onManualPlace, onPaymentLinkResend, paymentLinkBusy, refundReference, onRefundReferenceChange, onRequestRefund, onConfirmRefund, refundBusy, quoteReviewBusy, onQuoteReviewResolve, onCloseRecord, cancellationEditorOpen, cancellationNote, cancellationBusy, onOpenCancellation, onCloseCancellation, onCancellationNoteChange, onRequestCancellation, onChaseDelivery }: {
   record: OrderRecord;
   selectedPrescriptionId: number | null;
   onSelectPrescription: (prescriptionId: number) => void;
@@ -1481,11 +1515,12 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
   paymentLinkBusy: boolean;
   refundReference: string;
   onRefundReferenceChange: (value: string) => void;
-  onRequestRefund: () => void;
+  onRequestRefund: (composition: RefundRequestInput) => Promise<boolean>;
   onConfirmRefund: () => void;
   refundBusy: boolean;
   quoteReviewBusy: boolean;
   onQuoteReviewResolve: (action: 'absorb' | 'refresh') => void;
+  onCloseRecord: () => void;
   cancellationEditorOpen: boolean;
   cancellationNote: string;
   cancellationBusy: boolean;
@@ -1704,7 +1739,10 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
         <QuoteReviewPanel
           order={selectedDisplayOrder}
           busy={quoteReviewBusy || refundBusy || cancellationBusy}
+          canCancelOrder={mayCancel && !cancellationEditorOpen}
           onResolve={onQuoteReviewResolve}
+          onCancelOrder={onOpenCancellation}
+          onDismiss={onCloseRecord}
         />
       ) : null}
 
@@ -1767,7 +1805,7 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
               </div>
               <label><span>Note (Optional)</span><textarea className="input" value={manualForm.notes} onChange={event => onManualFormChange({ notes: event.target.value })} /></label>
               <label className="payment-confirmation"><input type="checkbox" checked={manualForm.confirmed} onChange={event => onManualFormChange({ confirmed: event.target.checked })} /><span><strong>I confirm {money(order.payment.amount)} has been received</strong><small>This creates the pharmacy payment record.</small></span></label>
-              <button type="button" className="btn btn-primary" disabled={!manualForm.confirmed || busy} onClick={onRecordManual}><CheckCircle2 size={14} /> {busy ? 'Recording…' : 'Record payment'}</button>
+              <button type="button" className="btn btn-primary btn-sm" disabled={!manualForm.confirmed || busy} onClick={onRecordManual}><CheckCircle2 size={13} /> {busy ? 'Recording…' : 'Record payment'}</button>
             </section>
           ) : null}
 
@@ -2227,10 +2265,13 @@ function PlacementStatusPanel({ order }: { order: PatientOrder }) {
   );
 }
 
-function QuoteReviewPanel({ order, busy, onResolve }: {
+function QuoteReviewPanel({ order, busy, canCancelOrder, onResolve, onCancelOrder, onDismiss }: {
   order: PatientOrder;
   busy: boolean;
+  canCancelOrder: boolean;
   onResolve: (action: 'absorb' | 'refresh') => void;
+  onCancelOrder: () => void;
+  onDismiss: () => void;
 }) {
   const review = order.quoteReview;
   const quoteCheck = order.activeQuoteCheck;
@@ -2251,9 +2292,10 @@ function QuoteReviewPanel({ order, busy, onResolve }: {
     ? 'Placement is held. Recheck after Curaleaf restocks; the verified payment remains attached to this order.'
     : missingBaseline
       ? 'The quote attached to payment cannot be proved. Recheck keeps placement held until reconciliation succeeds.'
-      : delta !== 0
-        ? `Accept the ${money(Math.abs(delta) / 100)} ${delta > 0 ? 'increase' : 'decrease'} and keep the patient payment unchanged.`
-        : 'The supplier cost changed. Accept the difference and keep the patient payment unchanged.';
+      : 'Patient payment stays unchanged. Pharmacy covers the difference.';
+  const absorbLabel = delta !== 0
+    ? `Accept ${money(Math.abs(delta) / 100)} ${delta > 0 ? 'increase' : 'decrease'}`
+    : 'Accept price change';
   return (
     <section className="quote-review-panel" aria-labelledby="quote-review-title">
       <header className="quote-review-panel__header">
@@ -2276,12 +2318,21 @@ function QuoteReviewPanel({ order, busy, onResolve }: {
       ) : null}
       <div className="quote-review-panel__actions">
         {outOfStock || missingBaseline ? (
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('refresh')}>
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onResolve('refresh')}>
             <RefreshCw size={13} /> {busy ? 'Checking…' : 'Recheck quote'}
           </button>
         ) : (
-          <button type="button" className="btn btn-primary" disabled={busy} onClick={() => onResolve('absorb')}>
-            Accept
+          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onResolve('absorb')}>
+            <CheckCircle2 size={13} /> {busy ? 'Saving…' : absorbLabel}
+          </button>
+        )}
+        {canCancelOrder ? (
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onCancelOrder}>
+            <XCircle size={13} /> Cancel order
+          </button>
+        ) : (
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onDismiss}>
+            <X size={13} /> Cancel
           </button>
         )}
       </div>
@@ -2338,7 +2389,7 @@ function OrderCancellationPanel({ order, editorOpen, note, busy, onClose, onNote
           </p>
         </div>
         <div className="order-cancellation-confirm__actions">
-          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onClose}>Keep order</button>
+          <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onClose}><X size={13} /> Keep order</button>
           <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={onRequest}>
             <XCircle size={13} /> {busy ? 'Cancelling…' : 'Cancel order'}
           </button>
@@ -2367,10 +2418,11 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, partialP
   refundReference: string;
   onRefundReferenceChange: (value: string) => void;
   onReplace: () => void;
-  onRequestRefund: () => void;
+  onRequestRefund: (composition: RefundRequestInput) => Promise<boolean>;
   onConfirmRefund: () => void;
 }) {
-  const method = order.payment.route === 'worldpay' ? 'Worldpay portal' : 'ePOS';
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const method = order.refund?.method === 'worldpay_api' ? 'Worldpay' : order.payment.route === 'worldpay' ? 'Worldpay portal' : 'ePOS';
   const reference = order.refund?.paymentReference ?? order.payment.ref ?? 'Reference unavailable';
   return (
     <section className={`order-resolution${order.refund?.status === 'completed' ? ' order-resolution--complete' : ''}`}>
@@ -2378,11 +2430,11 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, partialP
         <span><small>Paid-order resolution</small><strong>{
           lockedByCuraleaf ? 'Waiting for Curaleaf cancellation'
             : order.refund?.status === 'completed' ? 'Refund completed'
-            : order.refund?.status === 'verifying' ? 'Refund reference is being verified'
+            : order.refund?.status === 'verifying' ? 'Waiting for Worldpay confirmation'
             : order.refund?.status === 'reconciliation_required' ? 'Refund needs reconciliation'
             : order.refund ? 'Refund due'
             : partialPrescription ? 'Resolve cancelled prescription'
-            : canReplace ? 'Choose replacement or cancel'
+            : canReplace ? 'Choose replacement or refund'
             : 'Refund due'
         }</strong></span>
         <span className="order-resolution__amount"><small>Order payment</small><strong>{money(order.payment.amount)}</strong></span>
@@ -2390,7 +2442,7 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, partialP
       <div className="order-resolution__reference">
         <CreditCard size={15} />
         <span><small>{method} payment ID</small><code>{reference}</code></span>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void navigator.clipboard.writeText(reference)}>Copy ID</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void navigator.clipboard.writeText(reference)}><Copy size={13} /> Copy ID</button>
       </div>
       {lockedByCuraleaf ? (
         <div className="order-resolution__choices">
@@ -2408,20 +2460,37 @@ function PaidExceptionResolution({ order, canReplace, lockedByCuraleaf, partialP
               </span>
             </div>
           ) : (
-            <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onRequestRefund}><XCircle size={13} /> Cancel order</button>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setRefundDialogOpen(true)}>
+              <Banknote size={13} /> Refund
+            </button>
           )}
-          <small>{partialPrescription
-            ? 'The unaffected prescription keeps its own PO and continues through fulfilment.'
-            : `A replacement keeps the verified payment allocated to the new order. Cancelling opens the ${method} refund gate and the order remains actionable until its external refund reference is verified.`}</small>
+          {refundDialogOpen && !partialPrescription ? (
+            <OrderRefundDialog
+              order={order}
+              busy={busy}
+              onClose={() => { if (!busy) setRefundDialogOpen(false); }}
+              onSubmit={async input => {
+                const ok = await onRequestRefund(input);
+                if (ok) setRefundDialogOpen(false);
+              }}
+            />
+          ) : null}
         </div>
       ) : order.refund.status === 'pending_confirmation' ? (
         <div className="order-resolution__confirm">
-          <ol><li>Sign in to {method}.</li><li>Find payment <code>{reference}</code> and refund {money(order.refund.amountPence / 100)}.</li><li>Enter the refund reference below and confirm. HHH records the confirmation but does not move the money.</li></ol>
+          {order.refund.lines?.length ? (
+            <ul className="order-refund-composer__breakdown">
+              {order.refund.lines.map(line => (
+                <li key={line.key}><span>{line.label}{line.percent != null ? ` · ${line.percent}%` : ''}</span><strong>{money(line.amountPence / 100)}</strong></li>
+              ))}
+            </ul>
+          ) : null}
+          <ol><li>Sign in to {method}.</li><li>Find payment <code>{reference}</code> and refund {money(order.refund.amountPence / 100)}{order.refund.scope === 'partial' ? ' as a partial refund' : ''}.</li><li>Enter the refund reference below and confirm. HHH records the confirmation but does not move the money.</li></ol>
           <label><span>Refund confirmation reference</span><input className="input" value={refundReference} onChange={event => onRefundReferenceChange(event.target.value)} placeholder="Worldpay refund / command ID" /></label>
           <button type="button" className="btn btn-primary btn-sm" disabled={busy || refundReference.trim().length < 3} onClick={onConfirmRefund}><CheckCircle2 size={13} /> {busy ? 'Recording…' : 'Submit reference for verification'}</button>
         </div>
       ) : order.refund.status === 'verifying' ? (
-        <div className="order-resolution__locked" role="status"><RefreshCw size={16} className="spin" /><span><strong>Verifying with {order.payment.route === 'worldpay' ? 'Worldpay' : 'the payment record'}</strong><small>Reference {order.refund.externalReference ?? 'recorded'}. Keep this order open until the amount and original transaction are confirmed.</small></span></div>
+        <div className="order-resolution__locked" role="status"><RefreshCw size={16} className="spin" /><span><strong>Waiting for Worldpay to confirm</strong><small>{order.refund.verificationMessage ?? `Submission ${order.refund.externalReference ?? 'recorded'} is being checked against the original payment. Do not issue another refund while verification is pending.`}</small></span></div>
       ) : order.refund.status === 'reconciliation_required' ? (
         <div className="order-resolution__locked" role="alert"><AlertTriangle size={16} /><span><strong>Do not archive this order yet</strong><small>{order.refund.verificationMessage ?? 'The refund reference or amount could not be verified against the original payment. Finance reconciliation is required.'}</small></span></div>
       ) : (
@@ -2784,7 +2853,7 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
               </span>
             </span>
             <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={onManualPlace}>
-              {busy ? 'Placing…' : 'Place prescription'}
+              <Send size={13} /> {busy ? 'Placing…' : 'Place prescription'}
             </button>
           </div>
         ) : null}
@@ -2951,7 +3020,7 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
                   <div className="order-goods-in__actions">
                     <button
                       type="button"
-                      className="btn btn-primary"
+                      className="btn btn-primary btn-sm"
                       disabled={busy || arrivingPacks < 1}
                       onClick={() => {
                         const allArrived: Record<string, number> = {};
@@ -2960,8 +3029,8 @@ function PrescriptionCard({ order, prescription, index, busy, onReceiptDraftChan
                         onConfirmDelivery(selectedShipmentId || undefined);
                       }}
                     >
-                      <PackageCheck size={15} />
-                      {busy ? 'Recording delivery…' : `Accept Delivery (${arrivingPacks} pk)`}
+                      <PackageCheck size={13} />
+                      {busy ? 'Recording delivery…' : `Accept delivery (${arrivingPacks} pk)`}
                     </button>
                   </div>
                 </div>

@@ -10028,13 +10028,6 @@ td{
   flex-wrap: wrap;
 }
 
-.rx-unresolved-panel__actions > span{
-  flex: 1 1 240px;
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1.45;
-}
-
 .rx-workbench-layout{
   gap: 20px !important;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 340px) !important;
@@ -14216,12 +14209,12 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .quote-review-panel__waiting strong{ font-size: 11px; color: var(--text-primary); }
 .quote-review-panel__waiting small{ margin-top: 3px; font-size: 10px; color: var(--text-secondary); line-height: 1.45; }
 .quote-review-panel__waiting label{ display: grid; gap: 5px; flex: 1 1 220px; color: var(--text-secondary); font-size: 10px; font-weight: 650; }
-.quote-review-panel__actions .btn,
-.quote-review-panel__waiting .btn,
-.curaleaf-call-modal__footer .btn{ min-height: 44px; }
 @media (max-width: 720px){
   .quote-review-panel__actions .btn,
-  .quote-review-panel__waiting .btn{ width: 100%; }
+  .quote-review-panel__waiting .btn{
+    width: 100%;
+    min-height: 44px;
+  }
 }
 
 .order-gate-summary,
@@ -14909,12 +14902,13 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-resolution__reference small{ color: var(--text-tertiary); font-size: 8px; font-weight: 680; }
 .order-resolution__reference code{ overflow: hidden; color: var(--text-primary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .order-resolution__choices{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 13px; }
-.order-resolution__choices > small{ flex: 1 1 300px; color: var(--text-secondary); font-size: 9px; line-height: 1.45; }
+.order-resolution__choices > small{ color: var(--text-secondary); font-size: 9px; line-height: 1.45; }
 .order-resolution__locked{ display: flex; align-items: flex-start; gap: 9px; padding: 12px 13px; color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 5%, var(--bg-surface)); }
 .order-resolution__locked > span{ display: grid; gap: 3px; }
 .order-resolution__locked strong{ color: var(--text-primary); font-size: 10px; }
 .order-resolution__locked small{ color: var(--text-secondary); font-size: 9px; line-height: 1.45; }
 .order-resolution__confirm{ display: grid; grid-template-columns: minmax(250px, 1fr) minmax(220px, .8fr) auto; align-items: end; gap: 12px; padding: 12px 13px; }
+.order-resolution__confirm .order-refund-composer__breakdown{ grid-column: 1 / -1; }
 .order-resolution__confirm ol{ margin: 0; padding-left: 18px; color: var(--text-secondary); font-size: 9px; line-height: 1.55; }
 .order-resolution__confirm label{ display: grid; gap: 5px; color: var(--text-secondary); font-size: 9px; }
 .order-resolution__completed{ display: flex; align-items: center; gap: 9px; padding: 12px 13px; color: var(--color-success); }
@@ -14923,6 +14917,171 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-resolution__completed small{ color: var(--text-secondary); font-size: 9px; }
 .order-resolution--complete{ border-color: color-mix(in srgb, var(--color-success) 28%, var(--border)); }
 .order-resolution--complete > header{ background: color-mix(in srgb, var(--color-success) 6%, var(--bg-surface)); }
+.order-refund-composer{
+  display: grid;
+  gap: 12px;
+  flex: 1 1 100%;
+}
+.order-refund-composer__modes{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.order-refund-composer__modes button{
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.order-refund-composer__modes button strong{ color: var(--text-primary); font-size: 12px; }
+.order-refund-composer__modes button small{ color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.order-refund-composer__modes button:hover:not(:disabled){
+  border-color: color-mix(in srgb, var(--tenant-primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--tenant-primary) 6%, var(--bg-surface));
+}
+.order-refund-composer__modes button.is-selected{
+  color: var(--tenant-primary-strong);
+  border-color: var(--tenant-primary);
+  background: color-mix(in srgb, var(--tenant-primary) 10%, var(--bg-surface));
+}
+.order-refund-composer__breakdown,
+.order-refund-composer__medicines{
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.order-refund-composer__breakdown li{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+.order-refund-composer__breakdown li:last-child{ border-bottom: 0; }
+.order-refund-composer__section-label{
+  margin: 4px 0 0;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 720;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.order-refund-composer__medicine{
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.order-refund-composer__medicines li:last-child .order-refund-composer__medicine{ border-bottom: 0; }
+.order-refund-composer__medicine input{
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+}
+.order-refund-composer__medicine span,
+.order-refund-composer__charge .order-refund-composer__line-copy{
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.order-refund-composer__medicine strong,
+.order-refund-composer__charge strong{ color: var(--text-primary); font-size: 12px; }
+.order-refund-composer__medicine small,
+.order-refund-composer__charge small{ color: var(--text-secondary); font-size: 10px; }
+.order-refund-composer__charge{
+  display: grid;
+  gap: 8px;
+  padding: 10px 0 2px;
+}
+.order-refund-composer__percents{
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.order-refund-composer__percents button{
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+}
+.order-refund-composer__percents button:hover{
+  border-color: color-mix(in srgb, var(--tenant-primary) 35%, var(--border));
+  color: var(--text-primary);
+}
+.order-refund-composer__percents button.is-selected{
+  color: var(--tenant-on-primary);
+  border-color: var(--tenant-primary);
+  background: var(--tenant-primary);
+}
+.order-refund-composer__empty,
+.order-refund-composer__error{
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.order-refund-composer__error{ color: var(--color-danger); }
+.order-refund-composer__footer{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.order-refund-composer__footer > span{ display: grid; gap: 2px; }
+.order-refund-composer__footer small{ color: var(--text-tertiary); font-size: 8px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; }
+.order-refund-composer__footer strong{ color: var(--text-primary); font-size: 16px; }
+.order-refund-dialog{
+  width: min(560px, 94vw);
+  max-height: min(90vh, 760px);
+  overflow: auto;
+}
+.order-refund-dialog .order-refund-composer{ gap: 14px; }
+@media (prefers-reduced-motion: reduce){
+  .order-refund-dialog{ animation: none; }
+}
+@media (max-width: 420px){
+  .order-handout-backdrop{ padding: 12px; align-items: end; }
+  .order-refund-dialog{ width: 100%; max-height: min(92vh, 760px); border-radius: 16px 16px 0 0; }
+  .order-refund-dialog .curaleaf-call-modal__close{ width: 44px; height: 44px; }
+  .order-refund-composer__footer .btn{ min-height: 44px; }
+}
+.order-refund-composer button:focus-visible,
+.order-refund-composer input:focus-visible{
+  outline: 3px solid var(--focus-ring, var(--tenant-primary));
+  outline-offset: 2px;
+}
+@media (max-width: 720px){
+  .order-refund-composer__modes{ grid-template-columns: 1fr; }
+}
+@media (max-width: 420px){
+  .order-refund-composer__percents{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 
 .order-crm-record__body{ display: block; }
 .order-crm-main{ min-width: 0; padding: 18px; background: transparent; }

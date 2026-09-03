@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
-import { maskWorldpayIdentifier, worldpayBaseUrl, worldpaySecretPayload, worldpayStatusPayload, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
+import { maskWorldpayIdentifier, safeWorldpayActionUrl, worldpayBaseUrl, worldpaySecretPayload, worldpayStatusPayload, WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
 
 describe('Worldpay credential helpers', () => {
   // Hosted-page customisation was removed: the stored secret is now exactly the
@@ -32,12 +32,31 @@ describe('Worldpay credential helpers', () => {
     });
   });
 
+  it('expires hosted payment links after 72 hours by default', () => {
+    assert.equal(WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS, 72 * 60 * 60);
+  });
+
   it('uses try unless the stored connection is live', () => {
     assert.equal(worldpayBaseUrl(), WORLDPAY_TRY_BASE_URL);
     assert.equal(worldpayBaseUrl('TEST'), WORLDPAY_TRY_BASE_URL);
     assert.equal(worldpayBaseUrl('try'), WORLDPAY_TRY_BASE_URL);
     assert.equal(worldpayBaseUrl('PRODUCTION'), WORLDPAY_LIVE_BASE_URL);
     assert.equal(worldpayBaseUrl('live'), WORLDPAY_LIVE_BASE_URL);
+  });
+
+  it('allows only HTTPS actions on the configured Worldpay host', () => {
+    assert.equal(
+      safeWorldpayActionUrl('/payments/refunds/token', WORLDPAY_TRY_BASE_URL).href,
+      'https://try.access.worldpay.com/payments/refunds/token',
+    );
+    assert.throws(
+      () => safeWorldpayActionUrl('https://attacker.example/refund', WORLDPAY_TRY_BASE_URL),
+      { code: 'WORLDPAY_REFUND_LINK_INVALID' },
+    );
+    assert.throws(
+      () => safeWorldpayActionUrl('http://try.access.worldpay.com/refund', WORLDPAY_TRY_BASE_URL),
+      { code: 'WORLDPAY_REFUND_LINK_INVALID' },
+    );
   });
 
   it('masks the merchant entity without returning the full identifier', () => {
