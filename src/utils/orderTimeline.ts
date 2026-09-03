@@ -403,43 +403,97 @@ function pharmacyPlacementStepsForPrescription(order: PatientOrder, prescription
   ];
 }
 
+function dispensingStepState(complete: boolean, some: boolean, active: boolean): OrderStageState {
+  return complete ? 'complete' : some ? 'partial' : active ? 'active' : 'pending';
+}
+
+function pendingPackDetail(done: number, ordered: number) {
+  return `${done} of ${ordered} pending`;
+}
+
+/**
+ * Build Ordered → Collected steps. Pack counts appear only on the first
+ * incomplete stage (`{done} of {ordered} pending`); every other step stays
+ * status-only so a split order does not look like every phase is live.
+ */
+function buildDispensingSteps(input: {
+  ordered: number;
+  allocated: number;
+  shipped: number;
+  received: number;
+  collected: number;
+  readyPacks: number;
+}): OrderStageStep[] {
+  const ordered = input.ordered;
+  const dispensedComplete = ordered > 0 && input.allocated >= ordered;
+  const shippedComplete = ordered > 0 && input.shipped >= ordered;
+  const receivedComplete = ordered > 0 && input.received >= ordered;
+  const collectedComplete = ordered > 0 && input.collected >= ordered;
+  const readyComplete = ordered > 0 && input.readyPacks >= ordered;
+  const readySome = input.readyPacks > 0;
+
+  const steps: OrderStageStep[] = [
+    step('ordered', 'Ordered', 'PO sent', 'complete'),
+    step(
+      'dispensed',
+      'Dispensed by Clinic',
+      dispensedComplete ? 'Allocated' : 'Awaiting clinic allocation',
+      dispensingStepState(dispensedComplete, input.allocated > 0, true),
+    ),
+    step(
+      'in-transit',
+      'In transit',
+      shippedComplete ? 'Dispatched' : 'Awaiting dispatch',
+      dispensingStepState(shippedComplete, input.shipped > 0, dispensedComplete),
+    ),
+    step(
+      'checked-in',
+      'Arrived at Pharmacy',
+      receivedComplete ? 'Verified' : 'Awaiting delivery',
+      dispensingStepState(receivedComplete, input.received > 0, input.shipped > 0),
+    ),
+    step(
+      'ready',
+      'Ready',
+      readyComplete ? 'Patient notified' : 'Awaiting goods-in',
+      readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending',
+    ),
+    step(
+      'collected',
+      'Collected',
+      collectedComplete ? 'Handed to patient' : 'Awaiting collection',
+      dispensingStepState(collectedComplete, input.collected > 0, readyComplete),
+    ),
+  ];
+
+  const current = steps.find(entry => entry.state !== 'complete');
+  if (!current || ordered < 1) return steps;
+
+  const pendingByKey: Record<string, number> = {
+    dispensed: input.allocated,
+    'in-transit': input.shipped,
+    'checked-in': input.received,
+    ready: input.readyPacks,
+    collected: input.collected,
+  };
+  const done = pendingByKey[current.key];
+  if (typeof done === 'number' && done > 0) {
+    current.detail = pendingPackDetail(done, ordered);
+  }
+  return steps;
+}
+
 function dispensingStepsForPrescription(prescription: Prescription): OrderStageStep[] {
   const totals = prescriptionPackTotals(prescription);
   const allocated = (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + (line.allocated ?? 0), 0);
-
-  const packLabel = (count: number) => `${count} pack${count === 1 ? '' : 's'}`;
-  const partOf = (done: number) => `${done} of ${totals.ordered} ${totals.ordered === 1 ? 'pack' : 'packs'}`;
-
-  const dispensedComplete = totals.ordered > 0 && allocated >= totals.ordered;
-  const inTransit = Math.max(0, totals.shipped - totals.received);
-  const shippedComplete = totals.ordered > 0 && totals.shipped >= totals.ordered;
-  const receivedComplete = totals.ordered > 0 && totals.received >= totals.ordered;
-  const collectedComplete = totals.ordered > 0 && totals.collected >= totals.ordered;
-  const readyPacks = readyPackCountForPrescription(prescription);
-  const readyComplete = totals.ordered > 0 && readyPacks >= totals.ordered;
-  const readySome = readyPacks > 0;
-
-  const state = (complete: boolean, some: boolean, active: boolean): OrderStageState =>
-    complete ? 'complete' : some ? 'partial' : active ? 'active' : 'pending';
-
-  return [
-    step('ordered', 'Ordered', 'PO sent', 'complete'),
-    step('dispensed', 'Dispensed by Clinic', dispensedComplete ? 'Allocated' : allocated > 0 ? partOf(allocated) : 'Awaiting clinic allocation',
-      state(dispensedComplete, allocated > 0, true)),
-    step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
-      state(shippedComplete, totals.shipped > 0, dispensedComplete)),
-    step('checked-in', 'Arrived at Pharmacy', receivedComplete ? 'Verified' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
-      state(receivedComplete, totals.received > 0, totals.shipped > 0)),
-    step('ready', 'Ready',
-      readyComplete
-        ? 'Patient notified'
-        : readySome
-          ? `${partOf(readyPacks)} ready · patient notified for those`
-          : 'Awaiting goods-in',
-      readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending'),
-    step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
-      state(collectedComplete, totals.collected > 0, readyComplete)),
-  ];
+  return buildDispensingSteps({
+    ordered: totals.ordered,
+    allocated,
+    shipped: totals.shipped,
+    received: totals.received,
+    collected: totals.collected,
+    readyPacks: readyPackCountForPrescription(prescription),
+  });
 }
 
 function dispensingSteps(order: PatientOrder): OrderStageStep[] {
@@ -456,40 +510,14 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
     sum + (prescription.fulfilmentLines ?? []).reduce((lineSum, line) => lineSum + (line.allocated ?? 0), 0)
   ), 0);
 
-  const packLabel = (count: number) => `${count} pack${count === 1 ? '' : 's'}`;
-  const partOf = (done: number) => `${done} of ${totals.ordered} ${totals.ordered === 1 ? 'pack' : 'packs'}`;
-
-  const dispensedComplete = totals.ordered > 0 && allocated >= totals.ordered;
-  const inTransit = Math.max(0, totals.shipped - totals.received);
-  const shippedComplete = totals.ordered > 0 && totals.shipped >= totals.ordered;
-  const receivedComplete = totals.ordered > 0 && totals.received >= totals.ordered;
-  const collectedComplete = totals.ordered > 0 && totals.collected >= totals.ordered;
-  const readyPacks = readyPackCount(order);
-  const readyComplete = totals.ordered > 0 && readyPacks >= totals.ordered;
-  const readySome = readyPacks > 0;
-
-  const state = (complete: boolean, some: boolean, active: boolean): OrderStageState =>
-    complete ? 'complete' : some ? 'partial' : active ? 'active' : 'pending';
-
-  return [
-    step('ordered', 'Ordered', 'PO sent', 'complete'),
-    step('dispensed', 'Dispensed by Clinic', dispensedComplete ? 'Allocated' : allocated > 0 ? partOf(allocated) : 'Awaiting clinic allocation',
-      state(dispensedComplete, allocated > 0, true)),
-    step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
-      state(shippedComplete, totals.shipped > 0, dispensedComplete)),
-    // Goods-in is the pharmacy's record; Curaleaf cannot report arrival.
-    step('checked-in', 'Arrived at Pharmacy', receivedComplete ? 'Verified' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
-      state(receivedComplete, totals.received > 0, totals.shipped > 0)),
-    step('ready', 'Ready',
-      readyComplete
-        ? 'Patient notified'
-        : readySome
-          ? `${partOf(readyPacks)} ready · patient notified for those`
-          : 'Awaiting goods-in',
-      readyComplete ? 'complete' : readySome ? 'partial' : receivedComplete ? 'active' : 'pending'),
-    step('collected', 'Collected', collectedComplete ? 'Handed to patient' : totals.collected > 0 ? partOf(totals.collected) : 'Awaiting collection',
-      state(collectedComplete, totals.collected > 0, readyComplete)),
-  ];
+  return buildDispensingSteps({
+    ordered: totals.ordered,
+    allocated,
+    shipped: totals.shipped,
+    received: totals.received,
+    collected: totals.collected,
+    readyPacks: readyPackCount(order),
+  });
 }
 
 export interface PrescriptionStageRail {

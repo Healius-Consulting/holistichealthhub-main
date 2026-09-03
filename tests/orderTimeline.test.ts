@@ -213,15 +213,58 @@ test('a manual order shows the prescriber check as real outstanding work', () =>
   assert.notEqual(prescriber?.state, 'complete');
 });
 
-test('a partially ready split order does not claim the patient was notified', () => {
-  // One consignment of 1 pack is ready; 9 packs are still with Curaleaf.
+test('a partially ready split order puts the pack count only on the current stage', () => {
+  // One pack has progressed; nine remain with Curaleaf, so Dispensed is current.
   const rail = buildOrderStageRail(partialOrder);
+  const dispensed = rail.curaleafPlacement!.find(entry => entry.key === 'dispensed');
   const ready = rail.curaleafPlacement!.find(entry => entry.key === 'ready');
+  assert.ok(dispensed);
   assert.ok(ready);
+  assert.equal(dispensed!.state, 'partial');
+  assert.equal(dispensed!.detail, '1 of 10 pending');
   assert.notEqual(ready!.state, 'complete');
-  assert.equal(ready!.state, 'partial');
-  assert.match(ready!.detail, /1 of 10 packs ready/);
+  assert.doesNotMatch(ready!.detail, /\d+ of \d+/);
   assert.doesNotMatch(ready!.detail, /^Patient notified$/);
+  for (const entry of rail.curaleafPlacement!) {
+    if (entry.key === 'dispensed') continue;
+    assert.doesNotMatch(entry.detail, /\d+ of \d+ (packs|pending)/);
+  }
+});
+
+test('when upstream stages are complete, Ready carries the pending pack count', () => {
+  const shipmentId = '796adea9-f2d9-43b2-ad5c-ccfc4184ee62';
+  const partiallyReadyUpstreamComplete: PatientOrder = {
+    ...partialOrder,
+    prescriptions: [{
+      ...tenPackPrescription,
+      status: 'ready',
+      shipmentStates: { [shipmentId]: 'ready_for_collection' },
+      shipments: [{
+        id: shipmentId,
+        createdAt: '2026-08-17T08:50:45.621344Z',
+        items: [{ productId: '9f2d6958-2d76-4338-9e5f-6fd383dfff36', packCount: 1 }],
+      }],
+      fulfilmentLines: [{
+        ...tenPackPrescription.fulfilmentLines![0]!,
+        allocated: 10,
+        shipped: 10,
+        received: 10,
+        collected: 0,
+        remaining: 0,
+        backordered: false,
+      }],
+    }],
+  };
+  // readyPackCount uses shipment readiness; force one ready pack via collected=0 and ready status on a partial shipment.
+  // With all 10 received but only 1 consignment ready_for_collection, ready packs stay at 1.
+  const rail = buildOrderStageRail(partiallyReadyUpstreamComplete).curaleafPlacement!;
+  const ready = rail.find(entry => entry.key === 'ready');
+  assert.equal(ready!.state, 'partial');
+  assert.equal(ready!.detail, '1 of 10 pending');
+  for (const entry of rail) {
+    if (entry.key === 'ready') continue;
+    assert.doesNotMatch(entry.detail, /\d+ of \d+ pending/);
+  }
 });
 
 test('a fully ready order still reads as fully ready', () => {
