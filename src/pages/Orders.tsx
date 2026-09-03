@@ -2618,15 +2618,18 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
   selectedPrescriptionId: number | null;
   onSelect: (prescriptionId: number) => void;
 }) {
-  const statusCounts = items.reduce<Record<string, number>>((counts, item) => {
-    const label = recordCardTag(item.record);
-    counts[label] = (counts[label] ?? 0) + 1;
-    return counts;
-  }, {});
-  const summary = Object.entries(statusCounts).map(([label, count]) => `${count} ${label.toLowerCase()}`).join(' · ');
-  const sharedPo = items.length > 1
-    && items.every(item => item.prescription?.purchaseOrderId)
-    && new Set(items.map(item => item.prescription?.purchaseOrderId)).size === 1;
+  const placedCount = items.filter(item => Boolean(item.prescription?.purchaseOrderId)).length;
+  const distinctPoCount = new Set(
+    items.flatMap(item => item.prescription?.purchaseOrderId ? [item.prescription.purchaseOrderId] : []),
+  ).size;
+  const legacySharedPo = placedCount > 1 && distinctPoCount === 1;
+  const subtitle = legacySharedPo
+    ? `1 payment · ${items.length} prescriptions on a legacy shared Curaleaf PO`
+    : placedCount === 0
+      ? `1 payment · ${items.length} Curaleaf order${items.length === 1 ? '' : 's'} to place`
+      : placedCount < items.length
+        ? `1 payment · ${placedCount} of ${items.length} Curaleaf orders placed`
+        : `1 payment · ${items.length} separate Curaleaf order${items.length === 1 ? '' : 's'}`;
 
   const moveSelection = (currentIndex: number, direction: number) => {
     const next = items[(currentIndex + direction + items.length) % items.length]?.prescription;
@@ -2634,14 +2637,14 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
   };
 
   return (
-    <section className="order-rx-switcher" aria-label="Choose prescription">
+    <section className="order-rx-switcher" aria-label="Choose Curaleaf order">
       <header className="order-rx-switcher__header">
         <div className="order-rx-switcher__intro">
-          <strong>Switch prescription</strong>
-          <small>{items.length} on this order{summary ? ` · ${summary}` : ''}{sharedPo ? ' · shared PO' : ''}</small>
+          <strong>Switch Curaleaf order</strong>
+          <small>{subtitle}</small>
         </div>
         <label className="order-rx-switcher__mobile">
-          <span className="sr-only">Selected prescription</span>
+          <span className="sr-only">Selected Curaleaf order</span>
           <select value={selectedPrescriptionId ?? ''} onChange={event => onSelect(Number(event.target.value))}>
             {items.map(item => item.prescription ? (
               <option value={item.prescription.id} key={item.key}>{prescriptionWorkItemLabel(item)} · {recordCardTag(item.record)}</option>
@@ -2649,7 +2652,7 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
           </select>
         </label>
       </header>
-      <div className="order-rx-switcher__tabs" role="tablist" aria-label="Prescriptions in this order">
+      <div className="order-rx-switcher__tabs" role="tablist" aria-label="Curaleaf orders on this payment">
         {items.map((item, index) => {
           const prescription = item.prescription;
           if (!prescription) return null;
