@@ -463,6 +463,7 @@ export default function Patients() {
   const empty = emptyCopy(activeFilter, Boolean(search.trim()));
   const closedCount = records.filter(record => patientCrmLane(record) === 'declined').length;
   const visibleLanes = showClosed ? [...PATIENT_CRM_LANES, PATIENT_CRM_CLOSED_LANE] : PATIENT_CRM_LANES;
+  const populatedLanes = visibleLanes.filter(lane => (lanes.get(lane.key) ?? []).length > 0);
 
   return (
     <div className="page-body order-crm patient-crm">
@@ -507,10 +508,10 @@ export default function Patients() {
         </div>
       </section>
 
-      {filtered.length ? (
+      {populatedLanes.length ? (
         view === 'board' ? (
-          <div className={`crm-lane-board crm-lane-board--count-${visibleLanes.length}`}>
-            {visibleLanes.map(lane => {
+          <div className={`crm-lane-board crm-lane-board--count-${populatedLanes.length}`}>
+            {populatedLanes.map(lane => {
               const laneRecords = lanes.get(lane.key) ?? [];
               return (
                 <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`} data-tour={lane.key === 'enquiries' ? 'patients-enquiries' : lane.key === 'care' ? 'patients-referred' : undefined}>
@@ -518,15 +519,11 @@ export default function Patients() {
                     <span><strong>{lane.label}</strong></span>
                     <b>{laneRecords.length}</b>
                   </header>
-                  {laneRecords.length ? (
-                    <div className="crm-lane__rows">
-                      {laneRecords.map(record => (
-                        <CrmListRow key={record.key} record={record} selected={false} onSelect={() => setSelectedKey(record.key)} />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="crm-lane__empty">Nothing here.</p>
-                  )}
+                  <div className="crm-lane__rows">
+                    {laneRecords.map(record => (
+                      <CrmListRow key={record.key} record={record} selected={false} onSelect={() => setSelectedKey(record.key)} />
+                    ))}
+                  </div>
                 </section>
               );
             })}
@@ -536,9 +533,8 @@ export default function Patients() {
              lane priority under quiet headings: a flat A–Z list buries the records
              that need action today, which is the whole job of this screen. */
           <div className="crm-directory-list">
-            {visibleLanes.map(lane => {
+            {populatedLanes.map(lane => {
               const laneRecords = lanes.get(lane.key) ?? [];
-              if (!laneRecords.length) return null;
               return (
                 <section className={`crm-directory-list__group crm-directory-list__group--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
                   <header>
