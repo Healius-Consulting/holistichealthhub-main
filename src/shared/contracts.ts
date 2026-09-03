@@ -1167,22 +1167,24 @@ export interface PharmacyOverview {
     urgentTotal: number;
   };
   /**
-   * Last thirty days of money, from the same ledger the Finance page renders so
-   * the two can never disagree. Null when the costing inputs could not be read:
-   * the block is then omitted rather than published with revenue counted and
-   * cost missing, which would overstate what the pharmacy made.
+   * Settled cash this calendar month. Null when the costing inputs could not
+   * be read: the block is then omitted rather than published with revenue
+   * counted and cost treated as zero. Finance is the collected-order ledger;
+   * these figures are not the same question.
    */
   finance: {
-    period: '30d';
-    periodDays: number;
-    since: string;
-    realisedPatientRevenuePence: number;
-    realisedCount: number;
-    pendingCollectionCount: number;
-    pendingPatientRevenuePence: number;
-    contributionPence: number;
-    /** False when some realised orders in the window have no wholesale cost yet. */
-    contributionComplete: boolean;
+    period: 'this_month';
+    timezone: 'Europe/London';
+    periodStart: string;
+    periodEnd: string;
+    revenuePence: number;
+    revenueOrderCount: number;
+    grossProfitPence: number;
+    /** False when some paid orders in the window have no wholesale cost yet. */
+    grossProfitComplete: boolean;
+    costedOrderCount: number;
+    averageSpendPence: number;
+    payingPatientCount: number;
     awaitingPaymentCount: number;
     awaitingPaymentValuePence: number;
   } | null;

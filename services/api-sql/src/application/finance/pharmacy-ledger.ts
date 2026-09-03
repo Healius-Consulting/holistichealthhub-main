@@ -4,11 +4,10 @@ import { financeRevenueBasis, pharmacyFinanceRecognition } from '../../transport
 /**
  * The pharmacy's financial ledger, derived once.
  *
- * Finance and the Overview's thirty-day snapshot both need "what has this
- * pharmacy actually earned", and they have to agree to the penny — a headline
- * on Overview that disagrees with the page it links to destroys trust in both.
- * So there is exactly one implementation of the realisation, refund and costing
- * rules and both surfaces read its rows.
+ * Finance (collected-order realisation) and Overview (settled cash this month)
+ * both read these rows so refund, allocation and costing arithmetic stay in one
+ * place. They answer different questions on purpose: Overview is cash in the
+ * calendar month; Finance is the collected-order ledger.
  */
 
 export type PharmacyLedgerOrder = {
@@ -125,10 +124,14 @@ export function buildPharmacyLedgerRows(input: {
     const realisedAt = flags.realised
       ? String(collectedEventAt || paidEventAt || order.updatedAt || order.createdAt)
       : null;
-    // Realised rows period on collection; pending on payment; exclusions on payment/cancel.
+    // Finance still periods realised rows on collection; Overview cash events
+    // use paidAt / refundedAt instead. Unpaid rows fall back to createdAt.
     const financialEventAt = flags.realised
       ? realisedAt!
       : String(paidEventAt || order.cancelledAt || order.updatedAt || order.createdAt);
+    const refundSettledAt = (flags.refunded || flags.partialRefund)
+      ? String(flags.refundConfirmedAt || order.cancelledAt || order.updatedAt || '')
+      : null;
 
     return {
       orderId: order.orderNumber || order.id,
@@ -137,7 +140,8 @@ export function buildPharmacyLedgerRows(input: {
       createdAt: String(order.createdAt),
       updatedAt: String(order.updatedAt || order.createdAt),
       recognisedAt: realisedAt,
-      refundedAt: flags.refunded ? String(flags.refundConfirmedAt || order.cancelledAt || order.updatedAt) : null,
+      paidAt: paidEventAt,
+      refundedAt: refundSettledAt || null,
       financialEventAt,
       paymentStatus: String(order.paymentStatus).toLowerCase(),
       fulfilmentStatus: String(order.fulfilmentStatus).toLowerCase(),
@@ -148,6 +152,7 @@ export function buildPharmacyLedgerRows(input: {
       partialRefund: flags.partialRefund,
       refundAmountPence: completedRefundPence,
       refundPending: flags.refundPending,
+      grossPatientRevenuePence,
       productRevenuePence,
       pharmacyDeliveryPence,
       dispensingFeePence,
@@ -168,48 +173,139 @@ export function buildPharmacyLedgerRows(input: {
 
 /** Payment states that mean the pharmacy is still waiting to be paid. */
 const AWAITING_PAYMENT_STATUSES = ['pending', 'awaiting_manual_payment', 'awaiting_payment'];
+const FAILED_PAYMENT_STATUSES = ['failed', 'none'];
 
 export function isAwaitingPaymentRow(row: { paymentStatus: string }) {
   return AWAITING_PAYMENT_STATUSES.includes(row.paymentStatus);
 }
 
-export const OVERVIEW_FINANCE_PERIOD_DAYS = 30;
+export const OVERVIEW_FINANCE_TIME_ZONE = 'Europe/London';
+
+type LondonClock = { year: number; month: number; day: number; hour: number; minute: number };
+
+function londonClock(instant: Date): LondonClock {
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: OVERVIEW_FINANCE_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(instant).map(part => [part.type, part.value]));
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour) % 24,
+    minute: Number(parts.minute),
+  };
+}
+
+function londonOffsetMinutes(instant: Date) {
+  const clock = londonClock(instant);
+  const asUtc = Date.UTC(clock.year, clock.month - 1, clock.day, clock.hour, clock.minute);
+  return Math.round((asUtc - Math.floor(instant.getTime() / 60000) * 60000) / 60000);
+}
+
+function londonWallClockToInstant(year: number, month: number, day: number, hour = 0, minute = 0, second = 0, ms = 0) {
+  const naive = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+  const firstGuess = new Date(naive - londonOffsetMinutes(new Date(naive)) * 60000);
+  return new Date(naive - londonOffsetMinutes(firstGuess) * 60000);
+}
 
 /**
- * The thirty-day money headline for the Overview.
+ * Current calendar month in the pharmacy operating timezone: 00:00 on the 1st
+ * through now. A completed month would run through the last millisecond of its
+ * final day; Overview always asks for the live month.
+ */
+export function thisMonthBounds(now: number = Date.now()) {
+  const clock = londonClock(new Date(now));
+  const periodStart = londonWallClockToInstant(clock.year, clock.month, 1);
+  const nextMonth = clock.month === 12
+    ? londonWallClockToInstant(clock.year + 1, 1, 1)
+    : londonWallClockToInstant(clock.year, clock.month + 1, 1);
+  const periodEndMs = Math.min(now, nextMonth.getTime() - 1);
+  return {
+    timezone: OVERVIEW_FINANCE_TIME_ZONE,
+    periodStart: periodStart.toISOString(),
+    periodEnd: new Date(periodEndMs).toISOString(),
+    startMs: periodStart.getTime(),
+    endMs: periodEndMs,
+  };
+}
+
+function instantInWindow(value: string | null | undefined, startMs: number, endMs: number) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  const time = Date.parse(text);
+  return Number.isFinite(time) && time >= startMs && time <= endMs;
+}
+
+function hasSettledPayment(row: { paidAt?: string | null; paymentStatus: string }) {
+  if (!String(row.paidAt || '').trim()) return false;
+  return !FAILED_PAYMENT_STATUSES.includes(row.paymentStatus);
+}
+
+type OverviewFinanceRow = Pick<PharmacyLedgerRow,
+  'orderId' | 'patientId' | 'createdAt' | 'paidAt' | 'refundedAt' | 'paymentStatus'
+  | 'grossPatientRevenuePence' | 'refundAmountPence' | 'patientRevenuePence'
+  | 'wholesalePence' | 'wholesaleComplete'>;
+
+/**
+ * Overview money headline: settled cash this calendar month.
  *
- * Same rows, same rules, same arithmetic as the Finance page — this only
- * chooses the window and the handful of figures worth a headline. Contribution
- * is summed over costed rows only, and `contributionComplete` says whether every
- * realised order in the window had a wholesale cost to work from, so the number
- * is never presented as more complete than it is.
+ * Payments count on paidAt, refunds on refundedAt, unpaid links stay outstanding.
+ * Collection is not a gate. Wholesale is taken only for orders whose payment
+ * landed in the window, and missing cost never counts as £0.
  */
 export function overviewFinanceSnapshot(
-  rows: Array<Pick<PharmacyLedgerRow,
-    'financialEventAt' | 'realised' | 'pendingCollection' | 'patientRevenuePence'
-    | 'totalContributionPence' | 'wholesaleComplete' | 'paymentStatus'>>,
+  rows: OverviewFinanceRow[],
   now: number = Date.now(),
 ) {
-  const since = new Date(now - OVERVIEW_FINANCE_PERIOD_DAYS * 86_400_000).toISOString().slice(0, 10);
-  const inWindow = rows.filter(row => Boolean(row.financialEventAt) && row.financialEventAt.slice(0, 10) >= since);
+  const bounds = thisMonthBounds(now);
+  const payments = rows.filter(row => hasSettledPayment(row) && instantInWindow(row.paidAt, bounds.startMs, bounds.endMs));
+  const refunds = rows.filter(row => Number(row.refundAmountPence || 0) > 0 && instantInWindow(row.refundedAt, bounds.startMs, bounds.endMs));
+  const awaitingPayment = rows.filter(row => (
+    isAwaitingPaymentRow(row) && instantInWindow(row.createdAt, bounds.startMs, bounds.endMs)
+  ));
 
-  const realised = inWindow.filter(row => row.realised);
-  const pendingCollection = inWindow.filter(row => row.pendingCollection);
-  const awaitingPayment = inWindow.filter(isAwaitingPaymentRow);
-  const costed = realised.filter(row => row.wholesaleComplete);
+  const paymentPence = payments.reduce((sum, row) => sum + Number(row.grossPatientRevenuePence || 0), 0);
+  const refundPence = refunds.reduce((sum, row) => sum + Number(row.refundAmountPence || 0), 0);
+  const revenuePence = paymentPence - refundPence;
+
+  const costedPayments = payments.filter(row => row.wholesaleComplete && row.wholesalePence != null);
+  const wholesalePence = costedPayments.reduce((sum, row) => sum + Number(row.wholesalePence || 0), 0);
+  const grossProfitPence = revenuePence - wholesalePence;
+
+  const netByPatient = new Map<string, number>();
+  for (const row of payments) {
+    const key = String(row.patientId || '').trim() || `order:${row.orderId}`;
+    netByPatient.set(key, (netByPatient.get(key) ?? 0) + Number(row.grossPatientRevenuePence || 0));
+  }
+  for (const row of refunds) {
+    const key = String(row.patientId || '').trim() || `order:${row.orderId}`;
+    netByPatient.set(key, (netByPatient.get(key) ?? 0) - Number(row.refundAmountPence || 0));
+  }
+  const payingNets = [...netByPatient.values()].filter(net => net > 0);
+  const payingPatientCount = payingNets.length;
+  const payingSpendPence = payingNets.reduce((sum, net) => sum + net, 0);
+  const averageSpendPence = payingPatientCount === 0 ? 0 : Math.round(payingSpendPence / payingPatientCount);
 
   return {
-    period: '30d' as const,
-    periodDays: OVERVIEW_FINANCE_PERIOD_DAYS,
-    since: `${since}T00:00:00.000Z`,
-    realisedPatientRevenuePence: realised.reduce((sum, row) => sum + row.patientRevenuePence, 0),
-    realisedCount: realised.length,
-    pendingCollectionCount: pendingCollection.length,
-    pendingPatientRevenuePence: pendingCollection.reduce((sum, row) => sum + row.patientRevenuePence, 0),
-    contributionPence: costed.reduce((sum, row) => sum + (row.totalContributionPence ?? 0), 0),
-    // False when some realised orders in the window have no wholesale cost yet.
-    contributionComplete: costed.length === realised.length,
+    period: 'this_month' as const,
+    timezone: bounds.timezone,
+    periodStart: bounds.periodStart,
+    periodEnd: bounds.periodEnd,
+    revenuePence,
+    revenueOrderCount: payments.length,
+    grossProfitPence,
+    grossProfitComplete: costedPayments.length === payments.length,
+    costedOrderCount: costedPayments.length,
+    averageSpendPence,
+    payingPatientCount,
     awaitingPaymentCount: awaitingPayment.length,
-    awaitingPaymentValuePence: awaitingPayment.reduce((sum, row) => sum + row.patientRevenuePence, 0),
+    awaitingPaymentValuePence: awaitingPayment.reduce((sum, row) => sum + Number(row.patientRevenuePence || row.grossPatientRevenuePence || 0), 0),
   };
 }

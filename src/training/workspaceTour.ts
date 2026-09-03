@@ -92,7 +92,7 @@ export const WORKSPACE_TOUR_STEPS: WorkspaceTourStep[] = [
     screen: 'finance',
     targets: ['finance'],
     title: 'Finance after collection',
-    body: 'Headline figures count paid orders only once they are fully collected. Contribution uses the same ledger as this page. Overview never adds these totals up from the patient or order lists.',
+    body: 'The Finance page is the collected-order ledger. Overview shows settled cash this month, which is a different question. Neither page adds totals up from the patient or order lists.',
   },
   {
     id: 'settings',

@@ -376,7 +376,6 @@ export function sandboxPortalPack(organisationId: string, now = new Date()) {
 
 export function sandboxOverviewSnapshot(organisationId: string, now = new Date(), tradingName = 'Primary Branch'): PharmacyOverview {
   const asOf = now.toISOString();
-  const since = daysAgo(30, now).toISOString();
   return {
     asOf,
     organisation: {
@@ -399,15 +398,17 @@ export function sandboxOverviewSnapshot(organisationId: string, now = new Date()
       urgentTotal: 3,
     },
     finance: {
-      period: '30d',
-      periodDays: 30,
-      since,
-      realisedPatientRevenuePence: PATIENT_PENCE,
-      realisedCount: 1,
-      pendingCollectionCount: 2,
-      pendingPatientRevenuePence: PATIENT_PENCE * 2,
-      contributionPence: PATIENT_PENCE - WHOLESALE_PENCE,
-      contributionComplete: true,
+      period: 'this_month',
+      timezone: 'Europe/London',
+      periodStart: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+      periodEnd: asOf,
+      revenuePence: PATIENT_PENCE,
+      revenueOrderCount: 1,
+      grossProfitPence: PATIENT_PENCE - WHOLESALE_PENCE,
+      grossProfitComplete: true,
+      costedOrderCount: 1,
+      averageSpendPence: PATIENT_PENCE,
+      payingPatientCount: 1,
       awaitingPaymentCount: 1,
       awaitingPaymentValuePence: PATIENT_PENCE,
     },

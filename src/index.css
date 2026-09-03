@@ -549,16 +549,27 @@
 .overview-integration-chip--degraded { border-color: #e0be86; background: #fffaf2; }
 .overview-integration-chip--unavailable { border-color: #e3aaa7; background: #fff7f6; }
 
-/* The money block: four figures, whole pounds, and one way through to the
-   ledger they came from. It is a summary to act on, not a report to read. */
+/* The money block: Gross profit leads, then supporting realised and outstanding
+   figures. Whole pounds; the pence belong on the Finance ledger. */
 .overview-finance__figures {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   gap: 0.9rem 1.25rem;
-  margin: 0.5rem 0 0.9rem;
+  margin: 0.5rem 0 0.65rem;
 }
 
 .overview-finance__figures > div { display: grid; gap: 0.15rem; min-width: 0; }
+
+.overview-finance__hero {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 48rem) {
+  .overview-finance__figures {
+    grid-template-columns: minmax(11rem, 1.25fr) repeat(3, minmax(8.5rem, 1fr));
+  }
+  .overview-finance__hero { grid-column: auto; }
+}
 
 .overview-finance__figures dt {
   color: var(--text-muted, #526157);
@@ -575,7 +586,22 @@
   letter-spacing: -0.02em;
 }
 
+.overview-finance__hero dd {
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+}
+
 .overview-finance__figures small { color: var(--text-muted, #526157); font-size: 0.75rem; }
+
+.overview-finance__outstanding {
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--border, #d5ddd6);
+}
+
+.overview-finance__note {
+  margin: 0 0 0.55rem;
+  color: var(--text-muted, #526157);
+  font-size: 0.75rem;
+}
 
 .overview-finance__link,
 .overview-integrations__link {

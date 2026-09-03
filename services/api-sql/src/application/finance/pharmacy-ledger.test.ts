@@ -1,103 +1,185 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { allocatePatientRevenueAfterRefund, OVERVIEW_FINANCE_PERIOD_DAYS, overviewFinanceSnapshot } from './pharmacy-ledger.js';
+import {
+  allocatePatientRevenueAfterRefund,
+  OVERVIEW_FINANCE_TIME_ZONE,
+  overviewFinanceSnapshot,
+  thisMonthBounds,
+} from './pharmacy-ledger.js';
 
-const NOW = Date.parse('2026-08-27T12:00:00.000Z');
-const daysAgo = (days: number) => new Date(NOW - days * 86_400_000).toISOString();
+const NOW = Date.parse('2026-09-03T12:00:00.000Z');
 
 type Row = Parameters<typeof overviewFinanceSnapshot>[0][number];
 
 function row(overrides: Partial<Row> = {}): Row {
   return {
-    financialEventAt: daysAgo(1),
-    realised: false,
-    pendingCollection: false,
-    patientRevenuePence: 0,
-    totalContributionPence: null,
-    wholesaleComplete: false,
+    orderId: 'ord-1',
+    patientId: 'patient-a',
+    createdAt: '2026-09-02T10:00:00.000Z',
+    paidAt: '2026-09-02T10:00:00.000Z',
+    refundedAt: null,
     paymentStatus: 'paid',
+    grossPatientRevenuePence: 0,
+    refundAmountPence: 0,
+    patientRevenuePence: 0,
+    wholesalePence: null,
+    wholesaleComplete: false,
     ...overrides,
   };
 }
 
-describe('the Overview thirty-day money snapshot', () => {
-  it('reports the agreed fixed window', () => {
-    assert.equal(OVERVIEW_FINANCE_PERIOD_DAYS, 30);
-    assert.equal(overviewFinanceSnapshot([], NOW).period, '30d');
+describe('this month bounds in Europe/London', () => {
+  it('starts at midnight on the first of the calendar month', () => {
+    const bounds = thisMonthBounds(NOW);
+    assert.equal(bounds.timezone, OVERVIEW_FINANCE_TIME_ZONE);
+    assert.equal(bounds.periodStart, '2026-08-31T23:00:00.000Z');
+    assert.equal(bounds.periodEnd, new Date(NOW).toISOString());
   });
+});
 
-  it('counts only realised orders as earned revenue', () => {
+describe('the Overview this-month cash snapshot', () => {
+  it('counts paid uncollected settlements as revenue', () => {
     const snapshot = overviewFinanceSnapshot([
-      row({ realised: true, patientRevenuePence: 6_000 }),
-      row({ pendingCollection: true, patientRevenuePence: 4_000 }),
-      row({ paymentStatus: 'pending', patientRevenuePence: 2_500 }),
+      row({ grossPatientRevenuePence: 6_000, wholesalePence: 2_000, wholesaleComplete: true }),
+      row({
+        orderId: 'ord-unpaid',
+        paymentStatus: 'pending',
+        paidAt: null,
+        grossPatientRevenuePence: 2_500,
+        patientRevenuePence: 2_500,
+      }),
     ], NOW);
-    assert.equal(snapshot.realisedPatientRevenuePence, 6_000);
-    assert.equal(snapshot.realisedCount, 1);
+    assert.equal(snapshot.period, 'this_month');
+    assert.equal(snapshot.revenuePence, 6_000);
+    assert.equal(snapshot.revenueOrderCount, 1);
+    assert.equal(snapshot.grossProfitPence, 4_000);
+    assert.equal(snapshot.awaitingPaymentValuePence, 2_500);
   });
 
-  it('separates money paid but awaiting collection from money already earned', () => {
+  it('excludes unpaid, cancelled, and failed payments from revenue and gross profit', () => {
     const snapshot = overviewFinanceSnapshot([
-      row({ realised: true, patientRevenuePence: 6_000 }),
-      row({ pendingCollection: true, patientRevenuePence: 4_000 }),
-      row({ pendingCollection: true, patientRevenuePence: 1_500 }),
+      row({ grossPatientRevenuePence: 6_000, wholesalePence: 2_000, wholesaleComplete: true }),
+      row({
+        orderId: 'ord-failed',
+        paymentStatus: 'failed',
+        paidAt: null,
+        grossPatientRevenuePence: 9_900,
+      }),
+      row({
+        orderId: 'ord-cancelled',
+        paymentStatus: 'cancelled',
+        paidAt: null,
+        createdAt: '2026-09-01T08:00:00.000Z',
+        grossPatientRevenuePence: 4_000,
+      }),
     ], NOW);
-    assert.equal(snapshot.pendingCollectionCount, 2);
-    assert.equal(snapshot.pendingPatientRevenuePence, 5_500);
+    assert.equal(snapshot.revenuePence, 6_000);
+    assert.equal(snapshot.grossProfitPence, 4_000);
+    assert.equal(snapshot.awaitingPaymentCount, 0);
   });
 
-  it('reports the value still awaiting payment, not just the count', () => {
+  it('starts the window on the first of the month, not thirty days back', () => {
     const snapshot = overviewFinanceSnapshot([
-      row({ paymentStatus: 'pending', patientRevenuePence: 2_500 }),
-      row({ paymentStatus: 'awaiting_manual_payment', patientRevenuePence: 3_000 }),
-      row({ realised: true, patientRevenuePence: 6_000 }),
+      row({ paidAt: '2026-08-31T22:00:00.000Z', grossPatientRevenuePence: 9_900, wholesalePence: 1, wholesaleComplete: true }),
+      row({ paidAt: '2026-08-31T23:00:00.000Z', grossPatientRevenuePence: 6_000, wholesalePence: 2_000, wholesaleComplete: true }),
     ], NOW);
-    assert.equal(snapshot.awaitingPaymentCount, 2);
-    assert.equal(snapshot.awaitingPaymentValuePence, 5_500);
+    assert.equal(snapshot.revenuePence, 6_000);
+    assert.equal(snapshot.revenueOrderCount, 1);
   });
 
-  it('excludes anything older than the window', () => {
+  it('records a later-month refund in the refund month, not the original payment month', () => {
+    const september = overviewFinanceSnapshot([
+      row({
+        paidAt: '2026-08-10T10:00:00.000Z',
+        refundedAt: '2026-09-02T09:00:00.000Z',
+        refundAmountPence: 3_000,
+        grossPatientRevenuePence: 10_000,
+        wholesalePence: 4_000,
+        wholesaleComplete: true,
+      }),
+    ], NOW);
+    assert.equal(september.revenuePence, -3_000);
+    assert.equal(september.grossProfitPence, -3_000);
+    assert.equal(september.revenueOrderCount, 0);
+    assert.equal(september.payingPatientCount, 0);
+
+    const august = overviewFinanceSnapshot([
+      row({
+        paidAt: '2026-08-10T10:00:00.000Z',
+        refundedAt: '2026-09-02T09:00:00.000Z',
+        refundAmountPence: 3_000,
+        grossPatientRevenuePence: 10_000,
+        wholesalePence: 4_000,
+        wholesaleComplete: true,
+      }),
+    ], Date.parse('2026-08-20T12:00:00.000Z'));
+    assert.equal(august.revenuePence, 10_000);
+    assert.equal(august.grossProfitPence, 6_000);
+  });
+
+  it('counts a patient with two paid orders once in average spend', () => {
     const snapshot = overviewFinanceSnapshot([
-      row({ realised: true, patientRevenuePence: 6_000, financialEventAt: daysAgo(2) }),
-      row({ realised: true, patientRevenuePence: 9_900, financialEventAt: daysAgo(31) }),
+      row({ orderId: 'ord-1', patientId: 'patient-a', grossPatientRevenuePence: 6_000, wholesalePence: 2_000, wholesaleComplete: true }),
+      row({ orderId: 'ord-2', patientId: 'patient-a', grossPatientRevenuePence: 4_000, wholesalePence: 1_000, wholesaleComplete: true }),
+      row({ orderId: 'ord-3', patientId: 'patient-b', grossPatientRevenuePence: 5_000, wholesalePence: 2_000, wholesaleComplete: true }),
     ], NOW);
-    assert.equal(snapshot.realisedPatientRevenuePence, 6_000);
-    assert.equal(snapshot.realisedCount, 1);
+    assert.equal(snapshot.revenuePence, 15_000);
+    assert.equal(snapshot.payingPatientCount, 2);
+    assert.equal(snapshot.averageSpendPence, 7_500);
   });
 
-  it('sums contribution only over orders with a wholesale cost to work from', () => {
+  it('keeps uncosted payments in revenue and flags incomplete gross profit', () => {
     const snapshot = overviewFinanceSnapshot([
-      row({ realised: true, patientRevenuePence: 6_000, wholesaleComplete: true, totalContributionPence: 2_000 }),
-      row({ realised: true, patientRevenuePence: 5_000, wholesaleComplete: false, totalContributionPence: null }),
+      row({ grossPatientRevenuePence: 6_000, wholesalePence: 2_000, wholesaleComplete: true }),
+      row({
+        orderId: 'ord-open-cost',
+        patientId: 'patient-b',
+        grossPatientRevenuePence: 5_000,
+        wholesalePence: null,
+        wholesaleComplete: false,
+      }),
     ], NOW);
-    assert.equal(snapshot.contributionPence, 2_000);
-    // The pharmacy is told the figure is partial rather than shown £20.00 as if
-    // the uncosted order had cost nothing at all.
-    assert.equal(snapshot.contributionComplete, false);
+    assert.equal(snapshot.revenuePence, 11_000);
+    assert.equal(snapshot.grossProfitPence, 9_000);
+    assert.equal(snapshot.grossProfitComplete, false);
+    assert.equal(snapshot.costedOrderCount, 1);
+    assert.equal(snapshot.revenueOrderCount, 2);
   });
 
-  it('reports contribution as complete when every realised order is costed', () => {
-    const snapshot = overviewFinanceSnapshot([
-      row({ realised: true, patientRevenuePence: 6_000, wholesaleComplete: true, totalContributionPence: 2_000 }),
-      row({ realised: true, patientRevenuePence: 5_000, wholesaleComplete: true, totalContributionPence: 1_500 }),
-    ], NOW);
-    assert.equal(snapshot.contributionPence, 3_500);
-    assert.equal(snapshot.contributionComplete, true);
-  });
-
-  it('is all zeroes rather than absent for a pharmacy that has not traded', () => {
+  it('shows zeros and no paying patients rather than dividing by zero', () => {
     const snapshot = overviewFinanceSnapshot([], NOW);
-    assert.equal(snapshot.realisedPatientRevenuePence, 0);
-    assert.equal(snapshot.pendingCollectionCount, 0);
+    assert.equal(snapshot.revenuePence, 0);
+    assert.equal(snapshot.grossProfitPence, 0);
+    assert.equal(snapshot.averageSpendPence, 0);
+    assert.equal(snapshot.payingPatientCount, 0);
+    assert.equal(snapshot.grossProfitComplete, true);
     assert.equal(snapshot.awaitingPaymentValuePence, 0);
-    assert.equal(snapshot.contributionComplete, true);
   });
 
-  it('ignores rows with no financial event date instead of dating them today', () => {
+  it('keeps awaiting payment out of revenue and gross profit', () => {
     const snapshot = overviewFinanceSnapshot([
-      row({ realised: true, patientRevenuePence: 6_000, financialEventAt: '' }),
+      row({ grossPatientRevenuePence: 6_000, wholesalePence: 2_000, wholesaleComplete: true }),
+      row({
+        orderId: 'ord-link',
+        paymentStatus: 'pending',
+        paidAt: null,
+        patientRevenuePence: 8_000,
+        grossPatientRevenuePence: 8_000,
+      }),
     ], NOW);
-    assert.equal(snapshot.realisedCount, 0);
+    assert.equal(snapshot.revenuePence, 6_000);
+    assert.equal(snapshot.grossProfitPence, 4_000);
+    assert.equal(snapshot.awaitingPaymentCount, 1);
+    assert.equal(snapshot.awaitingPaymentValuePence, 8_000);
+  });
+
+  it('ignores payments and refunds with blank dates instead of dating them today', () => {
+    const snapshot = overviewFinanceSnapshot([
+      row({ paidAt: '', grossPatientRevenuePence: 6_000, wholesaleComplete: true, wholesalePence: 1 }),
+      row({ paidAt: null, refundedAt: '', refundAmountPence: 2_000, grossPatientRevenuePence: 6_000 }),
+    ], NOW);
+    assert.equal(snapshot.revenuePence, 0);
+    assert.equal(snapshot.revenueOrderCount, 0);
   });
 });
 

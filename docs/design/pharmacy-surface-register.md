@@ -24,6 +24,7 @@ Read this register before changing any pharmacy-facing screen. “Fixed” items
 | Workflow Pipeline | Pharmacy staff | Aggregate counts/ageing; Overview endpoint | Flexible pipeline/list composition | Navigation only | No contact data; textual bottleneck status; 4→2→1 stages |
 | Secure Handover | Pharmacy staff and shared stand-up display | Zero-PII aggregates; Overview endpoint | Fixed privacy boundary, flexible composition | Refresh/view preference only | No patient labels or identifiers; readable at 200% zoom |
 | Integration health | Pharmacy staff | Operational metadata; Overview endpoint | Fixed state vocabulary | No repair mutation | Connected, degraded, unavailable, not configured; text plus colour |
+| Finance summary | Pharmacy staff | Aggregated financial; Overview endpoint | Flexible composition; server aggregates only | Navigate to Finance | Loading, omit-figures, zero and no-paying-patients; Gross profit lead; outstanding labelled apart from Revenue; wraps at 360px |
 
 ## Other pharmacy surfaces
 

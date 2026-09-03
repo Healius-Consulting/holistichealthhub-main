@@ -88,7 +88,7 @@ test('overview snapshot is precomputed and has no patient names', () => {
   assert.equal(overview.enquiries.pendingCount, 1);
   assert.equal(overview.summary.awaitingPayment, 1);
   assert.equal(overview.summary.readyForCollection, 2);
-  assert.equal(overview.finance?.realisedCount, 1);
+  assert.equal(overview.finance?.payingPatientCount, 1);
   assert.equal(overview.priorityItems.every(item => !item.maskedPatientLabel.includes('Reed') && !item.maskedPatientLabel.includes('Hart')), true);
   assert.equal(overview.priorityItems.every(item => item.maskedPatientLabel.includes('——')), true);
 });

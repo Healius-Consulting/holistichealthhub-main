@@ -224,20 +224,47 @@ export default function PharmacyOverview() {
       {overview.finance ? (
         <section className="card overview-finance" aria-labelledby="overview-finance-title">
           <div className="section-heading">
-            <div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2></div>
-            <span>{overview.finance.realisedCount} realised</span>
+            <div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> This month</h2></div>
+            <span>{overview.finance.payingPatientCount === 1 ? '1 paying patient' : `${overview.finance.payingPatientCount} paying patients`}</span>
           </div>
           <dl className="overview-finance__figures">
-            <div><dt>Patient revenue</dt><dd>{pounds(overview.finance.realisedPatientRevenuePence)}</dd><small>Collected orders, refunds deducted</small></div>
-            <div><dt>Contribution</dt><dd>{pounds(overview.finance.contributionPence)}</dd><small>{overview.finance.contributionComplete ? 'All realised orders costed' : 'Some orders not yet costed'}</small></div>
-            <div><dt>Paid, awaiting collection</dt><dd>{pounds(overview.finance.pendingPatientRevenuePence)}</dd><small>{overview.finance.pendingCollectionCount} order{overview.finance.pendingCollectionCount === 1 ? '' : 's'}</small></div>
-            <div><dt>Awaiting payment</dt><dd>{pounds(overview.finance.awaitingPaymentValuePence)}</dd><small>{overview.finance.awaitingPaymentCount} order{overview.finance.awaitingPaymentCount === 1 ? '' : 's'}</small></div>
+            <div className="overview-finance__hero">
+              <dt>Gross profit</dt>
+              <dd>{pounds(overview.finance.grossProfitPence)}</dd>
+              <small>
+                {overview.finance.grossProfitComplete
+                  ? 'Patient payments less matching wholesale'
+                  : overview.finance.revenueOrderCount > 0
+                    ? `Incomplete cost data · ${overview.finance.costedOrderCount} of ${overview.finance.revenueOrderCount} orders costed`
+                    : 'Incomplete cost data'}
+              </small>
+            </div>
+            <div>
+              <dt>Revenue</dt>
+              <dd>{pounds(overview.finance.revenuePence)}</dd>
+              <small>Settled payments this month</small>
+            </div>
+            <div>
+              <dt>Average spend</dt>
+              <dd>{overview.finance.payingPatientCount === 0 ? pounds(0) : pounds(overview.finance.averageSpendPence)}</dd>
+              <small>
+                {overview.finance.payingPatientCount === 0
+                  ? 'No paying patients'
+                  : `Based on ${overview.finance.payingPatientCount} paying patient${overview.finance.payingPatientCount === 1 ? '' : 's'}`}
+              </small>
+            </div>
+            <div className="overview-finance__outstanding">
+              <dt>Awaiting payment</dt>
+              <dd>{pounds(overview.finance.awaitingPaymentValuePence)}</dd>
+              <small>Outstanding · {overview.finance.awaitingPaymentCount} order{overview.finance.awaitingPaymentCount === 1 ? '' : 's'}</small>
+            </div>
           </dl>
+          <p className="overview-finance__note">Settled cash this month. Finance is the collected-order ledger.</p>
           <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>View finance <ArrowRight size={13} aria-hidden="true" /></button>
         </section>
       ) : (
         <section className="card overview-finance" aria-labelledby="overview-finance-title">
-          <div className="section-heading"><div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> Last 30 days</h2></div></div>
+          <div className="section-heading"><div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> This month</h2></div></div>
           <p className="overview-muted">Figures could not be worked out just now. Refresh, or open Finance for the full ledger.</p>
           <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>View finance <ArrowRight size={13} aria-hidden="true" /></button>
         </section>
