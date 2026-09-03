@@ -407,14 +407,10 @@ function dispensingStepState(complete: boolean, some: boolean, active: boolean):
   return complete ? 'complete' : some ? 'partial' : active ? 'active' : 'pending';
 }
 
-function pendingPackDetail(done: number, ordered: number) {
-  return `${done} of ${ordered} pending`;
-}
-
 /**
- * Build Ordered → Collected steps. Pack counts appear only on the first
- * incomplete stage (`{done} of {ordered} pending`); every other step stays
- * status-only so a split order does not look like every phase is live.
+ * Build Ordered → Collected steps. Pack progress lives on consignments in the
+ * prescription list; the rail only surfaces a count on Collected when some
+ * packs have been handed over (`2/4 collected`).
  */
 function buildDispensingSteps(input: {
   ordered: number;
@@ -431,8 +427,13 @@ function buildDispensingSteps(input: {
   const collectedComplete = ordered > 0 && input.collected >= ordered;
   const readyComplete = ordered > 0 && input.readyPacks >= ordered;
   const readySome = input.readyPacks > 0;
+  const collectedDetail = collectedComplete
+    ? 'Handed to patient'
+    : input.collected > 0 && ordered > 0
+      ? `${input.collected}/${ordered} collected`
+      : 'Awaiting collection';
 
-  const steps: OrderStageStep[] = [
+  return [
     step('ordered', 'Ordered', 'PO sent', 'complete'),
     step(
       'dispensed',
@@ -461,26 +462,10 @@ function buildDispensingSteps(input: {
     step(
       'collected',
       'Collected',
-      collectedComplete ? 'Handed to patient' : 'Awaiting collection',
+      collectedDetail,
       dispensingStepState(collectedComplete, input.collected > 0, readyComplete),
     ),
   ];
-
-  const current = steps.find(entry => entry.state !== 'complete');
-  if (!current || ordered < 1) return steps;
-
-  const pendingByKey: Record<string, number> = {
-    dispensed: input.allocated,
-    'in-transit': input.shipped,
-    'checked-in': input.received,
-    ready: input.readyPacks,
-    collected: input.collected,
-  };
-  const done = pendingByKey[current.key];
-  if (typeof done === 'number' && done > 0) {
-    current.detail = pendingPackDetail(done, ordered);
-  }
-  return steps;
 }
 
 function dispensingStepsForPrescription(prescription: Prescription): OrderStageStep[] {

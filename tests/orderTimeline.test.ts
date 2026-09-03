@@ -213,25 +213,28 @@ test('a manual order shows the prescriber check as real outstanding work', () =>
   assert.notEqual(prescriber?.state, 'complete');
 });
 
-test('a partially ready split order puts the pack count only on the current stage', () => {
-  // One pack has progressed; nine remain with Curaleaf, so Dispensed is current.
+test('a split order keeps pack counts off the rail except Collected', () => {
+  // One pack collected; nine remain with Curaleaf. Progress lives on consignments.
   const rail = buildOrderStageRail(partialOrder);
   const dispensed = rail.curaleafPlacement!.find(entry => entry.key === 'dispensed');
   const ready = rail.curaleafPlacement!.find(entry => entry.key === 'ready');
+  const collected = rail.curaleafPlacement!.find(entry => entry.key === 'collected');
   assert.ok(dispensed);
   assert.ok(ready);
+  assert.ok(collected);
   assert.equal(dispensed!.state, 'partial');
-  assert.equal(dispensed!.detail, '1 of 10 pending');
+  assert.equal(dispensed!.detail, 'Awaiting clinic allocation');
   assert.notEqual(ready!.state, 'complete');
-  assert.doesNotMatch(ready!.detail, /\d+ of \d+/);
+  assert.doesNotMatch(ready!.detail, /\d+[/ ]\d+/);
   assert.doesNotMatch(ready!.detail, /^Patient notified$/);
+  assert.equal(collected!.detail, '1/10 collected');
   for (const entry of rail.curaleafPlacement!) {
-    if (entry.key === 'dispensed') continue;
-    assert.doesNotMatch(entry.detail, /\d+ of \d+ (packs|pending)/);
+    if (entry.key === 'collected') continue;
+    assert.doesNotMatch(entry.detail, /\d+\/\d+|\d+ of \d+/);
   }
 });
 
-test('when upstream stages are complete, Ready carries the pending pack count', () => {
+test('when nothing is collected yet, Ready stays status-only', () => {
   const shipmentId = '796adea9-f2d9-43b2-ad5c-ccfc4184ee62';
   const partiallyReadyUpstreamComplete: PatientOrder = {
     ...partialOrder,
@@ -255,15 +258,14 @@ test('when upstream stages are complete, Ready carries the pending pack count', 
       }],
     }],
   };
-  // readyPackCount uses shipment readiness; force one ready pack via collected=0 and ready status on a partial shipment.
-  // With all 10 received but only 1 consignment ready_for_collection, ready packs stay at 1.
   const rail = buildOrderStageRail(partiallyReadyUpstreamComplete).curaleafPlacement!;
   const ready = rail.find(entry => entry.key === 'ready');
+  const collected = rail.find(entry => entry.key === 'collected');
   assert.equal(ready!.state, 'partial');
-  assert.equal(ready!.detail, '1 of 10 pending');
+  assert.equal(ready!.detail, 'Awaiting goods-in');
+  assert.equal(collected!.detail, 'Awaiting collection');
   for (const entry of rail) {
-    if (entry.key === 'ready') continue;
-    assert.doesNotMatch(entry.detail, /\d+ of \d+ pending/);
+    assert.doesNotMatch(entry.detail, /\d+\/\d+|\d+ of \d+/);
   }
 });
 
