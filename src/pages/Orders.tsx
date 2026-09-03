@@ -2511,7 +2511,7 @@ function StageRailLane({ label, note, steps }: { label: string; note?: string | 
         {steps.map((entry, index) => (
           <li key={entry.key} className={`is-${entry.state}`} aria-current={entry.state === 'active' ? 'step' : undefined}>
             <span className="order-stage-rail__marker" aria-hidden="true">
-              {entry.state === 'complete' ? <Check size={11} /> : index + 1}
+              {entry.state === 'complete' ? <Check size={11} strokeWidth={2.5} /> : <span>{index + 1}</span>}
             </span>
             <span className="order-stage-rail__copy">
               <strong>{entry.label}</strong>

@@ -13909,16 +13909,36 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-stage-rail__marker{
   position: relative;
   z-index: 1;
-  display: grid;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   width: 22px;
   height: 22px;
-  place-items: center;
+  flex: 0 0 22px;
+  padding: 0;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: 50%;
   color: var(--text-tertiary);
   background: var(--bg-surface);
   font-size: 10px;
   font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 0;
+}
+
+.order-stage-rail__marker > span{
+  display: block;
+  line-height: 1;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.order-stage-rail__marker > svg{
+  display: block;
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
 }
 
 .order-stage-rail__copy{
