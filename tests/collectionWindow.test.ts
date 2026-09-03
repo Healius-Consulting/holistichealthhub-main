@@ -53,7 +53,7 @@ test('a check-in after 15:00 London is held to 09:00 the next working day', () =
   assert.match(notice.summary, /Friday 28 Aug, 09:00/);
 });
 
-test('a weekend check-in never invites a patient to a closed dispensary', () => {
+test('a weekend check-in never invites a patient to a closed pharmacy', () => {
   const saturday = collectionEmailNotice(new Date('2026-08-29T10:00:00Z'));
   assert.equal(saturday.immediate, false);
   assert.match(saturday.summary, /Monday 31 Aug, 09:00/);

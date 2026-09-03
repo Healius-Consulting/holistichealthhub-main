@@ -946,7 +946,9 @@ export function overviewIntegrationHealth(connections: OverviewIntegrationConnec
         state: 'not-configured' as const,
         environment,
         checkedAt: null,
-        detail: 'No credentials on file. HHH sets this up.',
+        detail: integration === 'CURALEAF'
+          ? 'No credentials on file. HHH sets this up.'
+          : 'No credentials on file. Connect Worldpay in Settings.',
       };
     }
     // Only a successful call counts as a check. `validatedAt` records when a credential

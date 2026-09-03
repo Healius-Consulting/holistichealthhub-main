@@ -171,7 +171,7 @@ const CARD_STAGE_LABELS: Partial<Record<OrderStage, string>> = {
   'curaleaf-pending': 'Prescription check',
   'curaleaf-approved': 'Being prepared',
   dispatched: 'In transit',
-  delivered: 'Checked in',
+  delivered: 'Arrived at Pharmacy',
   ready: 'Ready to collect',
   collected: 'Collected',
   rejected: 'Prescription issue',
@@ -194,6 +194,7 @@ const CARD_TAG_SHORTENINGS: Record<string, string> = {
   'Prescription issue': 'Rx issue',
   'Ready to send': 'To send',
   'Being prepared': 'Preparing',
+  'Part Arrived at Pharmacy': 'Part arrived',
   'Quote Review': 'Quote review',
   'Refund Due': 'Refund due',
   'Stock Hold': 'Stock hold',
@@ -226,7 +227,7 @@ export function orderSplitCardLabel(record: OrderLaneInput): string | null {
   // and it stays short enough to sit on one line in a lane card. The transit-versus-
   // awaiting-dispatch breakdown lives in the tooltip and the record dialog.
   if (stage === 'ready' && split.atPharmacy > 0) return `${split.atPharmacy}/${total} ready`;
-  if (split.atPharmacy > 0) return `${split.atPharmacy}/${total} checked in`;
+  if (split.atPharmacy > 0) return `${split.atPharmacy}/${total} arrived`;
   if (split.collected > 0 && split.collected < total) return `${split.collected}/${total} collected`;
   if (split.inTransit > 0) return `${split.inTransit}/${total} in transit`;
   if (split.dispensedAtCuraleaf > 0 && split.awaitingDispense > 0) return `${split.dispensedAtCuraleaf}/${total} prepared`;
@@ -238,7 +239,7 @@ export function orderSplitCardDescription(order: PatientOrder): string | null {
   if (!orderIsSplitFulfilment(order)) return null;
   const split = orderSplitPackSnapshot(order);
   if (orderHasUncollectedReceivedPacks(order)) {
-    return `${split.atPharmacy} pack(s) checked in · ${split.withCuraleaf + split.inTransit} still in transit or awaiting dispatch`;
+    return `${split.atPharmacy} pack(s) arrived at pharmacy · ${split.withCuraleaf + split.inTransit} still in transit or awaiting dispatch`;
   }
   if (orderHasPartialCollection(order) && !orderHasInTransitPacks(order)) {
     return 'Arrived packs collected; remainder awaiting dispatch';
@@ -252,7 +253,7 @@ export function orderSplitCardDescription(order: PatientOrder): string | null {
       : `${split.inTransit} of ${split.total} packs with courier`;
   }
   if (orderHasPartialCuraleafDispense(order)) {
-    return `${split.dispensedAtCuraleaf} of ${split.total} packs dispensed at Curaleaf · ${split.awaitingDispense} awaiting dispense`;
+    return `${split.dispensedAtCuraleaf} of ${split.total} packs dispensed by Clinic · ${split.awaitingDispense} awaiting dispense`;
   }
   if (split.withCuraleaf > 0) return `${split.withCuraleaf} pack(s) awaiting dispatch after the first consignment`;
   return null;

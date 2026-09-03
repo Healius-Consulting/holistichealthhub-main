@@ -28,8 +28,8 @@ const SHIPMENT_STATE_LABELS: Record<string, string> = {
   dispatched_to_pharmacy: 'In Transit',
   in_transit: 'In Transit',
   dispatched: 'In Transit',
-  partially_received: 'Part Checked In',
-  received: 'Checked In',
+  partially_received: 'Part Arrived at Pharmacy',
+  received: 'Arrived at Pharmacy',
   ready_for_collection: 'Ready to Collect',
   collected: 'Collected',
 };

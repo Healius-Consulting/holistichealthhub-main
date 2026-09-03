@@ -127,7 +127,7 @@ test('order header uses one stable prescription stage and reserves split deliver
     payment: { status: 'paid' },
     prescriptions: [{ status: 'processing' }, { status: 'approved' }, { status: 'processing' }],
   } as PatientOrder;
-  assert.equal(orderFulfilmentHeadline(uniform)?.label, 'Curaleaf Dispensing');
+  assert.equal(orderFulfilmentHeadline(uniform)?.label, 'Dispensed by Clinic');
 
   const splitDelivery = {
     date: new Date(),
@@ -486,7 +486,7 @@ test('a CANCELLED purchase order is labelled cancelled even if rx status lagged'
   assert.equal(prescriptionStatusChipTone(prescription), 'cancelled');
 });
 
-test('prescription chips use the same In Transit and Checked In language as the order pills', () => {
+test('prescription chips use the same In Transit and Arrived at Pharmacy language as the order pills', () => {
   const inTransit = {
     status: 'dispatched',
     dispatchStatus: 'complete',
@@ -506,7 +506,7 @@ test('prescription chips use the same In Transit and Checked In language as the 
   } as PatientOrder['prescriptions'][number];
   assert.equal(prescriptionStatusLabel(inTransit), 'In Transit');
   assert.equal(prescriptionStatusLabel(partInTransit), 'Part In Transit');
-  assert.equal(prescriptionStatusLabel(checkedIn), 'Checked In');
+  assert.equal(prescriptionStatusLabel(checkedIn), 'Arrived at Pharmacy');
   assert.equal(prescriptionStatusLabel({
     status: 'awaiting-approval',
     placed: false,

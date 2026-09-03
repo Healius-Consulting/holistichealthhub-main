@@ -814,7 +814,7 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
     if (isLocalPortalPreview) {
       const records: PharmacyStaffAccount[] = [
         { uid: `${organisation.id}-owner`, email: 'owner@pharmacy.example', displayName: 'Alex Morgan', role: 'pharmacy_staff', pharmacyId: organisation.id, organisationId: organisation.id, contactRole: 'owner', status: 'active', createdAt: new Date().toISOString() },
-        { uid: `${organisation.id}-staff`, email: 'dispensary@pharmacy.example', displayName: 'Sam Reed', role: 'pharmacy_staff', pharmacyId: organisation.id, organisationId: organisation.id, contactRole: 'staff', status: 'active', createdAt: new Date().toISOString() },
+        { uid: `${organisation.id}-staff`, email: 'staff@pharmacy.example', displayName: 'Sam Reed', role: 'pharmacy_staff', pharmacyId: organisation.id, organisationId: organisation.id, contactRole: 'staff', status: 'active', createdAt: new Date().toISOString() },
       ];
       setStaff(records);
       onCountChange(records.length);

@@ -142,7 +142,7 @@ test('split card label names the stage the fraction refers to', () => {
       fulfilmentLines: [line({ ordered: 5, shipped: 4, received: 2, remaining: 1, allocated: 4 })],
     }],
   } as PatientOrder;
-  assert.equal(orderSplitCardLabel({ order: inTransit, stage: 'dispatched' }), '2/5 checked in');
+  assert.equal(orderSplitCardLabel({ order: inTransit, stage: 'dispatched' }), '2/5 arrived');
 
   const awaitingDispatch = {
     date: new Date(),
@@ -152,7 +152,7 @@ test('split card label names the stage the fraction refers to', () => {
       fulfilmentLines: [line({ ordered: 5, shipped: 2, received: 2, remaining: 3, allocated: 2 })],
     }],
   } as PatientOrder;
-  assert.equal(orderSplitCardLabel({ order: awaitingDispatch, stage: 'dispatched' }), '2/5 checked in');
+  assert.equal(orderSplitCardLabel({ order: awaitingDispatch, stage: 'dispatched' }), '2/5 arrived');
 
   const notSplit = {
     date: new Date(),

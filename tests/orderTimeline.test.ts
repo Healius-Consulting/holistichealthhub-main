@@ -305,7 +305,9 @@ test('a placed sibling shows dispensing while an unplaced sibling keeps its own 
   assert.deepEqual(placed.dispensing?.map(entry => entry.key), ['ordered', 'dispensed', 'in-transit', 'checked-in', 'ready', 'collected']);
   assert.equal(placed.route, 'manual');
   const chrome = `${pending.placement?.map(step => `${step.label} ${step.detail}`).join(' ')} ${placed.dispensing?.map(step => `${step.label} ${step.detail}`).join(' ')}`;
-  assert.doesNotMatch(chrome, /All prescriptions|remaining prescriptions|RX-|serial|file-2|S2/i);
+  assert.doesNotMatch(chrome, /All prescriptions|remaining prescriptions|RX-|serial|file-2|S2|dispensar/i);
+  assert.equal(placed.dispensing?.find(step => step.key === 'dispensed')?.label, 'Dispensed by Clinic');
+  assert.equal(placed.dispensing?.find(step => step.key === 'checked-in')?.label, 'Arrived at Pharmacy');
 });
 
 test('zero allocation uses the agreed supplier wording', () => {
@@ -314,5 +316,5 @@ test('zero allocation uses the agreed supplier wording', () => {
     fulfilmentLines: tenPackPrescription.fulfilmentLines?.map(line => ({ ...line, allocated: 0, shipped: 0, received: 0, collected: 0 })),
   };
   const rail = buildPrescriptionStageRail(partialOrder, zeroAllocation);
-  assert.equal(rail.dispensing?.find(step => step.key === 'dispensed')?.detail, 'Awaiting Curaleaf allocation');
+  assert.equal(rail.dispensing?.find(step => step.key === 'dispensed')?.detail, 'Awaiting clinic allocation');
 });

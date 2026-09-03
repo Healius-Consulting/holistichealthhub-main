@@ -6,7 +6,7 @@ import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboa
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
 import { conditionLabel } from '@hhh/domain';
-import RecordDialog from '../components/RecordDialog';
+import RecordDialog, { allocateRecordLayer } from '../components/RecordDialog';
 import ConditionList from '../components/ConditionList';
 import ConditionEditor from '../components/ConditionEditor';
 import { updatePatientConditions } from '../shared/api';
@@ -292,7 +292,10 @@ export default function Patients() {
   const { state, dispatch } = useApp();
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<PatientDirectoryFilter>('all');
-  const [selectedKey, setSelectedKey] = useState<string | null>(() => selectedCrmKeyFromSearch(window.location.search));
+  const [openPatients, setOpenPatients] = useState<Array<{ key: string; layer: number }>>(() => {
+    const initial = selectedCrmKeyFromSearch(window.location.search);
+    return initial ? [{ key: initial, layer: allocateRecordLayer() }] : [];
+  });
   const [showClosed, setShowClosed] = useState(false);
   // Board is the triage view; List is the same records with the contact detail the
   // narrow lane cards have no room for. Both read the same search and declined filters.
@@ -398,7 +401,22 @@ export default function Patients() {
   }, [filtered]);
 
   // Nothing is auto-selected any more: the board is the view, the dialog is opt-in.
+  const topOpenPatient = openPatients.reduce<(typeof openPatients)[number] | null>((top, entry) => !top || entry.layer > top.layer ? entry : top, null);
+  const selectedKey = topOpenPatient?.key ?? null;
   const selected = records.find(record => record.key === selectedKey) ?? null;
+
+  const openPatientFromBoard = (key: string) => {
+    setOpenPatients([{ key, layer: allocateRecordLayer() }]);
+  };
+
+  const closePatientRecord = (key: string) => {
+    setOpenPatients(current => current.filter(entry => entry.key !== key));
+  };
+
+  useEffect(() => {
+    if (!records.length) return;
+    setOpenPatients(current => current.filter(entry => records.some(record => record.key === entry.key)));
+  }, [records]);
 
   useEffect(() => {
     const selection = selected ? { kind: selected.kind, id: selected.id } : null;
@@ -414,7 +432,10 @@ export default function Patients() {
         setSearch(context.search);
         setActiveFilter(context.filter);
       }
-      setSelectedKey(selectedCrmKeyFromSearch(window.location.search));
+      setOpenPatients(() => {
+        const key = selectedCrmKeyFromSearch(window.location.search);
+        return key ? [{ key, layer: allocateRecordLayer() }] : [];
+      });
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -426,7 +447,7 @@ export default function Patients() {
       setActiveFilter('all');
       setView('board');
       setSearch('');
-      setSelectedKey(null);
+      setOpenPatients([]);
       dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
       return;
     }
@@ -435,13 +456,22 @@ export default function Patients() {
     if (record) {
       setActiveFilter('all');
       setSearch('');
-      setSelectedKey(record.key);
+      setOpenPatients(current => {
+        const layer = allocateRecordLayer();
+        const existing = current.find(entry => entry.key === record.key);
+        if (existing) return current.map(entry => entry.key === record.key ? { ...entry, layer } : entry);
+        return [...current, { key: record.key, layer }];
+      });
     }
     dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
   }, [dispatch, records, state.navigationTarget]);
 
-  const closeRecord = () => {
-    setSelectedKey(null);
+  const closeRecord = (key?: string) => {
+    if (key) {
+      closePatientRecord(key);
+      return;
+    }
+    setOpenPatients([]);
   };
 
   const handleCreateOrder = (patient: UnifiedPatient) => {
@@ -521,7 +551,7 @@ export default function Patients() {
                   </header>
                   <div className="crm-lane__rows">
                     {laneRecords.map(record => (
-                      <CrmListRow key={record.key} record={record} selected={false} onSelect={() => setSelectedKey(record.key)} />
+                      <CrmListRow key={record.key} record={record} selected={selectedKey === record.key} onSelect={() => openPatientFromBoard(record.key)} />
                     ))}
                   </div>
                 </section>
@@ -546,7 +576,7 @@ export default function Patients() {
                   </header>
                   <div className="crm-directory-list__rows">
                     {laneRecords.map(record => (
-                      <PatientDirectoryRow key={record.key} record={record} onSelect={() => setSelectedKey(record.key)} />
+                      <PatientDirectoryRow key={record.key} record={record} onSelect={() => openPatientFromBoard(record.key)} />
                     ))}
                   </div>
                 </section>
@@ -558,37 +588,41 @@ export default function Patients() {
         <div className="order-crm-empty"><Users size={26} /><strong>{empty.title}</strong><span>{empty.detail}</span></div>
       )}
 
-      {selected ? (
-        <RecordDialog label={`${selected.name} record`} onClose={closeRecord}>
-          {selected.patient ? (
-            <PatientCrmDetail
-              record={selected}
-              workspaceLive={isLocalPortalPreview || isOpenPharmacyWorkspace(state.workspaceMode)}
-              trainingDraft={Boolean(selected.patient.crmPatient && isTrainingSandboxPatient(selected.patient.crmPatient))}
-              onCreateOrder={() => handleCreateOrder(selected.patient!)}
-              onConditionsSaved={(patientId, conditions, primaryCondition) => {
-                dispatch({ type: 'SET_PATIENT_CONDITIONS', patientId, conditions, primaryCondition });
-                dispatch({ type: 'ADD_TOAST', message: 'Patient conditions updated.', toastType: 'success', dedupeKey: 'patient-conditions' });
-              }}
-              onOpenOrder={order => {
-                if (order.payment.status === 'none') {
-                  closeRecord();
-                  dispatch({ type: 'SET_ACTIVE_ORDER', orderId: order.id });
-                  dispatch({ type: 'SET_SCREEN', screen: 'create' });
-                  return;
-                }
-                // Stay on Patients: Orders is keep-alive mounted and opens a portaled dialog.
-                dispatch({
-                  type: 'SET_NAVIGATION_TARGET',
-                  target: { kind: 'order', key: String(order.id) },
-                });
-              }}
-            />
-          ) : (
-            <EnquiryCrmDetail record={selected} />
-          )}
-        </RecordDialog>
-      ) : null}
+      {openPatients.map(entry => {
+        const record = records.find(item => item.key === entry.key);
+        if (!record) return null;
+        return (
+          <RecordDialog key={entry.key} label={`${record.name} record`} layer={entry.layer} onClose={() => closePatientRecord(entry.key)}>
+            {record.patient ? (
+              <PatientCrmDetail
+                record={record}
+                workspaceLive={isLocalPortalPreview || isOpenPharmacyWorkspace(state.workspaceMode)}
+                trainingDraft={Boolean(record.patient.crmPatient && isTrainingSandboxPatient(record.patient.crmPatient))}
+                onCreateOrder={() => handleCreateOrder(record.patient!)}
+                onConditionsSaved={(patientId, conditions, primaryCondition) => {
+                  dispatch({ type: 'SET_PATIENT_CONDITIONS', patientId, conditions, primaryCondition });
+                  dispatch({ type: 'ADD_TOAST', message: 'Patient conditions updated.', toastType: 'success', dedupeKey: 'patient-conditions' });
+                }}
+                onOpenOrder={order => {
+                  if (order.payment.status === 'none') {
+                    closeRecord(entry.key);
+                    dispatch({ type: 'SET_ACTIVE_ORDER', orderId: order.id });
+                    dispatch({ type: 'SET_SCREEN', screen: 'create' });
+                    return;
+                  }
+                  // Stay on Patients: Orders is keep-alive mounted and opens a portaled dialog.
+                  dispatch({
+                    type: 'SET_NAVIGATION_TARGET',
+                    target: { kind: 'order', key: String(order.id) },
+                  });
+                }}
+              />
+            ) : (
+              <EnquiryCrmDetail record={record} />
+            )}
+          </RecordDialog>
+        );
+      })}
     </div>
   );
 }

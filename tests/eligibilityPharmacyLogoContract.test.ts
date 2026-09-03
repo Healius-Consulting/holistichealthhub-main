@@ -14,3 +14,13 @@ test('pharmacy eligibility headers centre the uploaded logo at header height', (
   assert.match(css, /\.eligibility-brand__pharmacy-logo\{[\s\S]*?height:\s*88px/);
   assert.match(css, /\.eligibility-brand__pharmacy-logo\{[\s\S]*?object-fit:\s*contain/);
 });
+
+test('QR eligibility keeps the HHH mark and opens the public site in a new tab', () => {
+  assert.match(app, /src=\{HHH_MARK\}/);
+  assert.doesNotMatch(app, /eligibility-brand__identity" aria-hidden="true"/);
+  assert.match(app, /More info/);
+  assert.match(app, /https:\/\/holistichealthhub\.live/);
+  assert.match(app, /target="_blank"/);
+  assert.match(app, /rel="noopener noreferrer"/);
+  assert.match(app, /opens in a new tab/);
+});

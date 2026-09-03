@@ -3,7 +3,7 @@
  *
  * The pharmacy never sends this by hand: recording goods-in is the act that tells the
  * patient. But an email that lands at 20:00 invites a wasted trip to a closed
- * dispensary, so a weekday check-in before 15:00 London sends immediately and
+ * pharmacy, so a weekday check-in before 15:00 London sends immediately and
  * everything else is held to 09:00 on the next working day.
  *
  * This mirrors the server's `collection-email-schedule.ts` so the workspace can state
@@ -111,6 +111,6 @@ export function collectionEmailNotice(now = new Date()) {
     immediate: false,
     sendAt: heldUntil,
     summary: `Patient emailed ${when}`,
-    detail: `Past the ${COLLECTION_EMAIL_CUTOFF_HOUR}:00 cut-off or outside the working week, so the collection email is held to ${COLLECTION_EMAIL_SEND_HOUR}:00 on the next working day. A patient is never invited to a closed dispensary.`,
+    detail: `Past the ${COLLECTION_EMAIL_CUTOFF_HOUR}:00 cut-off or outside the working week, so the collection email is held to ${COLLECTION_EMAIL_SEND_HOUR}:00 on the next working day. A patient is never invited to a closed pharmacy.`,
   };
 }

@@ -53,9 +53,9 @@ const steps = [
     number: '03',
     kicker: 'Dispensing & Care',
     title: 'Receive treatment',
-    copy: 'If prescribed, your prescription is sent to your nominated pharmacy, who contacts you to arrange payment and convenient delivery or dispensary collection.',
+    copy: 'If prescribed, your prescription is sent to your nominated pharmacy, who contacts you to arrange payment and convenient delivery or pharmacy collection.',
     image: PHARMACY_IMAGE,
-    imageAlt: 'A community pharmacist providing prescription guidance at the pharmacy dispensary',
+    imageAlt: 'A community pharmacist providing prescription guidance at the pharmacy',
     tag: 'Nominated community pharmacy',
   },
   {
@@ -1039,7 +1039,7 @@ function AboutPage() {
                   image: TEAM_PHARMACIST_IMAGE,
                   imageAlt: 'A community pharmacist checking a medicine before dispensing',
                   title: 'Clinical pharmacists',
-                  copy: 'Your nominated community pharmacy supports dispensing, medicines reviews, and convenient delivery or dispensary collection.',
+                  copy: 'Your nominated community pharmacy supports dispensing, medicines reviews, and convenient delivery or pharmacy collection.',
                 },
                 {
                   image: TEAM_NURSE_IMAGE,

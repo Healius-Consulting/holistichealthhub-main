@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, Info, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
 import { CONDITIONS, conditionLabel } from '@hhh/domain';
 import { createEligibilitySubmission, createV2Intake, resolvePublicReferralToken, searchPublicPharmacies } from '../../../src/shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
@@ -25,6 +25,7 @@ const HHH_PUBLIC_IDENTITY: PublicPharmacy = {
   gphcNumber: '', superintendent: '', address: '', primaryColour: '#124f3b',
 };
 const PUBLIC_HOME_HREF = '/';
+const PUBLIC_SITE_HREF = 'https://holistichealthhub.live';
 
 function EligibilityBrand({
   identity,
@@ -45,11 +46,9 @@ function EligibilityBrand({
   </>;
   return <header className={`eligibility-brand${pharmacyLogo ? ' eligibility-brand--pharmacy-logo' : ''}`} aria-label={token ? `${identity.name} eligibility` : 'Holistic Health Hub eligibility'}>
     <div className="eligibility-brand__inner">
-      {pharmacyLogo
-        ? <div className="eligibility-brand__identity" aria-hidden="true" />
-        : token
-          ? <div className="eligibility-brand__identity">{identityMarkup}</div>
-          : <a className="eligibility-brand__identity" href={PUBLIC_HOME_HREF} aria-label="Holistic Health Hub Home">{identityMarkup}</a>}
+      {token
+        ? <div className="eligibility-brand__identity">{identityMarkup}</div>
+        : <a className="eligibility-brand__identity" href={PUBLIC_HOME_HREF} aria-label="Holistic Health Hub Home">{identityMarkup}</a>}
       {pharmacyLogo ? (
         <img
           className="eligibility-brand__pharmacy-logo"
@@ -61,7 +60,9 @@ function EligibilityBrand({
         />
       ) : null}
       <div className="eligibility-brand__actions">
-        {!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={15} aria-hidden="true" /> Return home</a>}
+        {token
+          ? <a className="eligibility-home" href={PUBLIC_SITE_HREF} target="_blank" rel="noopener noreferrer" aria-label="More info about Holistic Health Hub (opens in a new tab)"><Info size={15} aria-hidden="true" /> More info</a>
+          : <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={15} aria-hidden="true" /> Return home</a>}
         <span className="eligibility-brand__secure"><LockKeyhole size={14} /> Private and secure</span>
       </div>
     </div>

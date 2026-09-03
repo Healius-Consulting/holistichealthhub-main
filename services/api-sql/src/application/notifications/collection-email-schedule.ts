@@ -1,7 +1,7 @@
 /**
  * Collection emails are read by patients who then travel to the pharmacy, so
  * they must not land after hours: an email sent at 20:00 invites a wasted trip
- * to a closed dispensary, and one sent at 03:00 reads as an error.
+ * to a closed pharmacy, and one sent at 03:00 reads as an error.
  *
  * Weekdays before the cutoff send immediately. Everything else waits for 09:00
  * on the next working day. All reasoning is in Europe/London, which is the

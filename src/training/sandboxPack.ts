@@ -464,7 +464,7 @@ export function sandboxOverviewSnapshot(organisationId: string, now = new Date()
         state: 'not-configured',
         environment: null,
         checkedAt: null,
-        detail: 'Set up by HHH',
+        detail: 'Connect Worldpay in Settings.',
       },
     ],
   };

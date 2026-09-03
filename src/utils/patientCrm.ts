@@ -67,7 +67,7 @@ export type PatientCrmLane = 'needs-action' | 'enquiries' | 'ready' | 'on-order'
 export const PATIENT_CRM_LANES: Array<{ key: PatientCrmLane; label: string; detail: string }> = [
   { key: 'needs-action', label: 'Needs action', detail: 'Exceptions, refunds and cancellations' },
   { key: 'enquiries', label: 'New enquiries', detail: 'Assigned to you; HHH may still move them' },
-  { key: 'ready', label: 'Ready to collect', detail: 'Checked in and waiting for the patient' },
+  { key: 'ready', label: 'Ready to collect', detail: 'Arrived at pharmacy and waiting for the patient' },
   { key: 'on-order', label: 'On order', detail: 'Draft, payment or fulfilment' },
   { key: 'care', label: 'Referred & active', detail: 'In care after HHH referral' },
 ];

@@ -74,13 +74,11 @@ function stateLabel(item: PharmacyOverviewContract['integrations'][number]) {
   return `${label} (Test)`;
 }
 
-/**
- * The check line is the honest part of this chip. "Connected" with nothing behind it
- * was the old lie, so a state with no successful check says so in words.
- */
-function integrationCheckLabel(item: PharmacyOverviewContract['integrations'][number]) {
+function integrationChipCaption(item: PharmacyOverviewContract['integrations'][number]) {
   if (item.checkedAt) return `Last confirmed ${formatAsOf(item.checkedAt)}`;
-  if (item.state === 'not-configured') return 'Set up by HHH';
+  if (item.state === 'not-configured') {
+    return item.integration === 'worldpay' ? 'Set up in Settings' : 'Set up by HHH';
+  }
   return 'Never confirmed';
 }
 
@@ -343,8 +341,7 @@ export default function PharmacyOverview() {
                 <li key={item.integration} className={`overview-integration-chip overview-integration-chip--${item.state}`}>
                   <span className="overview-integration-chip__name">{INTEGRATION_NAMES[item.integration] ?? item.integration}</span>
                   <strong className={`integration-state integration-state--${item.state}`}>{stateLabel(item)}</strong>
-                  <small>{item.detail ?? integrationCheckLabel(item)}</small>
-                  <small className="overview-integration-chip__checked">{integrationCheckLabel(item)}</small>
+                  <small className="overview-integration-chip__checked">{integrationChipCaption(item)}</small>
                 </li>
               ))}
             </ul>

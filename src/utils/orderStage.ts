@@ -201,11 +201,11 @@ export function prescriptionStatusLabel(prescription: OrderPrescription) {
   return ({
     draft: 'Draft',
     'awaiting-approval': 'Waiting for Curaleaf',
-    processing: 'Curaleaf Dispensing',
-    approved: 'Curaleaf Dispensing',
+    processing: 'Dispensed by Clinic',
+    approved: 'Dispensed by Clinic',
     dispatched: prescription.dispatchStatus === 'partial' ? 'Part In Transit' : 'In Transit',
-    'partially-received': 'Part Checked In',
-    received: 'Checked In',
+    'partially-received': 'Part Arrived at Pharmacy',
+    received: 'Arrived at Pharmacy',
     ready: 'Ready to Collect',
     collected: 'Collected',
     cancelled: 'Cancelled Purchase Order',
@@ -234,8 +234,8 @@ export function orderFulfilmentHeadline(order: PatientOrder): OrderFulfilmentHea
     return ({
       'Part In Transit': 'In transit',
       'In Transit': 'In transit',
-      'Part Checked In': 'Checked in',
-      'Checked In': 'Checked in',
+      'Part Arrived at Pharmacy': 'Arrived at Pharmacy',
+      'Arrived at Pharmacy': 'Arrived at Pharmacy',
       'Part Ready to Collect': 'Ready',
       'Ready to Collect': 'Ready',
     } as Record<string, string>)[label] ?? label;
@@ -243,7 +243,7 @@ export function orderFulfilmentHeadline(order: PatientOrder): OrderFulfilmentHea
 
   const summaryLabel = (prescription: OrderPrescription) => {
     const label = displayLabel(prescription);
-    return label === 'Curaleaf Dispensing' ? 'Being prepared' : label;
+    return label === 'Dispensed by Clinic' ? 'Being prepared' : label;
   };
 
   const prescriptionSummaries = prescriptions.map(({ prescription, number }) =>

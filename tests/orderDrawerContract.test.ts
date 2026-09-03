@@ -38,9 +38,11 @@ test('multi-prescription dialogs expose one accessible selected workflow', () =>
 
 test('handout confirmation is portalled above the order record stacking context', () => {
   assert.match(ordersSource, /handoutOrderId[\s\S]+createPortal\(/);
+  assert.match(ordersSource, /chaseDeliveryModal \? createPortal\(/);
+  assert.match(ordersSource, /callCuraleafModal \? createPortal\(/);
   assert.match(ordersSource, /document\.body/);
   assert.match(cssSource, /\.crm-dialog__scrim\{[\s\S]+z-index: 1400/);
-  assert.match(cssSource, /\.order-handout-backdrop\{[^}]+z-index: 1500/);
+  assert.match(cssSource, /\.order-handout-backdrop\{[^}]+z-index: 1520/);
 });
 
 test('the placement and prescription rails retain a compact 360px layout', () => {

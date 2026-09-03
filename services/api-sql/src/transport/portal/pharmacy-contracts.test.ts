@@ -1072,7 +1072,7 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal('platformFeeMonthly' in overview.organisation, false);
     assert.deepEqual(overview.integrations, [
       { integration: 'curaleaf', state: 'not-configured', environment: null, checkedAt: null, detail: 'No credentials on file. HHH sets this up.' },
-      { integration: 'worldpay', state: 'not-configured', environment: null, checkedAt: null, detail: 'No credentials on file. HHH sets this up.' },
+      { integration: 'worldpay', state: 'not-configured', environment: null, checkedAt: null, detail: 'No credentials on file. Connect Worldpay in Settings.' },
     ]);
     // Prescription starts were removed from the Overview: the pharmacy reported
     // they never started an order from here, and the section only competed with

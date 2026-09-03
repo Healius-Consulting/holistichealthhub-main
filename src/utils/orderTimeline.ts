@@ -4,7 +4,7 @@ export type OrderTimelineEvent = {
   label: string;
   detail: string;
   date: Date | string | null;
-  source: 'Pharmacy' | 'HHH automation' | 'Worldpay' | 'Curaleaf' | 'Dispensary';
+  source: 'Pharmacy' | 'HHH automation' | 'Worldpay' | 'Curaleaf';
 };
 
 function shortConsignmentId(id: string) {
@@ -127,9 +127,9 @@ export function buildPrescriptionTimelineEvents(
         ? `${totals.received} pack${totals.received === 1 ? '' : 's'} checked in; ${awaitingAtCuraleaf} remain with Curaleaf`
         : prescription.goodsInBy
           ? `Checked in by ${prescription.goodsInBy}`
-          : 'Checked in at dispensary',
+          : 'Arrived at Pharmacy',
       date: prescription.goodsInAt ?? null,
-      source: 'Dispensary',
+      source: 'Pharmacy',
     });
   }
 
@@ -142,7 +142,7 @@ export function buildPrescriptionTimelineEvents(
       label: `${rxLabel} ready to collect`,
       detail: `Consignment ${shortConsignmentId(shipmentId)} · ${packs} pack${packs === 1 ? '' : 's'} · collection email queued`,
       date: prescription.readyAt ?? null,
-      source: 'Dispensary',
+      source: 'Pharmacy',
     });
   }
 
@@ -156,14 +156,14 @@ export function buildPrescriptionTimelineEvents(
           ? 'Dispensed and collected'
           : 'Dispensed and collected',
       date: handoutAt ?? prescription.readyAt ?? null,
-      source: 'Dispensary',
+      source: 'Pharmacy',
     });
   } else if (prescription.status === 'collected') {
     events.push({
       label: `${rxLabel} handed to patient`,
       detail: 'Dispensed and collected',
       date: handoutAt ?? prescription.readyAt ?? null,
-      source: 'Dispensary',
+      source: 'Pharmacy',
     });
   }
 
@@ -248,7 +248,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
       label: 'Medicine handed over',
       detail: 'Collected by patient',
       date: order.handoutAt,
-      source: 'Dispensary',
+      source: 'Pharmacy',
     });
   }
 
@@ -286,7 +286,7 @@ export function buildOrderTimelineEvents(order: PatientOrder & { handoutAt?: Dat
  *
  * Placement boundary per .agents/rules/curaleaf-rocky.md: the clinic lane runs
  * until a purchase order exists, and only then does the dispensing lane apply.
- * Goods-in stages are always derived from the dispensary's own records, never
+ * Goods-in stages are always derived from the pharmacy's own records, never
  * from Curaleaf, which cannot report delivery.
  */
 
@@ -424,11 +424,11 @@ function dispensingStepsForPrescription(prescription: Prescription): OrderStageS
 
   return [
     step('ordered', 'Ordered', 'PO sent', 'complete'),
-    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf allocation',
+    step('dispensed', 'Dispensed by Clinic', dispensedComplete ? 'Allocated' : allocated > 0 ? partOf(allocated) : 'Awaiting clinic allocation',
       state(dispensedComplete, allocated > 0, true)),
     step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
       state(shippedComplete, totals.shipped > 0, dispensedComplete)),
-    step('checked-in', 'Checked in', receivedComplete ? 'Verified at dispensary' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
+    step('checked-in', 'Arrived at Pharmacy', receivedComplete ? 'Verified' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
       state(receivedComplete, totals.received > 0, totals.shipped > 0)),
     step('ready', 'Ready',
       readyComplete
@@ -473,12 +473,12 @@ function dispensingSteps(order: PatientOrder): OrderStageStep[] {
 
   return [
     step('ordered', 'Ordered', 'PO sent', 'complete'),
-    step('dispensed', 'Dispensed', dispensedComplete ? 'Allocated by Curaleaf' : allocated > 0 ? partOf(allocated) : 'Awaiting Curaleaf allocation',
+    step('dispensed', 'Dispensed by Clinic', dispensedComplete ? 'Allocated' : allocated > 0 ? partOf(allocated) : 'Awaiting clinic allocation',
       state(dispensedComplete, allocated > 0, true)),
     step('in-transit', 'In transit', shippedComplete ? 'Dispatched' : totals.shipped > 0 ? partOf(totals.shipped) : 'Awaiting dispatch',
       state(shippedComplete, totals.shipped > 0, dispensedComplete)),
-    // Goods-in is the dispensary's record; Curaleaf cannot report arrival.
-    step('checked-in', 'Checked in', receivedComplete ? 'Verified at dispensary' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
+    // Goods-in is the pharmacy's record; Curaleaf cannot report arrival.
+    step('checked-in', 'Arrived at Pharmacy', receivedComplete ? 'Verified' : totals.received > 0 ? partOf(totals.received) : inTransit > 0 ? `${packLabel(inTransit)} arriving` : 'Awaiting delivery',
       state(receivedComplete, totals.received > 0, totals.shipped > 0)),
     step('ready', 'Ready',
       readyComplete

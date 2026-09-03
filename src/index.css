@@ -7461,8 +7461,10 @@ html.modal-open .page-container{ overflow: hidden; }
 .crm-directory-list__rows{ display: flex; flex-direction: column; }
 
 .patient-directory-row{
+  --patient-directory-status-col: 8.5rem;
   display: grid;
-  grid-template-columns: 32px minmax(150px, 1.1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) auto;
+  /* Status is a reserved track so “Enquiry” vs “Ready to collect” cannot shove address, phone or email. */
+  grid-template-columns: 32px minmax(150px, 1.1fr) minmax(0, 1.2fr) minmax(0, 1.4fr) var(--patient-directory-status-col);
   align-items: center;
   gap: 4px 14px;
   width: 100%;
@@ -7530,9 +7532,11 @@ html.modal-open .page-container{ overflow: hidden; }
 
 .patient-directory-row__contact svg{ flex: 0 0 auto; color: var(--text-tertiary); }
 
-/* Field name in text, not just an icon, so the value is never guesswork. */
+/* Field name in text, not just an icon, so the value is never guesswork.
+   Same width for Address / Postcode / Phone / Email so values start on one vertical. */
 .patient-directory-row__contact em{
-  flex: 0 0 auto;
+  flex: 0 0 8.5ch;
+  width: 8.5ch;
   color: var(--text-tertiary);
   font-size: 9.5px;
   font-style: normal;
@@ -7541,12 +7545,17 @@ html.modal-open .page-container{ overflow: hidden; }
   text-transform: uppercase;
 }
 
-.patient-directory-row > .order-stage-pill{ justify-self: end; }
+.patient-directory-row > .order-stage-pill{
+  justify-self: end;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Tablet: contact fields drop under the name rather than shrinking to nothing. */
 @media (max-width: 1080px){
   .patient-directory-row{
-    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-columns: 32px minmax(0, 1fr) var(--patient-directory-status-col);
     align-items: start;
   }
 
@@ -7562,7 +7571,11 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 
 @media (max-width: 560px){
-  .patient-directory-row{ padding: 12px; gap: 4px 10px; }
+  .patient-directory-row{
+    --patient-directory-status-col: 6.75rem;
+    padding: 12px;
+    gap: 4px 10px;
+  }
   .patient-directory-row__contact > span{ white-space: normal; }
   .patient-directory-row > .order-stage-pill{ white-space: normal; text-align: right; }
 }
@@ -11948,10 +11961,10 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 .eligibility-brand--pharmacy-logo .eligibility-brand__identity{
   min-width: 0;
-  min-height: 1px;
 }
 .eligibility-brand--pharmacy-logo .eligibility-brand__pharmacy-logo{
   justify-self: center;
+  max-width: 100%;
 }
 .eligibility-brand--pharmacy-logo .eligibility-brand__actions{
   justify-self: end;
@@ -13164,11 +13177,22 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .eligibility-brand{ margin-bottom: 14px; }
   .eligibility-brand__inner{ flex-wrap: wrap; gap: 10px; }
   .eligibility-brand--pharmacy-logo .eligibility-brand__inner{
-    flex-wrap: nowrap;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'identity actions' 'logo logo';
     height: auto;
     min-height: 88px;
     padding-block: 10px;
+    row-gap: 8px;
   }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__identity{ grid-area: identity; }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__pharmacy-logo{
+    grid-area: logo;
+    height: 64px;
+    max-width: min(420px, 100%);
+  }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__identity small{ display: none; }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__identity strong{ font-size: 15px; }
+  .eligibility-shell:has(.eligibility-brand--pharmacy-logo){ --eligibility-brand-height: 150px; }
   .eligibility-brand__pharmacy-logo{
     height: 64px;
     max-width: min(420px, 78vw);
@@ -14503,7 +14527,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-fulfilment-collapsed--audit{ margin-top: 12px; background: var(--bg-surface); }
 .order-full-view-controls{ display: flex; justify-content: flex-end; padding: 14px 16px 0; }
 
-.order-handout-backdrop{ position: fixed; z-index: 1500; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(13, 25, 21, .48); backdrop-filter: blur(3px); }
+.order-handout-backdrop{ position: fixed; z-index: 1520; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(13, 25, 21, .48); backdrop-filter: blur(3px); }
 .order-handout-dialog{ display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 13px; width: min(480px, 100%); padding: 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); box-shadow: 0 24px 70px rgba(10, 22, 18, .24); }
 .order-handout-dialog__icon{ display: grid; width: 40px; height: 40px; place-items: center; border-radius: 9px; color: var(--color-success); background: color-mix(in srgb, var(--color-success) 10%, var(--bg-surface)); }
 .order-handout-dialog small{ color: var(--tenant-primary-strong); font-size: 9px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
