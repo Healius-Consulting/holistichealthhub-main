@@ -650,7 +650,9 @@ export function toPortalOrder(order: PortalOrderSource) {
     );
     const overlappingPoLines = poPackIds.size
       ? overlappingLines.filter(line => poPackIds.has(packIdFromRecord(line)))
-      : overlappingLines;
+      : [];
+    // Only treat a root PO as shared when Curaleaf pack lines uniquely overlap an Rx.
+    // Empty PO items must not stamp the same id onto every multi-Rx card (new orders).
     const legacySharedPo = multiRx && !hasNamedSubOrders && Boolean(purchaseOrderId) && overlappingPoLines.length > 0;
     const rxPurchaseOrderId = typeof sub?.purchaseOrderId === 'string' && sub.purchaseOrderId.trim()
       ? sub.purchaseOrderId.trim()

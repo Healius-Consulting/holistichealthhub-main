@@ -1455,6 +1455,34 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.prescriptionFlow?.['2']?.lines.length, 0);
   });
 
+  it('does not stamp an empty multi-Rx root PO onto every prescription', () => {
+    const mapped = toPortalOrder({
+      ...order,
+      paymentStatus: 'PAID',
+      paidAt: '2026-09-03T22:00:00.000Z',
+      fulfilmentStatus: 'SUPPLIER_PROCESSING',
+      quoteSnapshot: {
+        lineItems: [
+          { packId: 'pack-a', productId: 'pack-a', quantity: 1, unitPricePence: 4800, localPrescriptionId: '1' },
+          { packId: 'pack-b', productId: 'pack-b', quantity: 1, unitPricePence: 8500, localPrescriptionId: '2' },
+        ],
+        prescriptions: [
+          { id: '1', fileId: 'file-1', serialNumber: 'S1', issueDate: '2026-09-01', items: [{ packId: 'pack-a', productId: 'pack-a', quantity: 1 }] },
+          { id: '2', fileId: 'file-2', serialNumber: 'S2', issueDate: '2026-09-01', items: [{ packId: 'pack-b', productId: 'pack-b', quantity: 1 }] },
+        ],
+      },
+      curaleaf: {
+        id: 'po-root-only',
+        state: 'CREATED',
+        items: [],
+      },
+    } as OrderRecord & { curaleaf: unknown });
+    assert.equal(mapped.prescriptionFlow?.['1']?.purchaseOrderId, null);
+    assert.equal(mapped.prescriptionFlow?.['1']?.state, 'PENDING_PLACEMENT');
+    assert.equal(mapped.prescriptionFlow?.['2']?.purchaseOrderId, null);
+    assert.equal(mapped.prescriptionFlow?.['2']?.state, 'PENDING_PLACEMENT');
+  });
+
   it('attaches each purchase order when snapshots use clientKey instead of id', () => {
     const mapped = toPortalOrder({
       ...order,

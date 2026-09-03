@@ -1771,7 +1771,7 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
         <section className="order-crm-main">
           <div className="order-crm-section-heading"><span><small>Prescription fulfilment</small><strong>{order.prescriptions.length} prescription{order.prescriptions.length === 1 ? '' : 's'}</strong></span><FileText size={16} /></div>
           {sharesLegacyPurchaseOrder ? (
-            <p className="order-crm-legacy-po" role="note">One Curaleaf purchase order covers more than one prescription on this order.</p>
+            <p className="order-crm-legacy-po" role="note">These prescriptions currently share one Curaleaf purchase-order reference. New multi-Rx placements should create a separate Curaleaf order per prescription.</p>
           ) : null}
           <div className="order-crm-prescriptions" aria-live="polite">
             {selectedPrescription ? <PrescriptionCard
@@ -2622,9 +2622,9 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
   const distinctPoCount = new Set(
     items.flatMap(item => item.prescription?.purchaseOrderId ? [item.prescription.purchaseOrderId] : []),
   ).size;
-  const legacySharedPo = placedCount > 1 && distinctPoCount === 1;
-  const subtitle = legacySharedPo
-    ? `1 payment · ${items.length} prescriptions on a legacy shared Curaleaf PO`
+  const sharedPoReference = placedCount > 1 && distinctPoCount === 1;
+  const subtitle = sharedPoReference
+    ? `1 payment · ${items.length} prescriptions · one Curaleaf PO on file`
     : placedCount === 0
       ? `1 payment · ${items.length} Curaleaf order${items.length === 1 ? '' : 's'} to place`
       : placedCount < items.length

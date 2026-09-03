@@ -1293,29 +1293,52 @@ function reducer(state: AppState, action: Action): AppState {
       const quoted = new Map(action.items.map(item => [item.productId, item]));
       // The quote is the only source of wholesale cost, so bank it on the catalogue
       // too: the medicine picker needs cost and margin before a line is ever added.
+      let catalogueChanged = false;
       const quotedCatalogue = state.catalogue.map(product => {
         const item = quoted.get(product.id);
-        return item ? {
+        if (!item) return product;
+        const availability = !item.inStock || item.stockStatus === 'out_of_stock' ? 'out' : item.stockStatus === 'low_stock' ? 'low' : 'in';
+        if (product.cost === item.wholesalePrice && product.retail === item.patientPrice && product.availability === availability) {
+          return product;
+        }
+        catalogueChanged = true;
+        return {
           ...product,
           cost: item.wholesalePrice,
           retail: item.patientPrice,
-          availability: !item.inStock || item.stockStatus === 'out_of_stock' ? 'out' : item.stockStatus === 'low_stock' ? 'low' : 'in',
-        } as CatalogueItem : product;
+          availability,
+        } as CatalogueItem;
       });
-      saveCachedCatalogue(quotedCatalogue, state.catalogueUpdatedAt, state.currentOrganisationId, state.catalogueEnvironment);
+      const nextCatalogue = catalogueChanged ? quotedCatalogue : state.catalogue;
+      if (catalogueChanged) {
+        saveCachedCatalogue(nextCatalogue, state.catalogueUpdatedAt, state.currentOrganisationId, state.catalogueEnvironment);
+      }
+      let ordersChanged = false;
+      const nextOrders = state.orders.map(order => {
+        if (order.payment.status !== 'none') return order;
+        let prescriptionsChanged = false;
+        const prescriptions = order.prescriptions.map(rx => {
+          let itemsChanged = false;
+          const items = rx.items.map(line => {
+            const item = quoted.get(line.productId);
+            if (!item) return line;
+            if (line.cost === item.wholesalePrice && line.retail === item.patientPrice) return line;
+            itemsChanged = true;
+            return { ...line, cost: item.wholesalePrice, retail: item.patientPrice };
+          });
+          if (!itemsChanged) return rx;
+          prescriptionsChanged = true;
+          return { ...rx, items };
+        });
+        if (!prescriptionsChanged) return order;
+        ordersChanged = true;
+        return { ...order, prescriptions };
+      });
+      if (!catalogueChanged && !ordersChanged) return state;
       return {
         ...state,
-        catalogue: quotedCatalogue,
-        orders: state.orders.map(order => order.payment.status !== 'none' ? order : ({
-          ...order,
-          prescriptions: order.prescriptions.map(rx => ({
-            ...rx,
-            items: rx.items.map(line => {
-              const item = quoted.get(line.productId);
-              return item ? { ...line, cost: item.wholesalePrice, retail: item.patientPrice } : line;
-            }),
-          })),
-        })),
+        catalogue: nextCatalogue,
+        orders: ordersChanged ? nextOrders : state.orders,
       };
     }
     case 'SYNC_PATIENT_DIRECTORY': {

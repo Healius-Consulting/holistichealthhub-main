@@ -94,6 +94,9 @@ export default function CreateOrderPage() {
   const quoteRequestVersion = useRef(0);
   const draftCreationInFlight = useRef(new Map<number, Promise<string>>());
   const deletedDraftOrderIds = useRef(new Set<number>());
+  const catalogueRef = useRef(state.catalogue);
+  catalogueRef.current = state.catalogue;
+  const lastAutoQuoteKeyRef = useRef<string | null>(null);
   const [uploadingRxId, setUploadingRxId] = useState<number | null>(null);
   const [confirmingFileRemoveRxId, setConfirmingFileRemoveRxId] = useState<number | null>(null);
   const [fileRemovalBusyRxId, setFileRemovalBusyRxId] = useState<number | null>(null);
@@ -889,7 +892,7 @@ export default function CreateOrderPage() {
     try {
       const snapshot = placementUnlocked ? null : snapshotQuoteFromCatalogue(
         currentQuoteItems,
-        state.catalogue,
+        catalogueRef.current,
         activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({
           productId: item.productId,
           cost: item.cost,
@@ -984,6 +987,13 @@ export default function CreateOrderPage() {
   automaticQuoteRef.current = refreshQuote;
   const automaticQuoteOrderId = activeOrder?.id ?? null;
   const hasCurrentQuoteItems = currentQuoteItems.length > 0;
+  const autoQuoteKey = [
+    automaticQuoteOrderId ?? '',
+    currentQuoteSignature,
+    placementUnlocked ? 'live' : 'snapshot',
+    state.workspaceMode,
+    state.currentOrganisationId,
+  ].join('|');
 
   useEffect(() => {
     const shouldQuote = Boolean(
@@ -993,11 +1003,14 @@ export default function CreateOrderPage() {
       && (prescriptionReady || (hasCurrentQuoteItems && !activeOrder?.redoContext)),
     );
     if (!shouldQuote) return;
+    // One auto attempt per basket/org/mode. APPLY_CURALEAF_QUOTE must not re-trigger quotes.
+    if (lastAutoQuoteKeyRef.current === autoQuoteKey) return;
     const timeoutId = window.setTimeout(() => {
+      lastAutoQuoteKeyRef.current = autoQuoteKey;
       void automaticQuoteRef.current({ silent: true });
     }, 500);
     return () => window.clearTimeout(timeoutId);
-  }, [activeOrder?.redoContext, automaticQuoteOrderId, currentQuoteSignature, hasCurrentQuoteItems, placementUnlocked, prescriptionReady, state.catalogue, state.currentOrganisationId, state.workspaceMode]);
+  }, [activeOrder?.redoContext, autoQuoteKey, automaticQuoteOrderId, hasCurrentQuoteItems, isApiConfigured, placementUnlocked, prescriptionReady]);
 
   const selectPatient = (patientId: string) => {
     if (!activeOrder || !patientId) return;
