@@ -261,7 +261,7 @@ test('packs on the shelf show on Ready; later awaiting only when packs wait ther
   const dispensed = rail.find(entry => entry.key === 'dispensed');
   const inTransit = rail.find(entry => entry.key === 'in-transit');
   assert.equal(ready!.state, 'partial');
-  assert.equal(ready!.detail, '10/10');
+  assert.equal(ready!.detail, '10');
   assert.equal(collected!.detail, 'Awaiting collection');
   assert.equal(dispensed!.detail, 'Allocated');
   assert.equal(inTransit!.detail, 'Dispatched');
@@ -294,7 +294,7 @@ test('a fully ready order with packs on the shelf shows the Ready count', () => 
   };
   const ready = buildOrderStageRail(fullyReady).curaleafPlacement!.find(entry => entry.key === 'ready');
   assert.equal(ready!.state, 'partial');
-  assert.equal(ready!.detail, '10/10');
+  assert.equal(ready!.detail, '10');
 });
 
 test('split consignments put each remaining pack count on its current stage', () => {
@@ -407,7 +407,7 @@ test('zero allocation shows the full remainder awaiting at clinic', () => {
     fulfilmentLines: tenPackPrescription.fulfilmentLines?.map(line => ({ ...line, allocated: 0, shipped: 0, received: 0, collected: 0, remaining: 10 })),
   };
   const rail = buildPrescriptionStageRail(partialOrder, zeroAllocation);
-  assert.equal(rail.dispensing?.find(step => step.key === 'dispensed')?.detail, '10/10 awaiting');
+  assert.equal(rail.dispensing?.find(step => step.key === 'dispensed')?.detail, '10 awaiting');
   assert.equal(rail.dispensing?.find(step => step.key === 'in-transit')?.detail, '');
   assert.equal(rail.dispensing?.find(step => step.key === 'checked-in')?.detail, '');
 });

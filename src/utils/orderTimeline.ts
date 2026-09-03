@@ -424,7 +424,8 @@ function buildDispensingSteps(input: {
   const atClinic = Math.max(0, ordered - input.shipped);
   const inTransit = Math.max(0, input.shipped - input.received);
   const onShelf = Math.max(0, input.received - input.collected);
-  const fraction = (n: number) => `${n}/${ordered}`;
+  /** Partial progress uses n/max; a full bucket is just the count (not 2/2). */
+  const packCount = (n: number) => (ordered > 0 && n >= ordered ? String(ordered) : `${n}/${ordered}`);
 
   const dispensedComplete = ordered > 0 && input.allocated >= ordered && atClinic === 0;
   const shippedComplete = ordered > 0 && input.shipped >= ordered;
@@ -436,12 +437,12 @@ function buildDispensingSteps(input: {
   const dispensedDetail = dispensedComplete
     ? 'Allocated'
     : atClinic > 0 && ordered > 0
-      ? `${fraction(atClinic)} awaiting`
+      ? `${packCount(atClinic)} awaiting`
       : '';
   const inTransitDetail = shippedComplete
     ? 'Dispatched'
     : inTransit > 0 && ordered > 0
-      ? fraction(inTransit)
+      ? packCount(inTransit)
       : '';
   const arrivedDetail = inTransit > 0
     ? 'Awaiting delivery'
@@ -449,12 +450,12 @@ function buildDispensingSteps(input: {
   const readyDetail = readyComplete
     ? 'Patient notified'
     : onShelf > 0 && ordered > 0
-      ? fraction(onShelf)
+      ? packCount(onShelf)
       : '';
   const collectedDetail = collectedComplete
     ? 'Handed to patient'
     : input.collected > 0 && ordered > 0
-      ? `${fraction(input.collected)} collected`
+      ? `${packCount(input.collected)} collected`
       : onShelf > 0
         ? 'Awaiting collection'
         : '';
