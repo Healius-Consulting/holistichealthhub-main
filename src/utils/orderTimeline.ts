@@ -443,13 +443,9 @@ function buildDispensingSteps(input: {
     : inTransit > 0 && ordered > 0
       ? fraction(inTransit)
       : '';
-  const arrivedDetail = receivedComplete
-    ? 'Verified'
-    : inTransit > 0
-      ? 'Awaiting delivery'
-      : input.received > 0
-        ? 'Verified'
-        : '';
+  const arrivedDetail = inTransit > 0
+    ? 'Awaiting delivery'
+    : '';
   const readyDetail = readyComplete
     ? 'Patient notified'
     : onShelf > 0 && ordered > 0

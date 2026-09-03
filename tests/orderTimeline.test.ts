@@ -265,6 +265,7 @@ test('packs on the shelf show on Ready; later awaiting only when packs wait ther
   assert.equal(collected!.detail, 'Awaiting collection');
   assert.equal(dispensed!.detail, 'Allocated');
   assert.equal(inTransit!.detail, 'Dispatched');
+  assert.equal(rail.find(entry => entry.key === 'checked-in')!.detail, '');
 });
 
 test('a fully ready order with packs on the shelf shows the Ready count', () => {
