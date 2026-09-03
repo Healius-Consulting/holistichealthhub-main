@@ -1694,17 +1694,6 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
       <QuoteCheckpointSummary order={order} />
 
       {placementConfirmation ? <div className="order-placement-confirmation"><CheckCircle2 size={17} /><span><strong>Order placed with Curaleaf</strong><small>{placementConfirmation}</small></span></div> : null}
-      {selectedStage === 'awaiting-payment' || (selectedStage === 'paid' && !selectedDisplayOrder.prescriptions.every(prescription => Boolean(prescription.purchaseOrderId))) ? (
-        <PrePlacementDeliveryGuidance now={now} />
-      ) : !['collected', 'cancelled', 'rejected', 'archived'].includes(selectedStage) ? (
-        <FulfilmentDeliveryStatus order={selectedDisplayOrder} now={now} />
-      ) : null}
-
-      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : null}
-
-      <ExpiryCountdown order={order} now={now} />
-      <ReplacementLineage order={order} allOrders={state.orders} />
-      <PlacementStatusPanel order={order} />
 
       {order.prescriptions.length > 1 ? (
         <PrescriptionSwitcher
@@ -1713,6 +1702,23 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
           onSelect={onSelectPrescription}
         />
       ) : null}
+
+      {selectedStage === 'awaiting-payment' || (selectedStage === 'paid' && !selectedDisplayOrder.prescriptions.every(prescription => Boolean(prescription.purchaseOrderId))) ? (
+        <PrePlacementDeliveryGuidance now={now} />
+      ) : !['collected', 'cancelled', 'rejected', 'archived'].includes(selectedStage) ? (
+        <FulfilmentDeliveryStatus
+          order={selectedPrescription
+            ? { ...selectedDisplayOrder, prescriptions: [selectedPrescription] }
+            : selectedDisplayOrder}
+          now={now}
+        />
+      ) : null}
+
+      {cancellationClosed ? <CancellationClosureSummary order={order} resolution={order.resolution?.status === 'REFUNDED' || cancellationResolution === 'refunded' ? 'refunded' : 'resolved'} /> : null}
+
+      <ExpiryCountdown order={order} now={now} />
+      <ReplacementLineage order={order} allOrders={state.orders} />
+      <PlacementStatusPanel order={order} />
 
       {!cancellationClosed && cancellationEditorOpen && mayCancel ? (
         <OrderCancellationPanel

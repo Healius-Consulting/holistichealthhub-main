@@ -15487,8 +15487,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .order-rx-switcher{
   display: grid;
   gap: 8px;
-  margin: 0 0 14px;
-  padding: 10px 12px 12px;
+  margin: 14px 16px 0;
+  padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--tenant-primary) 22%, var(--border));
   border-radius: 12px;
   background:
