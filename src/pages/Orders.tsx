@@ -2618,6 +2618,9 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
     return counts;
   }, {});
   const summary = Object.entries(statusCounts).map(([label, count]) => `${count} ${label.toLowerCase()}`).join(' · ');
+  const sharedPo = items.length > 1
+    && items.every(item => item.prescription?.purchaseOrderId)
+    && new Set(items.map(item => item.prescription?.purchaseOrderId)).size === 1;
 
   const moveSelection = (currentIndex: number, direction: number) => {
     const next = items[(currentIndex + direction + items.length) % items.length]?.prescription;
@@ -2626,9 +2629,12 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
 
   return (
     <section className="order-rx-switcher" aria-label="Choose prescription">
-      <header>
-        <span><strong>{items.length} prescriptions</strong><small>{summary}</small></span>
-        <label>
+      <header className="order-rx-switcher__header">
+        <div className="order-rx-switcher__intro">
+          <strong>Switch prescription</strong>
+          <small>{items.length} on this order{summary ? ` · ${summary}` : ''}{sharedPo ? ' · shared PO' : ''}</small>
+        </div>
+        <label className="order-rx-switcher__mobile">
           <span className="sr-only">Selected prescription</span>
           <select value={selectedPrescriptionId ?? ''} onChange={event => onSelect(Number(event.target.value))}>
             {items.map(item => item.prescription ? (
@@ -2642,8 +2648,10 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
           const prescription = item.prescription;
           if (!prescription) return null;
           const selected = prescription.id === selectedPrescriptionId;
+          const status = recordCardTag(item.record);
           const meta = recordStageMeta(item.record);
-          const Icon = meta.icon;
+          const packCount = (prescription.fulfilmentLines ?? []).reduce((sum, line) => sum + (line.ordered ?? 0), 0)
+            || prescription.items.reduce((sum, line) => sum + line.qty, 0);
           return (
             <button
               type="button"
@@ -2652,7 +2660,7 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
               aria-selected={selected}
               aria-controls={`order-rx-panel-${prescription.id}`}
               tabIndex={selected ? 0 : -1}
-              className={`order-rx-switcher__tab order-tone--${meta.tone}${selected ? ' is-selected' : ''}`}
+              className={`order-rx-switcher__tab${selected ? ' is-selected' : ''}`}
               key={item.key}
               onClick={() => onSelect(prescription.id)}
               onKeyDown={event => {
@@ -2662,9 +2670,12 @@ function PrescriptionSwitcher({ items, selectedPrescriptionId, onSelect }: {
                 if (event.key === 'End') { event.preventDefault(); items.at(-1)?.prescription && onSelect(items.at(-1)!.prescription!.id); }
               }}
             >
-              <span className="order-rx-switcher__icon"><Icon size={14} aria-hidden="true" /></span>
-              <span><strong>{`Rx ${index + 1}`}</strong><small>{recordCardTag(item.record)}</small></span>
-              {prescription.purchaseOrderId ? <code title={prescription.purchaseOrderId}>{prescription.purchaseOrderId}</code> : <em>No PO</em>}
+              <span className="order-rx-switcher__index" aria-hidden="true">{index + 1}</span>
+              <span className="order-rx-switcher__copy">
+                <strong>Rx {index + 1}</strong>
+                <span className={`order-rx-switcher__status order-tone--${meta.tone}`}>{status}</span>
+              </span>
+              {packCount > 0 ? <em className="order-rx-switcher__packs">{packCount} pack{packCount === 1 ? '' : 's'}</em> : null}
             </button>
           );
         })}
