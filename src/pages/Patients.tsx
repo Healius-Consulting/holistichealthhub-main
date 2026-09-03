@@ -423,12 +423,10 @@ export default function Patients() {
   useEffect(() => {
     const target = state.navigationTarget;
     if (target?.kind === 'patient-lane') {
-      if (target.lane === 'enquiries') {
-        setActiveFilter('enquiries');
-        setView('list');
-        setSearch('');
-        setSelectedKey(null);
-      }
+      setActiveFilter('all');
+      setView('board');
+      setSearch('');
+      setSelectedKey(null);
       dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
       return;
     }

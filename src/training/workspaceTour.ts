@@ -22,7 +22,7 @@ export const WORKSPACE_TOUR_STEPS: WorkspaceTourStep[] = [
     screen: 'home',
     targets: ['overview-enquiry'],
     title: 'New eligibility enquiries',
-    body: 'This banner is a count, not a patient list. HHH still decides whether to refer or move the case. Open New enquiries to see who is assigned to you. Do not treat Overview as the place to accept or decline.',
+    body: 'This banner is a count, not a patient list. HHH still decides whether to refer or move the case. Open Patients to see who is assigned to you. Do not treat Overview as the place to accept or decline.',
   },
   {
     id: 'overview-daily',
