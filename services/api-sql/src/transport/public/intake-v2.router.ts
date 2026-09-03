@@ -12,9 +12,9 @@ import { SqlPostcodeSearchRepository } from '../../repositories/sql/postcode-sea
 import { publicReferralResolveLimiter, publicSubmissionLimiter } from '../../security/public-limits.js';
 import { sha256 } from '../../security/session-utils.js';
 import type { CreateSubmissionInput } from '../../repositories/ports/intake.port.js';
-import { listPlatformAdminRecipients, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
+import { pharmacyEmailContext } from '../../application/notifications/email-outbox.js';
 import { resolveWebsiteAssignedPharmacy } from '../../domain/intake/website-assignment.js';
-import { queuePharmacyEnquiryEmail } from '../../application/notifications/pharmacy-enquiry-email.js';
 import { attachPublicPharmacyLogo } from '../../application/organisation/public-pharmacy-logo.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 
@@ -222,32 +222,35 @@ export function createPublicIntakeV2Router(): Router {
           surface: 'public',
           details: { sourceType, conditionCount: input.conditions.length },
         });
-        const adminRecipients = await listPlatformAdminRecipients(identityRepo);
-        await queueEmailToRecipients(
-          notificationRepo,
-          adminRecipients,
-          'admin_new_enquiry_received',
-          {
-            firstName: input.firstName,
-            surname: input.surname,
-            mobile: input.mobile,
-            email: input.email,
-            caseReference: caseReference(submission.id, submission.submittedAt || new Date().toISOString()),
-            sourceType,
-            provisionalPharmacyName,
-          },
-          ['admin-enquiry', submission.id],
-          {},
-        );
-        await queuePharmacyEnquiryEmail({
+        const caseRef = caseReference(submission.id, submission.submittedAt || new Date().toISOString());
+        const assignedOrganisation = assignedOrganisationId
+          ? await organisationRepo.findOrganisationById(assignedOrganisationId)
+          : null;
+        await dispatchEmailEvent('enquiry.submitted', {
           notificationRepo,
           identityRepo,
           organisationRepo,
           organisationId: assignedOrganisationId,
-          submissionId: submission.id,
-          caseReference: caseReference(submission.id, submission.submittedAt || new Date().toISOString()),
-          assignmentVersion: 1,
-          event: 'assigned',
+          mails: {
+            admin_new_enquiry_received: {
+              payload: {
+                firstName: input.firstName,
+                surname: input.surname,
+                mobile: input.mobile,
+                email: input.email,
+                caseReference: caseRef,
+                sourceType,
+                provisionalPharmacyName,
+              },
+              keyParts: ['admin-enquiry', submission.id],
+            },
+            pharmacy_new_enquiry_assigned: assignedOrganisation
+              ? {
+                  payload: { caseReference: caseRef, ...pharmacyEmailContext(assignedOrganisation) },
+                  keyParts: ['pharmacy-enquiry-assigned', submission.id, assignedOrganisationId, 1],
+                }
+              : { skip: true },
+          },
         });
       }
 

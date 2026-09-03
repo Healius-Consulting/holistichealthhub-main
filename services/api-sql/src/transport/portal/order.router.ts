@@ -22,7 +22,8 @@ import {
   applyPharmacyHandout,
   normalisedFulfilmentLines,
 } from '../../application/orders/curaleaf-fulfilment.js';
-import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
+import { pharmacyEmailContext } from '../../application/notifications/email-outbox.js';
 import { queueCollectionReadyEmail } from '../../application/notifications/collection-ready-email.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
@@ -837,19 +838,20 @@ export function createPortalOrderRouter(): Router {
         await orderRepo.deleteDraft(input.draftId, scope.organisationId).catch(() => undefined);
       }
 
-      const pharmacyRecipients = await listPharmacyRecipients(scope.organisationId, { identityRepo, organisationRepo });
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('order.accepted', {
         notificationRepo,
-        pharmacyRecipients,
-        'pharmacy_order_accepted',
-        {
+        identityRepo,
+        organisationRepo,
+        organisationId: scope.organisationId,
+        patientId: input.patientId,
+        orderId: result.id,
+        payload: {
           orderNumber,
           amountPence: totalPence,
           currency: input.currency,
         },
-        ['pharmacy-order-accepted', result.id, orderNumber],
-        { organisationId: scope.organisationId, patientId: input.patientId, orderId: result.id },
-      );
+        keyParts: ['pharmacy-order-accepted', result.id, orderNumber],
+      });
 
       res.status(201).json({
         id: result.id,
@@ -1511,20 +1513,22 @@ export function createPortalOrderRouter(): Router {
         organisationRepo.findOrganisationById(scope.organisationId).catch(() => null),
       ]);
       if (patient?.email) {
-        await queueEmailToRecipients(
+        await dispatchEmailEvent('payment.refunded', {
           notificationRepo,
-          [{ email: patient.email, displayName: patient.firstName || null }],
-          'patient_refunded',
-          {
+          organisationRepo,
+          organisationId: scope.organisationId,
+          patientId: order.patientId,
+          orderId,
+          to: { email: patient.email, displayName: patient.firstName || null },
+          payload: {
             firstName: patient.firstName || 'Patient',
             amountPence: nextRefund.amountPence,
             currency: order.currency || 'GBP',
             orderNumber: order.orderNumber,
             ...pharmacyEmailContext(organisation),
           },
-          ['patient-refunded', orderId, refundId],
-          { organisationId: scope.organisationId, patientId: order.patientId, orderId },
-        );
+          keyParts: ['patient-refunded', orderId, refundId],
+        });
       }
 
       res.status(200).json(nextRefund);
@@ -1639,18 +1643,19 @@ export function createPortalOrderRouter(): Router {
         );
       }
 
-      const pharmacyRecipients = await listPharmacyRecipients(scope.organisationId, { identityRepo, organisationRepo });
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('collection.completed', {
         notificationRepo,
-        pharmacyRecipients,
-        'pharmacy_collection_completed',
-        {
+        identityRepo,
+        organisationRepo,
+        organisationId: scope.organisationId,
+        patientId: order.patientId,
+        orderId,
+        payload: {
           orderNumber: order.orderNumber,
           summary: allRemainingOpen ? 'Partial collection completed.' : 'Collection completed.',
         },
-        ['pharmacy-collection-completed', orderId, dispenseKey],
-        { organisationId: scope.organisationId, patientId: order.patientId, orderId },
-      );
+        keyParts: ['pharmacy-collection-completed', orderId, dispenseKey],
+      });
 
       res.status(200).json({
         id: orderId,

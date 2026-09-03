@@ -6,7 +6,8 @@ import { pendingPlacementRxIndexes, snapshotRxList } from '../prescriptions/snap
 import { promotePatientAfterCuraleafPlacement } from '../patient-finance/patient-finance.js';
 import type { PatientFinanceDeps } from '../patient-finance/patient-finance.js';
 import type { IntegrationRepositoryPort } from '../../repositories/ports/integration.port.js';
-import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../notifications/email-dispatch.js';
+import { pharmacyEmailContext } from '../notifications/email-outbox.js';
 import type { OrderRecord, OrderRepositoryPort } from '../../repositories/ports/order.port.js';
 import type { PaymentRecord, PaymentRepositoryPort } from '../../repositories/ports/payment.port.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
@@ -128,42 +129,41 @@ async function queueSettlementEmails(payment: PaymentRecord, deps: WorldpaySettl
     deps.patientRepo.findPatientById(payment.organisationId, order.patientId).catch(() => null),
     deps.organisationRepo.findOrganisationById(payment.organisationId).catch(() => null),
   ]);
-  if (patient?.email) {
-    await queueEmailToRecipients(
-      deps.notificationRepo,
-      [{ email: patient.email, displayName: patient.firstName || null }],
-      'patient_payment_confirmation',
-      {
-        firstName: patient.firstName || 'Patient',
-        amountPence: payment.amountPence,
-        medicineTotalPence: order.medicineTotalPence,
-        dispensingFeePence: order.dispensingFeePence,
-        pharmacyDeliveryPence: order.pharmacyDeliveryPence,
-        currency: payment.currency,
-        orderNumber: order.orderNumber,
-        receiptHash: payment.receiptHash,
-        ...pharmacyEmailContext(organisation),
-      },
-      ['patient-payment-confirmation', payment.id, payment.receiptHash],
-      { organisationId: payment.organisationId, patientId: order.patientId, orderId: order.id },
-    );
-  }
-  const pharmacyRecipients = await listPharmacyRecipients(payment.organisationId, {
+  await dispatchEmailEvent('payment.settled', {
+    notificationRepo: deps.notificationRepo,
     identityRepo: deps.identityRepo,
     organisationRepo: deps.organisationRepo,
-  });
-  await queueEmailToRecipients(
-    deps.notificationRepo,
-    pharmacyRecipients,
-    'pharmacy_payment_received',
-    {
-      amountPence: payment.amountPence,
-      currency: payment.currency,
-      orderNumber: order.orderNumber,
+    organisationId: payment.organisationId,
+    patientId: order.patientId,
+    orderId: order.id,
+    mails: {
+      patient_payment_confirmation: patient?.email
+        ? {
+            to: { email: patient.email, displayName: patient.firstName || null },
+            payload: {
+              firstName: patient.firstName || 'Patient',
+              amountPence: payment.amountPence,
+              medicineTotalPence: order.medicineTotalPence,
+              dispensingFeePence: order.dispensingFeePence,
+              pharmacyDeliveryPence: order.pharmacyDeliveryPence,
+              currency: payment.currency,
+              orderNumber: order.orderNumber,
+              receiptHash: payment.receiptHash,
+              ...pharmacyEmailContext(organisation),
+            },
+            keyParts: ['patient-payment-confirmation', payment.id, payment.receiptHash],
+          }
+        : { skip: true },
+      pharmacy_payment_received: {
+        payload: {
+          amountPence: payment.amountPence,
+          currency: payment.currency,
+          orderNumber: order.orderNumber,
+        },
+        keyParts: ['pharmacy-payment-received', payment.id],
+      },
     },
-    ['pharmacy-payment-received', payment.id],
-    { organisationId: payment.organisationId, patientId: order.patientId, orderId: order.id },
-  );
+  });
 }
 
 export async function placeOrderAfterWorldpaySettlement(

@@ -19,7 +19,7 @@ import {
   type CuraleafEventKind,
 } from '../integrations/curaleaf-events.js';
 import { advanceFulfilmentStatus } from '../orders/curaleaf-fulfilment.js';
-import { listPharmacyRecipients, queueEmailToRecipients } from '../notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../notifications/email-dispatch.js';
 import { curaleafApiRequest } from '../integrations/curaleaf.service.js';
 import { persistCuraleafPrescriptionIdentity } from '../prescriptions/curaleaf-prescription-record.js';
 import { curaleafSubOrders, rxKeyForCuraleafIdentity, snapshotRxList } from '../prescriptions/snapshot-rx.js';
@@ -152,18 +152,19 @@ async function persistSupplierCancellation(
     fulfilmentStatus: 'EXCEPTION',
   });
   await new SqlPrescriptionSerialRepository().endLiveForOrder(order.organisationId, order.id, 'curaleaf_cancelled').catch(() => undefined);
-  const recipients = await listPharmacyRecipients(order.organisationId, deps);
-  await queueEmailToRecipients(
-    deps.notificationRepo,
-    recipients,
-    'pharmacy_order_cancelled',
-    {
+  await dispatchEmailEvent('order.cancelled', {
+    notificationRepo: deps.notificationRepo,
+    identityRepo: deps.identityRepo,
+    organisationRepo: deps.organisationRepo,
+    organisationId: order.organisationId,
+    patientId: order.patientId,
+    orderId: order.id,
+    payload: {
       orderNumber: order.orderNumber,
       summary: input.summary,
     },
-    ['pharmacy-order-cancelled', order.id, input.entityId, input.source],
-    { organisationId: order.organisationId, patientId: order.patientId, orderId: order.id },
-  );
+    keyParts: ['pharmacy-order-cancelled', order.id, input.entityId, input.source],
+  });
 }
 
 function pharmacyAlreadyAskedCuraleafToCancel(snapshot: unknown) {
@@ -451,20 +452,21 @@ async function pollKind(
             fulfilmentStatus !== order.fulfilmentStatus &&
             ['PARTIALLY_DISPATCHED_TO_PHARMACY', 'DISPATCHED_TO_PHARMACY'].includes(fulfilmentStatus)
           ) {
-            const recipients = await listPharmacyRecipients(order.organisationId, deps);
-            await queueEmailToRecipients(
-              deps.notificationRepo,
-              recipients,
-              'pharmacy_order_dispatched',
-              {
+            await dispatchEmailEvent('order.dispatched', {
+              notificationRepo: deps.notificationRepo,
+              identityRepo: deps.identityRepo,
+              organisationRepo: deps.organisationRepo,
+              organisationId: order.organisationId,
+              patientId: order.patientId,
+              orderId: order.id,
+              payload: {
                 orderNumber: order.orderNumber,
                 summary: next.fulfilmentStatus === 'PARTIALLY_DISPATCHED_TO_PHARMACY'
                   ? 'A partial order has been dispatched.'
                   : 'An order has been dispatched.',
               },
-              ['pharmacy-order-dispatched', order.id, shipment.id, next.fulfilmentStatus],
-              { organisationId: order.organisationId, patientId: order.patientId, orderId: order.id },
-            );
+              keyParts: ['pharmacy-order-dispatched', order.id, shipment.id, next.fulfilmentStatus],
+            });
           }
         }
       }

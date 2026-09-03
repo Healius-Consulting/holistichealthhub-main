@@ -1,5 +1,6 @@
 import { evaluatePendingPaymentLifecycle } from '../payments/payment-lifecycle.js';
-import { pharmacyEmailContext, queueEmailToRecipients } from '../notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../notifications/email-dispatch.js';
+import { pharmacyEmailContext } from '../notifications/email-outbox.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { OrderRepositoryPort } from '../../repositories/ports/order.port.js';
 import type { OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
@@ -84,11 +85,14 @@ export async function processPendingPaymentLifecycle(deps: PaymentLifecycleDeps,
         deps.organisationRepo.findOrganisationById(payment.organisationId).catch(() => null),
       ]);
       if (patient?.email) {
-        await queueEmailToRecipients(
-          deps.notificationRepo,
-          [{ email: patient.email, displayName: patient.firstName || null }],
-          'patient_payment_request',
-          {
+        await dispatchEmailEvent('payment.reminder', {
+          notificationRepo: deps.notificationRepo,
+          organisationRepo: deps.organisationRepo,
+          organisationId: payment.organisationId,
+          patientId: order.patientId,
+          orderId: order.id,
+          to: { email: patient.email, displayName: patient.firstName || null },
+          payload: {
             firstName: patient.firstName || 'Patient',
             amountPence: payment.amountPence,
             medicineTotalPence: order.medicineTotalPence,
@@ -100,9 +104,8 @@ export async function processPendingPaymentLifecycle(deps: PaymentLifecycleDeps,
             reminderHour: decision.hour,
             ...pharmacyEmailContext(organisation),
           },
-          [payment.id, `reminder${decision.hour}`],
-          { organisationId: payment.organisationId, patientId: order.patientId, orderId: order.id },
-        );
+          keyParts: [payment.id, `reminder${decision.hour}`],
+        });
       }
       await deps.paymentRepo.updatePaymentOutcome({
         id: payment.id,

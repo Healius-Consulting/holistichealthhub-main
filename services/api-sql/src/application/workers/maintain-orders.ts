@@ -5,7 +5,7 @@ import {
   prescriptionFlowMap,
   snapshotObject,
 } from '../orders/order-maintenance.js';
-import { listPharmacyRecipients, queueEmailToRecipients } from '../notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../notifications/email-dispatch.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { IdentityRepositoryPort } from '../../repositories/ports/identity.port.js';
 import type { OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
@@ -30,19 +30,20 @@ async function queueDelayMessage(
   prescriptionId: string,
   episodeId: string,
 ) {
-  const recipients = await listPharmacyRecipients(order.organisationId, deps);
-  await queueEmailToRecipients(
-    deps.notificationRepo,
-    recipients,
-    'pharmacy_delivery_issue',
-    {
+  await dispatchEmailEvent('order.delivery_issue', {
+    notificationRepo: deps.notificationRepo,
+    identityRepo: deps.identityRepo,
+    organisationRepo: deps.organisationRepo,
+    organisationId: order.organisationId,
+    patientId: order.patientId,
+    orderId: order.id,
+    payload: {
       orderNumber: order.orderNumber,
       summary: 'Part of the order is delayed and needs pharmacy awareness.',
       prescriptionId,
     },
-    ['pharmacy-delivery-issue', order.id, prescriptionId, episodeId],
-    { organisationId: order.organisationId, patientId: order.patientId, orderId: order.id },
-  );
+    keyParts: ['pharmacy-delivery-issue', order.id, prescriptionId, episodeId],
+  });
 }
 
 export async function maintainPaidOrderFlow(deps: OrderMaintenanceDeps, now = new Date()) {
@@ -86,19 +87,20 @@ export async function maintainPaidOrderFlow(deps: OrderMaintenanceDeps, now = ne
             details: { orderId: order.id, prescriptionId },
             dueAt: new Date(`${String(prescription.expiryDate ?? '')}T23:59:59.999Z`).toISOString(),
           });
-          const recipients = await listPharmacyRecipients(order.organisationId, deps);
-          await queueEmailToRecipients(
-            deps.notificationRepo,
-            recipients,
-            'pharmacy_prescription_close_to_expiry',
-            {
+          await dispatchEmailEvent('order.near_expiry', {
+            notificationRepo: deps.notificationRepo,
+            identityRepo: deps.identityRepo,
+            organisationRepo: deps.organisationRepo,
+            organisationId: order.organisationId,
+            patientId: order.patientId,
+            orderId: order.id,
+            payload: {
               orderNumber: order.orderNumber,
               summary: `Prescription ${prescriptionId} is close to expiry.`,
               prescriptionId,
             },
-            ['pharmacy-prescription-close-to-expiry', order.id, prescriptionId, taskId],
-            { organisationId: order.organisationId, patientId: order.patientId, orderId: order.id },
-          );
+            keyParts: ['pharmacy-prescription-close-to-expiry', order.id, prescriptionId, taskId],
+          });
         }
         if (action.type === 'renewal_expired') {
           summary.renewalEscalated += 1;

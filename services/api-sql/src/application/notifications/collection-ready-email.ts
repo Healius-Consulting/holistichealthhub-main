@@ -1,7 +1,8 @@
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
 import type { PatientRepositoryPort } from '../../repositories/ports/patient.port.js';
-import { pharmacyEmailContext, queueEmailToRecipients } from './email-outbox.js';
+import { dispatchEmailEvent } from './email-dispatch.js';
+import { pharmacyEmailContext } from './email-outbox.js';
 import { collectionEmailDelayUntil } from './collection-email-schedule.js';
 
 /**
@@ -33,13 +34,18 @@ export async function queueCollectionReadyEmail(
   if (!patient?.email) return { queued: false as const, reason: 'no-email' as const };
 
   const organisation = await deps.organisationRepo.findOrganisationById(input.organisationId).catch(() => null);
-  const nextAttemptAt = collectionEmailDelayUntil(input.now ?? new Date());
+  const now = input.now ?? new Date();
+  const nextAttemptAt = collectionEmailDelayUntil(now);
 
-  await queueEmailToRecipients(
-    deps.notificationRepo,
-    [{ email: patient.email, displayName: patient.firstName || null }],
-    'patient_ready_for_collection',
-    {
+  await dispatchEmailEvent('collection.ready', {
+    notificationRepo: deps.notificationRepo,
+    organisationRepo: deps.organisationRepo,
+    organisationId: input.organisationId,
+    patientId: input.patientId,
+    orderId: input.orderId,
+    now,
+    to: { email: patient.email, displayName: patient.firstName || null },
+    payload: {
       firstName: patient.firstName || 'Patient',
       orderNumber: input.orderNumber ?? null,
       readyPacks: input.readyPacks ?? null,
@@ -48,14 +54,9 @@ export async function queueCollectionReadyEmail(
         && Number(input.totalPacks || 0) > Number(input.readyPacks || 0),
       ...pharmacyEmailContext(organisation),
     },
-    ['patient-ready-for-collection', input.orderId, input.scopeKey],
-    {
-      organisationId: input.organisationId,
-      patientId: input.patientId,
-      orderId: input.orderId,
-      nextAttemptAt,
-    },
-  );
+    keyParts: ['patient-ready-for-collection', input.orderId, input.scopeKey],
+    nextAttemptAt,
+  });
 
   return { queued: true as const, nextAttemptAt };
 }

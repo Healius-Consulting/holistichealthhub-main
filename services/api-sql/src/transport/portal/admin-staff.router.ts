@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { auth } from '../../bootstrap/firebase.js';
-import { queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
 import { generateStaffPasswordResetLink } from '../../application/identity/password-reset-link.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
@@ -143,24 +143,23 @@ export function createAdminStaffRouter(): Router {
         surface: scope.surface,
         details: { role: 'pharmacy_staff', contactRole, deliveryMode: 'outbox' },
       });
-      const { queued } = await queueEmailToRecipients(
+      const { queued } = await dispatchEmailEvent('staff.invited', {
         notificationRepo,
-        [{ email: input.email, displayName: input.displayName }],
-        'pharmacy_staff_invite',
-        {
+        organisationId: input.organisationId,
+        to: { email: input.email, displayName: input.displayName },
+        payload: {
           pharmacyName: organisation.tradingName || organisation.name,
           organisationId: organisation.id,
           actionLink,
         },
-        staffInviteEmailKey({
+        keyParts: staffInviteEmailKey({
           role: 'pharmacy_staff',
           uid: user.uid,
           organisationId: input.organisationId,
           existingInvite: Boolean(existingProfile),
           requestId: scope.requestId,
         }),
-        { organisationId: input.organisationId },
-      );
+      });
 
       res.status(201).json({
         uid: user.uid,
@@ -324,22 +323,20 @@ export function createAdminStaffRouter(): Router {
         surface: scope.surface,
         details: { role: 'hhh_admin', deliveryMode: 'outbox' },
       });
-      const { queued } = await queueEmailToRecipients(
+      const { queued } = await dispatchEmailEvent('staff.invited', {
         notificationRepo,
-        [{ email: input.email, displayName: input.displayName }],
-        'pharmacy_staff_invite',
-        {
+        to: { email: input.email, displayName: input.displayName },
+        payload: {
           pharmacyName: 'HHH admin workspace',
           actionLink,
         },
-        staffInviteEmailKey({
+        keyParts: staffInviteEmailKey({
           role: 'hhh_admin',
           uid: user.uid,
           existingInvite: Boolean(existingProfile),
           requestId: scope.requestId,
         }),
-        {},
-      );
+      });
 
       res.status(201).json({
         uid: user.uid,
@@ -416,24 +413,23 @@ export function createAdminStaffRouter(): Router {
       }
 
       const actionLink = await generateStaffPasswordResetLink(profile.email);
-      const { queued } = await queueEmailToRecipients(
+      const { queued } = await dispatchEmailEvent('staff.invited', {
         notificationRepo,
-        [{ email: profile.email, displayName: profile.displayName }],
-        'pharmacy_staff_invite',
-        {
+        organisationId: profile.organisationId,
+        to: { email: profile.email, displayName: profile.displayName },
+        payload: {
           pharmacyName: organisation.tradingName || organisation.name,
           organisationId: organisation.id,
           actionLink,
         },
-        staffInviteResendEmailKey({
+        keyParts: staffInviteResendEmailKey({
           role: 'pharmacy_staff',
           uid: profile.uid,
           organisationId: profile.organisationId,
           requestId: scope.requestId,
           issuedAt: Date.now(),
         }),
-        { organisationId: profile.organisationId },
-      );
+      });
 
       await identityRepo.appendAudit({
         organisationId: profile.organisationId,
@@ -470,22 +466,20 @@ export function createAdminStaffRouter(): Router {
       }
 
       const actionLink = await generateStaffPasswordResetLink(profile.email);
-      const { queued } = await queueEmailToRecipients(
+      const { queued } = await dispatchEmailEvent('staff.invited', {
         notificationRepo,
-        [{ email: profile.email, displayName: profile.displayName }],
-        'pharmacy_staff_invite',
-        {
+        to: { email: profile.email, displayName: profile.displayName },
+        payload: {
           pharmacyName: 'HHH admin workspace',
           actionLink,
         },
-        staffInviteResendEmailKey({
+        keyParts: staffInviteResendEmailKey({
           role: 'hhh_admin',
           uid: profile.uid,
           requestId: scope.requestId,
           issuedAt: Date.now(),
         }),
-        {},
-      );
+      });
 
       await identityRepo.appendAudit({
         organisationId: null,
@@ -517,18 +511,17 @@ export function createAdminStaffRouter(): Router {
       const organisation = await organisationRepo.findOrganisationById(profile.organisationId);
       if (!organisation) throw new HttpError(404, 'Pharmacy account not found.', 'NOT_FOUND');
       const actionLink = await generateStaffPasswordResetLink(profile.email);
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('staff.password_reset', {
         notificationRepo,
-        [{ email: profile.email, displayName: profile.displayName }],
-        'pharmacy_password_reset',
-        {
+        organisationId: profile.organisationId,
+        to: { email: profile.email, displayName: profile.displayName },
+        payload: {
           pharmacyName: organisation.tradingName || organisation.name,
           organisationId: organisation.id,
           actionLink,
         },
-        ['pharmacy-password-reset', profile.uid, Date.now()],
-        { organisationId: profile.organisationId },
-      );
+        keyParts: ['pharmacy-password-reset', profile.uid, Date.now()],
+      });
       await identityRepo.appendAudit({
         organisationId: profile.organisationId,
         actorUid: scope.uid,
@@ -555,17 +548,15 @@ export function createAdminStaffRouter(): Router {
         throw new HttpError(404, 'Admin account not found.', 'ADMIN_NOT_FOUND');
       }
       const actionLink = await generateStaffPasswordResetLink(profile.email);
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('staff.password_reset', {
         notificationRepo,
-        [{ email: profile.email, displayName: profile.displayName }],
-        'pharmacy_password_reset',
-        {
+        to: { email: profile.email, displayName: profile.displayName },
+        payload: {
           pharmacyName: 'HHH admin workspace',
           actionLink,
         },
-        ['platform-admin-password-reset', profile.uid, Date.now()],
-        {},
-      );
+        keyParts: ['platform-admin-password-reset', profile.uid, Date.now()],
+      });
       await identityRepo.appendAudit({
         organisationId: null,
         actorUid: scope.uid,
@@ -600,19 +591,18 @@ export function createAdminStaffRouter(): Router {
       const organisation = profile.organisationId
         ? await organisationRepo.findOrganisationById(profile.organisationId)
         : null;
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('staff.2fa_disabled', {
         notificationRepo,
-        [{ email: profile.email, displayName: profile.displayName }],
-        'pharmacy_2fa_disabled',
-        {
+        organisationId: profile.organisationId,
+        to: { email: profile.email, displayName: profile.displayName },
+        payload: {
           pharmacyName: profile.role === 'HHH_ADMIN'
             ? 'HHH admin workspace'
             : organisation?.tradingName || organisation?.name || 'the pharmacy',
           organisationId: organisation?.id || '',
         },
-        ['pharmacy-2fa-disabled', profile.uid, Date.now()],
-        { organisationId: profile.organisationId },
-      );
+        keyParts: ['pharmacy-2fa-disabled', profile.uid, Date.now()],
+      });
       await identityRepo.appendAudit({
         organisationId: profile.organisationId,
         actorUid: scope.uid,

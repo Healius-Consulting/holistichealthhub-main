@@ -8,7 +8,8 @@ import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntakeRepository } from '../../repositories/sql/intake.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
-import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
+import { pharmacyEmailContext } from '../../application/notifications/email-outbox.js';
 import { canActivateReferredPatient, canReceiveReferral, pharmacyIntakeDirectoryAccess } from '../../domain/organisation/access.js';
 import { queuePharmacyEnquiryEmail } from '../../application/notifications/pharmacy-enquiry-email.js';
 import { requireCsrf } from '../../security/csrf.js';
@@ -358,34 +359,34 @@ export function createPortalIntakeV2Router(): Router {
         surface: 'admin',
         details: { patientId, notePresent: Boolean(input.notes), sourceOrganisationId: record.sourceOrganisationId },
       });
-      const pharmacyRecipients = canActivateReferredPatient(destination)
-        ? await listPharmacyRecipients(record.assignedOrganisationId, { identityRepo, organisationRepo })
-        : [];
       const pharmacyContext = pharmacyEmailContext(destination);
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('referral.activated', {
         notificationRepo,
-        pharmacyRecipients,
-        'pharmacy_new_patient_referred',
-        {
-          caseReference: record.id,
-          ...pharmacyContext,
-        },
-        ['pharmacy-referred', record.id, record.assignedOrganisationId],
-        { organisationId: record.assignedOrganisationId, patientId },
-      );
-      if (record.email) {
-        await queueEmailToRecipients(
-          notificationRepo,
-          [{ email: record.email, displayName: record.firstName || null }],
-          'patient_referred',
-          {
-            firstName: record.firstName || 'there',
-            ...pharmacyContext,
+        identityRepo,
+        organisationRepo,
+        organisationId: record.assignedOrganisationId,
+        patientId,
+        mails: {
+          pharmacy_new_patient_referred: {
+            skip: !canActivateReferredPatient(destination),
+            payload: {
+              caseReference: record.id,
+              ...pharmacyContext,
+            },
+            keyParts: ['pharmacy-referred', record.id, record.assignedOrganisationId],
           },
-          ['patient-referred', record.id, record.assignedOrganisationId],
-          { organisationId: record.assignedOrganisationId, patientId },
-        );
-      }
+          patient_referred: record.email
+            ? {
+                to: { email: record.email, displayName: record.firstName || null },
+                payload: {
+                  firstName: record.firstName || 'there',
+                  ...pharmacyContext,
+                },
+                keyParts: ['patient-referred', record.id, record.assignedOrganisationId],
+              }
+            : { skip: true },
+        },
+      });
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ id: caseId, decision: 'approved', patientId, assignmentVersion: newVersion });
     } catch (error) {

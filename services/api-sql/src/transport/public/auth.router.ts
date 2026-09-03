@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { SessionService } from '../../application/identity/session.service.js';
 import { firstPartyPasswordResetLink, portalAppOrigin } from '../../application/identity/password-reset-link.js';
 import { hasEnrolledTotp } from '../../application/identity/staff-activation.js';
-import { queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
 import { auth } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { cookieOptions, csrfCookieName, issueCsrf, requireCsrf } from '../../security/csrf.js';
@@ -173,18 +173,17 @@ export function createAuthRouter(): Router {
           const organisation = profile.organisationId
             ? await organisationRepo.findOrganisationById(profile.organisationId)
             : null;
-          await queueEmailToRecipients(
+          await dispatchEmailEvent('staff.password_reset', {
             notificationRepo,
-            [{ email: profile.email, displayName: profile.displayName }],
-            'pharmacy_password_reset',
-            {
+            organisationId: profile.organisationId,
+            to: { email: profile.email, displayName: profile.displayName },
+            payload: {
               pharmacyName: organisation?.tradingName || organisation?.name || 'HHH admin workspace',
               organisationId: organisation?.id || '',
               actionLink,
             },
-            ['staff-password-reset', profile.uid, Date.now()],
-            { organisationId: profile.organisationId },
-          );
+            keyParts: ['staff-password-reset', profile.uid, Date.now()],
+          });
           await identityRepo.appendAudit({
             organisationId: profile.organisationId,
             actorUid: profile.uid,
@@ -243,19 +242,18 @@ export function createAuthRouter(): Router {
       const organisation = profile.organisationId
         ? await organisationRepo.findOrganisationById(profile.organisationId)
         : null;
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('staff.2fa_enabled', {
         notificationRepo,
-        [{ email: profile.email, displayName: profile.displayName }],
-        'pharmacy_2fa_enabled',
-        {
+        organisationId: profile.organisationId,
+        to: { email: profile.email, displayName: profile.displayName },
+        payload: {
           pharmacyName: profile.role === 'HHH_ADMIN'
             ? 'HHH admin workspace'
             : organisation?.tradingName || organisation?.name || 'the pharmacy',
           organisationId: organisation?.id || '',
         },
-        ['pharmacy-2fa-enabled', profile.uid, Date.now()],
-        { organisationId: profile.organisationId },
-      );
+        keyParts: ['pharmacy-2fa-enabled', profile.uid, Date.now()],
+      });
       await identityRepo.appendAudit({
         organisationId: profile.organisationId,
         actorUid: profile.uid,

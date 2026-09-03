@@ -3,4 +3,4 @@ export {
   type PatientMessageKind,
   isPatientMessageKind,
   patientMessageIdempotencyKey,
-} from './message-kinds.js';
+} from './email-catalog.js';

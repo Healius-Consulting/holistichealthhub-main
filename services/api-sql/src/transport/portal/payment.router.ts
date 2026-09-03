@@ -11,7 +11,8 @@ import { createWorldpayHostedSession } from '../../application/integrations/worl
 import { createWorldpayTransactionReference } from '../../application/payments/worldpay-reference.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
-import { listPharmacyRecipients, pharmacyEmailContext, queueEmailToRecipients } from '../../application/notifications/email-outbox.js';
+import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
+import { pharmacyEmailContext } from '../../application/notifications/email-outbox.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
@@ -84,11 +85,14 @@ async function queuePatientPaymentRequestEmail(input: {
     input.organisationRepo.findOrganisationById(input.organisationId).catch(() => null),
   ]);
   if (!patient?.email || !input.paymentUrl || !input.paymentId) return;
-  await queueEmailToRecipients(
-    input.notificationRepo,
-    [{ email: patient.email, displayName: patient.firstName || null }],
-    'patient_payment_request',
-    {
+  await dispatchEmailEvent('payment.link_created', {
+    notificationRepo: input.notificationRepo,
+    organisationRepo: input.organisationRepo,
+    organisationId: input.organisationId,
+    patientId: input.order.patientId,
+    orderId: input.orderId,
+    to: { email: patient.email, displayName: patient.firstName || null },
+    payload: {
       firstName: patient.firstName || 'Patient',
       amountPence: input.order.totalPence,
       medicineTotalPence: input.order.medicineTotalPence,
@@ -99,9 +103,8 @@ async function queuePatientPaymentRequestEmail(input: {
       paymentUrl: input.paymentUrl,
       ...pharmacyEmailContext(organisation),
     },
-    ['patient-payment-request', input.paymentId],
-    { organisationId: input.organisationId, patientId: input.order.patientId, orderId: input.orderId },
-  );
+    keyParts: ['patient-payment-request', input.paymentId],
+  });
 }
 
 const refundSchema = z.object({
@@ -369,39 +372,41 @@ export function createPortalPaymentRouter(): Router {
         patientRepo.findPatientById(scope.organisationId, order.patientId).catch(() => null),
         organisationRepo.findOrganisationById(scope.organisationId).catch(() => null),
       ]);
-      if (patient?.email) {
-        await queueEmailToRecipients(
-          notificationRepo,
-          [{ email: patient.email, displayName: patient.firstName || null }],
-          'patient_payment_confirmation',
-          {
-            firstName: patient.firstName || 'Patient',
-            amountPence: gatedAmountPence,
-            medicineTotalPence: order.medicineTotalPence,
-            dispensingFeePence: order.dispensingFeePence,
-            pharmacyDeliveryPence: order.pharmacyDeliveryPence,
-            currency: 'GBP',
-            orderNumber: order.orderNumber,
-            receiptHash,
-            ...pharmacyEmailContext(organisation),
-          },
-          ['patient-payment-confirmation', paymentResult.id, receiptHash],
-          { organisationId: scope.organisationId, patientId: order.patientId, orderId },
-        );
-      }
-      const pharmacyRecipients = await listPharmacyRecipients(scope.organisationId, { identityRepo, organisationRepo });
-      await queueEmailToRecipients(
+      await dispatchEmailEvent('payment.settled', {
         notificationRepo,
-        pharmacyRecipients,
-        'pharmacy_payment_received',
-        {
-          amountPence: gatedAmountPence,
-          currency: 'GBP',
-          orderNumber: order.orderNumber,
+        identityRepo,
+        organisationRepo,
+        organisationId: scope.organisationId,
+        patientId: order.patientId,
+        orderId,
+        mails: {
+          patient_payment_confirmation: patient?.email
+            ? {
+                to: { email: patient.email, displayName: patient.firstName || null },
+                payload: {
+                  firstName: patient.firstName || 'Patient',
+                  amountPence: gatedAmountPence,
+                  medicineTotalPence: order.medicineTotalPence,
+                  dispensingFeePence: order.dispensingFeePence,
+                  pharmacyDeliveryPence: order.pharmacyDeliveryPence,
+                  currency: 'GBP',
+                  orderNumber: order.orderNumber,
+                  receiptHash,
+                  ...pharmacyEmailContext(organisation),
+                },
+                keyParts: ['patient-payment-confirmation', paymentResult.id, receiptHash],
+              }
+            : { skip: true },
+          pharmacy_payment_received: {
+            payload: {
+              amountPence: gatedAmountPence,
+              currency: 'GBP',
+              orderNumber: order.orderNumber,
+            },
+            keyParts: ['pharmacy-payment-received', paymentResult.id],
+          },
         },
-        ['pharmacy-payment-received', paymentResult.id],
-        { organisationId: scope.organisationId, patientId: order.patientId, orderId },
-      );
+      });
 
       res.status(200).json({
         id: paymentResult.id,
