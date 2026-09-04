@@ -113,6 +113,7 @@ export default function PaymentReceipt() {
   }, [loadState, receipt]);
 
   const presentation = receipt ? receiptPresentation(receipt) : null;
+  const breakdown = receipt?.breakdown?.length ? receipt.breakdown : null;
   const paidLabel = receipt ? money(receipt.amountPence, receipt.currency) : null;
   const refundedLabel = receipt?.refundedAmountPence != null && receipt.refundedAmountPence > 0
     ? money(receipt.refundedAmountPence, receipt.currency)
@@ -165,9 +166,15 @@ export default function PaymentReceipt() {
                   <code className="receipt-ref">{receipt.orderNumber}</code>
                 </div>
               ) : null}
+              {breakdown ? breakdown.map(line => (
+                <div className="receipt-card-row receipt-card-row--line" key={line.key}>
+                  <span>{line.label}</span>
+                  <span>{money(line.amountPence, receipt.currency)}</span>
+                </div>
+              )) : null}
               {paidLabel ? (
-                <div className="receipt-card-row">
-                  <span>Original amount</span>
+                <div className={`receipt-card-row${breakdown ? ' receipt-card-row--total' : ''}`}>
+                  <span>{breakdown ? 'Total' : 'Original amount'}</span>
                   <strong>{paidLabel}</strong>
                 </div>
               ) : null}

@@ -562,6 +562,12 @@ export function getPublicPaymentStatus(params: { ref?: string; receipt?: string;
   return apiRequest<PublicPaymentStatusResponse>(`/v1/public/payments/status?${query.toString()}`, { skipGetCache: true });
 }
 
+export type PublicPaymentReceiptLine = {
+  key: 'medicine' | 'dispensing' | 'pharmacyDelivery' | 'delivery';
+  label: string;
+  amountPence: number;
+};
+
 export type PublicPaymentReceiptResponse = {
   id: string;
   amountPence: number;
@@ -572,6 +578,7 @@ export type PublicPaymentReceiptResponse = {
   orderNumber?: string | null;
   refundedAmountPence?: number | null;
   partial?: boolean;
+  breakdown?: PublicPaymentReceiptLine[];
 };
 
 export function getPublicPaymentReceipt(token: string) {

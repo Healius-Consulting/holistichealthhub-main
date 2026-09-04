@@ -87,6 +87,14 @@ export function createPublicPaymentRouter(): Router {
       res.status(200).json(buildPublicPaymentReceipt({
         payment,
         orderNumber: order?.orderNumber ?? null,
+        order: order
+          ? {
+              medicineTotalPence: order.medicineTotalPence,
+              dispensingFeePence: order.dispensingFeePence,
+              pharmacyDeliveryPence: order.pharmacyDeliveryPence,
+              deliveryPence: order.deliveryPence,
+            }
+          : null,
         completedRefunds: refunds,
       }));
     } catch (error) {
