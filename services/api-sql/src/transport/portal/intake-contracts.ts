@@ -15,8 +15,8 @@ export function sqlIntakeCaseReference(id: string, submittedAt: string) {
 }
 
 export function sqlIntakeDisplayStatus(record: PlatformSubmissionRecord) {
-  if (record.pharmacyAccessStatus !== 'ACTIVATED') return 'Awaiting HHH referral';
-  if (record.assignmentStatus !== 'CONFIRMED') return 'Pending HHH allocation review';
+  if (record.pharmacyAccessStatus !== 'ACTIVATED') return 'Awaiting referral decision';
+  if (record.assignmentStatus !== 'CONFIRMED') return 'Pending allocation review';
   if (record.pharmacyReviewStatus === 'NOT_OPENED') return 'Assignment confirmed';
   return 'Under pharmacy review';
 }

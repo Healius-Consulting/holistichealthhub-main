@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type R
 import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, Info, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
 import { CONDITIONS, conditionLabel } from '@hhh/domain';
 import { createEligibilitySubmission, createV2Intake, resolvePublicReferralToken, searchPublicPharmacies } from '../../../src/shared/api';
-import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
+import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type DeclineRule, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
 import { tenantThemeVariables } from '../../../src/utils/tenantTheme';
 import { EMAIL_LOGO_SPEC } from '../../../src/utils/pharmacyLogo';
 import { parseEligibilityReferralRoute } from './referralRoute';
+import { latestEligibleDateOfBirth } from '../../../src/utils/eligibilityAge';
 
 const LOCAL_PREVIEW_TOKEN = 'local-preview';
 const HHH_MARK = '/holistic-health-hub-mark.png';
@@ -28,6 +29,8 @@ const PUBLIC_HOME_HREF = '/';
 const PUBLIC_SITE_HREF = 'https://holistichealthhub.live';
 const TERMS_HREF = '/terms';
 const PRIVACY_HREF = '/privacy';
+/** Review requests land in the pharmacist queue; a pharmacist, not the form, reconsiders. */
+const REVIEW_REQUEST_EMAIL = 'info@holistichealthhub.live';
 
 /**
  * The pharmacy is the controller for the referral service, so patient-facing copy
@@ -132,6 +135,7 @@ export default function EligibilityApp() {
   const [submitting, setSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
   const [eligible, setEligible] = useState(false);
+  const [declineRule, setDeclineRule] = useState<DeclineRule | null>(null);
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [primaryCondition, setPrimaryCondition] = useState('');
   const [conditionError, setConditionError] = useState('');
@@ -205,7 +209,6 @@ export default function EligibilityApp() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!pharmacy || (!token && (!search || (!selectedDirectoryProfileId && !manualProceed)))) return;
-    if (treatmentHistory === 'no' || psychHistory === 'yes') return;
     if (selectedConditions.length < 1 || selectedConditions.length > 3) {
       setConditionError('Select between one and three conditions.');
       return;
@@ -240,7 +243,11 @@ export default function EligibilityApp() {
           consentVersion, idempotencyKey: idempotencyKey.current,
         }));
       }
-      setEligible(input.tried2 && !input.psychExclusion);
+      const rule = !input.tried2 ? 'TREATMENTS_NOT_TRIED' as const
+        : input.psychExclusion ? 'PSYCHOSIS_HISTORY' as const
+        : null;
+      setDeclineRule(rule);
+      setEligible(!rule);
       setComplete(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
@@ -261,16 +268,32 @@ export default function EligibilityApp() {
   };
 
   if (loading) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={HHH_PUBLIC_IDENTITY} token={token} /><section className="eligibility-card eligibility-message"><LoaderCircle className="spin" size={34} /><h1>Checking your pharmacy link</h1></section></EligibilityShell>;
-  if (error && !pharmacy) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={HHH_PUBLIC_IDENTITY} token={token} /><section className="eligibility-card eligibility-message"><AlertTriangle size={36} /><h1>Unable to open this form</h1><p>{error}</p><p>Please ask your pharmacy for its current eligibility link.</p>{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (error && !pharmacy) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={HHH_PUBLIC_IDENTITY} token={token} /><section className="eligibility-card eligibility-message"><AlertTriangle size={36} /><h1>Unable to open this form</h1><p>{error}</p><p>Please ask your pharmacy for its current eligibility link.</p>{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
   if (!pharmacy) return null;
 
   const brandIdentity = token ? pharmacy : HHH_PUBLIC_IDENTITY;
+  const maxDateOfBirth = latestEligibleDateOfBirth();
   // "[Pharmacy]" in the approved copy: the trading name on a token form, and a
   // generic reference on the master site, where the choice is made in section 01.
   const pharmacyRef = token ? pharmacy.tradingName : 'your pharmacy';
   const consentPharmacyRef = token ? pharmacy.tradingName : 'my pharmacy';
 
-  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>Thank you — your application has gone to {pharmacy.tradingName}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (complete && declineRule) {
+    const reason = declineRule === 'TREATMENTS_NOT_TRIED' ? 'the treatments question' : 'the family-history question';
+    return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
+      <EligibilityBrand identity={brandIdentity} token={token} />
+      <section className="eligibility-card eligibility-message eligibility-decline">
+        <div className="eligibility-result-icon review"><Info size={32} /></div>
+        <h1>{pharmacy.tradingName} cannot refer you at the moment</h1>
+        <p>Based on your answer to {reason}, you do not currently meet the clinic’s criteria for a referral. This was an automatic check.</p>
+        <p>If you think this does not reflect your situation, or you would like a pharmacist to look at your application, email <a href={`mailto:${REVIEW_REQUEST_EMAIL}?subject=${encodeURIComponent('Eligibility review request')}`}>{REVIEW_REQUEST_EMAIL}</a> quoting your name and date of birth. A registered pharmacist will reply within 3 working days.</p>
+        <p>Otherwise your application is deleted within 3 months.</p>
+        <a className="eligibility-home" href={token ? PUBLIC_SITE_HREF : PUBLIC_HOME_HREF}>Close</a>
+      </section>
+    </EligibilityShell>;
+  }
+
+  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>Thank you — your application has gone to {pharmacy.tradingName}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
 
   return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
     <EligibilityBrand identity={brandIdentity} token={token} />
@@ -352,7 +375,7 @@ export default function EligibilityApp() {
         </section>}
         <section className="eligibility-form-section" aria-labelledby="eligibility-about-you">
           <div className="eligibility-section-heading"><span>{token ? '01' : '02'}</span><div><h3 id="eligibility-about-you">About you</h3><p>Your details let {pharmacyRef} contact you about your application.</p></div></div>
-          <div className="eligibility-form-grid"><label>First name <em>*</em><input className="input" name="firstName" required autoComplete="given-name" /></label><label>Surname <em>*</em><input className="input" name="surname" required autoComplete="family-name" /></label><label>Date of birth <em>*</em><input className="input" name="dob" type="date" required /></label>{token && <label>Postcode <em>*</em><input className="input" name="postcode" required autoComplete="postal-code" /></label>}<label>Email <em>*</em><input className="input" name="email" type="email" required autoComplete="email" /></label><label>Mobile number <em>*</em><input className="input" name="mobile" type="tel" required autoComplete="tel" /></label></div>
+          <div className="eligibility-form-grid"><label>First name <em>*</em><input className="input" name="firstName" required autoComplete="given-name" /></label><label>Surname <em>*</em><input className="input" name="surname" required autoComplete="family-name" /></label><label>Date of birth <em>*</em><input className="input" name="dob" type="date" required max={maxDateOfBirth} onInvalid={event => event.currentTarget.setCustomValidity(event.currentTarget.validity.rangeOverflow ? 'You must be 18 or over to apply.' : '')} onInput={event => event.currentTarget.setCustomValidity('')} /></label>{token && <label>Postcode <em>*</em><input className="input" name="postcode" required autoComplete="postal-code" /></label>}<label>Email <em>*</em><input className="input" name="email" type="email" required autoComplete="email" /></label><label>Mobile number <em>*</em><input className="input" name="mobile" type="tel" required autoComplete="tel" /></label></div>
         </section>
         <section className="eligibility-form-section" aria-labelledby="eligibility-health-needs">
           <div className="eligibility-section-heading"><span>{token ? '02' : '03'}</span><div><h3 id="eligibility-health-needs">Your health needs</h3><p>Select up to three conditions, then choose the main one.</p></div></div>
@@ -374,8 +397,8 @@ export default function EligibilityApp() {
             {conditionError && <span className="eligibility-field-error" id="condition-error" role="alert">{conditionError}</span>}
           </fieldset>
           <label>Primary condition <em>*</em><select className="input select" value={primaryCondition} disabled={selectedConditions.length === 0} required onChange={event => { setPrimaryCondition(event.target.value); setConditionError(''); }}><option value="">Select the main condition</option>{selectedConditions.map(conditionId => <option key={conditionId} value={conditionId}>{conditionLabel(conditionId)}</option>)}</select></label>
-          <fieldset><legend>Have you tried at least two licensed treatments or therapies? <em>*</em></legend><div className="eligibility-choice"><label><input type="radio" name="tried2" value="yes" required checked={treatmentHistory === 'yes'} onChange={() => setTreatmentHistory('yes')} /><span><strong>Yes</strong><small>I have tried two or more</small></span></label><label><input type="radio" name="tried2" value="no" checked={treatmentHistory === 'no'} onChange={() => setTreatmentHistory('no')} /><span><strong>No</strong><small>Not yet or I am unsure</small></span></label></div>{treatmentHistory === 'no' && <div className="eligibility-screening-stop" role="alert"><AlertTriangle size={18} /><div><strong>You are not eligible to submit this check yet</strong><p>At least two licensed treatments or therapies must have been tried before a referral can be considered. If you are unsure what counts, please contact the pharmacy.</p></div></div>}</fieldset>
-          <fieldset><legend>Have you or an immediate family member been diagnosed with psychosis or schizophrenia? <em>*</em></legend><p className="eligibility-field-help">We record only your answer, not who the family member is.</p><div className="eligibility-choice"><label><input type="radio" name="psychExclusion" value="yes" required checked={psychHistory === 'yes'} onChange={() => setPsychHistory('yes')} /><span><strong>Yes</strong><small>This applies to me or family</small></span></label><label><input type="radio" name="psychExclusion" value="no" checked={psychHistory === 'no'} onChange={() => setPsychHistory('no')} /><span><strong>No</strong><small>This does not apply</small></span></label></div>{psychHistory === 'yes' && <div className="eligibility-screening-stop" role="alert"><AlertTriangle size={18} /><div><strong>You are not eligible to submit this check</strong><p>A diagnosis of psychosis or schizophrenia in you or an immediate family member means a referral cannot be considered through this form. Please speak to the pharmacy or your GP about other options.</p></div></div>}</fieldset>
+          <fieldset><legend>Have you tried at least two licensed treatments or therapies? <em>*</em></legend><div className="eligibility-choice"><label><input type="radio" name="tried2" value="yes" required checked={treatmentHistory === 'yes'} onChange={() => setTreatmentHistory('yes')} /><span><strong>Yes</strong><small>I have tried two or more</small></span></label><label><input type="radio" name="tried2" value="no" checked={treatmentHistory === 'no'} onChange={() => setTreatmentHistory('no')} /><span><strong>No</strong><small>Not yet or I am unsure</small></span></label></div></fieldset>
+          <fieldset><legend>Have you or an immediate family member been diagnosed with psychosis or schizophrenia? <em>*</em></legend><p className="eligibility-field-help">We record only your answer, not who the family member is.</p><div className="eligibility-choice"><label><input type="radio" name="psychExclusion" value="yes" required checked={psychHistory === 'yes'} onChange={() => setPsychHistory('yes')} /><span><strong>Yes</strong><small>This applies to me or family</small></span></label><label><input type="radio" name="psychExclusion" value="no" checked={psychHistory === 'no'} onChange={() => setPsychHistory('no')} /><span><strong>No</strong><small>This does not apply</small></span></label></div></fieldset>
         </section>
         <section className="eligibility-form-section eligibility-form-section--consent" aria-labelledby="eligibility-consent">
           <div className="eligibility-section-heading"><span>{token ? '03' : '04'}</span><div><h3 id="eligibility-consent">Consent and referral</h3><p>Please read the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> and <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>, then confirm:</p></div></div>
@@ -384,7 +407,7 @@ export default function EligibilityApp() {
           <p className="eligibility-consent-withdraw">You can withdraw at any time before referral by contacting {pharmacyRef}.</p>
         </section>
         {error && <div className="banner banner-red"><AlertTriangle size={16} /> {error}</div>}
-        <footer className="eligibility-form-footer"><button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || treatmentHistory === 'no' || psychHistory === 'yes' || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : treatmentHistory === 'no' || psychHistory === 'yes' ? 'Not eligible to submit' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{treatmentHistory === 'no' ? <><AlertTriangle size={13} /> Submission is unavailable based on your treatment history.</> : psychHistory === 'yes' ? <><AlertTriangle size={13} /> Submission is unavailable based on your answer about psychosis or schizophrenia.</> : !token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>
+        <footer className="eligibility-form-footer"><button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{!token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>
         <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : <>This service is provided by {token ? pharmacy.tradingName : 'the partner pharmacy you select'}. Website operated by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX · ICO ZB639206 · <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> · <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink> · Protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</>}</p>
       </form>
     </div>

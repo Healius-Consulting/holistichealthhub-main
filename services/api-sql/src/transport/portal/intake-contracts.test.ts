@@ -28,7 +28,7 @@ describe('SQL admin intake projections', () => {
     assert.equal(projected.sourceType, 'future_pharmacy_qr');
     assert.equal(projected.destinationLocked, false);
     assert.equal(projected.pharmacyActivated, false);
-    assert.equal(projected.displayStatus, 'Awaiting HHH referral');
+    assert.equal(projected.displayStatus, 'Awaiting referral decision');
   });
 
   it('includes selected conditions only in the authorised detail projection', () => {

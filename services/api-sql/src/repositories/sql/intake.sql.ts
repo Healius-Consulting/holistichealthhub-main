@@ -5,6 +5,7 @@ import { formConditionRecords, type FormConditionRecord } from '../../domain/eli
 import type {
   ActivateSubmissionInput,
   CreateSubmissionInput,
+  DeclinedSubmissionRecord,
   DeclineSubmissionInput,
   IdempotentSubmissionRecord,
   IntakeRepositoryPort,
@@ -168,6 +169,14 @@ const CREATE_SUBMISSION_GQL = `
     $dataSharingConsent: Boolean!
     $marketingConsent: Boolean!
     $privacyNoticeVersion: String!
+    $termsVersion: String
+    $referralConsentVersion: String
+    $dataSharingConsentVersion: String
+    $marketingConsentVersion: String
+    $submissionIpHash: String
+    $outcomeStatus: OutcomeStatus!
+    $declineRule: String
+    $declinedAt: Timestamp
   ) {
     eligibilitySubmission_insert(data: {
       sourceOrganisationId: $sourceOrganisationId
@@ -193,6 +202,14 @@ const CREATE_SUBMISSION_GQL = `
       dataSharingConsent: $dataSharingConsent
       marketingConsent: $marketingConsent
       privacyNoticeVersion: $privacyNoticeVersion
+      termsVersion: $termsVersion
+      referralConsentVersion: $referralConsentVersion
+      dataSharingConsentVersion: $dataSharingConsentVersion
+      marketingConsentVersion: $marketingConsentVersion
+      submissionIpHash: $submissionIpHash
+      outcomeStatus: $outcomeStatus
+      declineRule: $declineRule
+      declinedAt: $declinedAt
     })
   }
 `;
@@ -377,6 +394,46 @@ const ACTIVATE_SUBMISSION_GQL = `
   }
 `;
 
+const MARK_REVIEW_REQUESTED_GQL = `
+  mutation MarkSubmissionReviewRequested($id: UUID!, $note: String) {
+    updated: eligibilitySubmission_updateMany(
+      where: {
+        id: { eq: $id }
+        outcomeStatus: { eq: DECLINED }
+      }
+      data: {
+        reviewRequestedAt_expr: "request.time"
+        reviewRequestedNote: $note
+        updatedAt_expr: "request.time"
+      }
+    ) @check(expr: "this == 1", message: "INTAKE_STATE_CONFLICT") @redact
+  }
+`;
+
+const LIST_DECLINED_SUBMISSIONS_GQL = `
+  query ListDeclinedSubmissions($limit: Int!) {
+    eligibilitySubmissions(
+      where: { outcomeStatus: { eq: DECLINED } }
+      limit: $limit
+    ) {
+      id
+      submittedAt
+      sourceType
+      firstName
+      surname
+      dob
+      email
+      mobile
+      postcode
+      assignedOrganisationId
+      declineRule
+      declinedAt
+      reviewRequestedAt
+      reviewRequestedNote
+    }
+  }
+`;
+
 const UPSERT_PATIENT_CONDITION_GQL = `
   mutation UpsertPatientCondition(
     $patientId: UUID!
@@ -448,6 +505,27 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
       .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
   }
 
+  async markReviewRequested(id: string, note?: string | null): Promise<void> {
+    await dataConnect.executeGraphql(
+      MARK_REVIEW_REQUESTED_GQL,
+      { variables: { id: asUuid(id), note: note ?? null } },
+    );
+  }
+
+  async listDeclinedSubmissions(limit = 200): Promise<DeclinedSubmissionRecord[]> {
+    const result = await dataConnect.executeGraphql<{
+      eligibilitySubmissions: DeclinedSubmissionRecord[];
+    }, any>(LIST_DECLINED_SUBMISSIONS_GQL, { variables: { limit } });
+    return (result.data.eligibilitySubmissions ?? [])
+      // Review requests first, then newest: a waiting patient outranks a closed decline.
+      .sort((left, right) => {
+        if (Boolean(left.reviewRequestedAt) !== Boolean(right.reviewRequestedAt)) {
+          return left.reviewRequestedAt ? -1 : 1;
+        }
+        return right.submittedAt.localeCompare(left.submittedAt);
+      });
+  }
+
   async listPlatformSubmissions(limit = 500): Promise<PlatformSubmissionRecord[]> {
     const result = await dataConnect.executeGraphql<{
       eligibilitySubmissions: PlatformSubmissionRecord[];
@@ -497,6 +575,14 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
           dataSharingConsent: input.dataSharingConsent,
           marketingConsent: input.marketingConsent,
           privacyNoticeVersion: input.privacyNoticeVersion,
+          termsVersion: input.termsVersion ?? null,
+          referralConsentVersion: input.referralConsentVersion ?? null,
+          dataSharingConsentVersion: input.dataSharingConsentVersion ?? null,
+          marketingConsentVersion: input.marketingConsentVersion ?? null,
+          submissionIpHash: input.submissionIpHash ?? null,
+          outcomeStatus: input.outcomeStatus ?? 'OPEN',
+          declineRule: input.declineRule ?? null,
+          declinedAt: input.declinedAt ?? null,
         },
       }
     );

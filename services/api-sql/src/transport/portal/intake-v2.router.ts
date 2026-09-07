@@ -41,6 +41,10 @@ const pendingAssignmentSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
 }).strict();
 const followUpStatusSchema = z.enum(['not_started', 'due', 'attempted', 'in_progress', 'completed', 'unable_to_contact']);
+const reviewRequestSchema = z.object({
+  note: z.string().trim().max(2000).optional(),
+}).strict();
+
 const followUpSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   followUpStatus: followUpStatusSchema,
@@ -78,7 +82,7 @@ function page(records: PlatformSubmissionRecord[], request: Request) {
 
 function assertPending(record: PlatformSubmissionRecord) {
   if (record.pharmacyAccessStatus !== 'WITHHELD' || record.outcomeStatus !== 'OPEN') {
-    throw new HttpError(409, 'This intake has already left the protected HHH queue.', 'INTAKE_NOT_PENDING');
+    throw new HttpError(409, 'This application has already left the review queue.', 'INTAKE_NOT_PENDING');
   }
 }
 
@@ -111,6 +115,83 @@ export function createPortalIntakeV2Router(): Router {
       next(error);
     }
   };
+
+  /**
+   * Declined applications and the review requests against them. Terms 4.5 promises a
+   * real pharmacist reconsiders a decline, so the automatic outcome has to surface
+   * somewhere a pharmacist actually looks rather than only in the audit log.
+   */
+  router.get('/portal/admin/intake/declined', requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const declined = await intakeRepo.listDeclinedSubmissions();
+      await identityRepo.appendAudit({
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'eligibility.declined_queue_viewed',
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: 'admin',
+        details: {
+          resultCount: declined.length,
+          reviewRequestCount: declined.filter(record => record.reviewRequestedAt).length,
+        },
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json(declined.map(record => ({
+        id: record.id,
+        caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
+        patientDisplayName: `${record.firstName} ${record.surname}`.trim(),
+        dob: record.dob,
+        email: record.email,
+        mobile: record.mobile,
+        postcode: record.postcode,
+        submittedAt: record.submittedAt,
+        sourceType: portalSourceType(record.sourceType) ?? 'legacy_pharmacy_qr',
+        assignedOrganisationId: record.assignedOrganisationId,
+        declineRule: record.declineRule,
+        declinedAt: record.declinedAt,
+        reviewRequestedAt: record.reviewRequestedAt,
+        reviewRequestedNote: record.reviewRequestedNote,
+      })));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * Recorded by hand when a review request arrives at info@. The mailbox is not wired
+   * to the platform, so a human marks the record and the queue then shows it first.
+   */
+  router.post('/portal/admin/intake/:caseId/review-request', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const caseId = String(req.params.caseId);
+      const input = reviewRequestSchema.parse(req.body);
+      const record = await intakeRepo.findSubmissionById(caseId) as PlatformSubmissionRecord | null;
+      if (!record) throw new HttpError(404, 'Intake not found.', 'NOT_FOUND');
+      if (record.outcomeStatus !== 'DECLINED') {
+        throw new HttpError(409, 'Only a declined application can have a review request.', 'INTAKE_NOT_DECLINED');
+      }
+      await intakeRepo.markReviewRequested(caseId, input.note);
+      await identityRepo.appendAudit({
+        organisationId: record.assignedOrganisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'eligibility.review_requested',
+        recordType: 'EligibilitySubmission',
+        recordId: caseId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: 'admin',
+        details: { notePresent: Boolean(input.note) },
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ id: caseId, reviewRequested: true });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/portal/admin/intake/general', requireStaff('admin'), queue('general'));
   router.get('/portal/admin/intake/pharmacy-referrals', requireStaff('admin'), queue('pharmacy'));
@@ -321,7 +402,7 @@ export function createPortalIntakeV2Router(): Router {
         throw new HttpError(409, 'Choose and save a pharmacy before completing the referral.', 'DESTINATION_REQUIRED');
       }
       if (record.followUpStatus !== 'COMPLETED') {
-        throw new HttpError(409, 'Complete the HHH review before activating the pharmacy patient record.', 'FOLLOW_UP_REQUIRED');
+        throw new HttpError(409, 'Complete the pharmacy review before referring this application.', 'FOLLOW_UP_REQUIRED');
       }
       if (!record.referralConsent || !record.dataSharingConsent) {
         throw new HttpError(409, 'Required referral and data-sharing consent is not recorded.', 'CONSENT_REQUIRED');

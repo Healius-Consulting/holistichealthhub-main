@@ -136,12 +136,16 @@ export type V2IntakeInput = V2IntakeAnswers & (
   | { type: 'future_pharmacy_qr'; referralToken: string }
 );
 
+/** Which automatic screening rule declined an application, if any. */
+export type DeclineRule = 'TREATMENTS_NOT_TRIED' | 'PSYCHOSIS_HISTORY';
+
 export interface V2IntakeReceipt {
   caseReference: string;
   submittedAt: string;
   assignmentStatus: 'awaiting_hhh_allocation' | 'provisional';
   provisionalPharmacyName: string | null;
   warning: 'SELECTED_PHARMACY_UNAVAILABLE' | null;
+  declineRule: DeclineRule | null;
 }
 
 export interface V2EligibilityQueueItem {

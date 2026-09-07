@@ -3,20 +3,25 @@ import { z } from 'zod';
 import { SqlIntakeRepository } from '../../repositories/sql/intake.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { publicSubmissionLimiter } from '../../security/public-limits.js';
-import { sha256 } from '../../security/session-utils.js';
+import { ipHash, sha256 } from '../../security/session-utils.js';
 import { PRIVACY_NOTICE_VERSION } from '../../domain/legal/notice-version.js';
+import { isEligibleAge } from '../../domain/eligibility/age.js';
+import { automaticDeclineRule } from '../../domain/eligibility/screening.js';
+import { TERMS_VERSION } from '../../domain/legal/notice-version.js';
 
 const submissionInputSchema = z.object({
   firstName: z.string().min(1).max(100),
   surname: z.string().min(1).max(100),
-  dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => isEligibleAge(value), {
+    message: 'You must be 18 or over to apply.',
+  }),
   mobile: z.string().min(8).max(20),
   email: z.string().email(),
   postcode: z.string().min(3).max(12),
   conditions: z.array(z.string()).min(1),
   primaryCondition: z.string().min(1),
-  tried2: z.literal(true),
-  psychExclusion: z.literal(false),
+  tried2: z.boolean(),
+  psychExclusion: z.boolean(),
   consentReferral: z.literal(true),
   consentShare: z.literal(true),
   marketing: z.boolean().default(false),
@@ -36,6 +41,10 @@ export function createPublicEligibilityRouter(): Router {
   router.post('/public/eligibility-submissions', publicSubmissionLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = submissionInputSchema.parse(req.body);
+      const declineRule = automaticDeclineRule({
+        triedTwoTreatments: input.tried2,
+        psychiatricExclusion: input.psychExclusion,
+      });
       const emailHash = sha256(input.email.trim().toLowerCase());
       const idempotencyKeyHash = sha256(input.idempotencyKey);
 
@@ -82,6 +91,14 @@ export function createPublicEligibilityRouter(): Router {
         dataSharingConsent: input.consentShare,
         marketingConsent: input.marketing,
         privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
+        termsVersion: TERMS_VERSION,
+        referralConsentVersion: input.consentVersion,
+        dataSharingConsentVersion: input.consentVersion,
+        marketingConsentVersion: input.marketing ? input.consentVersion : null,
+        submissionIpHash: ipHash(req),
+        outcomeStatus: declineRule ? 'DECLINED' : 'OPEN',
+        declineRule,
+        declinedAt: declineRule ? new Date().toISOString() : null,
       });
       const submissionId = result.id
         ?? (await intakeRepo.findSubmissionByIdempotencyHash(idempotencyKeyHash))?.id;

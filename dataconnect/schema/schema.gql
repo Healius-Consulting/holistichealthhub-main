@@ -534,7 +534,26 @@ type EligibilitySubmission @table {
   referralConsent: Boolean!
   dataSharingConsent: Boolean!
   marketingConsent: Boolean! @default(value: false)
+  """
+  The version of each consent statement as it was worded when this patient ticked it.
+  All three move together today, but marketing wording changes on its own timetable
+  under PECR, and re-consenting for that must not invalidate the referral consent.
+  """
+  referralConsentVersion: String
+  dataSharingConsentVersion: String
+  marketingConsentVersion: String
   privacyNoticeVersion: String!
+  termsVersion: String
+  submissionIpHash: String
+  """
+  Which automatic screening rule declined this application, if any, so the decision
+  can be explained to the patient and audited. TREATMENTS_NOT_TRIED or PSYCHOSIS_HISTORY.
+  """
+  declineRule: String
+  declinedAt: Timestamp
+  """ Set when the patient emails info@ asking a pharmacist to reconsider a decline. """
+  reviewRequestedAt: Timestamp
+  reviewRequestedNote: String
   submittedAt: Timestamp! @default(expr: "request.time")
   allocationCompletedAt: Timestamp
   operationalStartedAt: Timestamp

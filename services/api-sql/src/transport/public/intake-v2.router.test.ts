@@ -73,30 +73,27 @@ describe('public SQL intake v2 validation', () => {
     assert.equal(parsed.success, true);
   });
 
-  it('rejects a clinical screening bypass', () => {
-    assert.equal(fixedPharmacyIntakeSchema.safeParse({ ...validInput(), tried2: false }).success, false);
-    assert.equal(fixedPharmacyIntakeSchema.safeParse({ ...validInput(), psychExclusion: true }).success, false);
-    assert.equal(intakeSchema.safeParse({
-      type: 'general_hhh_website',
-      searchId: '11111111-1111-4111-8111-111111111111',
-      selectedDirectoryProfileId: null,
-      firstName: 'Test',
-      surname: 'Applicant',
-      dob: '1990-01-01',
-      mobile: '07000000000',
-      email: 'test@example.test',
-      postcode: 'SW1A 1AA',
-      conditions: ['chronic-pain'],
-      primaryCondition: 'chronic-pain',
-      tried2: false,
-      psychExclusion: false,
-      consentReferral: true,
-      consentShare: true,
-      marketing: false,
-      heardAbout: 'Website',
-      consentVersion: 'general-public-v2.1',
-      idempotencyKey: '11111111-1111-4111-8111-111111111111',
-    }).success, false);
+  it('accepts a screening answer that fails the criteria, so the decline can be recorded', () => {
+    // The clinic's criteria are applied after the record is written, not by refusing it:
+    // a patient cannot be told why they were declined, or ask a pharmacist to reconsider,
+    // against an application that was never stored.
+    assert.equal(fixedPharmacyIntakeSchema.safeParse({ ...validInput(), tried2: false }).success, true);
+    assert.equal(fixedPharmacyIntakeSchema.safeParse({ ...validInput(), psychExclusion: true }).success, true);
+  });
+
+  it('still refuses an application from someone under 18', () => {
+    const under18 = new Date();
+    under18.setUTCFullYear(under18.getUTCFullYear() - 17);
+    assert.equal(
+      fixedPharmacyIntakeSchema.safeParse({ ...validInput(), dob: under18.toISOString().slice(0, 10) }).success,
+      false,
+    );
+  });
+
+  it('requires an answer to where the patient heard about the service', () => {
+    assert.equal(fixedPharmacyIntakeSchema.safeParse({ ...validInput(), heardAbout: '' }).success, false);
+    const { heardAbout: _omitted, ...withoutHeardAbout } = validInput();
+    assert.equal(fixedPharmacyIntakeSchema.safeParse(withoutHeardAbout).success, false);
   });
 
   it('creates a stable, non-PII case reference', () => {

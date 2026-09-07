@@ -23,6 +23,14 @@ export interface CreateSubmissionInput {
   dataSharingConsent: boolean;
   marketingConsent: boolean;
   privacyNoticeVersion: string;
+  termsVersion?: string | null;
+  referralConsentVersion?: string | null;
+  dataSharingConsentVersion?: string | null;
+  marketingConsentVersion?: string | null;
+  submissionIpHash?: string | null;
+  outcomeStatus?: 'OPEN' | 'DECLINED';
+  declineRule?: string | null;
+  declinedAt?: string | null;
 }
 
 export interface SubmissionQueueItem {
@@ -39,6 +47,23 @@ export interface SubmissionQueueItem {
   followUpStatus: string;
   submittedAt: string;
   updatedAt: string;
+}
+
+export interface DeclinedSubmissionRecord {
+  id: string;
+  submittedAt: string;
+  sourceType: 'GENERAL_HHH_WEBSITE' | 'PHARMACY_QR' | 'LEGACY_PHARMACY_QR';
+  firstName: string;
+  surname: string;
+  dob: string;
+  email: string;
+  mobile: string;
+  postcode: string;
+  assignedOrganisationId: string | null;
+  declineRule: string | null;
+  declinedAt: string | null;
+  reviewRequestedAt: string | null;
+  reviewRequestedNote: string | null;
 }
 
 export interface TenantPendingEnquiryRecord {
@@ -145,6 +170,8 @@ export interface IntakeRepositoryPort {
   saveSubmissionConditions(submissionId: string, conditionCodes: string[], primaryConditionCode: string): Promise<void>;
   listTenantPendingEnquiries(organisationId: string, limit?: number): Promise<TenantPendingEnquiryRecord[]>;
   listPlatformSubmissions(limit?: number): Promise<PlatformSubmissionRecord[]>;
+  listDeclinedSubmissions(limit?: number): Promise<DeclinedSubmissionRecord[]>;
+  markReviewRequested(id: string, note?: string | null): Promise<void>;
   listSubmissionConditions(submissionId: string): Promise<SubmissionConditionRecord[]>;
   reassignPendingSubmission(input: ReassignSubmissionInput): Promise<void>;
   updateSubmissionFollowUp(input: UpdateSubmissionFollowUpInput): Promise<void>;
