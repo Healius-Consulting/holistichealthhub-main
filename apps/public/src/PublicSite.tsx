@@ -1486,6 +1486,12 @@ function PrivacyPage() {
           </ul>
           <p>We do not sell your information and do not share it with anyone for their own marketing.</p>
 
+          {/*
+            Regions verified 7 September 2026: Vercel lhr1 and Cloud SQL europe-west2 from
+            repo config, and the storage bucket via `gcloud storage buckets describe
+            gs://hhh26-4ebd2.firebasestorage.app` (EUROPE-WEST2, regional). Re-verify before
+            republishing — this paragraph is a legal claim, not a deployment note.
+          */}
           <h2>5. International transfers</h2>
           <p>Your information is stored in the United Kingdom, with Google Cloud in London (europe-west2) and Vercel in London (lhr1). The only transfer outside the UK is the reCAPTCHA security check, which sends technical data (not your application) to Google LLC in the United States under [TO CONFIRM — the UK Extension to the EU-US Data Privacy Framework / Google’s standard contractual clauses with the UK Addendum]. This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</p>
 
