@@ -1481,7 +1481,7 @@ function PrivacyPage() {
             <li><strong>Another partner pharmacy:</strong> only if we cannot take you on and you agree to the transfer.</li>
             <li><strong>Our medicines supplier:</strong> we send it a copy of your prescription through HHH’s software so it can supply your medicine. The supplier is named in your pharmacy’s own privacy notice.</li>
             <li><strong>Our delivery courier, if we deliver to you:</strong> your name, address, phone number and the parcel reference — never what the medicine is. The courier is named in your pharmacy’s own privacy notice.</li>
-            <li><strong>HHH’s service providers, acting on instructions:</strong> hosting with Google Cloud (London, europe-west2) and Vercel (London, lhr1); email and SMS delivery [TO CONFIRM — provider not yet appointed]; Worldpay (payment links issued to you on our behalf — Worldpay handles card data; neither we nor HHH see it); Google (reCAPTCHA security check on every page).</li>
+            <li><strong>HHH’s service providers, acting on instructions:</strong> hosting with Google Cloud (London, europe-west2) and Vercel (London, lhr1); email delivery (Resend); Worldpay (payment links issued to you on our behalf — Worldpay handles card data; neither we nor HHH see it); Google (reCAPTCHA security check on every page).</li>
             <li><strong>Professional advisers, insurers, regulators, courts</strong> where required by law or to protect our legal position.</li>
           </ul>
           <p>We do not sell your information and do not share it with anyone for their own marketing.</p>
@@ -1558,21 +1558,15 @@ function CostsPage() {
             <p>The eligibility check and the referral itself are free. Consultations are charged by the clinic, and medicine is charged separately by your pharmacy when you order it.</p>
           </div>
 
+          {/*
+            Interim wording. The fee table is held back until Curaleaf Clinic's current
+            prices are confirmed — an empty or placeholder table on a live costs page is
+            worse than none. When the figures arrive, restore the table here and add the
+            "correct at" date; Terms 6.2 points patients at this page for them.
+          */}
           <h2>Clinic consultation fees</h2>
-          <p>These fees are set and charged by Curaleaf Clinic, not by your pharmacy or by Holistic Health Hub. You will be told the fees that apply to you before you book.</p>
-          <div className="hhh-legal-table">
-            <table>
-              <thead>
-                <tr><th>Appointment</th><th>Fee</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>Initial specialist consultation</td><td>[TO CONFIRM — fee]</td></tr>
-                <tr><td>Follow-up consultation</td><td>[TO CONFIRM — fee]</td></tr>
-                <tr><td>Annual review</td><td>[TO CONFIRM — fee]</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p className="hhh-legal-note">Clinic fees correct at [TO CONFIRM — date].</p>
+          <p>Consultation fees are set and charged by Curaleaf Clinic, not by your pharmacy or by Holistic Health Hub. The clinic confirms the fees that apply to you before you book anything, and you are never charged for a consultation without being told the price first.</p>
+          <p>Current clinic fees will be published on this page. In the meantime, your pharmacy can tell you what the clinic charges — contact it using the details shown when you selected it, or ask when a pharmacist first gets in touch about your application.</p>
 
           <h2>Medicine</h2>
           <p>Medicine is private and is charged separately by your pharmacy when you order it. The price depends on what the specialist prescribes and the quantity. Your pharmacy tells you the price of any medicine, and any delivery charge, before you pay.</p>
