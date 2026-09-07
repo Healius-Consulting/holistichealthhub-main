@@ -127,7 +127,7 @@ export interface V2IntakeAnswers {
   consentShare: true;
   marketing: boolean;
   heardAbout: string;
-  consentVersion: 'general-public-v2.0' | 'pharmacy-qr-v2.0' | 'general-public-v2.1' | 'pharmacy-qr-v2.1';
+  consentVersion: 'general-public-v2.0' | 'pharmacy-qr-v2.0' | 'general-public-v2.1' | 'pharmacy-qr-v2.1' | 'general-public-v2.2' | 'pharmacy-qr-v2.2';
   idempotencyKey: string;
 }
 

@@ -4,6 +4,7 @@ import { SqlIntakeRepository } from '../../repositories/sql/intake.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { publicSubmissionLimiter } from '../../security/public-limits.js';
 import { sha256 } from '../../security/session-utils.js';
+import { PRIVACY_NOTICE_VERSION } from '../../domain/legal/notice-version.js';
 
 const submissionInputSchema = z.object({
   firstName: z.string().min(1).max(100),
@@ -80,7 +81,7 @@ export function createPublicEligibilityRouter(): Router {
         referralConsent: input.consentReferral,
         dataSharingConsent: input.consentShare,
         marketingConsent: input.marketing,
-        privacyNoticeVersion: '2026-v2',
+        privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
       });
       const submissionId = result.id
         ?? (await intakeRepo.findSubmissionByIdempotencyHash(idempotencyKeyHash))?.id;

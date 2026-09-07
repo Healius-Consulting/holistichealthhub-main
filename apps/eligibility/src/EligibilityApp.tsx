@@ -26,6 +26,17 @@ const HHH_PUBLIC_IDENTITY: PublicPharmacy = {
 };
 const PUBLIC_HOME_HREF = '/';
 const PUBLIC_SITE_HREF = 'https://holistichealthhub.live';
+const TERMS_HREF = '/terms';
+const PRIVACY_HREF = '/privacy';
+
+/**
+ * The pharmacy is the controller for the referral service, so patient-facing copy
+ * names it rather than HHH. A token form knows the pharmacy from the start; the
+ * master site cannot name one until the patient picks, so it says "your pharmacy".
+ */
+function LegalLink({ href, children }: { href: string; children: ReactNode }) {
+  return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+}
 
 function EligibilityBrand({
   identity,
@@ -71,6 +82,17 @@ function EligibilityBrand({
 
 function directoryContactLine(result: PublicDirectoryResult) {
   return [result.website, result.publicPhone].filter(value => value?.trim()).join(' · ');
+}
+
+/**
+ * Terms 3.1 tells patients to choose a pharmacy they can collect from or that
+ * delivers to them, so the picker has to show each one's option before they pick.
+ */
+function directoryFulfilmentLine(result: PublicDirectoryResult) {
+  const options: string[] = [];
+  if (result.collectionAvailable) options.push('Collection');
+  if (result.deliveryCapability !== 'none') options.push(result.deliverySummary?.trim() || 'Delivery available');
+  return options.join(' · ');
 }
 
 function EligibilityShell({
@@ -193,6 +215,7 @@ export default function EligibilityApp() {
       return;
     }
     setSubmitting(true); setError('');
+    const consentVersion = token ? 'pharmacy-qr-v2.2' as const : 'general-public-v2.2' as const;
     const data = new FormData(event.currentTarget);
     const input: EligibilitySubmissionInput = {
       referralToken: token,
@@ -205,7 +228,7 @@ export default function EligibilityApp() {
     };
     try {
       if (!isLocalPreview) {
-        if (intakeVersion === 'v1') await createEligibilitySubmission(input);
+        if (intakeVersion === 'v1') await createEligibilitySubmission({ ...input, heardAbout: input.source, consentVersion });
         else setReceipt(await createV2Intake({
           ...(token
             ? { type: 'future_pharmacy_qr' as const, referralToken: token }
@@ -214,7 +237,7 @@ export default function EligibilityApp() {
           postcode: input.postcode, conditions: input.conditions, primaryCondition: input.primaryCondition,
           tried2: input.tried2, psychExclusion: input.psychExclusion, consentReferral: true, consentShare: true,
           marketing: input.marketing, heardAbout: input.source,
-          consentVersion: token ? 'pharmacy-qr-v2.1' : 'general-public-v2.1', idempotencyKey: idempotencyKey.current,
+          consentVersion, idempotencyKey: idempotencyKey.current,
         }));
       }
       setEligible(input.tried2 && !input.psychExclusion);
@@ -242,8 +265,12 @@ export default function EligibilityApp() {
   if (!pharmacy) return null;
 
   const brandIdentity = token ? pharmacy : HHH_PUBLIC_IDENTITY;
+  // "[Pharmacy]" in the approved copy: the trading name on a token form, and a
+  // generic reference on the master site, where the choice is made in section 01.
+  const pharmacyRef = token ? pharmacy.tradingName : 'your pharmacy';
+  const consentPharmacyRef = token ? pharmacy.tradingName : 'my pharmacy';
 
-  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>{intakeVersion === 'v1' ? eligible ? 'Thank you — your pharmacy will be in touch' : 'Thank you — your answers need a clinical review' : 'Thank you — HHH will be in touch'}</h1><p>{receipt ? token ? `HHH received your application for ${pharmacy.tradingName}. HHH will review it and contact you before referring it to that pharmacy; the dedicated destination will not change.` : `${receipt.provisionalPharmacyName ? `${receipt.provisionalPharmacyName} has been recorded as your preference. ` : ''}Your application remains with HHH while the team reviews it and contacts you. Nothing is sent to a pharmacy until HHH completes the referral.` : `Your enquiry has been securely linked to ${pharmacy.name}.`} This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>Thank you — your application has gone to {pharmacy.tradingName}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="btn btn-primary eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
 
   return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
     <EligibilityBrand identity={brandIdentity} token={token} />
@@ -251,14 +278,14 @@ export default function EligibilityApp() {
       <aside className="eligibility-intro">
         <p className="section-label">Private pre-screening · about 2 minutes</p>
         <h1>Could specialist care be right for you?</h1>
-        <p className="eligibility-intro__lead">Answer a few confidential questions so HHH can review whether a referral may be appropriate.</p>
-        <div className="eligibility-trust"><span><ShieldCheck size={17} /> {token ? 'Dedicated pharmacy destination protected' : 'Reviewed by HHH before referral'}</span><span><LockKeyhole size={17} /> Health information handled securely</span></div>
+        <p className="eligibility-intro__lead">Answer a few confidential questions so {pharmacyRef} can review whether a referral may be appropriate.</p>
+        <div className="eligibility-trust"><span><ShieldCheck size={17} /> {token ? `Your details go to ${pharmacy.tradingName} only` : 'Your details go to the pharmacy you choose'}</span><span><LockKeyhole size={17} /> Health information handled securely</span></div>
         <div className="eligibility-next-steps">
           <p>What happens next</p>
           <ol>
             <li><span>1</span><div><strong>Complete this check</strong><small>Tell us about you and the support you need.</small></div></li>
-            <li><span>2</span><div><strong>HHH review and call</strong><small>Your application stays with HHH while the team completes its checks.</small></div></li>
-            <li><span>3</span><div><strong>Referral to pharmacy</strong><small>After HHH completes the referral, the confirmed pharmacy can support your next steps.</small></div></li>
+            <li><span>2</span><div><strong>Pharmacy review</strong><small>A registered pharmacist or technician reviews your application and may call, email or text you within 3 working days.</small></div></li>
+            <li><span>3</span><div><strong>Referral to the clinic</strong><small>If suitable, {pharmacyRef} refers you to its partner clinic. The clinic decides whether to see you.</small></div></li>
           </ol>
         </div>
         <p className="eligibility-intro__note"><HeartPulse size={16} /> This check is not a diagnosis and does not guarantee a consultation or prescription.</p>
@@ -266,7 +293,7 @@ export default function EligibilityApp() {
       <form className="eligibility-card eligibility-form" onSubmit={submit}>
         <header className="eligibility-form-header"><span><ClipboardCheck size={17} /> Eligibility check</span><h2>Tell us a little about yourself</h2><p>Fields marked with an asterisk are required.</p></header>
         {!token && <section className="eligibility-form-section eligibility-location-section" aria-labelledby="eligibility-location">
-          <div className="eligibility-section-heading"><span>01</span><div><h3 id="eligibility-location">Choose your preferred pharmacy</h3><p>Search by postcode, then select a pin or a pharmacy from the list. HHH will confirm the final referral with you.</p></div></div>
+          <div className="eligibility-section-heading"><span>01</span><div><h3 id="eligibility-location">Choose your pharmacy</h3><p>Choose the pharmacy you are applying to. Nothing is shared with any other pharmacy unless you agree.</p></div></div>
           <div className="eligibility-location-search">
             <label htmlFor="eligibility-postcode-search">UK postcode <em>*</em><input id="eligibility-postcode-search" className="input" name="postcode" value={searchPostcode} onChange={event => {
               const next = event.target.value;
@@ -297,6 +324,7 @@ export default function EligibilityApp() {
             <div className="eligibility-directory-results" role="group" aria-label="Choose a pharmacy">
               {search.results.map((result, index) => {
                 const contact = directoryContactLine(result);
+                const fulfilment = directoryFulfilmentLine(result);
                 return (
                   <button type="button" aria-pressed={selectedDirectoryProfileId === result.id} className={selectedDirectoryProfileId === result.id ? 'is-selected' : ''} key={result.id} onClick={() => choosePharmacy(result)}>
                     <span className="eligibility-directory-number" aria-hidden="true">{index + 1}</span>
@@ -304,6 +332,7 @@ export default function EligibilityApp() {
                       <strong>{publicDirectoryPharmacyName(result)}</strong>
                       <small>{result.addressSummary}</small>
                       {contact ? <small className="eligibility-directory-contact">{contact}</small> : null}
+                      {fulfilment ? <small className="eligibility-directory-fulfilment">{fulfilment}</small> : null}
                       <small>{result.approximateMiles.toFixed(1)} miles away</small>
                     </span>
                     <span><strong>{selectedDirectoryProfileId === result.id ? 'Selected' : 'Choose'}</strong></span>
@@ -311,7 +340,7 @@ export default function EligibilityApp() {
                 );
               })}
             </div>
-            {selectedDirectoryProfileId ? <div className="banner banner-green" role="status"><CheckCircle2 size={17} /> {pharmacy.tradingName} recorded as your preference. Your application stays with HHH until the referral is completed.</div> : <div className="eligibility-location-required" role="status"><MapPin size={17} /><span><strong>Select one pharmacy to continue</strong><small>You can use a pin or the list. The form cannot be submitted until you choose.</small></span></div>}
+            {selectedDirectoryProfileId ? <div className="banner banner-green" role="status"><CheckCircle2 size={17} /> You are applying to {pharmacy.tradingName}. Nothing is shared with any other pharmacy unless you agree.</div> : <div className="eligibility-location-required" role="status"><MapPin size={17} /><span><strong>Select one pharmacy to continue</strong><small>You can use a pin or the list. The form cannot be submitted until you choose.</small></span></div>}
           </div> : search ? <div className="eligibility-location-manual" aria-live="polite">
             <div className="banner banner-amber"><AlertTriangle size={17} /><span>{search.status === 'provider_unavailable' ? 'The postcode service is temporarily unavailable.' : search.status === 'not_found' ? 'We could not find that postcode.' : 'No participating pharmacy is currently available nearby.'} You can still send the form to {HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL}.</span></div>
             <div className={`eligibility-hhh-allocation${manualProceed ? ' is-selected' : ''}`}>
@@ -322,7 +351,7 @@ export default function EligibilityApp() {
           </div> : <div className="eligibility-location-required" role="status"><Search size={17} /><span><strong>Search before submitting</strong><small>Your remaining form fields are available below, but a pharmacy choice is required before submission.</small></span></div>}
         </section>}
         <section className="eligibility-form-section" aria-labelledby="eligibility-about-you">
-          <div className="eligibility-section-heading"><span>{token ? '01' : '02'}</span><div><h3 id="eligibility-about-you">About you</h3><p>Your details help the HHH team contact the right person and complete your referral review.</p></div></div>
+          <div className="eligibility-section-heading"><span>{token ? '01' : '02'}</span><div><h3 id="eligibility-about-you">About you</h3><p>Your details let {pharmacyRef} contact you about your application.</p></div></div>
           <div className="eligibility-form-grid"><label>First name <em>*</em><input className="input" name="firstName" required autoComplete="given-name" /></label><label>Surname <em>*</em><input className="input" name="surname" required autoComplete="family-name" /></label><label>Date of birth <em>*</em><input className="input" name="dob" type="date" required /></label>{token && <label>Postcode <em>*</em><input className="input" name="postcode" required autoComplete="postal-code" /></label>}<label>Email <em>*</em><input className="input" name="email" type="email" required autoComplete="email" /></label><label>Mobile number <em>*</em><input className="input" name="mobile" type="tel" required autoComplete="tel" /></label></div>
         </section>
         <section className="eligibility-form-section" aria-labelledby="eligibility-health-needs">
@@ -346,16 +375,17 @@ export default function EligibilityApp() {
           </fieldset>
           <label>Primary condition <em>*</em><select className="input select" value={primaryCondition} disabled={selectedConditions.length === 0} required onChange={event => { setPrimaryCondition(event.target.value); setConditionError(''); }}><option value="">Select the main condition</option>{selectedConditions.map(conditionId => <option key={conditionId} value={conditionId}>{conditionLabel(conditionId)}</option>)}</select></label>
           <fieldset><legend>Have you tried at least two licensed treatments or therapies? <em>*</em></legend><div className="eligibility-choice"><label><input type="radio" name="tried2" value="yes" required checked={treatmentHistory === 'yes'} onChange={() => setTreatmentHistory('yes')} /><span><strong>Yes</strong><small>I have tried two or more</small></span></label><label><input type="radio" name="tried2" value="no" checked={treatmentHistory === 'no'} onChange={() => setTreatmentHistory('no')} /><span><strong>No</strong><small>Not yet or I am unsure</small></span></label></div>{treatmentHistory === 'no' && <div className="eligibility-screening-stop" role="alert"><AlertTriangle size={18} /><div><strong>You are not eligible to submit this check yet</strong><p>At least two licensed treatments or therapies must have been tried before a referral can be considered. If you are unsure what counts, please contact the pharmacy.</p></div></div>}</fieldset>
-          <fieldset><legend>Have you or an immediate family member been diagnosed with psychosis or schizophrenia? <em>*</em></legend><div className="eligibility-choice"><label><input type="radio" name="psychExclusion" value="yes" required checked={psychHistory === 'yes'} onChange={() => setPsychHistory('yes')} /><span><strong>Yes</strong><small>This applies to me or family</small></span></label><label><input type="radio" name="psychExclusion" value="no" checked={psychHistory === 'no'} onChange={() => setPsychHistory('no')} /><span><strong>No</strong><small>This does not apply</small></span></label></div>{psychHistory === 'yes' && <div className="eligibility-screening-stop" role="alert"><AlertTriangle size={18} /><div><strong>You are not eligible to submit this check</strong><p>A diagnosis of psychosis or schizophrenia in you or an immediate family member means a referral cannot be considered through this form. Please speak to the pharmacy or your GP about other options.</p></div></div>}</fieldset>
+          <fieldset><legend>Have you or an immediate family member been diagnosed with psychosis or schizophrenia? <em>*</em></legend><p className="eligibility-field-help">We record only your answer, not who the family member is.</p><div className="eligibility-choice"><label><input type="radio" name="psychExclusion" value="yes" required checked={psychHistory === 'yes'} onChange={() => setPsychHistory('yes')} /><span><strong>Yes</strong><small>This applies to me or family</small></span></label><label><input type="radio" name="psychExclusion" value="no" checked={psychHistory === 'no'} onChange={() => setPsychHistory('no')} /><span><strong>No</strong><small>This does not apply</small></span></label></div>{psychHistory === 'yes' && <div className="eligibility-screening-stop" role="alert"><AlertTriangle size={18} /><div><strong>You are not eligible to submit this check</strong><p>A diagnosis of psychosis or schizophrenia in you or an immediate family member means a referral cannot be considered through this form. Please speak to the pharmacy or your GP about other options.</p></div></div>}</fieldset>
         </section>
         <section className="eligibility-form-section eligibility-form-section--consent" aria-labelledby="eligibility-consent">
-          <div className="eligibility-section-heading"><span>{token ? '03' : '04'}</span><div><h3 id="eligibility-consent">Consent and referral</h3><p>Review how your information will be used.</p></div></div>
-          <label>Where did you hear about this service?<select className="input select" name="source"><option>Poster</option><option>Text</option><option>Leaflet</option><option>Website</option><option>Google</option><option>TV ad</option></select></label>
-          <div className="eligibility-consents"><label><input type="checkbox" name="consentReferral" required /><span>{intakeVersion === 'v1' ? 'I understand the consultation and medicine may involve costs, and I want the pharmacy to consider me for referral.' : 'I understand the consultation and medicine may involve costs, and I want this application considered for referral.'} <em>*</em></span></label><label><input type="checkbox" name="consentShare" required /><span>{intakeVersion === 'v1' ? `I explicitly consent to my health information being collected and shared with ${pharmacy.tradingName} and relevant specialist healthcare services for this enquiry.` : token ? `I explicitly consent to HHH reviewing this information and, only after HHH completes its referral review, sharing it with ${pharmacy.tradingName}. This dedicated pharmacy destination will not be changed.` : `I explicitly consent to HHH reviewing this information. ${selectedDirectoryProfileId ? pharmacy.tradingName : 'The pharmacy I select'} is a preference only, and HHH will share my application with a pharmacy only after completing its referral review and confirming the destination with me.`} <em>*</em></span></label><label className="eligibility-consent--optional"><input type="checkbox" name="marketing" /><span>I would like to receive optional service news and offers. I can withdraw this consent at any time. <small>Optional</small></span></label></div>
+          <div className="eligibility-section-heading"><span>{token ? '03' : '04'}</span><div><h3 id="eligibility-consent">Consent and referral</h3><p>Please read the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> and <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>, then confirm:</p></div></div>
+          <label>Where did you hear about this service? <em>*</em><select className="input select" name="source" defaultValue="" required><option value="" disabled>Please select an option</option><option>Poster</option><option>Text</option><option>Leaflet</option><option>Website</option><option>Google</option><option>TV ad</option></select></label>
+          <div className="eligibility-consents"><label><input type="checkbox" name="consentReferral" required /><span>I am 18 or over, this application is about me and is accurate, and I accept the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink>. <em>*</em></span></label><label><input type="checkbox" name="consentShare" required /><span>I consent to {consentPharmacyRef} and Holistic Health Hub using my health information — including my GP record and automatic screening of my answers — to assess me for referral, as set out in the <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>. <em>*</em></span></label><label className="eligibility-consent--optional"><input type="checkbox" name="marketing" /><span>Email and text me news about this service from {pharmacyRef} and Holistic Health Hub. Unsubscribe any time. <small>Optional</small></span></label></div>
+          <p className="eligibility-consent-withdraw">You can withdraw at any time before referral by contacting {pharmacyRef}.</p>
         </section>
         {error && <div className="banner banner-red"><AlertTriangle size={16} /> {error}</div>}
-        <footer className="eligibility-form-footer"><button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || treatmentHistory === 'no' || psychHistory === 'yes' || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : treatmentHistory === 'no' || psychHistory === 'yes' ? 'Not eligible to submit' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{treatmentHistory === 'no' ? <><AlertTriangle size={13} /> Submission is unavailable based on your treatment history.</> : psychHistory === 'yes' ? <><AlertTriangle size={13} /> Submission is unavailable based on your answer about psychosis or schizophrenia.</> : !token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> {intakeVersion === 'v1' ? `Your answers are sent securely to ${pharmacy.tradingName}.` : 'Your answers are sent securely to HHH first. A pharmacy receives them only after HHH completes the referral.'}</>}</p></footer>
-        <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : 'HHH is a platform of Healius Consulting. The approved live privacy notice must identify the verified legal entity and explain the pharmacy and platform operator’s data-protection roles before patient information is accepted.'}</p>
+        <footer className="eligibility-form-footer"><button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || treatmentHistory === 'no' || psychHistory === 'yes' || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : treatmentHistory === 'no' || psychHistory === 'yes' ? 'Not eligible to submit' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{treatmentHistory === 'no' ? <><AlertTriangle size={13} /> Submission is unavailable based on your treatment history.</> : psychHistory === 'yes' ? <><AlertTriangle size={13} /> Submission is unavailable based on your answer about psychosis or schizophrenia.</> : !token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>
+        <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : <>This service is provided by {token ? pharmacy.tradingName : 'the partner pharmacy you select'}. Website operated by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX · ICO ZB639206 · <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> · <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink> · Protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</>}</p>
       </form>
     </div>
   </EligibilityShell>;

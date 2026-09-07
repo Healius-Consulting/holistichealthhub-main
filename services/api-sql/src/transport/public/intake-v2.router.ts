@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { ELIGIBILITY_CONDITION_IDS } from '../../domain/eligibility/conditions.js';
 import { HttpError } from '../../domain/common/errors.js';
+import { PRIVACY_NOTICE_VERSION } from '../../domain/legal/notice-version.js';
 import { asUuid, uuidKey } from '../../domain/common/uuid.js';
 import { normaliseUkPostcode } from '../../domain/geography/postcode.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
@@ -37,14 +38,14 @@ const answersSchema = z.object({
   consentShare: z.literal(true),
   marketing: z.boolean().default(false),
   heardAbout: z.string().trim().max(100).default(''),
-  consentVersion: z.enum(['general-public-v2.0', 'pharmacy-qr-v2.0', 'general-public-v2.1', 'pharmacy-qr-v2.1']),
+  consentVersion: z.enum(['general-public-v2.0', 'pharmacy-qr-v2.0', 'general-public-v2.1', 'pharmacy-qr-v2.1', 'general-public-v2.2', 'pharmacy-qr-v2.2']),
   idempotencyKey: z.string().uuid(),
 });
 
 export const fixedPharmacyIntakeSchema = answersSchema.extend({
   type: z.literal('future_pharmacy_qr'),
   referralToken: referralTokenSchema,
-  consentVersion: z.enum(['pharmacy-qr-v2.0', 'pharmacy-qr-v2.1']),
+  consentVersion: z.enum(['pharmacy-qr-v2.0', 'pharmacy-qr-v2.1', 'pharmacy-qr-v2.2']),
 }).strict().refine(input => new Set(input.conditions).size === input.conditions.length, {
   path: ['conditions'],
   message: 'Conditions must be unique.',
@@ -57,7 +58,7 @@ export const generalWebsiteIntakeSchema = answersSchema.extend({
   type: z.literal('general_hhh_website'),
   searchId: opaqueIdSchema,
   selectedDirectoryProfileId: opaqueIdSchema.nullable(),
-  consentVersion: z.enum(['general-public-v2.0', 'general-public-v2.1']),
+  consentVersion: z.enum(['general-public-v2.0', 'general-public-v2.1', 'general-public-v2.2']),
 }).strict().refine(input => new Set(input.conditions).size === input.conditions.length, {
   path: ['conditions'],
   message: 'Conditions must be unique.',
@@ -77,8 +78,8 @@ export const intakeSchema = z.discriminatedUnion('type', [
   message: 'Conditions must be unique.',
 }).refine(input => (
   input.type === 'general_hhh_website'
-    ? input.consentVersion === 'general-public-v2.1' || input.consentVersion === 'general-public-v2.0'
-    : input.consentVersion === 'pharmacy-qr-v2.1' || input.consentVersion === 'pharmacy-qr-v2.0'
+    ? input.consentVersion.startsWith('general-public-')
+    : input.consentVersion.startsWith('pharmacy-qr-')
 ), {
   path: ['consentVersion'],
   message: 'Consent version does not match intake source.',
@@ -122,7 +123,7 @@ function answersPayload(input: z.infer<typeof intakeSchema>, assignment: {
     referralConsent: input.consentReferral,
     dataSharingConsent: input.consentShare,
     marketingConsent: input.marketing,
-    privacyNoticeVersion: '2026-v2.1',
+    privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
   };
 }
 

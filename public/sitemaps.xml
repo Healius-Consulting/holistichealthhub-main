@@ -61,15 +61,21 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://holistichealthhub.live/privacy</loc>
-    <lastmod>2026-08-19T00:00:00+00:00</lastmod>
+    <loc>https://holistichealthhub.live/terms</loc>
+    <lastmod>2026-09-07T00:00:00+00:00</lastmod>
     <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://holistichealthhub.live/consent</loc>
-    <lastmod>2026-08-19T00:00:00+00:00</lastmod>
+    <loc>https://holistichealthhub.live/privacy</loc>
+    <lastmod>2026-09-07T00:00:00+00:00</lastmod>
     <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://holistichealthhub.live/costs</loc>
+    <lastmod>2026-09-07T00:00:00+00:00</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
   </url>
 </urlset>

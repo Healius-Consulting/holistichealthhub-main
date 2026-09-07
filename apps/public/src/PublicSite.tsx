@@ -148,7 +148,7 @@ function SiteFooter() {
             <span>ICO Registered ZB639206</span>
             <span>UK Medical Cannabis (CBPM)</span>
           </div>
-          <small>© {new Date().getFullYear()} Holistic Health Hub. A Healius Consulting service.</small>
+          <small>© {new Date().getFullYear()} Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX.</small>
         </div>
         <div>
           <strong>Care Journey</strong>
@@ -165,8 +165,9 @@ function SiteFooter() {
         </div>
         <div>
           <strong>Legal &amp; Trust</strong>
-          <PublicLink href="/privacy">Privacy policy</PublicLink>
-          <PublicLink href="/consent">Consent &amp; terms</PublicLink>
+          <PublicLink href="/terms">Terms of Use</PublicLink>
+          <PublicLink href="/privacy">Privacy Notice</PublicLink>
+          <PublicLink href="/costs">Costs</PublicLink>
           <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>
           <div className="hhh-social" aria-label="Social links">
             <a href="https://www.instagram.com/holistichealthhub1" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
@@ -1330,105 +1331,254 @@ function ArticlePage({ slug }: { slug: string }) {
   );
 }
 
-function PrivacyPage() {
+/**
+ * Parts 2 and 3 of the approved HHH developer pack, published verbatim. The
+ * wording is legally operative — the pharmacy is the controller and HHH is its
+ * processor — so edit these only from an updated approved pack, and bump both the
+ * version line here and PRIVACY_NOTICE_VERSION in the intake router together.
+ */
+const LEGAL_LAST_UPDATED = '7 September 2026';
+const LEGAL_VERSION = '1.0';
+
+function LegalMeta() {
+  return <p className="hhh-legal-meta">Last updated: {LEGAL_LAST_UPDATED} · Version: {LEGAL_VERSION}</p>;
+}
+
+function TermsPage() {
   return (
     <PageShell>
       <main id="main-content">
         <article className="hhh-legal hhh-section-inner">
           <div className="hhh-rise-copy hhh-page-head__intro">
-          <p className="hhh-kicker">Legal &amp; Privacy</p>
-          <h1>Privacy Policy</h1>
-          <p>
-            This privacy policy explains how Holistic Health Hub collects, uses and shares personal information when you visit our website or use our services. We are committed to protecting your privacy and complying with the UK GDPR and Data Protection Act 2018.
-          </p>
+            <p className="hhh-kicker">Terms of Use</p>
+            <h1>Terms of Use — specialist referral service</h1>
+            <LegalMeta />
           </div>
-          <p>
-            <strong>ICO Registration:</strong> We comply with current requirements to notify our data processing activities to the Information Commissioner’s Office and are registered under number <strong>ZB639206</strong>.
-          </p>
 
-          <h2>Data Protection Principles</h2>
-          <p>
-            Personal information must be processed fairly, lawfully and transparently; collected for explicit and legitimate purposes; adequate, relevant and limited to what is necessary; accurate; retained only as long as needed; and processed securely.
-          </p>
+          <h2>1. Who provides this service</h2>
+          <p>1.1 This referral service is provided by your pharmacy. In these terms, “we”, “us”, “our” and “your pharmacy” mean the partner pharmacy you select in the eligibility check. Your pharmacy is registered with the General Pharmaceutical Council; its name, address, GPhC premises number and contact details are shown when you select it and in every message we send you.</p>
+          <p>1.2 We run the service through Holistic Health Hub (“HHH”). HHH’s pharmacists and pharmacy technicians, all registered with the General Pharmaceutical Council, work on our behalf: they review applications, contact you in our name when we ask them to, view your NHS record under our authority and make referrals to the clinic for us. Our own pharmacy team may also contact you directly at any stage. HHH also provides the software we use to manage prescriptions, collection and delivery. Holistic Health Hub is a trading name of Fit-Pharma Ltd (company number 11950925), 124 City Road, London EC1V 2NX.</p>
+          <p>1.3 This website (holistichealthhub.live) is operated by HHH. Until you select a pharmacy, no application information is collected. Sections 2–12 apply to the service your pharmacy provides; section 13 applies to the website itself.</p>
 
-          <h2>What information do we collect?</h2>
-          <ul>
-            <li>Personal and contact details (name, date of birth, postcode, email, mobile number).</li>
-            <li>Communications about our services and pre-screening enquiries.</li>
-            <li>Website usage and technical telemetry (without storing health information in tracking URLs).</li>
-            <li>With explicit consent through the secure eligibility intake, information about your health and medical history.</li>
-          </ul>
+          <h2>2. What the service is, and is not</h2>
+          <p>2.1 We review whether a referral to our partner clinic is appropriate, help gather the health record the clinic needs, and if suitable refer you. If you are prescribed, we dispense your medicine for collection or, where we offer it, delivery.</p>
+          <p>2.2 We do not diagnose or treat, and the referral service is not medical advice. Our partner clinic is regulated by the Care Quality Commission and is named in our <PublicLink href="/privacy">Privacy Notice</PublicLink>; its specialist doctors are on the GMC Specialist Register and make every decision about appointments and treatment.</p>
 
-          <h2>How is your personal information collected?</h2>
-          <p>
-            We collect information when you complete the secure eligibility check, enquire about our services, or communicate with our team. We may also receive relevant referral information from partner doctors and your nominated community pharmacy.
-          </p>
+          <h2>3. Who can use the service</h2>
+          <p>3.1 You must be 18 or over and living in the United Kingdom. Applications from anyone under 18 are deleted. Our partner pharmacies are in England: some offer collection only, some also deliver. Each pharmacy’s options are shown when you select it, so choose one you can collect from or that delivers to you.</p>
+          <p>3.2 You must apply for yourself. We do not accept applications made on someone else’s behalf.</p>
+          <p>3.3 If your GP practice is outside England, you will need to give us a copy of your GP record yourself (section 5.3).</p>
 
-          <h2>How do we use and share your information?</h2>
-          <p>
-            We use information to provide and improve services, communicate with you, meet legal obligations, and complete referral checks. Where appropriate and consented to, information is shared with a CQC-registered specialist clinic, your nominated community pharmacy, professional advisers, or regulators.
-          </p>
+          <h2>4. Three separate decisions</h2>
+          <p>4.1 The eligibility check decides only whether we will refer you. It is not a diagnosis and does not guarantee an appointment or a prescription.</p>
+          <p>4.2 The clinic decides whether to offer you an appointment.</p>
+          <p>4.3 The specialist decides, after assessing you, whether to prescribe. Any medicine prescribed may be unlicensed; the clinic will explain what that means.</p>
+          <p>4.4 We refer to one partner clinic. You are free to arrange a consultation with any other clinic without using this service.</p>
+          <p>4.5 Two answers on the form are checked automatically against the clinic’s criteria: whether you have tried at least two licensed treatments, and whether you or an immediate family member has been diagnosed with psychosis or schizophrenia. If either falls outside the criteria you are told immediately and we cannot refer you. You can ask one of our pharmacists to review that result by emailing <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>.</p>
 
-          <h2>How do we protect your information?</h2>
-          <p>
-            We employ robust technical and organisational safeguards, restrict access to authorised personnel, train staff on confidentiality, and enforce fail-closed data separation between pre-screening and pharmacy activation.
-          </p>
+          <h2>5. What happens after you apply</h2>
+          <p>5.1 <strong>Review and contact.</strong> A registered pharmacist or technician — from our own team or from the HHH team acting for us — reviews your application and may phone, email or text you. We aim to do this within 3 working days.</p>
+          <p>5.2 <strong>Your pharmacy.</strong> You are applying to the pharmacy you select. If we cannot take you on — for example because of distance or capacity — we will offer, with your agreement, to pass your application to another partner pharmacy. Nothing is shared with any other pharmacy unless you agree.</p>
+          <p>5.3 <strong>Your health record.</strong> The clinic needs a summary of your GP record before a specialist can see you. In England, with your permission, a registered pharmacy professional on the HHH team, acting for us, will view your NHS Summary Care Record and upload it to the clinic’s secure referral portal. Outside England, or if you prefer, you can supply a copy yourself (for example from the NHS App) and we will upload it in the same way. Your record is not stored on the HHH platform.</p>
+          <p>5.4 <strong>Referral.</strong> If we decide to refer you, we send your application and record to the clinic and tell you we have done so. From then on the clinic is your contact for appointments and treatment.</p>
+          <p>5.5 <strong>Prescriptions, collection and delivery.</strong> If you are prescribed, the clinic sends the prescription to us. We tell you the cost, take payment, order your medicine, and tell you when it is ready. You collect it from the pharmacy (bring photo ID) or, where we offer delivery, we send it by a tracked service that requires proof of identity and an adult signature on receipt. We tell you which applies, and any delivery charge, before you pay.</p>
 
-          <h2>Your rights</h2>
-          <p>
-            You have the right to access, rectify, erase, restrict or object to the processing of your personal data, withdraw consent at any time, and lodge a complaint with the UK Information Commissioner’s Office (ICO).
-          </p>
+          <h2>6. Costs</h2>
+          <p>6.1 The eligibility check and referral are free.</p>
+          <p>6.2 Consultations are private and are charged by the clinic. Medicine is private and is charged separately by us when you order it. Current clinic fees are shown at <PublicLink href="/costs">holistichealthhub.live/costs</PublicLink>. You will be told the applicable fees before you book, and the price of any medicine and any delivery charge before you pay.</p>
 
-          <h2>Cookies and Storage</h2>
-          <p>
-            We use strictly necessary and functional technologies to operate our services securely. No sensitive health information is stored in local storage or cookies.
-          </p>
+          <h2>7. Your responsibilities</h2>
+          <p>7.1 Give accurate and complete information, and tell us if anything changes before your referral is made.</p>
+          <p>7.2 Answer the screening questions truthfully. They exist for your safety; the specialist will ask them again.</p>
+          <p>7.3 Do not use the form for anyone other than yourself, or in any way that is unlawful or interferes with the service.</p>
 
-          <h2>Contact Us</h2>
-          <p>
-            Holistic Health Hub<br />
-            124 City Road, London, EC1V 2NX<br />
-            <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>
-          </p>
+          <h2>8. Withdrawing</h2>
+          <p>8.1 You can withdraw your application at any time before we refer you by contacting us (section 12). We will stop the process and delete your application within 3 months, keeping only a minimal record of the withdrawal.</p>
+          <p>8.2 After referral, contact the clinic to cancel or change an appointment. Their cancellation terms apply.</p>
+
+          <h2>9. How we contact you</h2>
+          <p>9.1 We contact you by phone, email or text about your application — either directly from the pharmacy or through the HHH team acting for us — and again only when there is something you need to do or know. Service messages are not marketing and you cannot opt out of them while your application is open.</p>
+          <p>9.2 Marketing emails or texts are sent only if you opted in, and you can unsubscribe at any time using the link or reply instructions in each message.</p>
+
+          <h2>10. Your information</h2>
+          <p>10.1 Our <PublicLink href="/privacy">Privacy Notice</PublicLink> explains what we collect, why, who we share it with, how long we keep it and your rights. It also explains that HHH processes your information on our behalf and under our instructions.</p>
+
+          <h2>11. Our responsibility to you</h2>
+          <p>11.1 We are responsible for providing the referral service, including the parts HHH carries out for us, with reasonable care and skill.</p>
+          <p>11.2 We are not responsible for the clinic’s clinical decisions or for the accuracy of information the clinic gives you. Complaints about the clinic go to the clinic first (section 12).</p>
+          <p>11.3 Nothing in these terms limits or excludes our liability for death or personal injury caused by our negligence, for fraud, or for anything else that cannot be limited by law.</p>
+          <p>11.4 We are not liable for losses that were not foreseeable when you started using the service, or that are caused by your own breach of these terms.</p>
+
+          <h2>12. Contact and complaints</h2>
+          <p>12.1 <strong>About your application, your information or a complaint about the service:</strong> contact your pharmacy using the details shown when you selected it and in our messages to you. We acknowledge complaints within 3 working days and respond within 20 working days. Pharmacies are regulated by the General Pharmaceutical Council.</p>
+          <p>12.2 <strong>About the clinic:</strong> use the clinic’s own complaints procedure (given to you at referral). The clinic is regulated by the Care Quality Commission.</p>
+          <p>12.3 <strong>About how your information is handled:</strong> see the <PublicLink href="/privacy">Privacy Notice</PublicLink>; you can also contact the Information Commissioner’s Office.</p>
+
+          <h2>13. This website</h2>
+          <p>13.1 The website is operated by HHH (Fit-Pharma Ltd, details in 1.2). Contact: <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>; complaints about the website: <a href="mailto:complaints@holistichealthhub.live">complaints@holistichealthhub.live</a>; privacy: <a href="mailto:privacy@holistichealthhub.live">privacy@holistichealthhub.live</a>.</p>
+          <p>13.2 Content on the website is general information, not medical advice. It is not an emergency service: if you need urgent medical help, call 999 or 111. HHH may update the website and these terms; the date at the top shows the current version. Material changes that affect an open application will be emailed to you.</p>
+          <p>13.3 HHH aims to keep the website available but does not guarantee it will be uninterrupted or error-free. Website content, design and branding belong to HHH or its licensors and may not be copied without permission; partner pharmacies use HHH’s materials under licence.</p>
+          <p>13.4 These terms are governed by the law of England and Wales and any dispute will be dealt with by the courts of England and Wales. If you live in Scotland or Northern Ireland you may also bring proceedings in your local courts.</p>
+          <p>13.5 If any part of these terms is found to be unenforceable, the rest continues to apply.</p>
         </article>
       </main>
     </PageShell>
   );
 }
 
-function ConsentPage() {
+function PrivacyPage() {
   return (
     <PageShell>
       <main id="main-content">
         <article className="hhh-legal hhh-section-inner">
           <div className="hhh-rise-copy hhh-page-head__intro">
-          <p className="hhh-kicker">Terms &amp; Consent</p>
-          <h1>Consent and terms of use</h1>
-          <p>
-            New eligibility applications are reviewed first by Holistic Health Hub. A community pharmacy does not receive the application while Holistic Health Hub is completing its intake and referral checks.
-          </p>
+            <p className="hhh-kicker">Privacy Notice</p>
+            <h1>Privacy Notice — specialist referral service</h1>
+            <LegalMeta />
           </div>
 
-          <h2>Your information and consent</h2>
-          <p>
-            Health information is sensitive and is collected only through the secure eligibility flow with explicit patient consent. A pharmacy selected on the main website is a preference until Holistic Health Hub confirms the final referral. A pharmacy-specific link has a fixed destination, but Holistic Health Hub still completes the intake review before activating the referral for that pharmacy.
-          </p>
+          <h2>1. Who is responsible for your information</h2>
+          <p>1.1 <strong>Your pharmacy</strong> — the partner pharmacy you select in the eligibility check — is responsible for your information (“controller”) for the referral service, from the moment you apply. In this notice “we”, “us” and “your pharmacy” mean that pharmacy. Its name, address, GPhC number, ICO registration number and privacy contact are shown when you select it and in every message we send you.</p>
+          <p>1.2 <strong>Holistic Health Hub (“HHH”)</strong> runs the service for us and processes your information on our behalf and under our written instructions (“processor”). HHH’s GPhC-registered pharmacists and technicians act in our name when they review your application, contact you, view your NHS record and refer you. Our own pharmacy team may also contact you directly and sees your application through the same platform. Holistic Health Hub is a trading name of Fit-Pharma Ltd (company number 11950925), 124 City Road, London EC1V 2NX; ICO registration ZB639206; privacy contact <a href="mailto:privacy@holistichealthhub.live">privacy@holistichealthhub.live</a>.</p>
+          <p>1.3 HHH is responsible in its own right (as a controller) only for: (a) this website, including its security cookie (section 9); and (b) administering the arrangements between the pharmacies, HHH and the clinic (section 3, last row).</p>
+          <p>1.4 <strong>The clinic</strong> — Curaleaf Clinic, operated by Sapphire Medical Clinics Limited (company number 11927140; CQC provider ID 1-6943797921) — is responsible for your information once we refer you, and has its own privacy notice.</p>
+          <p>1.5 <strong>Data Protection Officers.</strong> Your pharmacy’s Data Protection Officer is shown with its details when you select it. HHH’s Data Protection Officer can be contacted at <a href="mailto:dpo@holistichealthhub.live">dpo@holistichealthhub.live</a>.</p>
 
-          <h2>Clinical decisions</h2>
-          <p>
-            An eligibility check is not a medical diagnosis, guarantee of consultation, or promise of a prescription. A specialist physician on the GMC Specialist Register makes all treatment decisions following an individual assessment and MDT review.
-          </p>
+          <h2>2. What we collect</h2>
+          <p>2.1 <strong>From the eligibility form:</strong> name, date of birth, postcode, email, mobile number; the pharmacy you selected or the pharmacy link you used; the conditions you want support with (up to three) and the main one; whether you have tried at least two licensed treatments; whether you or an immediate family member has been diagnosed with psychosis or schizophrenia; where you heard about the service; your consent choices.</p>
+          <p>2.2 <strong>From our contact with you:</strong> notes of phone calls, emails and texts about your application, whether the contact is from our own team or from the HHH team on our behalf. Calls are not recorded.</p>
+          <p>2.3 <strong>From your NHS record:</strong> in England, with your permission, a registered pharmacy professional on the HHH team, acting for us, views your Summary Care Record and uploads it to the clinic’s secure referral portal. Your record is not stored on the HHH platform. Outside England, you supply a copy yourself and it is uploaded in the same way.</p>
+          <p>2.4 <strong>From your prescription and order:</strong> if you are prescribed, a copy of your prescription, the medicine and quantity, order status, payment status (not card details — Worldpay handles those), the date it was dispensed and, if we deliver to you, your delivery address and the courier’s proof of delivery. HHH’s software holds this for us.</p>
+          <p>2.5 <strong>From your visit to this website (HHH as controller):</strong> technical data (IP address, browser, pages visited) held in server logs, and the security technologies described in section 9. No analytics.</p>
+          <p>2.6 <strong>About other people:</strong> the family-history question concerns your immediate family. We record only your yes/no answer, never who the relative is, and we do not contact them.</p>
 
-          <h2>Treatment costs</h2>
-          <p>
-            Private medical consultations and prescribed cannabis-based medicines involve fees. Applicable charges are discussed at your first consultation and confirmed before you proceed with treatment.
-          </p>
+          <h2>3. Why we use it, and our legal basis</h2>
+          <div className="hhh-legal-table">
+            <table>
+              <thead>
+                <tr><th>Purpose</th><th>Who is responsible</th><th>Legal basis (UK GDPR Art. 6)</th><th>Special-category condition (Art. 9 / DPA 2018 Sch 1)</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Reviewing your application and deciding whether to refer you</td><td>Your pharmacy (HHH acting for us)</td><td>Art. 6(1)(b) — steps you have asked for</td><td>Art. 9(2)(h) health care by GPhC-registered professionals under a duty of confidentiality (Sch 1 para 2); we also ask for your consent so that you are in control of the step</td></tr>
+                <tr><td>Contacting you about your application</td><td>Your pharmacy (directly, or HHH acting for us)</td><td>Art. 6(1)(b)</td><td>Art. 9(2)(h)</td></tr>
+                <tr><td>Viewing your Summary Care Record and uploading it to the clinic</td><td>Your pharmacy (HHH acting for us)</td><td>Art. 6(1)(b)</td><td>Art. 9(2)(h); your permission is asked before each view</td></tr>
+                <tr><td>Sharing your application with the clinic</td><td>Your pharmacy</td><td>Art. 6(1)(b)</td><td>Art. 9(2)(h) and your consent</td></tr>
+                <tr><td>Passing your application to another partner pharmacy</td><td>Your pharmacy</td><td>Your agreement — Art. 6(1)(a)</td><td>Art. 9(2)(a) explicit consent, given at the time</td></tr>
+                <tr><td>Dispensing, payment, collection or delivery</td><td>Your pharmacy</td><td>Art. 6(1)(b), 6(1)(c) (medicines and controlled-drug record-keeping law)</td><td>Art. 9(2)(h)</td></tr>
+                <tr><td>Marketing emails/texts, if you opted in</td><td>Your pharmacy and HHH jointly as senders</td><td>Art. 6(1)(a) consent; PECR reg. 22</td><td>Health information is never used to decide who receives marketing</td></tr>
+                <tr><td>Complaints, legal claims, regulatory requests</td><td>Your pharmacy</td><td>Art. 6(1)(c)/(f)</td><td>Art. 9(2)(f) legal claims; Art. 9(2)(g) with Sch 1</td></tr>
+                <tr><td>Website security (reCAPTCHA)</td><td>HHH</td><td>Art. 6(1)(f); PECR reg. 6 (strictly necessary)</td><td>—</td></tr>
+                <tr><td>Administering the arrangements between the pharmacies, HHH and the clinic (referral reference and first-dispense date only — no clinical detail)</td><td>HHH</td><td>Art. 6(1)(f) legitimate interests — running the service</td><td>Sch 1 para 2(2)(f) management of health care services</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>3.2 Where we rely on consent you can withdraw it at any time (section 7). Withdrawing before referral stops the referral. Withdrawing after referral does not affect the clinic’s records, which are the clinic’s.</p>
+          <p>3.3 <strong>Automated screening.</strong> Two answers on the form are checked automatically against the clinic’s referral criteria: whether you have tried at least two licensed treatments, and whether you or an immediate family member has been diagnosed with psychosis or schizophrenia. If either falls outside the criteria, your application is declined automatically and you are told immediately. We do this with your explicit consent, given on the form, because the criteria are fixed by the clinic and applying them straight away saves you waiting. You can ask one of our pharmacists to review the result, tell us why you think it is wrong, and have it reconsidered, by emailing <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>. No other decision about you is made by automated means.</p>
 
-          <h2>Questions</h2>
-          <p>
-            For questions regarding consent or terms, contact Holistic Health Hub at{' '}
-            <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>.
-          </p>
+          <h2>4. Who we share it with</h2>
+          <ul>
+            <li><strong>The clinic (1.4):</strong> your application, your health record and contact details, so a specialist can decide whether to see you.</li>
+            <li><strong>Another partner pharmacy:</strong> only if we cannot take you on and you agree to the transfer.</li>
+            <li><strong>Our medicines supplier:</strong> we send it a copy of your prescription through HHH’s software so it can supply your medicine. The supplier is named in your pharmacy’s own privacy notice.</li>
+            <li><strong>Our delivery courier, if we deliver to you:</strong> your name, address, phone number and the parcel reference — never what the medicine is. The courier is named in your pharmacy’s own privacy notice.</li>
+            <li><strong>HHH’s service providers, acting on instructions:</strong> hosting with Google Cloud (London, europe-west2) and Vercel (London, lhr1); email and SMS delivery [TO CONFIRM — provider not yet appointed]; Worldpay (payment links issued to you on our behalf — Worldpay handles card data; neither we nor HHH see it); Google (reCAPTCHA security check on every page).</li>
+            <li><strong>Professional advisers, insurers, regulators, courts</strong> where required by law or to protect our legal position.</li>
+          </ul>
+          <p>We do not sell your information and do not share it with anyone for their own marketing.</p>
+
+          <h2>5. International transfers</h2>
+          <p>Your information is stored in the United Kingdom, with Google Cloud in London (europe-west2) and Vercel in London (lhr1). The only transfer outside the UK is the reCAPTCHA security check, which sends technical data (not your application) to Google LLC in the United States under [TO CONFIRM — the UK Extension to the EU-US Data Privacy Framework / Google’s standard contractual clauses with the UK Addendum]. This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</p>
+
+          <h2>6. How long we keep it</h2>
+          <div className="hhh-legal-table">
+            <table>
+              <thead>
+                <tr><th>Information</th><th>Kept for</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Applications we do not refer, or you withdraw</td><td>3 months from the decision or withdrawal, then deleted; a minimal record (name, date, outcome) is kept for 12 months to handle any query or complaint</td></tr>
+                <tr><td>Applications we refer</td><td>2 years after your last activity with the service (last order, message or referral event), then deleted from HHH’s platform</td></tr>
+                <tr><td>Your NHS record</td><td>Not stored by HHH. Upload logs (not the record) kept 90 days</td></tr>
+                <tr><td>Prescription and order records</td><td>As required by medicines and controlled-drug law (private prescriptions for controlled drugs: at least 2 years) and our pharmacy retention policy</td></tr>
+                <tr><td>Marketing consent</td><td>Until you unsubscribe; a suppression record is kept so we do not contact you again</td></tr>
+                <tr><td>Call notes and emails</td><td>Same period as the application they relate to</td></tr>
+                <tr><td>Website logs and cookies (HHH)</td><td>See section 9</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2>7. Your rights</h2>
+          <p>You can ask us to: give you a copy of your information (access); correct it; delete it; restrict or object to how we use it; give it to you or another organisation in a portable format; and you can withdraw consent at any time. For the automated screening in section 3.3, you can ask a pharmacist to review the result, tell us your view and contest it.</p>
+          <p>Contact your pharmacy using the details shown when you selected it and in our messages to you. We will respond within one month and may ask you to confirm your identity. HHH will help us answer your request; for information held by the clinic, contact the clinic. For the website and cookies, contact HHH at <a href="mailto:privacy@holistichealthhub.live">privacy@holistichealthhub.live</a>.</p>
+          <p>If you are unhappy with how your information is handled, please tell us first. You can also complain to the Information Commissioner’s Office: <a href="https://ico.org.uk/make-a-complaint" target="_blank" rel="noopener noreferrer">ico.org.uk/make-a-complaint</a>, 0303 123 1113.</p>
+
+          <h2>8. How we protect it</h2>
+          <p>Encryption in transit and at rest; access limited to named staff with a need to know, with access to patient records logged; staff bound by professional and contractual confidentiality; no health information in web addresses or browser storage. HHH team members access NHS records only with individual NHS smartcards issued under our Registration Authority and record your permission before each view. HHH is bound to us by a written data-processing contract.</p>
+
+          <h2>9. Cookies and similar technologies (HHH as controller)</h2>
+          <p>We use no analytics or advertising cookies. The only technologies used are:</p>
+          <div className="hhh-legal-table">
+            <table>
+              <thead>
+                <tr><th>Name</th><th>Provider</th><th>Purpose</th><th>Type</th><th>Duration</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>_GRECAPTCHA</td><td>Google</td><td>Protects the form against automated abuse</td><td>Strictly necessary for security</td><td>6 months</td></tr>
+                <tr><td>Firebase App Check token (browser storage, not a cookie)</td><td>HHH</td><td>Proves the request comes from this website so the form can be submitted securely</td><td>Strictly necessary for security</td><td>Up to 24 hours</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>This website sets no cookie of its own. Because nothing here is optional, no cookie banner is shown. If we introduce analytics in future we will update this notice and ask for your consent first.</p>
+
+          <h2>10. Children</h2>
+          <p>The service is for adults aged 18 and over. We delete any application from someone under 18.</p>
+
+          <h2>11. Changes to this notice</h2>
+          <p>Changes are posted here with the date at the top. If a change affects an open application we will email you.</p>
+        </article>
+      </main>
+    </PageShell>
+  );
+}
+
+function CostsPage() {
+  return (
+    <PageShell>
+      <main id="main-content">
+        <article className="hhh-legal hhh-section-inner">
+          <div className="hhh-rise-copy hhh-page-head__intro">
+            <p className="hhh-kicker">Costs</p>
+            <h1>What the service costs</h1>
+            <p>The eligibility check and the referral itself are free. Consultations are charged by the clinic, and medicine is charged separately by your pharmacy when you order it.</p>
+          </div>
+
+          <h2>Clinic consultation fees</h2>
+          <p>These fees are set and charged by Curaleaf Clinic, not by your pharmacy or by Holistic Health Hub. You will be told the fees that apply to you before you book.</p>
+          <div className="hhh-legal-table">
+            <table>
+              <thead>
+                <tr><th>Appointment</th><th>Fee</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Initial specialist consultation</td><td>[TO CONFIRM — fee]</td></tr>
+                <tr><td>Follow-up consultation</td><td>[TO CONFIRM — fee]</td></tr>
+                <tr><td>Annual review</td><td>[TO CONFIRM — fee]</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="hhh-legal-note">Clinic fees correct at [TO CONFIRM — date].</p>
+
+          <h2>Medicine</h2>
+          <p>Medicine is private and is charged separately by your pharmacy when you order it. The price depends on what the specialist prescribes and the quantity. Your pharmacy tells you the price of any medicine, and any delivery charge, before you pay.</p>
+
+          <h2>What is free</h2>
+          <ul>
+            <li>The eligibility check.</li>
+            <li>The pharmacy’s review of your application.</li>
+            <li>The referral to the clinic, including gathering the health record the clinic needs.</li>
+          </ul>
+
+          <p>Full details of how charges work are in our <PublicLink href="/terms">Terms of Use</PublicLink>, section 6.</p>
         </article>
       </main>
     </PageShell>
@@ -1553,18 +1703,24 @@ export default function PublicSite() {
             is404: false,
           },
           '/privacy': {
-            title: 'Privacy Policy | UK GDPR & Data Protection | Holistic Health Hub',
-            description: 'Learn how Holistic Health Hub protects your health data under the UK GDPR, Data Protection Act 2018, and ICO registration ZB639206.',
+            title: 'Privacy Notice | UK GDPR & Data Protection | Holistic Health Hub',
+            description: 'How your partner pharmacy and Holistic Health Hub use your information for the specialist referral service, your rights, and how long information is kept.',
             type: 'website',
             is404: false,
           },
-          '/consent': {
-            title: 'Consent & Terms of Use | Holistic Health Hub',
-            description: 'Understand patient consent, intake review terms, and clinical MDT assessments for Holistic Health Hub.',
+          '/terms': {
+            title: 'Terms of Use | Specialist Referral Service | Holistic Health Hub',
+            description: 'The terms on which your partner pharmacy provides the specialist referral service, and on which Holistic Health Hub operates this website.',
             type: 'website',
             is404: false,
           },
-        }[path as '/' | '/how-it-works' | '/conditions' | '/about' | '/faq' | '/blog' | '/privacy' | '/consent'] ?? {
+          '/costs': {
+            title: 'Costs | Clinic Fees & Medicine Charges | Holistic Health Hub',
+            description: 'What the specialist referral service costs: the eligibility check and referral are free; clinic consultations and medicine are charged separately.',
+            type: 'website',
+            is404: false,
+          },
+        }[path as '/' | '/how-it-works' | '/conditions' | '/about' | '/faq' | '/blog' | '/privacy' | '/terms' | '/costs'] ?? {
           title: 'Page Not Found | Holistic Health Hub',
           description: 'The requested Holistic Health Hub page could not be found. Return to our homepage to continue.',
           type: 'website',
@@ -1691,7 +1847,14 @@ export default function PublicSite() {
   }
   if (path === '/blog' || path.startsWith('/blog/categories/')) return <BlogPage />;
   if (path === '/privacy' || path === '/general-5-1') return <PrivacyPage />;
-  if (path === '/consent') return <ConsentPage />;
+  if (path === '/terms') return <TermsPage />;
+  if (path === '/costs') return <CostsPage />;
+  // /consent held the old combined consent-and-terms page. The approved pack splits
+  // it into /terms and /privacy, so the retired path lands on the Terms of Use.
+  if (path === '/consent') {
+    window.location.replace('/terms');
+    return null;
+  }
   if (path.startsWith('/post/')) return <ArticlePage slug={path.slice('/post/'.length)} />;
 
   return <NotFoundPage />;

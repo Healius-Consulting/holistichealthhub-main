@@ -295,7 +295,13 @@ export function getPharmacyOverview() {
   return apiRequest<PharmacyOverview>('/v1/portal/overview');
 }
 
-export function createEligibilitySubmission(input: EligibilitySubmissionInput) {
+/**
+ * The v1 read model calls the referral source `source`, but the API records it as
+ * `heardAbout` — sending only `source` silently dropped the answer. Callers pass both
+ * that and the consent version so a legacy submission is stamped with the wording the
+ * patient actually saw.
+ */
+export function createEligibilitySubmission(input: EligibilitySubmissionInput & { heardAbout: string; consentVersion: string }) {
   return apiRequest<EligibilitySubmissionReceipt>('/v1/public/eligibility-submissions', {
     method: 'POST', body: JSON.stringify(input),
   });

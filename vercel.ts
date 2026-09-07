@@ -85,6 +85,7 @@ export const config = {
     { source: '/contact', destination: '/eligibility', permanent: true },
     { source: '/general-5', destination: '/faq', permanent: true },
     { source: '/general-5-1', destination: '/privacy', permanent: true },
+    { source: '/consent', destination: '/terms', permanent: true },
   ],
   rewrites: portalSurface ? [
     { source: '/login', destination: '/api/page-gate?__hhh_path=/login' },

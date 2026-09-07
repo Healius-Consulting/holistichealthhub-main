@@ -369,12 +369,13 @@ export interface PharmacyTenant {
 }
 
 export const PLATFORM_OPERATOR = {
-  operatingName: 'Healius Consulting',
+  operatingName: 'Fit-Pharma Ltd',
   platformName: 'HHH',
   platformLongName: 'Holistic Health Hub',
-  legalName: null as string | null,
-  companyNumber: null as string | null,
-  registeredOffice: null as string | null,
+  legalName: 'Fit-Pharma Ltd',
+  companyNumber: '11950925',
+  registeredOffice: '124 City Road, London EC1V 2NX',
+  icoRegistration: 'ZB639206',
   website: 'www.healiusconsulting.com',
   contactEmail: 'spatel@healiusconsulting.com',
 } as const;
