@@ -16,6 +16,7 @@ import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { isDedicatedSqlIntake, isOpenSqlIntake, sqlIntakeCaseReference, toAdminIntakeDetail, toAdminIntakeQueueItem } from './intake-contracts.js';
+import { portalSourceType } from './intake-source.js';
 
 export { canReceiveReferral };
 

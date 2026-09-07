@@ -175,17 +175,18 @@ export function brandedEmail(input: {
   const controllerLines = (() => {
     const c = input.controller;
     if (!c?.pharmacyName?.trim()) return '';
-    const parts = [
-      c.pharmacyAddress?.trim(),
+    const present = (values: Array<string | null | undefined>) =>
+      values.map(value => value?.trim() ?? '').filter(Boolean);
+    const parts = present([
+      c.pharmacyAddress,
       c.gphcNumber?.trim() ? `GPhC premises ${c.gphcNumber.trim()}` : '',
       c.icoRegistrationNumber?.trim() ? `ICO ${c.icoRegistrationNumber.trim()}` : '',
-    ].filter(Boolean).map(escapeHtml).join(' · ');
-    const contacts = [
+    ]).map(escapeHtml).join(' · ');
+    const complaints = present([c.complaintsContactEmail, c.complaintsContactPhone]).join(' · ');
+    const contacts = present([
       c.privacyContactEmail?.trim() ? `Privacy: ${c.privacyContactEmail.trim()}` : '',
-      c.complaintsContactEmail?.trim() || c.complaintsContactPhone?.trim()
-        ? `Complaints: ${[c.complaintsContactEmail, c.complaintsContactPhone].filter(v => v?.trim()).join(' · ')}`
-        : '',
-    ].filter(Boolean).map(escapeHtml).join(' · ');
+      complaints ? `Complaints: ${complaints}` : '',
+    ]).map(escapeHtml).join(' · ');
     return `<p style="margin:18px 0 0; color:#9fb4af; font-size:12px; line-height:18px;"><strong style="color:#dce9e5;">${escapeHtml(c.pharmacyName.trim())}</strong>${parts ? `<br>${parts}` : ''}${contacts ? `<br>${contacts}` : ''}</p>`;
   })();
   const unsubscribeHref = input.unsubscribeUrl ? safeHttpUrl(input.unsubscribeUrl) : '';
