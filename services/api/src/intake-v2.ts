@@ -928,6 +928,14 @@ const profileSchema = z.object({
   addressLine1: z.string().trim().min(1).max(250), addressLine2: z.string().trim().max(250).default(''),
   locality: z.string().trim().min(1).max(120), postcode: z.string().trim().min(2).max(16),
   publicEmail: z.email().max(254), publicPhone: z.string().trim().max(50).default(''),
+  // Controller identity and data-protection contacts, published to patients at
+  // selection and in every message (Privacy 1.1 and 1.5). Optional so an existing
+  // profile can still be saved while the pharmacy is chasing its own details.
+  icoRegistrationNumber: z.string().trim().max(50).default(''),
+  privacyContactEmail: z.union([z.email().max(254), z.literal('')]).default(''),
+  dataProtectionOfficer: z.string().trim().max(200).default(''),
+  complaintsContactEmail: z.union([z.email().max(254), z.literal('')]).default(''),
+  complaintsContactPhone: z.string().trim().max(50).default(''),
   deliveryCapability: z.enum(['none', 'nationwide', 'postcode_areas', 'radius_miles']),
   deliveryCoverage: z.object({ postcodeAreas: z.array(z.string().trim().max(4)).max(100).default([]), radiusMiles: z.number().positive().max(1000).nullable().default(null) }),
   deliverySummary: z.string().trim().max(400).default(''), collectionAvailable: z.boolean(),

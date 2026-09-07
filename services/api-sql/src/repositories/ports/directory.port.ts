@@ -12,6 +12,11 @@ export interface DirectoryProfileRecord {
   postcode: string;
   publicEmail: string;
   publicPhone: string | null;
+  icoRegistrationNumber: string | null;
+  privacyContactEmail: string | null;
+  dataProtectionOfficer: string | null;
+  complaintsContactEmail: string | null;
+  complaintsContactPhone: string | null;
   website?: string | null;
   deliveryCapability: 'NONE' | 'NATIONWIDE' | 'POSTCODE_AREAS' | 'RADIUS_MILES';
   collectionAvailable: boolean;
@@ -33,6 +38,11 @@ export interface UpsertDirectoryProfileInput {
   postcode: string;
   publicEmail: string;
   publicPhone?: string | null;
+  icoRegistrationNumber?: string | null;
+  privacyContactEmail?: string | null;
+  dataProtectionOfficer?: string | null;
+  complaintsContactEmail?: string | null;
+  complaintsContactPhone?: string | null;
   latitude?: number | null;
   longitude?: number | null;
 }

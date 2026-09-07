@@ -38,7 +38,9 @@
     "migrate:supplier-shipment-rows": "tsx scripts/backfill-supplier-shipment-rows.ts",
     "build:all": "npm run build --workspace @hhh/ui && npm run build:vercel:public && npm run build:vercel:portal && npm run build:api",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "retention:dry-run": "tsx scripts/apply-retention.ts --dry-run",
+    "retention:apply": "tsx scripts/apply-retention.ts"
   },
   "dependencies": {
     "@hhh/domain": "0.1.0",

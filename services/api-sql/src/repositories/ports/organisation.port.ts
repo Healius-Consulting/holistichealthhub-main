@@ -72,20 +72,27 @@ export interface CreateOrganisationRecordInput {
   portalName: string;
 }
 
+export interface PublicPharmacy {
+  id: string;
+  name: string;
+  tradingName: string;
+  logoText: string;
+  gphcNumber: string;
+  superintendent: string;
+  address: string;
+  primaryColour: string;
+  logoUrl?: string | null;
+  icoRegistrationNumber?: string | null;
+  privacyContactEmail?: string | null;
+  dataProtectionOfficer?: string | null;
+  complaintsContactEmail?: string | null;
+  complaintsContactPhone?: string | null;
+}
+
 export interface PublicPharmacyResolution {
   type: 'future_pharmacy_qr' | 'legacy_pharmacy_qr';
   intakeVersion: 'v1' | 'v2';
-  pharmacy: {
-    id: string;
-    name: string;
-    tradingName: string;
-    logoText: string;
-    gphcNumber: string;
-    superintendent: string;
-    address: string;
-    primaryColour: string;
-    logoUrl?: string | null;
-  };
+  pharmacy: PublicPharmacy;
 }
 
 export interface SetupTaskRecord {

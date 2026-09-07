@@ -5,6 +5,7 @@ import { messageIdempotencyKey } from './message-kinds.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { IdentityRepositoryPort, StaffUserRecord } from '../../repositories/ports/identity.port.js';
 import type { OrganisationRecord, OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
+import type { SuppressionRepositoryPort } from '../../repositories/ports/suppression.port.js';
 
 type Recipient = {
   email: string;
@@ -27,14 +28,58 @@ function dedupeRecipients(items: Recipient[]) {
   return result;
 }
 
-export function pharmacyEmailContext(organisation: OrganisationRecord | null | undefined) {
+/**
+ * Identity of the pharmacy a message is about. The controller fields land in the email
+ * footer, which Privacy 1.1 promises carries the pharmacy's name, address, GPhC number,
+ * ICO number and privacy contact. Name, address and GPhC come from the organisation;
+ * the data-protection contacts live on the public directory profile, so a caller that
+ * has one passes it and the footer is complete.
+ */
+export function pharmacyEmailContext(
+  organisation: OrganisationRecord | null | undefined,
+  profile?: {
+    icoRegistrationNumber?: string | null;
+    privacyContactEmail?: string | null;
+    complaintsContactEmail?: string | null;
+    complaintsContactPhone?: string | null;
+  } | null,
+) {
   return {
     organisationId: organisation?.id || '',
     pharmacyName: organisation?.tradingName || organisation?.name || 'the pharmacy',
     pharmacyPhone: organisation?.mainContactPhone || '',
     pharmacyEmail: organisation?.mainContactEmail || '',
     pharmacyAddress: organisation?.address || '',
+    pharmacyGphcNumber: organisation?.gphcNumber || '',
+    pharmacyIcoNumber: profile?.icoRegistrationNumber || '',
+    pharmacyPrivacyEmail: profile?.privacyContactEmail || '',
+    pharmacyComplaintsEmail: profile?.complaintsContactEmail || '',
+    pharmacyComplaintsPhone: profile?.complaintsContactPhone || '',
   };
+}
+
+/**
+ * Marketing must not reach a suppressed address, whatever the stored consent says:
+ * an unsubscribe outranks a tick made earlier. Service messages about an open
+ * application are not marketing (Terms 9.1) and are never filtered here.
+ */
+export async function filterSuppressedRecipients(
+  suppressionRepo: Pick<SuppressionRepositoryPort, 'isSuppressed'>,
+  recipients: Recipient[],
+): Promise<Recipient[]> {
+  const allowed: Recipient[] = [];
+  for (const recipient of recipients) {
+    const address = String(recipient.email || '').trim().toLowerCase();
+    if (!address) continue;
+    // Fail closed: if the list cannot be read, no marketing goes out.
+    try {
+      if (await suppressionRepo.isSuppressed(sha256(address))) continue;
+    } catch {
+      continue;
+    }
+    allowed.push(recipient);
+  }
+  return allowed;
 }
 
 export async function queueEmailToRecipients(

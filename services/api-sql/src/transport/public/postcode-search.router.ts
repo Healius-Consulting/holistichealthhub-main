@@ -87,6 +87,13 @@ export function createPublicPostcodeSearchRouter(): Router {
           addressSummary: directoryAddressSummary(profile),
           publicPhone: profile.publicPhone,
           website: profile.website ?? null,
+          // Privacy 1.1 and 1.5: the controller's identity and contacts are shown to
+          // the patient before they choose, not only after they have applied.
+          icoRegistrationNumber: profile.icoRegistrationNumber,
+          privacyContactEmail: profile.privacyContactEmail,
+          dataProtectionOfficer: profile.dataProtectionOfficer,
+          complaintsContactEmail: profile.complaintsContactEmail,
+          complaintsContactPhone: profile.complaintsContactPhone,
           approximateMiles: Math.round(miles * 10) / 10,
           deliveryCapability: lowerDeliveryCapability(profile.deliveryCapability),
           collectionAvailable: profile.collectionAvailable,

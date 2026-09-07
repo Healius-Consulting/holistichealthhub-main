@@ -40,6 +40,11 @@ const DIRECTORY_PROFILE_FIELDS = `
   postcode
   publicEmail
   publicPhone
+  icoRegistrationNumber
+  privacyContactEmail
+  dataProtectionOfficer
+  complaintsContactEmail
+  complaintsContactPhone
   deliveryCapability
   collectionAvailable
   deliverySummary
@@ -114,6 +119,11 @@ const UPSERT_DIRECTORY_PROFILE_GQL = `
     $latitude: Float
     $longitude: Float
     $lifecycle: DirectoryLifecycle!
+    $icoRegistrationNumber: String
+    $privacyContactEmail: String
+    $dataProtectionOfficer: String
+    $complaintsContactEmail: String
+    $complaintsContactPhone: String
     $deliveryCapability: DeliveryCapability!
     $collectionAvailable: Boolean!
     $intakeState: IntakeState!
@@ -132,6 +142,11 @@ const UPSERT_DIRECTORY_PROFILE_GQL = `
       latitude: $latitude
       longitude: $longitude
       lifecycle: $lifecycle
+      icoRegistrationNumber: $icoRegistrationNumber
+      privacyContactEmail: $privacyContactEmail
+      dataProtectionOfficer: $dataProtectionOfficer
+      complaintsContactEmail: $complaintsContactEmail
+      complaintsContactPhone: $complaintsContactPhone
       deliveryCapability: $deliveryCapability
       collectionAvailable: $collectionAvailable
       intakeState: $intakeState
@@ -167,6 +182,11 @@ function toListedProfile(
     postcode: address.postcode,
     publicEmail: profile?.publicEmail || organisation.mainContactEmail || '',
     publicPhone: profile?.publicPhone ?? organisation.mainContactPhone,
+    icoRegistrationNumber: profile?.icoRegistrationNumber ?? null,
+    privacyContactEmail: profile?.privacyContactEmail ?? null,
+    dataProtectionOfficer: profile?.dataProtectionOfficer ?? null,
+    complaintsContactEmail: profile?.complaintsContactEmail ?? null,
+    complaintsContactPhone: profile?.complaintsContactPhone ?? null,
     website: directoryWebsiteLabel(organisation.websiteDomains),
     deliveryCapability: profile?.deliveryCapability ?? 'NONE',
     collectionAvailable: profile?.collectionAvailable ?? true,
@@ -285,6 +305,11 @@ export class SqlDirectoryRepository implements DirectoryRepositoryPort {
         postcode: input.postcode,
         publicEmail: input.publicEmail,
         publicPhone: input.publicPhone ?? null,
+        icoRegistrationNumber: input.icoRegistrationNumber ?? existing?.icoRegistrationNumber ?? null,
+        privacyContactEmail: input.privacyContactEmail ?? existing?.privacyContactEmail ?? null,
+        dataProtectionOfficer: input.dataProtectionOfficer ?? existing?.dataProtectionOfficer ?? null,
+        complaintsContactEmail: input.complaintsContactEmail ?? existing?.complaintsContactEmail ?? null,
+        complaintsContactPhone: input.complaintsContactPhone ?? existing?.complaintsContactPhone ?? null,
         latitude: input.latitude ?? existing?.latitude ?? null,
         longitude: input.longitude ?? existing?.longitude ?? null,
         lifecycle: existing?.lifecycle ?? 'DRAFT',

@@ -12302,6 +12302,22 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   opacity: 1;
 }
 .eligibility-form-footer p{ display: flex; align-items: center; justify-content: center; gap: 6px; color: #718079; font-size: 10px; text-align: center; }
+.eligibility-controller-details{
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  background: #f5f8f6;
+  border: 1px solid #dce5e0;
+  border-radius: 12px;
+}
+.eligibility-controller-details > div{ display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 10px; }
+.eligibility-controller-details dt{ color: #6b7a73; font-size: 11px; font-weight: 650; }
+.eligibility-controller-details dd{ margin: 0; color: #34443d; font-size: 11.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.eligibility-controller-details--intro{ background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.16); }
+.eligibility-controller-details--intro dt{ color: rgba(255,255,255,0.62); }
+.eligibility-controller-details--intro dd{ color: rgba(255,255,255,0.9); }
+
 .eligibility-decline p{ max-width: 52ch; }
 .eligibility-decline a[href^="mailto:"]{ color: var(--tenant-primary, #174f3f); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 

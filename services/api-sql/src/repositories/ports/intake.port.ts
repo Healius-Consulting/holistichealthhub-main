@@ -49,6 +49,15 @@ export interface SubmissionQueueItem {
   updatedAt: string;
 }
 
+export interface RetentionCandidateRecord {
+  id: string;
+  outcomeStatus: 'OPEN' | 'COMPLETED' | 'DECLINED' | 'WITHDRAWN';
+  completedAt: string | null;
+  /** Stands in for "last activity": any write to the case touches it. */
+  updatedAt: string;
+  minimalRecordSince: string | null;
+}
+
 export interface DeclinedSubmissionRecord {
   id: string;
   submittedAt: string;
@@ -131,6 +140,8 @@ export interface ReassignSubmissionInput {
   actorUid: string;
   reasonCode: string;
   note: string | null;
+  /** How the patient agreed to the transfer, and when. Required once a pharmacy is assigned. */
+  patientAgreementChannel: string | null;
 }
 
 export interface UpdateSubmissionFollowUpInput {
@@ -171,6 +182,9 @@ export interface IntakeRepositoryPort {
   listTenantPendingEnquiries(organisationId: string, limit?: number): Promise<TenantPendingEnquiryRecord[]>;
   listPlatformSubmissions(limit?: number): Promise<PlatformSubmissionRecord[]>;
   listDeclinedSubmissions(limit?: number): Promise<DeclinedSubmissionRecord[]>;
+  listRetentionCandidates(limit?: number): Promise<RetentionCandidateRecord[]>;
+  reduceToMinimalRecord(id: string): Promise<void>;
+  deleteSubmission(id: string): Promise<void>;
   markReviewRequested(id: string, note?: string | null): Promise<void>;
   listSubmissionConditions(submissionId: string): Promise<SubmissionConditionRecord[]>;
   reassignPendingSubmission(input: ReassignSubmissionInput): Promise<void>;

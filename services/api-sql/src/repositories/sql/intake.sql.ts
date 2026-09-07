@@ -11,6 +11,7 @@ import type {
   IntakeRepositoryPort,
   PlatformSubmissionRecord,
   ReassignSubmissionInput,
+  RetentionCandidateRecord,
   SubmissionConditionRecord,
   TenantPendingEnquiryRecord,
   UpdateSubmissionFollowUpInput,
@@ -282,6 +283,7 @@ const REASSIGN_SUBMISSION_GQL = `
     $note: String
     $previousOrganisationId: UUID
     $notePresent: Boolean!
+    $patientAgreementChannel: String
   ) @transaction {
     updated: eligibilitySubmission_updateMany(
       where: {
@@ -309,6 +311,8 @@ const REASSIGN_SUBMISSION_GQL = `
       previousAssignmentVersion: $expectedAssignmentVersion
       newAssignmentVersion: $newAssignmentVersion
       notePresent: $notePresent
+      patientAgreementChannel: $patientAgreementChannel
+      patientAgreementRecordedAt_expr: "request.time"
     })
   }
 `;
@@ -434,6 +438,56 @@ const LIST_DECLINED_SUBMISSIONS_GQL = `
   }
 `;
 
+const LIST_RETENTION_CANDIDATES_GQL = `
+  query ListRetentionCandidates($limit: Int!) {
+    eligibilitySubmissions(
+      where: { outcomeStatus: { ne: OPEN } }
+      limit: $limit
+    ) {
+      id
+      outcomeStatus
+      completedAt
+      updatedAt
+      minimalRecordSince
+    }
+  }
+`;
+
+/**
+ * Strips a closed application back to the minimal record Privacy 6 allows to survive:
+ * name, the decision date and the outcome. Contact details, health answers and free
+ * text are overwritten rather than left for the later delete, because the three-month
+ * promise is about the data, not about the row.
+ */
+const REDUCE_TO_MINIMAL_RECORD_GQL = `
+  mutation ReduceSubmissionToMinimalRecord($id: UUID!) {
+    updated: eligibilitySubmission_updateMany(
+      where: { id: { eq: $id }, minimalRecordSince: { isNull: true } }
+      data: {
+        mobile: ""
+        email: ""
+        postcode: ""
+        heardAbout: null
+        conditionCodes: null
+        primaryConditionCode: null
+        privateAllocationNote: null
+        privateOnboardingNote: null
+        reviewRequestedNote: null
+        submissionIpHash: null
+        minimalRecordSince_expr: "request.time"
+        updatedAt_expr: "request.time"
+      }
+    ) @check(expr: "this == 1", message: "RETENTION_STATE_CONFLICT") @redact
+  }
+`;
+
+const DELETE_SUBMISSION_GQL = `
+  mutation DeleteEligibilitySubmission($id: UUID!) @transaction {
+    eligibilityCondition_deleteMany(where: { submissionId: { eq: $id } })
+    eligibilitySubmission_delete(key: { id: $id })
+  }
+`;
+
 const UPSERT_PATIENT_CONDITION_GQL = `
   mutation UpsertPatientCondition(
     $patientId: UUID!
@@ -524,6 +578,21 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
         }
         return right.submittedAt.localeCompare(left.submittedAt);
       });
+  }
+
+  async listRetentionCandidates(limit = 500): Promise<RetentionCandidateRecord[]> {
+    const result = await dataConnect.executeGraphql<{
+      eligibilitySubmissions: RetentionCandidateRecord[];
+    }, any>(LIST_RETENTION_CANDIDATES_GQL, { variables: { limit } });
+    return result.data.eligibilitySubmissions ?? [];
+  }
+
+  async reduceToMinimalRecord(id: string): Promise<void> {
+    await dataConnect.executeGraphql(REDUCE_TO_MINIMAL_RECORD_GQL, { variables: { id: asUuid(id) } });
+  }
+
+  async deleteSubmission(id: string): Promise<void> {
+    await dataConnect.executeGraphql(DELETE_SUBMISSION_GQL, { variables: { id: asUuid(id) } });
   }
 
   async listPlatformSubmissions(limit = 500): Promise<PlatformSubmissionRecord[]> {
@@ -636,6 +705,7 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
           note: input.note,
           previousOrganisationId: current?.assignedOrganisationId ? asUuid(current.assignedOrganisationId) : null,
           notePresent: Boolean(input.note),
+          patientAgreementChannel: input.patientAgreementChannel,
         },
       });
     } catch (error) {

@@ -39,6 +39,12 @@ const pendingAssignmentSchema = z.object({
   reasonCode: assignmentReasonSchema,
   note: z.string().trim().max(1500).nullable().default(null),
   expectedVersion: z.number().int().nonnegative(),
+  /**
+   * How the patient agreed to move to another pharmacy. Terms 5.2 promises nothing is
+   * shared with another pharmacy unless they agree, so a transfer away from a pharmacy
+   * the patient chose cannot proceed without recording that agreement.
+   */
+  patientAgreementChannel: z.enum(['phone', 'email', 'sms', 'in_person']).nullable().default(null),
 }).strict();
 const followUpStatusSchema = z.enum(['not_started', 'due', 'attempted', 'in_progress', 'completed', 'unable_to_contact']);
 const reviewRequestSchema = z.object({
@@ -272,6 +278,15 @@ export function createPortalIntakeV2Router(): Router {
       if (sameUuid(record.assignedOrganisationId, destinationOrganisationId)) {
         throw new HttpError(409, 'This pharmacy is already the current pending destination.', 'DESTINATION_UNCHANGED');
       }
+      // Allocating an unassigned application is HHH's to do; moving one away from the
+      // pharmacy the patient applied to is not, without their agreement on the record.
+      if (record.assignedOrganisationId && !input.patientAgreementChannel) {
+        throw new HttpError(
+          409,
+          'Record how the patient agreed to move to another pharmacy before transferring this application.',
+          'PATIENT_AGREEMENT_REQUIRED',
+        );
+      }
       const newVersion = record.assignmentVersion + 1;
       await intakeRepo.reassignPendingSubmission({
         id: caseId,
@@ -281,6 +296,7 @@ export function createPortalIntakeV2Router(): Router {
         actorUid: scope.uid,
         reasonCode: input.reasonCode,
         note: input.note,
+        patientAgreementChannel: input.patientAgreementChannel ?? null,
       });
       await identityRepo.appendAudit({
         organisationId: destinationOrganisationId,

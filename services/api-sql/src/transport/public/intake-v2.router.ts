@@ -20,6 +20,8 @@ import { dispatchEmailEvent } from '../../application/notifications/email-dispat
 import { pharmacyEmailContext } from '../../application/notifications/email-outbox.js';
 import { resolveWebsiteAssignedPharmacy } from '../../domain/intake/website-assignment.js';
 import { attachPublicPharmacyLogo } from '../../application/organisation/public-pharmacy-logo.js';
+import { attachPublicPharmacyContacts } from '../../application/organisation/public-pharmacy-contacts.js';
+import { SqlDirectoryRepository } from '../../repositories/sql/directory.sql.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 
 export const referralTokenSchema = z.string().min(12).max(160).regex(/^[A-Za-z0-9_-]+$/);
@@ -153,6 +155,7 @@ export function createPublicIntakeV2Router(): Router {
   const identityRepo = new SqlIdentityRepository();
   const notificationRepo = new SqlNotificationRepository();
   const searchRepo = new SqlPostcodeSearchRepository();
+  const directoryRepo = new SqlDirectoryRepository();
   const storage = new StorageProvider();
 
   router.post('/public/referral-tokens/resolve', publicReferralResolveLimiter, async (req: Request, res: Response, next: NextFunction) => {
@@ -163,7 +166,10 @@ export function createPublicIntakeV2Router(): Router {
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({
         ...resolution,
-        pharmacy: await attachPublicPharmacyLogo(storage, resolution.pharmacy),
+        pharmacy: await attachPublicPharmacyContacts(
+          directoryRepo,
+          await attachPublicPharmacyLogo(storage, resolution.pharmacy),
+        ),
       });
     } catch (error) {
       next(error);

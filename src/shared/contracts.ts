@@ -8,6 +8,12 @@ export interface PublicPharmacy {
   superintendent: string;
   address: string;
   primaryColour: string;
+  /** Controller identity and data-protection contacts, shown in the token form header. */
+  icoRegistrationNumber?: string | null;
+  privacyContactEmail?: string | null;
+  dataProtectionOfficer?: string | null;
+  complaintsContactEmail?: string | null;
+  complaintsContactPhone?: string | null;
 }
 
 export interface EligibilitySubmissionInput {
@@ -80,6 +86,12 @@ export interface PublicDirectoryResult {
   addressSummary: string;
   publicPhone?: string | null;
   website?: string | null;
+  /** Controller identity and data-protection contacts, shown before the patient picks. */
+  icoRegistrationNumber?: string | null;
+  privacyContactEmail?: string | null;
+  dataProtectionOfficer?: string | null;
+  complaintsContactEmail?: string | null;
+  complaintsContactPhone?: string | null;
   approximateMiles: number;
   deliveryCapability: 'none' | 'nationwide' | 'postcode_areas' | 'radius_miles';
   collectionAvailable: boolean;

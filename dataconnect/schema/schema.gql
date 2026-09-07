@@ -451,6 +451,16 @@ type PharmacyDirectoryProfile @table(key: "organisation") {
   postcode: String!
   publicEmail: String!
   publicPhone: String
+  """
+  Identity and data-protection contacts the pharmacy must publish as controller.
+  Privacy 1.1 and 1.5 promise these are shown when the patient selects the pharmacy
+  and in every message it sends, so they belong on the public profile, not internally.
+  """
+  icoRegistrationNumber: String
+  privacyContactEmail: String
+  dataProtectionOfficer: String
+  complaintsContactEmail: String
+  complaintsContactPhone: String
   deliveryCapability: DeliveryCapability! @default(value: NONE)
   deliveryPostcodeAreas: [String!]
   deliveryRadiusMiles: Float
@@ -554,6 +564,8 @@ type EligibilitySubmission @table {
   """ Set when the patient emails info@ asking a pharmacist to reconsider a decline. """
   reviewRequestedAt: Timestamp
   reviewRequestedNote: String
+  """ Set when retention has stripped this record back to name, date and outcome. """
+  minimalRecordSince: Timestamp
   submittedAt: Timestamp! @default(expr: "request.time")
   allocationCompletedAt: Timestamp
   operationalStartedAt: Timestamp
@@ -584,6 +596,14 @@ type EligibilityAssignmentEvent @table {
   newAssignmentVersion: Int!
   pharmacyReviewStarted: Boolean! @default(value: false)
   notePresent: Boolean! @default(value: false)
+  """
+  Terms 5.2 and Privacy 3 make a transfer to another pharmacy conditional on the
+  patient agreeing, under Art. 9(2)(a) explicit consent given at the time. Recording
+  how and when that agreement was obtained is what makes the transfer lawful, so a
+  reassignment that moves the patient between controllers must carry it.
+  """
+  patientAgreementRecordedAt: Timestamp
+  patientAgreementChannel: String
   occurredAt: Timestamp! @default(expr: "request.time")
 }
 
@@ -1070,6 +1090,21 @@ type ReferralFeeEvent @table {
   idempotencyKey: String! @unique
   createdAt: Timestamp! @default(expr: "request.time")
   settledAt: Timestamp
+}
+
+"""
+Marketing opt-outs. Terms 9.2 and Privacy 6 promise an unsubscribe that sticks: the
+record outlives the application it came from, so a deleted patient is not marketed to
+again if they later reappear. Contact details are stored hashed — the list only ever
+needs to answer "is this address suppressed?", never to be read back.
+"""
+type MarketingSuppression @table(key: "contactHash") {
+  contactHash: String!
+  channel: String!
+  organisation: Organisation @ref(fields: "organisationId")
+  organisationId: UUID @index
+  reason: String!
+  suppressedAt: Timestamp! @default(expr: "request.time")
 }
 
 type NotificationOutbox @table {

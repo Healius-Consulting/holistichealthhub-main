@@ -154,6 +154,17 @@ function render(input: {
         organisationId: value(input.payload, 'organisationId'),
         pharmacyName: value(input.payload, 'pharmacyName'),
       }),
+      // Staff and admin mail is internal; only a patient needs to be told who the
+      // controller is, and an internal footer naming their own pharmacy reads oddly.
+      controller: admin ? null : {
+        pharmacyName: value(input.payload, 'pharmacyName'),
+        pharmacyAddress: value(input.payload, 'pharmacyAddress'),
+        gphcNumber: value(input.payload, 'pharmacyGphcNumber'),
+        icoRegistrationNumber: value(input.payload, 'pharmacyIcoNumber'),
+        privacyContactEmail: value(input.payload, 'pharmacyPrivacyEmail'),
+        complaintsContactEmail: value(input.payload, 'pharmacyComplaintsEmail'),
+        complaintsContactPhone: value(input.payload, 'pharmacyComplaintsPhone'),
+      },
     }),
   };
 }

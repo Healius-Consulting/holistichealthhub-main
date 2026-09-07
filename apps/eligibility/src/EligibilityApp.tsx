@@ -98,6 +98,30 @@ function directoryFulfilmentLine(result: PublicDirectoryResult) {
   return options.join(' · ');
 }
 
+/**
+ * The controller's own identity, shown where Privacy 1.1 and 1.5 promise it: beside
+ * the pharmacy in the picker, and in the header of a token form where the patient
+ * never sees a picker at all. Anything the pharmacy has not supplied is left out
+ * rather than shown as an empty label.
+ */
+function PharmacyControllerDetails({ pharmacy, className }: {
+  pharmacy: Pick<PublicPharmacy, 'tradingName' | 'address' | 'gphcNumber' | 'icoRegistrationNumber' | 'privacyContactEmail' | 'dataProtectionOfficer' | 'complaintsContactEmail' | 'complaintsContactPhone'>;
+  className?: string;
+}) {
+  const rows: Array<[string, string]> = [];
+  if (pharmacy.address?.trim()) rows.push(['Address', pharmacy.address]);
+  if (pharmacy.gphcNumber?.trim()) rows.push(['GPhC premises', pharmacy.gphcNumber]);
+  if (pharmacy.icoRegistrationNumber?.trim()) rows.push(['ICO registration', pharmacy.icoRegistrationNumber]);
+  if (pharmacy.dataProtectionOfficer?.trim()) rows.push(['Data Protection Officer', pharmacy.dataProtectionOfficer]);
+  if (pharmacy.privacyContactEmail?.trim()) rows.push(['Privacy contact', pharmacy.privacyContactEmail]);
+  const complaints = [pharmacy.complaintsContactEmail, pharmacy.complaintsContactPhone].filter(v => v?.trim()).join(' · ');
+  if (complaints) rows.push(['Complaints', complaints]);
+  if (!rows.length) return null;
+  return <dl className={`eligibility-controller-details${className ? ` ${className}` : ''}`}>
+    {rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+  </dl>;
+}
+
 function EligibilityShell({
   themeStyle,
   pharmacyThemed = false,
@@ -312,6 +336,7 @@ export default function EligibilityApp() {
           </ol>
         </div>
         <p className="eligibility-intro__note"><HeartPulse size={16} /> This check is not a diagnosis and does not guarantee a consultation or prescription.</p>
+        {token ? <PharmacyControllerDetails pharmacy={pharmacy} className="eligibility-controller-details--intro" /> : null}
       </aside>
       <form className="eligibility-card eligibility-form" onSubmit={submit}>
         <header className="eligibility-form-header"><span><ClipboardCheck size={17} /> Eligibility check</span><h2>Tell us a little about yourself</h2><p>Fields marked with an asterisk are required.</p></header>
@@ -363,7 +388,10 @@ export default function EligibilityApp() {
                 );
               })}
             </div>
-            {selectedDirectoryProfileId ? <div className="banner banner-green" role="status"><CheckCircle2 size={17} /> You are applying to {pharmacy.tradingName}. Nothing is shared with any other pharmacy unless you agree.</div> : <div className="eligibility-location-required" role="status"><MapPin size={17} /><span><strong>Select one pharmacy to continue</strong><small>You can use a pin or the list. The form cannot be submitted until you choose.</small></span></div>}
+            {selectedDirectoryProfileId ? <><div className="banner banner-green" role="status"><CheckCircle2 size={17} /> You are applying to {pharmacy.tradingName}. Nothing is shared with any other pharmacy unless you agree.</div>{(() => {
+              const chosen = search.results.find(result => result.id === selectedDirectoryProfileId);
+              return chosen ? <PharmacyControllerDetails pharmacy={{ ...chosen, address: chosen.addressSummary }} /> : null;
+            })()}</> : <div className="eligibility-location-required" role="status"><MapPin size={17} /><span><strong>Select one pharmacy to continue</strong><small>You can use a pin or the list. The form cannot be submitted until you choose.</small></span></div>}
           </div> : search ? <div className="eligibility-location-manual" aria-live="polite">
             <div className="banner banner-amber"><AlertTriangle size={17} /><span>{search.status === 'provider_unavailable' ? 'The postcode service is temporarily unavailable.' : search.status === 'not_found' ? 'We could not find that postcode.' : 'No participating pharmacy is currently available nearby.'} You can still send the form to {HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL}.</span></div>
             <div className={`eligibility-hhh-allocation${manualProceed ? ' is-selected' : ''}`}>

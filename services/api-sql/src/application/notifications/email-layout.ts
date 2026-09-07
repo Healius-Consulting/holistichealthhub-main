@@ -128,6 +128,22 @@ export function brandedEmail(input: {
   nextSteps?: string[];
   footerNote?: string;
   header: EmailHeader;
+  /**
+   * The controller's own identity. Privacy 1.1 promises the pharmacy's name, address,
+   * GPhC number, ICO number and privacy contact appear in every message it sends, so
+   * a patient can always tell who holds their information without returning to the site.
+   */
+  controller?: {
+    pharmacyName?: string | null;
+    pharmacyAddress?: string | null;
+    gphcNumber?: string | null;
+    icoRegistrationNumber?: string | null;
+    privacyContactEmail?: string | null;
+    complaintsContactEmail?: string | null;
+    complaintsContactPhone?: string | null;
+  } | null;
+  /** Marketing only: PECR reg. 22 requires a working opt-out in every message. */
+  unsubscribeUrl?: string | null;
 }) {
   const paragraphs = input.paragraphs.filter(Boolean).map((paragraph, index, items) =>
     `<p style="margin:0 0 ${index === items.length - 1 ? '28px' : '12px'}; color:#2f3c39; font-size:19px; line-height:31px;">${paragraph}</p>`
@@ -155,6 +171,26 @@ export function brandedEmail(input: {
     : '';
   const footerNote = input.footerNote
     ? `<p style="margin:0; color:#5a6662; font-size:15px; line-height:24px;">${input.footerNote}</p>`
+    : '';
+  const controllerLines = (() => {
+    const c = input.controller;
+    if (!c?.pharmacyName?.trim()) return '';
+    const parts = [
+      c.pharmacyAddress?.trim(),
+      c.gphcNumber?.trim() ? `GPhC premises ${c.gphcNumber.trim()}` : '',
+      c.icoRegistrationNumber?.trim() ? `ICO ${c.icoRegistrationNumber.trim()}` : '',
+    ].filter(Boolean).map(escapeHtml).join(' · ');
+    const contacts = [
+      c.privacyContactEmail?.trim() ? `Privacy: ${c.privacyContactEmail.trim()}` : '',
+      c.complaintsContactEmail?.trim() || c.complaintsContactPhone?.trim()
+        ? `Complaints: ${[c.complaintsContactEmail, c.complaintsContactPhone].filter(v => v?.trim()).join(' · ')}`
+        : '',
+    ].filter(Boolean).map(escapeHtml).join(' · ');
+    return `<p style="margin:18px 0 0; color:#9fb4af; font-size:12px; line-height:18px;"><strong style="color:#dce9e5;">${escapeHtml(c.pharmacyName.trim())}</strong>${parts ? `<br>${parts}` : ''}${contacts ? `<br>${contacts}` : ''}</p>`;
+  })();
+  const unsubscribeHref = input.unsubscribeUrl ? safeHttpUrl(input.unsubscribeUrl) : '';
+  const unsubscribeLine = unsubscribeHref
+    ? `<p style="margin:12px 0 0; color:#9fb4af; font-size:12px; line-height:18px;"><a href="${escapeHtml(unsubscribeHref)}" style="color:#dce9e5; text-decoration:underline;">Unsubscribe from these messages</a></p>`
     : '';
   const eyebrow = input.eyebrow
     ? `<p style="margin:0 0 14px; color:#148c77; font-size:12px; line-height:16px; font-weight:700; letter-spacing:1.8px; text-transform:uppercase;">${escapeHtml(input.eyebrow)}</p>`
@@ -206,6 +242,8 @@ export function brandedEmail(input: {
                 </tr>
               </table>
               <p style="margin:18px 0 0; color:#9fb4af; font-size:12px; line-height:18px;">This mailbox is not monitored.</p>
+              ${controllerLines}
+              ${unsubscribeLine}
             </td>
           </tr>
         </table>
