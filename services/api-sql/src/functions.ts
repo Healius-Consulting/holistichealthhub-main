@@ -6,6 +6,7 @@ import {
 } from './application/patient-finance/patient-finance.js';
 import { refreshAllCuraleafQuoteBanks } from './application/integrations/curaleaf-quote-bank.service.js';
 import { reconcilePendingWorldpayPayments } from './application/payments/worldpay-reconciliation.js';
+import { applyRetention } from './application/retention/apply-retention.js';
 import { runEvery } from './application/workers/cadence.js';
 import { cleanupAbandonedPrescriptionFiles } from './application/workers/cleanup-files.js';
 import { sqlWorkerDeps } from './application/workers/deps.js';
@@ -15,7 +16,9 @@ import { processPendingPaymentLifecycle } from './application/workers/payment-li
 import { pollCuraleafEvents } from './application/workers/poll-curaleaf.js';
 import { createApp } from './bootstrap/app.js';
 import { SqlCuraleafQuoteBankRepository } from './repositories/sql/curaleaf-quote-bank.sql.js';
+import { SqlIdentityRepository } from './repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from './repositories/sql/integration.sql.js';
+import { SqlIntakeRepository } from './repositories/sql/intake.sql.js';
 import { SqlPatientFinanceRepository } from './repositories/sql/patient-finance.sql.js';
 import { SqlPatientRepository } from './repositories/sql/patient.sql.js';
 
@@ -60,6 +63,41 @@ export const updatePatientRetentionLondon = onSchedule({
   retryCount: 1,
 }, async () => {
   console.log('Patient retention update complete', await updatePatientRetentionStates(patientFinanceDeps()));
+});
+
+/**
+ * Enforces the retention table published at /privacy section 6 — not to be confused
+ * with updatePatientRetentionLondon above, which marks patients inactive from their
+ * dispense cadence and is a CRM lifecycle job, not erasure.
+ *
+ * Runs after the other nightly jobs so a record is not deleted from under one of them
+ * mid-run. Failures are reported per record and the run continues, so a single stuck
+ * row cannot quietly suspend deletion for everyone.
+ */
+export const applyDataRetentionLondon = onSchedule({
+  schedule: '45 3 * * *',
+  timeZone: 'Europe/London',
+  region: 'europe-west2',
+  timeoutSeconds: 540,
+  memory: '512MiB',
+  maxInstances: 1,
+  retryCount: 1,
+}, async () => {
+  const run = await applyRetention({
+    intakeRepo: new SqlIntakeRepository(),
+    identityRepo: new SqlIdentityRepository(),
+  });
+  console.log('Data retention run complete', {
+    examined: run.examined,
+    reduced: run.reduced.length,
+    deleted: run.deleted.length,
+    failed: run.failed.length,
+  });
+  // Surface stuck records loudly: a retention promise that silently stops being kept
+  // is the failure mode that matters, and nothing else in the run reports it.
+  for (const failure of run.failed) {
+    console.error('Data retention failed for a record', { id: failure.id, reason: failure.reason });
+  }
 });
 
 export const refreshCuraleafQuoteBankLondon = onSchedule({
