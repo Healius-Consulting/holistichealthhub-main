@@ -39,17 +39,18 @@ export function latestPaymentAllocation(rows: PaymentAllocationRecord[]) {
 }
 
 export function mapPortalOrderFromSql(order: OrderRecord, children?: OrderSqlChildren) {
-  const refund = children?.refunds?.length ? latestRefund(children.refunds) : null;
+  const refund = children?.refunds?.length ? latestRefund(children.refunds.filter(row => !row.prescriptionId)) : null;
   const paymentAllocation = children?.paymentAllocations?.length
     ? latestPaymentAllocation(children.paymentAllocations)
     : null;
-  return toPortalOrder({
+  const mapped = toPortalOrder({
     ...order,
     sqlRefund: refund ? portalRefundFromSql(refund) : undefined,
     sqlLines: children?.lines?.length ? sqlLinesToPortal(children.lines) : undefined,
     sqlQuoteChecks: children?.quoteChecks?.length ? children.quoteChecks : undefined,
     sqlPaymentAllocation: paymentAllocation,
   });
+  return { ...mapped, prescriptionRefundsEnabled: true, prescriptionRefunds: (children?.refunds ?? []).filter(row => row.prescriptionId).map(portalRefundFromSql) };
 }
 
 export async function loadOrganisationOrderChildren(

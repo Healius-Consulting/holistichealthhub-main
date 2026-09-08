@@ -15134,6 +15134,79 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .order-refund-composer__percents{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+.order-resolution__completed--pending{ color: var(--tenant-primary-strong); }
+.order-refund-composer__medicine--quantity{
+  grid-template-columns: minmax(0, 1fr) 88px;
+  align-items: center;
+  cursor: default;
+}
+.order-refund-composer__medicine--quantity input{
+  width: 100%;
+  height: auto;
+  min-height: 40px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  font: inherit;
+  font-size: 13px;
+  text-align: right;
+}
+.order-refund-composer__medicine--quantity input:disabled{ color: var(--text-tertiary); background: var(--bg-muted, var(--bg-surface)); }
+.order-refund-balance{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.order-refund-balance > div{ display: grid; gap: 2px; min-width: 0; }
+.order-refund-balance dt{ color: var(--text-tertiary); font-size: 8px; font-weight: 720; letter-spacing: .05em; text-transform: uppercase; }
+.order-refund-balance dd{ margin: 0; color: var(--text-primary); font-size: 14px; font-weight: 650; }
+.order-refund-history{
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.order-refund-history > li{ display: grid; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.order-refund-history > li:last-child{ border-bottom: 0; }
+.order-refund-history__head{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.order-refund-history__head strong{ color: var(--text-primary); font-size: 12px; }
+.order-refund-history__head span{ margin-left: auto; color: var(--text-primary); font-size: 13px; font-weight: 650; }
+.order-refund-history__head small{ flex: 1 0 100%; color: var(--text-secondary); font-size: 10px; }
+.order-refund-history__lines{ margin: 0; padding-left: 16px; color: var(--text-secondary); font-size: 10px; line-height: 1.6; }
+.order-refund-history__confirm{ display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.order-refund-history__confirm label{ display: grid; flex: 1 1 180px; gap: 4px; color: var(--text-secondary); font-size: 9px; }
+.order-refund-history__confirm input{
+  min-height: 40px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  font: inherit;
+  font-size: 12px;
+}
+@media (max-width: 420px){
+  .order-refund-balance{ grid-template-columns: 1fr; gap: 6px; }
+  .order-refund-composer__medicine--quantity{ grid-template-columns: minmax(0, 1fr) 72px; }
+  .order-refund-composer__medicine--quantity input,
+  .order-refund-history__confirm input{ min-height: 44px; }
+  .order-refund-composer__footer{ align-items: stretch; }
+  /* Every control in the refund flow stays a comfortable touch target on a phone. */
+  .order-refund-composer .btn,
+  .order-refund-history .btn{ flex: 1 0 100%; justify-content: center; min-height: 44px; }
+}
+
 .order-crm-record__body{ display: block; }
 .order-crm-main{ min-width: 0; padding: 18px; background: transparent; }
 .order-crm-main--cancelled{

@@ -1,3 +1,5 @@
+import type { ReservePrescriptionRefundInput } from '../ports/payment.port.js';
+import { HttpError } from '../../domain/common/errors.js';
 import { dataConnect } from '../../bootstrap/firebase.js';
 import { pendingPaymentsToCancel, selectLivePayment } from '../../application/payments/live-payment.js';
 import { refundedAllocationState } from '../../application/payments/payment-allocation.js';
@@ -6,6 +8,7 @@ import type { PaymentAllocationRecord, QuoteCheckRecord } from '../ports/payment
 
 const PAYMENT_FIELDS = `
   id
+  pendingRefundId
   organisationId
   orderId
   patientId
@@ -65,7 +68,7 @@ const LIST_PENDING_WORLDPAY_PAYMENTS_GQL = `
     payments(
       where: {
         route: { eq: WORLDPAY }
-        status: { in: [PENDING, REFUND_REQUIRED] }
+        _or: [{ status: { in: [PENDING, REFUND_REQUIRED] } }, { pendingRefundId: { isNull: false } }]
       }
       limit: $limit
     ) {
@@ -215,7 +218,7 @@ const UPDATE_ORDER_PAYMENT_STATUS_GQL = `
 `;
 
 const REFUND_FIELDS = `
-  id organisationId orderId paymentId status amountPence currency cause route
+  id organisationId orderId paymentId prescriptionId breakdown status amountPence currency cause route
   idempotencyKey externalReference verificationStatus verificationPayload
   confirmedByUid createdAt confirmedAt verifiedAt
 `;
@@ -229,9 +232,15 @@ const CREATE_REFUND_GQL = `
     $currency: String!
     $cause: String!
     $route: PaymentRoute!
+    $paymentVersion: Int!
+    $nextPaymentVersion: Int!
     $status: RefundStatus!
     $idempotencyKey: String!
-  ) {
+  ) @transaction {
+    payment_updateMany(where: { id: { eq: $paymentId }, organisationId: { eq: $organisationId },
+      version: { eq: $paymentVersion }, pendingRefundId: { isNull: true } },
+      data: { version: $nextPaymentVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_RESERVATION_CONFLICT") @redact
     refund_insert(data: {
       organisationId: $organisationId
       orderId: $orderId
@@ -460,6 +469,9 @@ const CREATE_PAYMENT_ALLOCATION_GQL = `
 
 const TRANSFER_PAYMENT_ALLOCATION_GQL = `
   mutation TransferPaymentAllocation(
+    $paymentVersion: Int!
+    $nextPaymentVersion: Int!
+    $expectedSourceVersion: Int!
     $allocationId: UUID!
     $sourceAmountPence: Int64!
     $sourceStatus: PaymentAllocationStatus!
@@ -469,14 +481,18 @@ const TRANSFER_PAYMENT_ALLOCATION_GQL = `
     $toOrderId: UUID!
     $fromOrderId: UUID!
     $amountPence: Int64!
-  ) {
-    paymentAllocation_update(key: { id: $allocationId }, data: {
+  ) @transaction {
+    payment_updateMany(where: { id: { eq: $paymentId }, organisationId: { eq: $organisationId },
+      version: { eq: $paymentVersion }, pendingRefundId: { isNull: true } },
+      data: { version: $nextPaymentVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "ALLOCATION_RESERVATION_CONFLICT") @redact
+    paymentAllocation_updateMany(where: { id: { eq: $allocationId }, version: { eq: $expectedSourceVersion }, status: { eq: ACTIVE } }, data: {
       amountPence: $sourceAmountPence
       status: $sourceStatus
       version: $sourceVersion
       updatedAt_expr: "request.time"
       transferredAt_expr: "request.time"
-    })
+    }) @check(expr: "this == 1", message: "ALLOCATION_RESERVATION_CONFLICT") @redact
     paymentAllocation_insert(data: {
       organisationId: $organisationId
       paymentId: $paymentId
@@ -535,7 +551,61 @@ const COMPLETE_REFUND_AND_ALLOCATION_GQL = `
   }
 `;
 
+export const RESERVE_PRESCRIPTION_REFUND_GQL = `
+  mutation ReservePrescriptionRefund($id: UUID!, $organisationId: UUID!, $orderId: UUID!, $paymentId: UUID!,
+    $prescriptionId: UUID!, $amountPence: Int64!, $currency: String!, $route: PaymentRoute!,
+    $idempotencyKey: String!, $confirmedByUid: String!, $breakdown: Any!,
+    $paymentVersion: Int!, $nextPaymentVersion: Int!, $orderVersion: Int!, $nextOrderVersion: Int!, $orderUpdatedAt: Timestamp!) @transaction {
+    payment_updateMany(where: { id: { eq: $paymentId }, organisationId: { eq: $organisationId },
+      version: { eq: $paymentVersion }, pendingRefundId: { isNull: true } },
+      data: { pendingRefundId: $id, version: $nextPaymentVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_PREVIEW_STALE") @redact
+    order_updateMany(where: { id: { eq: $orderId }, organisationId: { eq: $organisationId }, version: { eq: $orderVersion }, updatedAt: { eq: $orderUpdatedAt } },
+      data: { version: $nextOrderVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_PREVIEW_STALE") @redact
+    refund_insert(data: { id: $id, organisationId: $organisationId, orderId: $orderId, paymentId: $paymentId,
+      prescriptionId: $prescriptionId, breakdown: $breakdown, amountPence: $amountPence, currency: $currency,
+      cause: "prescription_cancelled", route: $route, status: PENDING_CONFIRMATION,
+      idempotencyKey: $idempotencyKey, confirmedByUid: $confirmedByUid })
+  }
+`;
+
+export const COMPLETE_SCOPED_REFUND_GQL = `
+  mutation CompleteScopedRefund($refundId: UUID!, $organisationId: UUID!, $paymentId: UUID!,
+    $allocationId: UUID!, $allocationVersion: Int!, $nextAllocationVersion: Int!, $remainingPence: Int64!,
+    $allocationStatus: PaymentAllocationStatus!, $paymentVersion: Int!, $nextPaymentVersion: Int!,
+    $paymentStatus: PaymentStatus!, $externalReference: String!, $confirmedByUid: String!,
+    $verificationStatus: String!, $verificationPayload: Any) @transaction {
+    payment_updateMany(where: { id: { eq: $paymentId }, organisationId: { eq: $organisationId },
+      pendingRefundId: { eq: $refundId }, version: { eq: $paymentVersion } },
+      data: { pendingRefundId: null, version: $nextPaymentVersion, status: $paymentStatus, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_COMPLETION_CONFLICT") @redact
+    refund_updateMany(where: { id: { eq: $refundId }, organisationId: { eq: $organisationId }, status: { ne: COMPLETED } },
+      data: { status: COMPLETED, externalReference: $externalReference, confirmedByUid: $confirmedByUid,
+        verificationStatus: $verificationStatus, verificationPayload: $verificationPayload,
+        verifiedAt_expr: "request.time", confirmedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_COMPLETION_CONFLICT") @redact
+    paymentAllocation_updateMany(where: { id: { eq: $allocationId }, organisationId: { eq: $organisationId },
+      status: { eq: ACTIVE }, version: { eq: $allocationVersion } },
+      data: { amountPence: $remainingPence, status: $allocationStatus, version: $nextAllocationVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_COMPLETION_CONFLICT") @redact
+  }
+`;
+
 export class SqlPaymentRepository implements PaymentRepositoryPort {
+  async reservePrescriptionRefund(data: ReservePrescriptionRefundInput): Promise<RefundRecord> {
+    try {
+      await dataConnect.executeGraphql(RESERVE_PRESCRIPTION_REFUND_GQL, { variables: {
+        ...data, nextPaymentVersion: data.paymentVersion + 1, nextOrderVersion: data.orderVersion + 1,
+      } });
+    } catch {
+      throw new HttpError(409, 'The payment or prescription changed. Refresh the refund breakdown.', 'REFUND_PREVIEW_STALE');
+    }
+    const saved = await this.findRefundByIdempotencyKey(data.idempotencyKey, data.organisationId);
+    if (!saved) throw new Error('Reserved refund could not be read.');
+    return saved;
+  }
+
   async findPaymentByWorldpayCode(worldpayOrderCode: string): Promise<PaymentRecord | null> {
     const result = await dataConnect.executeGraphql<{ payments: PaymentRecord[] }, any>(
       GET_PAYMENT_BY_WORLDPAY_CODE_GQL,
@@ -715,10 +785,16 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
   }): Promise<RefundRecord> {
     const existing = await this.findRefundByIdempotencyKey(data.idempotencyKey, data.organisationId);
     if (existing) return existing;
+    const payment = (await this.listPaymentsByOrderId(data.orderId, data.organisationId)).find(row => row.id === data.paymentId);
+    if (!payment || payment.pendingRefundId) throw new HttpError(409, 'A refund is reserved on this payment.', 'REFUND_ALREADY_OPEN');
+    const history = await this.listRefundsByOrderId(data.orderId, data.organisationId);
+    if (history.some(row => row.paymentId === data.paymentId && row.prescriptionId)) throw new HttpError(409, 'Use the prescription refund flow for this payment.', 'PRESCRIPTION_REFUND_REQUIRED');
     await dataConnect.executeGraphql<{ refund_insert: { id: string } }, any>(
       CREATE_REFUND_GQL,
       {
         variables: {
+          paymentVersion: payment.version,
+          nextPaymentVersion: payment.version + 1,
           organisationId: data.organisationId,
           orderId: data.orderId,
           paymentId: data.paymentId,
@@ -900,9 +976,15 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
     }
     if (!source || source.status !== 'ACTIVE' || source.orderId !== data.fromOrderId) throw new Error('Active source payment allocation not found.');
     if (data.amountPence <= 0 || data.amountPence > Number(source.amountPence)) throw new Error('Invalid payment allocation transfer amount.');
+    const payment = tenantPayments.find(row => row.id === paymentId)!;
+    const refunds = await this.listRefundsByOrderId(data.fromOrderId, data.organisationId);
+    if (payment.pendingRefundId || refunds.some(row => row.prescriptionId)) throw new HttpError(409, 'Reconcile the prescription refund allocation before replacement.', 'REPLACEMENT_ALLOCATION_RECONCILIATION');
     const remaining = Number(source.amountPence) - data.amountPence;
     const result = await dataConnect.executeGraphql<{ paymentAllocation_insert: { id: string } }, any>(TRANSFER_PAYMENT_ALLOCATION_GQL, {
       variables: {
+        paymentVersion: payment.version,
+        nextPaymentVersion: payment.version + 1,
+        expectedSourceVersion: Number(source.version),
         allocationId: source.id,
         sourceAmountPence: remaining,
         sourceStatus: remaining === 0 ? 'TRANSFERRED' : 'ACTIVE',
@@ -953,6 +1035,32 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
     verificationStatus: string;
     verificationPayload?: unknown;
   }): Promise<PaymentAllocationRecord> {
+    const refunds = await this.listRefundsByOrderId(data.orderId, data.organisationId);
+    const refund = refunds.find(row => row.id === data.refundId && row.paymentId === data.paymentId);
+    if (!refund) throw new Error('Refund not found for this payment.');
+    if (refund.prescriptionId) {
+      const allocations = await this.listPaymentAllocations(data.paymentId, data.organisationId);
+      const active = allocations.find(row => row.orderId === data.orderId && row.status === 'ACTIVE');
+      const anyAllocation = active ?? allocations.find(row => row.orderId === data.orderId);
+      if (refund.status === 'COMPLETED') {
+        if (refund.externalReference !== data.externalReference) throw new Error('Refund reference conflict.');
+        if (!anyAllocation) throw new Error('Completed allocation missing.');
+        return anyAllocation;
+      }
+      if (!active || Number(refund.amountPence) !== data.amountPence) throw new Error('Refund allocation mismatch.');
+      const payment = (await this.listPaymentsByOrderId(data.orderId, data.organisationId)).find(row => row.id === data.paymentId);
+      if (!payment || payment.pendingRefundId !== refund.id) throw new Error('Refund reservation missing.');
+      const next = refundedAllocationState(Number(active.amountPence), data.amountPence);
+      const cumulative = refunds.filter(row => row.paymentId === payment.id && row.status === 'COMPLETED').reduce((sum, row) => sum + Number(row.amountPence), 0) + data.amountPence;
+      if (cumulative > Number(payment.amountPence)) throw new Error('Refund exceeds settled payment.');
+      await dataConnect.executeGraphql(COMPLETE_SCOPED_REFUND_GQL, { variables: {
+        ...data, allocationId: active.id, allocationVersion: Number(active.version), nextAllocationVersion: Number(active.version) + 1,
+        remainingPence: next.amountPence, allocationStatus: next.status,
+        paymentVersion: payment.version, nextPaymentVersion: payment.version + 1,
+        paymentStatus: cumulative === Number(payment.amountPence) ? 'REFUNDED' : 'PAID',
+      } });
+      return { ...active, amountPence: next.amountPence, status: next.status, version: Number(active.version) + 1 };
+    }
     const allocations = await this.listPaymentAllocations(data.paymentId, data.organisationId);
     const active = allocations.find(row => row.orderId === data.orderId && row.status === 'ACTIVE');
     if (!active) throw new Error('Active payment allocation not found for refund.');

@@ -944,3 +944,13 @@ export function updatePaymentSettings(
     }),
   });
 }
+
+export function getPrescriptionRefundPreview(orderId: string, prescriptionId: string) {
+  return apiRequest<import('./contracts').PrescriptionRefundPreview>(`/v1/portal/orders/${encodeURIComponent(orderId)}/prescriptions/${encodeURIComponent(prescriptionId)}/refunds/preview`);
+}
+export function createPrescriptionRefund(orderId: string, prescriptionId: string, input: import('./contracts').PrescriptionRefundRequest) {
+  return apiRequest<import('./contracts').OrderRefundState>(`/v1/portal/orders/${encodeURIComponent(orderId)}/prescriptions/${encodeURIComponent(prescriptionId)}/refunds`, { method: 'POST', body: JSON.stringify(input) });
+}
+export function confirmPrescriptionRefund(orderId: string, prescriptionId: string, refundId: string, externalReference: string) {
+  return apiRequest<import('./contracts').OrderRefundState>(`/v1/portal/orders/${encodeURIComponent(orderId)}/prescriptions/${encodeURIComponent(prescriptionId)}/refunds/${encodeURIComponent(refundId)}/confirm`, { method: 'POST', body: JSON.stringify({ externalReference }) });
+}

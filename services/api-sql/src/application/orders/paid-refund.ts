@@ -91,6 +91,8 @@ export function snapshotWithManualRefundTask(
 }
 
 export type SqlRefundRow = {
+  prescriptionId?: string | null;
+  breakdown?: unknown;
   id: string;
   status: string;
   amountPence: number | string;
@@ -117,6 +119,8 @@ export function portalRefundFromSql(row: SqlRefundRow) {
     : row.externalReference || row.id;
   return {
     id: row.id,
+    prescriptionId: row.prescriptionId ?? undefined,
+    breakdown: row.breakdown ?? undefined,
     status: status === 'COMPLETED' ? 'completed' as const
       : status === 'VERIFICATION_PENDING' ? 'verifying' as const
         : ['RECONCILIATION_REQUIRED', 'FAILED'].includes(status) ? 'reconciliation_required' as const

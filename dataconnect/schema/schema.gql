@@ -865,6 +865,7 @@ type PlacementEvent @table {
 }
 
 type Payment @table {
+  pendingRefundId: UUID
   id: UUID! @default(expr: "uuidV4()")
   organisation: Organisation! @ref(fields: "organisationId")
   organisationId: UUID! @index
@@ -895,6 +896,8 @@ type Payment @table {
 }
 
 type Refund @table @unique(fields: ["organisationId", "idempotencyKey"]) {
+  prescriptionId: UUID @index
+  breakdown: Any
   id: UUID! @default(expr: "uuidV4()")
   organisation: Organisation! @ref(fields: "organisationId")
   organisationId: UUID! @index

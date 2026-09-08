@@ -9,6 +9,7 @@ export type PaymentSqlStatus =
   | 'RECONCILIATION_REQUIRED';
 
 export interface PaymentRecord {
+  pendingRefundId?: string | null;
   id: string;
   organisationId: string;
   orderId: string;
@@ -33,6 +34,8 @@ export interface PaymentRecord {
 }
 
 export interface RefundRecord {
+  prescriptionId?: string | null;
+  breakdown?: unknown;
   id: string;
   organisationId: string;
   orderId: string;
@@ -90,7 +93,14 @@ export interface PaymentAllocationRecord {
   transferredAt?: string | null;
 }
 
+export type ReservePrescriptionRefundInput = {
+  id: string; organisationId: string; orderId: string; paymentId: string; prescriptionId: string;
+  amountPence: number; currency: string; route: 'MANUAL' | 'WORLDPAY'; idempotencyKey: string;
+  confirmedByUid: string; breakdown: unknown; paymentVersion: number; orderVersion: number; orderUpdatedAt: string;
+};
+
 export interface PaymentRepositoryPort {
+  reservePrescriptionRefund(data: ReservePrescriptionRefundInput): Promise<RefundRecord>;
   findPaymentByWorldpayCode(worldpayOrderCode: string): Promise<PaymentRecord | null>;
   findPaymentByReceiptHash(receiptHash: string): Promise<PaymentRecord | null>;
   findPaymentByOrderId(orderId: string, organisationId: string): Promise<PaymentRecord | null>;

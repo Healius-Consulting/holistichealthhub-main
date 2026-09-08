@@ -1,3 +1,4 @@
+import { createPrescriptionRefundRouter } from './prescription-refund.router.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
@@ -229,6 +230,7 @@ const createOrderInputSchema = z.object({
 
 export function createPortalOrderRouter(): Router {
   const router = Router();
+  router.use(createPrescriptionRefundRouter());
   const orderRepo = new SqlOrderRepository();
   const orderLineRepo = new SqlOrderLineRepository();
   const paymentRepo = new SqlPaymentRepository();
@@ -506,6 +508,8 @@ export function createPortalOrderRouter(): Router {
           throw new HttpError(409, 'Resolve every shipped and cancelled source line with Curaleaf before committing its replacement.', 'CURALEAF_CANCEL_REQUIRED', { reason: supplierResolution.reason });
         }
 
+        const refundHistory = await paymentRepo.listRefundsByOrderId(source.id, scope.organisationId);
+        if (payment.pendingRefundId || refundHistory.some(row => row.prescriptionId)) throw new HttpError(409, 'Reconcile the prescription refund allocation before replacement.', 'REPLACEMENT_ALLOCATION_RECONCILIATION');
         const allocations = await paymentRepo.listPaymentAllocations(payment.id, scope.organisationId);
         if (allocations.some(row => row.sourceOrderId === source.id && !['REFUNDED', 'RELEASED'].includes(row.status))) {
           throw new HttpError(409, 'A paid replacement has already been committed for this source order.', 'REPLACEMENT_ALREADY_COMMITTED');
@@ -1250,6 +1254,9 @@ export function createPortalOrderRouter(): Router {
         throw new HttpError(409, 'This order has no settled patient payment to refund.', 'REFUND_NOT_REQUIRED');
       }
       const existingRefunds = await paymentRepo.listRefundsByOrderId(orderId, scope.organisationId);
+      if (snapshotRxList(order.quoteSnapshot).length > 1 || existingRefunds.some(row => row.prescriptionId)) {
+        throw new HttpError(409, 'Select a prescription to refund its remaining medicines.', 'PRESCRIPTION_REFUND_REQUIRED');
+      }
       if (existingRefunds.some(row => String(row.status).toUpperCase() === 'COMPLETED')) {
         throw new HttpError(409, 'This order refund is already confirmed.', 'REFUND_ALREADY_COMPLETED');
       }
@@ -1477,6 +1484,7 @@ export function createPortalOrderRouter(): Router {
       const order = await orderRepo.findOrderById(orderId, scope.organisationId);
       if (!order) throw new HttpError(404, 'Order not found.', 'NOT_FOUND');
       const sqlRefunds = await paymentRepo.listRefundsByOrderId(orderId, scope.organisationId);
+      if (sqlRefunds.some(row => row.id === refundId && row.prescriptionId)) throw new HttpError(409, 'Confirm this refund from its prescription.', 'PRESCRIPTION_REFUND_REQUIRED');
       const sqlRefund = sqlRefunds.find(row => row.id === refundId)
         ?? sqlRefunds.find(row => String(row.status).toUpperCase() === 'PENDING_CONFIRMATION')
         ?? null;

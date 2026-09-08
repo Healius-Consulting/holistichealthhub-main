@@ -50,6 +50,7 @@ import { useModalFocus } from '../accessibility/useModalFocus';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { isOpenPharmacyWorkspace } from '../training/workspace';
 import { ApiRequestError, confirmPortalOrderRefund, createPortalOrderRefund, getPrescriptionFileDownloadUrl, handoutPortalOrder, placePrescriptionManually, recordPortalGoodsReceipt, recordPortalManualPayment, requestPortalOrderCancellation, resolvePortalQuoteReview, resendWorldpayPaymentLink } from '../shared/api';
+import { PrescriptionRefundPanel } from './orders/PrescriptionRefundPanel';
 import { OrderRefundDialog } from './orders/OrderRefundDialog';
 import { catalogFromPatientOrder, type RefundRequestInput } from '../utils/orderRefundCatalog';
 import { composeRefund } from '../utils/refundComposition';
@@ -1759,7 +1760,9 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
       ) : null}
 
       {((order.payment.status === 'paid' || Boolean(selectedDisplayOrder.refund)) && !reviewOpen && !cancellationClosed && (selectedStage === 'rejected' || selectedStage === 'archived' || selectedStage === 'cancelled' || Boolean(selectedDisplayOrder.cancellation) || selectedDisplayOrder.prescriptions.some(rx => rx.purchaseOrderState === 'CANCELLED' || rx.status === 'cancelled'))) ? (
-        <PaidExceptionResolution
+        order.prescriptionRefundsEnabled && order.backendId && selectedPrescription?.backendId && prescriptionIsCancelled(selectedPrescription) ? (
+          <PrescriptionRefundPanel key={selectedPrescription.id} order={order} prescription={selectedPrescription} index={selectedPrescriptionIndex} onReplace={onRedo} canReplace={!hasCuraleafOrder} />
+        ) : <PaidExceptionResolution
           order={selectedDisplayOrder}
           canReplace={!hasCuraleafOrder}
           lockedByCuraleaf={hasCuraleafOrder}

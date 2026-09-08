@@ -1,0 +1,39 @@
+# Server-only scoped refund transactions; mirrored by payment.sql.ts.
+
+  mutation ReservePrescriptionRefund($id: UUID!, $organisationId: UUID!, $orderId: UUID!, $paymentId: UUID!,
+    $prescriptionId: UUID!, $amountPence: Int64!, $currency: String!, $route: PaymentRoute!,
+    $idempotencyKey: String!, $confirmedByUid: String!, $breakdown: Any!,
+    $paymentVersion: Int!, $nextPaymentVersion: Int!, $orderVersion: Int!, $nextOrderVersion: Int!, $orderUpdatedAt: Timestamp!) @auth(level: NO_ACCESS) @transaction {
+    payment_updateMany(where: { id: { eq: $paymentId }, organisationId: { eq: $organisationId },
+      version: { eq: $paymentVersion }, pendingRefundId: { isNull: true } },
+      data: { pendingRefundId: $id, version: $nextPaymentVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_PREVIEW_STALE") @redact
+    order_updateMany(where: { id: { eq: $orderId }, organisationId: { eq: $organisationId }, version: { eq: $orderVersion }, updatedAt: { eq: $orderUpdatedAt } },
+      data: { version: $nextOrderVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_PREVIEW_STALE") @redact
+    refund_insert(data: { id: $id, organisationId: $organisationId, orderId: $orderId, paymentId: $paymentId,
+      prescriptionId: $prescriptionId, breakdown: $breakdown, amountPence: $amountPence, currency: $currency,
+      cause: "prescription_cancelled", route: $route, status: PENDING_CONFIRMATION,
+      idempotencyKey: $idempotencyKey, confirmedByUid: $confirmedByUid })
+  }
+
+
+  mutation CompleteScopedRefund($refundId: UUID!, $organisationId: UUID!, $paymentId: UUID!,
+    $allocationId: UUID!, $allocationVersion: Int!, $nextAllocationVersion: Int!, $remainingPence: Int64!,
+    $allocationStatus: PaymentAllocationStatus!, $paymentVersion: Int!, $nextPaymentVersion: Int!,
+    $paymentStatus: PaymentStatus!, $externalReference: String!, $confirmedByUid: String!,
+    $verificationStatus: String!, $verificationPayload: Any) @auth(level: NO_ACCESS) @transaction {
+    payment_updateMany(where: { id: { eq: $paymentId }, organisationId: { eq: $organisationId },
+      pendingRefundId: { eq: $refundId }, version: { eq: $paymentVersion } },
+      data: { pendingRefundId: null, version: $nextPaymentVersion, status: $paymentStatus, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_COMPLETION_CONFLICT") @redact
+    refund_updateMany(where: { id: { eq: $refundId }, organisationId: { eq: $organisationId }, status: { ne: COMPLETED } },
+      data: { status: COMPLETED, externalReference: $externalReference, confirmedByUid: $confirmedByUid,
+        verificationStatus: $verificationStatus, verificationPayload: $verificationPayload,
+        verifiedAt_expr: "request.time", confirmedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_COMPLETION_CONFLICT") @redact
+    paymentAllocation_updateMany(where: { id: { eq: $allocationId }, organisationId: { eq: $organisationId },
+      status: { eq: ACTIVE }, version: { eq: $allocationVersion } },
+      data: { amountPence: $remainingPence, status: $allocationStatus, version: $nextAllocationVersion, updatedAt_expr: "request.time" })
+      @check(expr: "this == 1", message: "REFUND_COMPLETION_CONFLICT") @redact
+  }

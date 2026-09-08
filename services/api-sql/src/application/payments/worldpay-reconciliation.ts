@@ -1,3 +1,4 @@
+import { completePrescriptionRefund } from './prescription-refund-completion.js';
 import { queryWorldpayPayment } from '../integrations/worldpay.service.js';
 import type { IntegrationRepositoryPort } from '../../repositories/ports/integration.port.js';
 import type { OrderRecord, OrderRepositoryPort } from '../../repositories/ports/order.port.js';
@@ -115,6 +116,15 @@ async function reconcilePreparedWorldpayRefund(
     return { state: 'reconciliation_required', reason: 'The active payment allocation is missing.' };
   }
 
+  if (refund.prescriptionId) {
+    await completePrescriptionRefund(deps.paymentRepo, refund, {
+      externalReference: String(refund.externalReference || commandId || requestReference),
+      confirmedByUid: refund.confirmedByUid, verificationStatus: 'worldpay_partial_refund_verified',
+      verificationPayload: { ...verificationPayload, providerStatus: provider.providerStatus, providerEvidence: verification.evidence },
+    });
+    const total = refunds.filter(row => row.paymentId === payment.id && row.status === 'COMPLETED').reduce((sum, row) => sum + Number(row.amountPence), 0) + Number(refund.amountPence);
+    return { state: 'reconciled', paymentStatus: total >= Number(payment.amountPence) ? 'REFUNDED' : 'PAID', providerStatus: provider.providerStatus };
+  }
   const fullyRefunded = Number(refund.amountPence) >= Number(payment.amountPence);
   await deps.paymentRepo.completeRefundAndConsumeAllocation({
     refundId: refund.id,
@@ -274,6 +284,12 @@ export async function reconcileWorldpayPaymentRecord(
     ? await reconcilePreparedWorldpayRefund(payment, provider, queried.expectedEntityId, order, deps)
     : null;
   if (preparedRefundOutcome) return preparedRefundOutcome;
+  if (order && ['refund_required', 'refunded'].includes(provider.paymentStatus)) {
+    const history = await deps.paymentRepo.listRefundsByOrderId(order.id, payment.organisationId);
+    if (history.some(row => row.prescriptionId && row.paymentId === payment.id)) {
+      return { state: 'reconciled', paymentStatus: payment.status, providerStatus: provider.providerStatus };
+    }
+  }
   // Provider refund events open/advance the staff refund gate; they never close it
   // without the pharmacy's recorded reference and exact verification route.
   const { latePaymentAfterCancellation, retiredLinkPaid, providerReportsRefund, nextStatus } = worldpayPaymentDisposition({

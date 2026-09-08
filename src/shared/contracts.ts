@@ -679,6 +679,8 @@ export interface PortalOrderRecord {
   manualTender?: string;
   manualReference?: string;
   refund?: OrderRefundState;
+  prescriptionRefunds?: OrderRefundState[];
+  prescriptionRefundsEnabled?: boolean;
   cancellation?: OrderCancellationState;
   curaleafCancellation?: CuraleafCancellationState;
   curaleafApprovedAt?: string;
@@ -851,7 +853,38 @@ export interface PharmacyOperationalStatus {
   missingGates: string[];
 }
 
+export interface PrescriptionRefundBreakdown {
+  version: 1;
+  prescriptionId: string;
+  medicines: Array<{ orderLineId: string; quantity: number; unitPricePence: number; amountPence: number; label: string }>;
+  dispensingFeePence: number;
+  deliveryFeePence: number;
+  requestHash: string;
+}
+export interface PrescriptionRefundPreview {
+  prescriptionId: string;
+  paymentId: string;
+  previewVersion: string;
+  medicines: Array<{ orderLineId: string; label: string; quantity: number; unitPricePence: number }>;
+  dispensing: { originalPence: number; remainingPence: number };
+  delivery: { originalPence: number; remainingPence: number };
+  availablePence: number;
+  reservedPence: number;
+  completedPence: number;
+  pendingRefundId: string | null;
+  history: Array<{ id: string; prescriptionId?: string; status: string; amountPence: number; breakdown: PrescriptionRefundBreakdown; externalReference?: string | null }>;
+}
+export interface PrescriptionRefundRequest {
+  previewVersion: string;
+  requestId: string;
+  medicines: Array<{ orderLineId: string; quantity: number }>;
+  dispensingPercent: number;
+  deliveryPercent: number;
+}
+
 export interface OrderRefundState {
+  prescriptionId?: string;
+  breakdown?: PrescriptionRefundBreakdown;
   id: string;
   status: 'pending_confirmation' | 'verifying' | 'reconciliation_required' | 'completed';
   amountPence: number;

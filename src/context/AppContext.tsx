@@ -201,6 +201,8 @@ export function orderReference(order: PatientOrder) {
 }
 
 export interface PatientOrder {
+  prescriptionRefunds?: OrderRefundState[];
+  prescriptionRefundsEnabled?: boolean;
   id: number;
   backendId?: string;
   orderNumber?: string;
@@ -1047,6 +1049,8 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
     curaleafApprovedAt: record.curaleafApprovedAt ?? null,
     auditEvents: record.auditEvents,
     refund: record.refund,
+    prescriptionRefunds: record.prescriptionRefunds,
+    prescriptionRefundsEnabled: record.prescriptionRefundsEnabled,
     cancellation: record.cancellation,
     curaleafCancellation: record.curaleafCancellation,
     pharmacyContribution: record.pharmacyContributionPence ? record.pharmacyContributionPence / 100 : 0,
@@ -1956,7 +1960,9 @@ function reducer(state: AppState, action: Action): AppState {
         refund: { ...order.refund, status: 'completed', externalReference: action.externalReference, confirmedAt: new Date().toISOString(), confirmedBy: state.staffSession?.name ?? 'Pharmacy staff' },
       } : order);
     case 'SET_ORDER_REFUND':
-      return mapOrder(state, action.orderId, order => ({ ...order, refund: action.refund }));
+      return mapOrder(state, action.orderId, order => action.refund.prescriptionId
+        ? { ...order, prescriptionRefunds: [...(order.prescriptionRefunds ?? []).filter(row => row.id !== action.refund.id), action.refund] }
+        : { ...order, refund: action.refund });
     case 'REQUEST_ORDER_CANCELLATION':
       return mapOrder(state, action.orderId, order => {
         const requestedAt = new Date().toISOString();
