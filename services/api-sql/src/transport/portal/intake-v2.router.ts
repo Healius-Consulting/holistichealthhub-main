@@ -506,7 +506,16 @@ export function createPortalIntakeV2Router(): Router {
           pharmacy_new_patient_referred: {
             skip: !canActivateReferredPatient(destination),
             payload: {
-              caseReference: record.id,
+              // The raw row id was going out here, so the pharmacy was reading a
+              // UUID. Every other surface shows the HHH-dated case reference.
+              caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
+              // The referred patient, so the pharmacy can identify and ring them
+              // without opening the portal. No health information travels with it.
+              firstName: record.firstName,
+              surname: record.surname,
+              dob: record.dob,
+              mobile: record.mobile,
+              email: record.email,
               ...pharmacyContext,
             },
             keyParts: ['pharmacy-referred', record.id, record.assignedOrganisationId],

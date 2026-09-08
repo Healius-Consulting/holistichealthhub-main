@@ -126,6 +126,15 @@ function paymentReceiptUrl(receiptHash: string) {
   return `https://holistichealthhub.live/receipt/${encodeURIComponent(receiptHash)}`;
 }
 
+/** A stored date (YYYY-MM-DD) as "14 March 1988". Read in UTC so the day never shifts. */
+function longDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? `${trimmed}T00:00:00Z` : trimmed);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parsed);
+}
+
 function enquirySourceLabel(sourceType: string) {
   if (sourceType === 'GENERAL_HHH_WEBSITE') return 'Website';
   if (sourceType === 'PHARMACY_QR' || sourceType === 'LEGACY_PHARMACY_QR') return 'Pharmacy QR';
@@ -692,21 +701,43 @@ export const EMAILS = {
       footerNote: 'If you did not expect this, contact an HHH administrator immediately.',
     }),
   },
+  /**
+   * Goes to the pharmacy's own operational mailbox, and the pharmacy is the
+   * controller for this patient — these are its own records, not a disclosure.
+   * It still carries no health information: who has been referred and how to
+   * reach them, with the form answers left in the portal.
+   */
   pharmacy_new_patient_referred: {
     audience: 'pharmacy_owner',
     events: ['referral.activated'],
     schedule: 'immediate',
-    summary: 'Sent when HHH admin activates a referred patient for that pharmacy.',
+    summary: 'Sent when HHH admin activates a referred patient for that pharmacy. Carries the patient name and contact details.',
     render: (payload) => {
-      const { pharmacyName, caseReference } = fields(payload);
+      const { pharmacyName, caseReference, enquiry } = fields(payload);
+      const dob = longDate(value(payload, 'dob'));
+      const patientDetails = [
+        { label: 'Name', value: enquiry.name },
+        { label: 'Date of birth', value: dob },
+        { label: 'Phone', value: enquiry.phone },
+        { label: 'Email', value: enquiry.email },
+        { label: 'Reference', value: value(payload, 'caseReference') },
+      ];
+      const plainDetails = patientDetails
+        .filter(item => item.value)
+        .map(item => `${item.label}: ${item.value}`)
+        .join('\n');
       return render({
         kind: 'pharmacy_new_patient_referred',
         payload,
-        subject: 'New patient referred to your pharmacy',
-        preheader: 'A new referral is waiting in the portal.',
+        subject: `New patient referred${enquiry.name ? ` — ${enquiry.name}` : ''}`,
+        preheader: enquiry.name ? `${enquiry.name} has been referred to your pharmacy.` : 'A new referral is waiting in the portal.',
         title: 'New patient referred',
-        text: `A new patient has been referred to ${value(payload, 'pharmacyName') || 'your pharmacy'}${value(payload, 'caseReference') ? ` (${value(payload, 'caseReference')})` : ''}.`,
-        paragraphs: [`A new patient has been referred to <strong>${pharmacyName}</strong>${caseReference ? ` (<strong>${caseReference}</strong>)` : ''}.`],
+        text: `A new patient has been referred to ${value(payload, 'pharmacyName') || 'your pharmacy'}.\n\n${plainDetails}\n\nOpen the portal for their form answers.`,
+        paragraphs: [`A new patient has been referred to <strong>${pharmacyName}</strong>.`],
+        detailsTitle: 'Patient',
+        details: patientDetails,
+        cta: { label: 'Open portal', href: 'https://portal.holistichealthhub.live' },
+        footerNote: 'Their form answers and the full record are in the portal.',
       });
     },
   },

@@ -93,6 +93,25 @@ describe('email template renderer', () => {
     assert.doesNotMatch(rendered.text, /the pharmacy: /);
   });
 
+  it('gives the pharmacy the referred patient, not a row id', () => {
+    const rendered = renderEmailTemplate('pharmacy_new_patient_referred', {
+      pharmacyName: 'Eastwood Health Pharmacy',
+      caseReference: 'HHH-20260908-A1B2C3D4',
+      firstName: 'Avery',
+      surname: 'Mitchell',
+      dob: '1988-03-14',
+      mobile: '07700 900123',
+      email: 'avery.mitchell@example.test',
+    });
+    assert.match(rendered.subject, /Avery Mitchell/);
+    assert.match(rendered.text, /HHH-20260908-A1B2C3D4/);
+    assert.match(rendered.text, /14 March 1988/);
+    assert.match(rendered.text, /07700 900123/);
+    assert.match(rendered.html, /avery\.mitchell@example\.test/);
+    // A UUID reaching the pharmacy is the bug this replaced.
+    assert.doesNotMatch(rendered.text, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-/i);
+  });
+
   it('renders a patient payment confirmation', () => {
     const rendered = renderEmailTemplate('patient_payment_confirmation', {
       firstName: 'Avery',

@@ -22,7 +22,7 @@ Operational pharmacy emails go to the **owner** account only (the earliest staff
 
 - `pharmacy_new_enquiry_assigned` (enquiry.submitted, enquiry.reassigned): Sent to the pharmacy owner when an eligibility enquiry is assigned to them.
 - `pharmacy_enquiry_declined` (enquiry.declined): Sent to the pharmacy owner when HHH declines an enquiry that was assigned to them.
-- `pharmacy_new_patient_referred` (referral.activated): Sent when HHH admin activates a referred patient for that pharmacy.
+- `pharmacy_new_patient_referred` (referral.activated): Sent when HHH admin activates a referred patient for that pharmacy. Carries the patient name and contact details.
 - `pharmacy_payment_received` (payment.settled): Sent when a patient payment is recorded (Worldpay settlement or manual pay).
 - `pharmacy_order_accepted` (order.accepted): Sent when the pharmacy submits / accepts an order.
 - `pharmacy_order_cancelled` (order.cancelled): Sent when Curaleaf reports a cancellation that needs pharmacy action.
