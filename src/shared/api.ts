@@ -188,7 +188,16 @@ export function getAssignmentCandidates(caseId: string, query = '') {
   return apiRequest<{ records: Array<Record<string, unknown>> }>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/assignment-candidates?q=${encodeURIComponent(query)}`);
 }
 
-export function reassignIntake(caseId: string, input: { destinationOrganisationId: string; reasonCode: string; note: string | null; expectedVersion: number }) {
+export type PatientAgreementChannel = 'phone' | 'email' | 'sms' | 'in_person';
+
+export function reassignIntake(caseId: string, input: {
+  destinationOrganisationId: string;
+  reasonCode: string;
+  note: string | null;
+  expectedVersion: number;
+  /** Required by the server when the enquiry is being moved away from a pharmacy it is already with. */
+  patientAgreementChannel?: PatientAgreementChannel | null;
+}) {
   return apiRequest<Record<string, unknown>>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/reassign`, { method: 'POST', body: JSON.stringify(input) });
 }
 

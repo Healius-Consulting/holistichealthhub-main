@@ -2439,6 +2439,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;
+    // Order history is a pharmacy-staff route. An HHH admin viewing a live pharmacy
+    // has no access to it, so polling would only produce a 403 every interval.
+    if (state.staffSession.role !== 'pharmacy') return;
     let cancelled = false;
     let inFlight = false;
     const organisationId = state.currentOrganisationId;

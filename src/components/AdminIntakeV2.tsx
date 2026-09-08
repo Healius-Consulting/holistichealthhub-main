@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ClipboardList, Globe, Inbox, LoaderCircle, LockKeyhole, MapPin, QrCode, RefreshCw, Search, Send, ShieldCheck, UserRound, type LucideIcon } from 'lucide-react';
-import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason } from '../shared/api';
+import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason, type PatientAgreementChannel } from '../shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { compactPatientName } from '../utils/patientName';
@@ -77,6 +77,9 @@ export default function AdminIntakeV2() {
   const [destination, setDestination] = useState('');
   const [reason, setReason] = useState<(typeof assignmentReasons)[number]>('patient_preference');
   const [allocationNote, setAllocationNote] = useState('');
+  // Moving an enquiry away from the pharmacy it is already with needs the patient's
+  // agreement on record (Terms 5.2); the server refuses the move without it.
+  const [agreementChannel, setAgreementChannel] = useState<PatientAgreementChannel | ''>('');
   const [onboardingNote, setOnboardingNote] = useState('');
   const [declineReason, setDeclineReason] = useState<DeclineReason | ''>('');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('not_started');
@@ -187,12 +190,14 @@ export default function AdminIntakeV2() {
           reasonCode: reason,
           note: allocationNote.trim() || null,
           expectedVersion: Number(detail.assignmentVersion ?? selected.version),
+          patientAgreementChannel: agreementChannel || null,
         });
         await Promise.all([refreshDetail(), load()]);
       } else {
         applyDetail({ ...detail, effectiveAssignedOrganisationId: destination, assignedOrganisationId: destination, assignedOrganisationName: candidates.find(candidate => candidate.id === destination)?.name, assignmentVersion: Number(detail.assignmentVersion ?? 0) + 1 });
       }
       setAllocationNote('');
+      setAgreementChannel('');
       setMessage('Pending destination updated. The previous pharmacy can no longer see this enquiry; it now appears for the new pharmacy.');
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : 'The pending destination could not be changed.');
@@ -315,6 +320,8 @@ export default function AdminIntakeV2() {
   }, [syncListOverflow, filteredRecords.length, queueFilter, loading]);
 
   const currentDestinationId = String(detail?.effectiveAssignedOrganisationId ?? '');
+  // Mirrors the server's rule: agreement is needed only when a pharmacy already holds the enquiry.
+  const movingFromPharmacy = Boolean(detail?.assignedOrganisationId);
   const destinationSaved = Boolean(currentDestinationId) && sameId(destination, currentDestinationId);
   const reviewComplete = detail?.followUpStatus === 'completed';
   const sourceName = String(detail?.sourceOrganisationName ?? (detail?.sourceType === 'general_hhh_website' ? 'Main HHH website' : 'Original QR pharmacy'));
@@ -493,8 +500,17 @@ export default function AdminIntakeV2() {
                       return <option key={String(candidate.id)} value={String(candidate.id)}>{String(candidate.name)} · GPhC {String(candidate.gphcNumber ?? 'not recorded')}{extra}</option>;
                     })}</select></label>
                     <label>Reason<select className="input" value={reason} onChange={event => setReason(event.target.value as typeof reason)}><option value="patient_preference">Patient preference</option><option value="capacity">Capacity</option><option value="delivery_or_collection">Delivery or collection needs</option><option value="geographic_coverage">Geographic coverage</option><option value="service_compatibility">Service compatibility</option><option value="administrative_correction">Administrative correction</option></select></label>
+                    {movingFromPharmacy ? (
+                      <label>How the patient agreed to the move<select className="input" value={agreementChannel} onChange={event => setAgreementChannel(event.target.value as PatientAgreementChannel | '')} required>
+                        <option value="">Choose how they agreed…</option>
+                        <option value="phone">By phone</option>
+                        <option value="email">By email</option>
+                        <option value="sms">By text message</option>
+                        <option value="in_person">In person</option>
+                      </select><small>This enquiry is already with {destinationName}. Nothing is shared with another pharmacy without the patient’s agreement, so record how they gave it.</small></label>
+                    ) : null}
                     <label>Private HHH note<textarea className="input" rows={3} value={allocationNote} onChange={event => setAllocationNote(event.target.value)} /></label>
-                    <button type="button" className="btn" disabled={busy || !destination || sameId(destination, currentDestinationId)} onClick={() => void saveDestination()}>Move pending enquiry</button>
+                    <button type="button" className="btn" disabled={busy || !destination || sameId(destination, currentDestinationId) || (movingFromPharmacy && !agreementChannel)} onClick={() => void saveDestination()}>Move pending enquiry</button>
                   </section>
 
                   <section className="admin-v2-panel">
