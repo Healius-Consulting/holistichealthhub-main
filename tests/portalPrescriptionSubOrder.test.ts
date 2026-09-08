@@ -96,3 +96,16 @@ test('shipments without overlapping packs are excluded from an unplaced sibling'
   assert.deepEqual(rx2.map(shipment => shipment.id), ['ship-2']);
   assert.equal(shipmentsForPrescription(shipments, [{ packId: 'pack-c' }], { failClosedWhenEmpty: true }).length, 0);
 });
+
+test('parent cancellation fields cannot leak into a different prescription PO', () => {
+  const record = {
+    ...paidMulti,
+    curaleaf: { ...paidMulti.curaleaf!, purchaseOrderId: 'po-1', purchaseOrderState: 'CANCELLED' as const },
+    curaleafSubOrders: {
+      'rx-1': { status: 'purchase_order_submitted' as const, purchaseOrderId: 'po-1' },
+      'rx-2': { status: 'purchase_order_submitted' as const, purchaseOrderId: 'po-2' },
+    },
+  };
+  assert.equal(resolvePortalPrescriptionCuraleaf(record, { id: 'rx-1' })?.purchaseOrderState, 'CANCELLED');
+  assert.equal(resolvePortalPrescriptionCuraleaf(record, { id: 'rx-2' })?.purchaseOrderState, undefined);
+});

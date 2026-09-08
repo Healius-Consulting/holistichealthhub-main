@@ -790,12 +790,12 @@ export const EMAILS = {
       return render({
         kind: 'pharmacy_order_cancelled',
         payload,
-        subject: 'Order cancelled',
-        preheader: 'An order needs refund or replacement action.',
-        title: 'Order cancelled',
-        text: `An order has been cancelled${orderNumber ? `: ${value(payload, 'orderNumber')}` : ''}.${value(payload, 'summary') ? `\n\n${value(payload, 'summary')}` : ''}`,
+        subject: 'Supplier cancellation',
+        preheader: 'Review the affected prescription for refund or replacement.',
+        title: 'Supplier cancellation',
+        text: `Curaleaf has reported a cancellation for order${orderNumber ? `: ${value(payload, 'orderNumber')}` : ''}.${value(payload, 'summary') ? `\n\n${value(payload, 'summary')}` : ''}`,
         paragraphs: [
-          `An order has been cancelled${orderNumber ? `: <strong>${orderNumber}</strong>` : ''}.`,
+          `Curaleaf has reported a cancellation for order${orderNumber ? `: <strong>${orderNumber}</strong>` : ''}.`,
           ...(summary ? [summary] : []),
         ],
       });

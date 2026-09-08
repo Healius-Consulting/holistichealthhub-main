@@ -1270,6 +1270,30 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(flow?.lines?.[0]?.allocated, 1);
   });
 
+  for (const cancelledIndex of [1, 2]) {
+    it(`isolates historical root cancellation to PO ${cancelledIndex}`, () => {
+      const mapped = toPortalOrder({
+        ...order, paymentStatus: 'PAID', paidAt: '2026-08-18T10:00:00.000Z', fulfilmentStatus: 'EXCEPTION',
+        quoteSnapshot: {
+          prescriptions: [1, 2].map(index => ({ id: String(index), fileId: `file-${index}`, items: [{ packId: 'same-pack', quantity: 1 }] })),
+          curaleaf: { purchaseOrderId: `po-${cancelledIndex}`, state: 'CANCELLED', purchaseOrderState: 'CANCELLED' },
+          curaleafSubOrders: {
+            1: { purchaseOrderId: 'po-1', status: 'purchase_order_submitted' },
+            2: { purchaseOrderId: 'po-2', status: 'purchase_order_submitted' },
+          },
+          prescriptionFlow: {
+            1: { state: 'CANCELLED_PURCHASE_ORDER', purchaseOrderId: 'po-1' },
+            2: { state: 'CANCELLED_PURCHASE_ORDER', purchaseOrderId: 'po-2' },
+          },
+        },
+      });
+      assert.notEqual(mapped.status, 'cancelled');
+      assert.notEqual(mapped.fulfilmentStatus, 'cancelled');
+      assert.equal(mapped.prescriptionFlow?.[String(cancelledIndex)]?.state, 'CANCELLED_PURCHASE_ORDER');
+      assert.equal(mapped.prescriptionFlow?.[String(3 - cancelledIndex)]?.state, 'PLACED');
+    });
+  }
+
   it('keeps line items and purchase orders on the matching prescription', () => {
     const mapped = toPortalOrder({
       ...order,

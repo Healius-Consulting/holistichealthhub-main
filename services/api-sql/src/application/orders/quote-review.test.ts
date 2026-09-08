@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   applyCancelledPurchaseOrderSnapshot,
+  supplierCancellationAlreadyConfirmed,
   curaleafOwnsCancellation,
   curaleafRequiresSupplierCancel,
   isCuraleafCorrectionRequired,
@@ -179,6 +180,37 @@ describe('Curaleaf cancelled purchase orders', () => {
       ...order,
       quoteSnapshot: {},
     }, { id: 'other', customerReference: 'ORD-MSZ0VH1L', state: 'CANCELLED' }), true);
+  });
+
+  it('cancels only flows and sub-orders with the affected PO, including sequential cancellations', () => {
+    const snapshot = {
+      prescriptions: [{ id: '1' }, { id: '2' }, { id: '3' }],
+      curaleaf: { purchaseOrderId: 'po-2', state: 'PROCESSING' },
+      curaleafSubOrders: {
+        1: { purchaseOrderId: 'po-1', state: 'PROCESSING' },
+        2: { purchaseOrderId: 'po-2', state: 'PROCESSING' },
+      },
+      prescriptionFlow: {
+        1: { purchaseOrderId: 'po-1', state: 'PLACED' },
+        alias1: { purchaseOrderId: 'po-1', state: 'PLACED' },
+        2: { purchaseOrderId: 'po-2', state: 'PLACED' },
+        3: { state: 'PENDING_PLACEMENT' },
+      },
+    };
+    const first = applyCancelledPurchaseOrderSnapshot(snapshot, { id: 'po-1', state: 'CANCELLED' });
+    assert.equal(first.prescriptionFlow['1'].state, 'CANCELLED_PURCHASE_ORDER');
+    assert.equal(first.prescriptionFlow.alias1.state, 'CANCELLED_PURCHASE_ORDER');
+    assert.deepEqual(first.prescriptionFlow['2'], snapshot.prescriptionFlow['2']);
+    assert.deepEqual(first.prescriptionFlow['3'], snapshot.prescriptionFlow['3']);
+    assert.deepEqual(first.curaleaf, snapshot.curaleaf);
+    assert.deepEqual(first.curaleafSubOrders['2'], snapshot.curaleafSubOrders['2']);
+    assert.equal(first.curaleafSubOrders['1'].purchaseOrderState, 'CANCELLED');
+    assert.equal(supplierCancellationAlreadyConfirmed(first, 'po-1'), true);
+    assert.equal(supplierCancellationAlreadyConfirmed(first, 'po-2'), false);
+    const second = applyCancelledPurchaseOrderSnapshot(first, { id: 'po-2', state: 'CANCELLED' });
+    assert.equal(second.prescriptionFlow['2'].state, 'CANCELLED_PURCHASE_ORDER');
+    assert.equal(second.prescriptionFlow['3'].state, 'PENDING_PLACEMENT');
+    assert.deepEqual(applyCancelledPurchaseOrderSnapshot(snapshot, { id: 'unrelated' }).prescriptionFlow, snapshot.prescriptionFlow);
   });
 
   it('stamps CANCELLED onto the snapshot without clearing payment identity', () => {

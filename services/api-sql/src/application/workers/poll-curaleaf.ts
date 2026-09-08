@@ -112,7 +112,7 @@ async function persistSupplierCancellation(
     purchaseOrder?: CuraleafPurchaseOrderLike | null;
   },
 ) {
-  if (supplierCancellationAlreadyConfirmed(order.quoteSnapshot)) return;
+  if (supplierCancellationAlreadyConfirmed(order.quoteSnapshot, input.purchaseOrderId)) return;
   const cancellationStamped = stampCuraleafCancellationOnSnapshot(order.quoteSnapshot, {
       action: 'confirmed',
       purchaseOrderId: input.purchaseOrderId,
@@ -151,7 +151,20 @@ async function persistSupplierCancellation(
     quoteSnapshot: nextSnapshot,
     fulfilmentStatus: 'EXCEPTION',
   });
-  await new SqlPrescriptionSerialRepository().endLiveForOrder(order.organisationId, order.id, 'curaleaf_cancelled').catch(() => undefined);
+  const serialRepo = new SqlPrescriptionSerialRepository();
+  const prescriptions = Array.isArray(typedSnapshot.prescriptions) ? typedSnapshot.prescriptions as Array<Record<string, any>> : [];
+  if (input.purchaseOrderId && prescriptions.length > 1) {
+    const subs = (typedSnapshot.curaleafSubOrders ?? {}) as Record<string, Record<string, any>>;
+    const cancelledRxIds = new Set(Object.values(subs)
+      .filter(sub => sub.purchaseOrderId === input.purchaseOrderId)
+      .map(sub => sub.prescriptionId).filter(Boolean));
+    const uses = await serialRepo.findLiveByOrder(order.organisationId, order.id);
+    for (const use of uses) {
+      if (use.curaleafPrescriptionId && cancelledRxIds.has(use.curaleafPrescriptionId)) await serialRepo.end(use.id, 'curaleaf_cancelled');
+    }
+  } else {
+    await serialRepo.endLiveForOrder(order.organisationId, order.id, 'curaleaf_cancelled');
+  }
   await dispatchEmailEvent('order.cancelled', {
     notificationRepo: deps.notificationRepo,
     identityRepo: deps.identityRepo,

@@ -54,6 +54,7 @@ import { OrderRefundDialog } from './orders/OrderRefundDialog';
 import { catalogFromPatientOrder, type RefundRequestInput } from '../utils/orderRefundCatalog';
 import { composeRefund } from '../utils/refundComposition';
 import { isPersistedPrescriptionFileId, orderPrescriptionCopyViewable } from '../utils/prescriptionFile';
+import { prescriptionReference } from '../utils/orderReference';
 import { compactPatientName } from '../utils/patientName';
 import {
   orderAwaitingSupplierShipmentProductNames,
@@ -421,8 +422,8 @@ function OrderFilterControl({
 function searchFieldsFor(record: OrderRecord, scope: OrderSearchScope): Array<string | number | null | undefined> {
   const { order, patient } = record;
   const patientFields = [patient?.name, patient?.dob, patient?.email, patient?.mobile];
-  const orderFields = [order.id, order.backendId, orderReference(order)];
-  const prescriptionFields = order.prescriptions.flatMap(prescription => [prescription.purchaseOrderId, prescription.serialNumber]);
+  const orderFields = [order.id, order.backendId, order.orderNumber, orderReference(order)];
+  const prescriptionFields = order.prescriptions.flatMap(prescription => [prescription.customerReference, prescriptionReference(order, order.prescriptions.indexOf(prescription)), prescription.purchaseOrderId, prescription.serialNumber]);
   if (scope === 'patient') return patientFields;
   if (scope === 'order') return orderFields;
   if (scope === 'prescription') return prescriptionFields;
@@ -1309,6 +1310,7 @@ export default function Orders() {
               {callModalPrescriptions.flatMap(prescription => {
                 const index = callCuraleafModal.order.prescriptions.findIndex(candidate => candidate.id === prescription.id);
                 return [
+                { key: `cancel-reference-${prescription.id}`, label: `Prescription ${index + 1} reference`, value: prescriptionReference(callCuraleafModal.order, callCuraleafModal.order.prescriptions.indexOf(prescription)), missing: 'Not recorded' },
                 { key: `cancel-po-${prescription.id}`, label: `Prescription ${index + 1} PO`, value: prescription.purchaseOrderId, missing: 'No Curaleaf PO created' },
                 { key: `cancel-serial-${prescription.id}`, label: `Prescription ${index + 1} serial`, value: prescription.serialNumber, missing: 'Not recorded' },
               ]; }).map(reference => (
@@ -1404,7 +1406,9 @@ function OrderListRow({ item, selected, laneLabel, sectionKey, onSelect }: { ite
   const rxCount = sourceOrder.prescriptions.length;
   const placedCount = sourceOrder.prescriptions.filter(candidate => Boolean(candidate.purchaseOrderId)).length;
   const mixedPlaced = !prescription && rxCount > 1 && placedCount > 0 && placedCount < rxCount;
-  const listReference = orderReference(sourceOrder);
+  const listReference = prescription && item.prescriptionIndex !== null
+    ? prescriptionReference(sourceOrder, item.prescriptionIndex)
+    : orderReference(sourceOrder);
   const workLabel = prescriptionWorkItemLabel(item);
   const workValue = prescription ? rxRevenue(prescription) : sourceOrder.payment.amount;
   return (
@@ -1558,7 +1562,9 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
   const sharesLegacyPurchaseOrder = placedCount > 1 && new Set(order.prescriptions.filter(prescription => prescription.placed && prescription.purchaseOrderId).map(prescription => prescription.purchaseOrderId)).size === 1;
   const paymentStatusLabel = order.payment.status === 'paid' ? 'paid' : order.payment.status === 'sent' ? 'awaiting payment' : order.payment.status === 'cancelled' ? 'cancelled' : 'unpaid';
   const isDraftOrder = order.payment.status === 'none';
-  const hhhReference = orderReference(order).replace(/^#/, '');
+  const hhhReference = selectedPrescription
+    ? prescriptionReference(order, order.prescriptions.indexOf(selectedPrescription))
+    : orderReference(order).replace(/^#/, '');
   const purchaseOrderSummary = purchaseOrderReferences.length === 1
     ? `Curaleaf PO ${purchaseOrderReferences[0]}`
     : purchaseOrderReferences.length > 1

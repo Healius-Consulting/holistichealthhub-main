@@ -179,18 +179,49 @@ export function stripPrematureHhhCancellation(snapshot: unknown) {
   return next;
 }
 
-export function supplierCancellationAlreadyConfirmed(snapshot: unknown) {
-  const cancellation = asRecord(asRecord(snapshot).curaleafCancellation);
-  return cancellation.status === 'confirmed';
+export function supplierCancellationAlreadyConfirmed(snapshot: unknown, purchaseOrderId?: string | null) {
+  const root = asRecord(snapshot);
+  if (purchaseOrderId) {
+    const records = [asRecord(root.curaleaf), ...Object.values(asRecord(root.curaleafSubOrders)).map(asRecord)];
+    return records.some(record => String(record.purchaseOrderId || record.id || '') === purchaseOrderId
+      && String(record.purchaseOrderState || record.state || '').toUpperCase() === 'CANCELLED');
+  }
+  return asRecord(root.curaleafCancellation).status === 'confirmed';
 }
 
 export function applyCancelledPurchaseOrderSnapshot(
   snapshot: unknown,
   purchaseOrder: CuraleafPurchaseOrderLike,
-) {
+): Record<string, any> {
   const root = asRecord(snapshot);
   const curaleaf = asRecord(root.curaleaf);
   const flow = asRecord(root.prescriptionFlow);
+  const subOrders = asRecord(root.curaleafSubOrders);
+  const incomingId = String(purchaseOrder.id || purchaseOrder.purchaseOrderId || '');
+  const multiRx = (Array.isArray(root.prescriptions) && root.prescriptions.length > 1)
+    || Object.keys(subOrders).length > 1;
+  // Supplier events belong to a PO, which may cover one or several prescriptions.
+  // Never use product overlap to infer ownership: siblings can contain the same pack.
+  if (multiRx) {
+    const nextSubs = Object.fromEntries(Object.entries(subOrders).map(([key, value]) => {
+      const sub = asRecord(value);
+      if (!incomingId || String(sub.purchaseOrderId || sub.id || '') !== incomingId) return [key, value];
+      const updated = applyCancelledPurchaseOrderSnapshot({ curaleaf: sub }, purchaseOrder);
+      return [key, updated.curaleaf];
+    }));
+    const nextFlow = Object.fromEntries(Object.entries(flow).map(([key, value]) => {
+      const entry = asRecord(value);
+      const poId = String(entry.purchaseOrderId || asRecord(subOrders[key]).purchaseOrderId || '');
+      return [key, incomingId && poId === incomingId ? { ...entry, state: 'CANCELLED_PURCHASE_ORDER' } : value];
+    }));
+    const rootMatches = incomingId && String(curaleaf.purchaseOrderId || curaleaf.id || '') === incomingId;
+    return {
+      ...root,
+      curaleaf: rootMatches ? applyCancelledPurchaseOrderSnapshot({ curaleaf }, purchaseOrder).curaleaf : root.curaleaf,
+      curaleafSubOrders: nextSubs,
+      prescriptionFlow: nextFlow,
+    };
+  }
   const shipments = Array.isArray(curaleaf.shipments) ? curaleaf.shipments as CuraleafShipmentLike[] : [];
   const requestedItems = Array.isArray(root.lineItems)
     ? root.lineItems.map(entry => {

@@ -121,6 +121,7 @@ export interface Prescription {
   backendId?: string;
   entryMode: 'clinic' | 'manual';
   clinicScanId?: string;
+  customerReference?: string;
   curaleafPrescriptionId?: string;
   curaleafPrescriptionState?: 'ACTIVE' | 'FULFILLED' | 'EXPIRED' | 'CANCELLED' | 'PENDING';
   purchaseOrderState?: 'CREATED' | 'PROCESSING' | 'FULLY_ALLOCATED' | 'CANCELLED' | null;
@@ -884,7 +885,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
             : null;
         const sourceShipments = rxHasPo
           ? shipmentsForPrescription(
-            curaleaf?.shipments ?? record.curaleaf?.shipments,
+            curaleaf?.shipments ?? (!multiRx ? record.curaleaf?.shipments : undefined),
             prescription.items,
             { failClosedWhenEmpty: multiRx },
           )
@@ -921,11 +922,12 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           backendId: flowKey,
           entryMode: prescription.clinicScanId ? 'clinic' : 'manual',
           clinicScanId: prescription.clinicScanId,
+          customerReference: isMatchedPO ? rawCuraleaf?.customerReference : undefined,
           curaleafPrescriptionId: prescription.curaleafPrescriptionId,
-          curaleafPrescriptionState: curaleaf?.prescriptionState ?? (rxHasPo ? record.curaleaf?.prescriptionState : undefined),
-          purchaseOrderState: curaleaf?.purchaseOrderState ?? (rxHasPo ? record.curaleaf?.purchaseOrderState : undefined),
-          dispatchStatus: rxHasPo ? (flow?.dispatchStatus ?? curaleaf?.dispatchStatus ?? record.curaleaf?.dispatchStatus) : undefined,
-          quantityMismatch: rxHasPo ? (flow?.quantityMismatch ?? curaleaf?.quantityMismatch ?? record.curaleaf?.quantityMismatch) : false,
+          curaleafPrescriptionState: curaleaf?.prescriptionState ?? (rxHasPo && !multiRx ? record.curaleaf?.prescriptionState : undefined),
+          purchaseOrderState: curaleaf?.purchaseOrderState ?? (rxHasPo && !multiRx ? record.curaleaf?.purchaseOrderState : undefined),
+          dispatchStatus: rxHasPo ? (flow?.dispatchStatus ?? curaleaf?.dispatchStatus ?? (!multiRx ? record.curaleaf?.dispatchStatus : undefined)) : undefined,
+          quantityMismatch: rxHasPo ? (flow?.quantityMismatch ?? curaleaf?.quantityMismatch ?? (!multiRx ? record.curaleaf?.quantityMismatch : undefined)) : false,
           prescriber: curaleaf?.prescriberName ?? prescription.prescriber.name,
           prescriberId: prescription.prescriber.id,
           prescriberPin: prescription.prescriber.pin,
@@ -949,7 +951,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
           deliveryAddress,
           shipmentId: shipmentIds[0],
           shipmentIds,
-          shipmentStates: rxHasPo ? (flow?.shipmentStates ?? curaleaf?.shipmentStates ?? record.curaleaf?.shipmentStates) : undefined,
+          shipmentStates: rxHasPo ? (flow?.shipmentStates ?? curaleaf?.shipmentStates ?? (!multiRx ? record.curaleaf?.shipmentStates : undefined)) : undefined,
           manualPlaceRequired: isPaid ? flow?.manualPlaceRequired : false,
           receivedItems,
           // Only a real dispensary check-in time, never the supplier's dispatch time:

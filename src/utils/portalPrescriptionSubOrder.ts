@@ -59,12 +59,14 @@ export function portalPrescriptionFlow(
 
 /** Sub-orders are keyed by Rx correlation. Never attach the order-level Curaleaf PO to every card. */
 export function resolvePortalPrescriptionCuraleaf(
-  record: Pick<PortalOrderRecord, 'curaleaf' | 'curaleafSubOrders' | 'prescriptions'>,
+  record: Pick<PortalOrderRecord, 'curaleaf' | 'curaleafSubOrders' | 'prescriptions' | 'prescriptionFlow'>,
   prescription: PortalPrescriptionIdentity,
 ): PortalCuraleafOrderState | undefined {
   const fromSub = lookupKeyedRecord(record.curaleafSubOrders, prescription);
-  if (fromSub) return fromSub;
-  if (portalPrescriptionIsMultiRx(record)) return undefined;
+  const ownPoId = fromSub?.purchaseOrderId || portalPrescriptionFlow(record, prescription)?.purchaseOrderId;
+  const rootMatches = Boolean(ownPoId && ownPoId === record.curaleaf?.purchaseOrderId);
+  if (fromSub) return rootMatches ? { ...record.curaleaf, ...fromSub } : fromSub;
+  if (portalPrescriptionIsMultiRx(record)) return rootMatches ? record.curaleaf : undefined;
   return record.curaleaf;
 }
 

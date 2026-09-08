@@ -381,11 +381,23 @@ export function toPortalOrder(order: PortalOrderSource) {
   const isSupplierCancelled = po?.state === 'CANCELLED'
     || po?.purchaseOrderState === 'CANCELLED'
     || po?.prescriptionState === 'CANCELLED'
-    || supplierCancellationConfirmed;
+    || (supplierCancellationConfirmed && (snapshotCuraleafCancellation?.purchaseOrderId
+      ? snapshotCuraleafCancellation.purchaseOrderId === (po?.purchaseOrderId || po?.id)
+      : snapshotCuraleafCancellation?.prescriptionId === po?.prescriptionId));
   const supplierStillLive = !isSupplierCancelled
     && !supplierCancellationAlreadyConfirmed(snapshot)
     && curaleafRequiresSupplierCancel({ ...snapshot, curaleaf: po || persistedCuraleaf });
-  const isCancelledOrder = isSupplierCancelled || (!supplierStillLive && isHhhCancelled);
+  const cancellationRxList = Array.isArray(snapshot?.prescriptions) ? snapshot.prescriptions : [];
+  const cancellationSubs = curaleafSubOrders(snapshot);
+  const hasUnaffectedPrescription = cancellationRxList.length > 1 && cancellationRxList.some((rx: Record<string, unknown>) => {
+    const sub = lookupKeyedRecord(cancellationSubs, rx);
+    const ownFlow = lookupKeyedRecord(snapshot.prescriptionFlow ?? {}, rx) as Record<string, unknown> | undefined;
+    const ownPoId = sub?.purchaseOrderId || ownFlow?.purchaseOrderId;
+    const ownCancelled = String(sub?.purchaseOrderState || sub?.state || '').toUpperCase() === 'CANCELLED'
+      || (Boolean(ownPoId) && ownPoId === (po?.purchaseOrderId || po?.id) && isSupplierCancelled);
+    return !ownCancelled;
+  });
+  const isCancelledOrder = !hasUnaffectedPrescription && (isSupplierCancelled || (!supplierStillLive && isHhhCancelled));
   const moneyTaken = orderMoneyWasTaken(order);
   const existingRefund = supplierStillLive
     ? null
@@ -705,6 +717,8 @@ export function toPortalOrder(order: PortalOrderSource) {
     const rxCheckedIn = rxLines.some(line => Number(line.received || 0) > 0 || Number(line.collected || 0) > 0);
     const rxRemainingOpen = rxCheckedIn && rxLines.some(line => Number(line.remaining || 0) > 0 || Number(line.received || 0) < Number(line.ordered || 0));
     const rxDispatch = rxHasPo ? dispatchStatusFromLines(rxShipments, rxLines) : dispatchStatus;
+    const rxSupplierCancelled = String(sub?.purchaseOrderState || sub?.state || '').toUpperCase() === 'CANCELLED'
+      || (isSupplierCancelled && (!multiRx || (Boolean(rxPurchaseOrderId) && rxPurchaseOrderId === purchaseOrderId)));
     const flowRecord = {
       id: rxKey,
       orderId: rxKey,
@@ -712,7 +726,7 @@ export function toPortalOrder(order: PortalOrderSource) {
         : reviewBlocking ? 'HELD_PRICE'
         : !rxHasPo
           ? (isPaid ? 'PENDING_PLACEMENT' : 'AWAITING_PAYMENT')
-        : isSupplierCancelled ? 'CANCELLED_PURCHASE_ORDER'
+        : rxSupplierCancelled ? 'CANCELLED_PURCHASE_ORDER'
         : rxCheckedIn && order.fulfilmentStatus === 'COLLECTED' ? 'COLLECTED'
         : rxCheckedIn && order.fulfilmentStatus === 'READY_FOR_COLLECTION' ? 'READY_FOR_COLLECTION'
         : rxRemainingOpen ? 'PARTIALLY_RECEIVED'
@@ -833,7 +847,7 @@ export function toPortalOrder(order: PortalOrderSource) {
             ? 'cancelled'
             : lower(order.paymentStatus),
     fulfilmentStatus: portalFulfilment,
-    status: isCancelledOrder ? 'cancelled' : supplierStillLive || (isPaid && order.status === 'SUBMITTED') ? 'processing' : lower(order.status),
+    status: isCancelledOrder ? 'cancelled' : hasUnaffectedPrescription || supplierStillLive || (isPaid && order.status === 'SUBMITTED') ? 'processing' : lower(order.status),
     paidAt: order.paidAt,
     curaleafApprovedAt: po?.createdAt || po?.issuedDate || undefined,
     auditEvents: Array.isArray(snapshot?.auditEvents)
