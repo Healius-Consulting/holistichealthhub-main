@@ -342,9 +342,13 @@ type Organisation @table {
   tradingName: String!
   gphcNumber: String! @unique
   superintendentName: String!
+  # The superintendent's own line: HHH admin reaches the pharmacy through these.
   mainContactName: String
   mainContactPhone: String
   mainContactEmail: String
+  # The pharmacy's public landline and inbox: what patients and the platform see.
+  pharmacyPhone: String
+  pharmacyEmail: String
   primaryContactUid: String
   address: String!
   addressLine1: String

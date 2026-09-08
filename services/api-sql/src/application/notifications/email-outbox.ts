@@ -49,8 +49,9 @@ export function pharmacyEmailContext(
     // The pharmacy's own name. `tradingName` holds the owning company (the onboarding
     // form calls it "Company name"), which a patient has never heard of.
     pharmacyName: organisation?.name || 'the pharmacy',
-    pharmacyPhone: organisation?.mainContactPhone || '',
-    pharmacyEmail: organisation?.mainContactEmail || '',
+    // Patients are given the pharmacy's landline and inbox, never the superintendent's own contact.
+    pharmacyPhone: organisation?.pharmacyPhone || organisation?.mainContactPhone || '',
+    pharmacyEmail: organisation?.pharmacyEmail || organisation?.mainContactEmail || '',
     pharmacyAddress: organisation?.address || '',
     pharmacyGphcNumber: organisation?.gphcNumber || '',
     pharmacyIcoNumber: profile?.icoRegistrationNumber || '',
@@ -139,6 +140,10 @@ function ownerRecipient(staff: StaffUserRecord[], organisation: OrganisationReco
   const owner = staff.find(member => member.uid === ownerUid);
   if (owner && owner.status !== 'REMOVED' && !owner.disabled) {
     return [{ email: owner.email, displayName: owner.displayName }];
+  }
+  // Without a named owner, notifications go to the pharmacy's inbox before the superintendent's.
+  if (organisation?.pharmacyEmail) {
+    return [{ email: organisation.pharmacyEmail, displayName: organisation.name }];
   }
   if (organisation?.mainContactEmail) {
     return [{ email: organisation.mainContactEmail, displayName: organisation.mainContactName }];

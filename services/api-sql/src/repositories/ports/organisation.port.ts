@@ -8,6 +8,9 @@ export interface OrganisationRecord {
   mainContactName: string | null;
   mainContactPhone: string | null;
   mainContactEmail: string | null;
+  /** The pharmacy's public landline and inbox; the main contact above is the superintendent, for HHH admin only. */
+  pharmacyPhone?: string | null;
+  pharmacyEmail?: string | null;
   address: string;
   addressLine1: string | null;
   addressLine2: string | null;
@@ -59,6 +62,8 @@ export interface CreateOrganisationRecordInput {
   mainContactName: string | null;
   mainContactPhone: string | null;
   mainContactEmail: string | null;
+  pharmacyPhone?: string | null;
+  pharmacyEmail?: string | null;
   address: string;
   addressLine1?: string | null;
   addressLine2?: string | null;
@@ -124,6 +129,8 @@ export interface UpdateOrganisationProfileInput {
   mainContactName: string | null;
   mainContactPhone: string | null;
   mainContactEmail: string | null;
+  pharmacyPhone: string | null;
+  pharmacyEmail: string | null;
 }
 
 export interface UpdateOrganisationBrandInput {

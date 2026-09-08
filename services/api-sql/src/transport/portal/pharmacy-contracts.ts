@@ -180,6 +180,8 @@ export function toPortalOrganisation(
     mainContactName: organisation.mainContactName ?? undefined,
     mainContactPhone: organisation.mainContactPhone ?? undefined,
     mainContactEmail: organisation.mainContactEmail ?? undefined,
+    pharmacyPhone: organisation.pharmacyPhone ?? undefined,
+    pharmacyEmail: organisation.pharmacyEmail ?? undefined,
     curaleafPharmacyCode: extras?.curaleafPharmacyCode ?? undefined,
     address: organisationAddressSummary(organisation),
     addressLine1: organisation.addressLine1 ?? undefined,

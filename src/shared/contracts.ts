@@ -1134,6 +1134,8 @@ export interface CreateOrganisationInput {
   mainContactName?: string;
   mainContactPhone?: string;
   mainContactEmail?: string;
+  pharmacyPhone?: string;
+  pharmacyEmail?: string;
   address: string;
   primaryColour: string;
   logoText: string;
@@ -1150,6 +1152,8 @@ export interface UpdateOrganisationInput {
   mainContactName?: string;
   mainContactPhone?: string;
   mainContactEmail?: string;
+  pharmacyPhone?: string;
+  pharmacyEmail?: string;
   address?: string;
   addressLine1?: string;
   addressLine2?: string;
@@ -1176,6 +1180,8 @@ export interface UpdatePharmacyProfileInput {
   mainContactName?: string;
   mainContactPhone?: string;
   mainContactEmail?: string;
+  pharmacyPhone?: string;
+  pharmacyEmail?: string;
 }
 
 export interface CreatedOrganisation extends CreateOrganisationInput {
@@ -1510,6 +1516,9 @@ export interface PortalOrganisation {
   mainContactName?: string;
   mainContactPhone?: string;
   mainContactEmail?: string;
+  /** The pharmacy's public landline and inbox: shown to patients and across the platform. */
+  pharmacyPhone?: string;
+  pharmacyEmail?: string;
   curaleafPharmacyCode?: string;
   address: string;
   addressLine1?: string;

@@ -255,6 +255,19 @@
   font-weight: 700;
 }
 
+/* Who each contact group reaches, so nobody enters the superintendent's line where patients will see it. */
+.pharmacy-settings-profile__hint{
+  margin: -4px 0 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.pharmacy-settings-form__group .pharmacy-settings-profile__hint{
+  grid-column: 1 / -1;
+  margin: 0 0 6px;
+}
+
 .pharmacy-settings-profile__group dl{
   display: grid;
   gap: 8px;

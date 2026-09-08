@@ -53,6 +53,8 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
     mainContactName: record.mainContactName,
     mainContactPhone: record.mainContactPhone,
     mainContactEmail: record.mainContactEmail,
+    pharmacyPhone: record.pharmacyPhone,
+    pharmacyEmail: record.pharmacyEmail,
     curaleafPharmacyCode: record.curaleafPharmacyCode,
     address: record.address,
     addressLine1: record.addressLine1,

@@ -26,6 +26,8 @@ const GET_ORGANISATION_BY_ID_GQL = `
       mainContactName
       mainContactPhone
       mainContactEmail
+      pharmacyPhone
+      pharmacyEmail
       primaryContactUid
       address
       addressLine1
@@ -77,6 +79,8 @@ const LIST_ORGANISATIONS_GQL = `
       mainContactName
       mainContactPhone
       mainContactEmail
+      pharmacyPhone
+      pharmacyEmail
       primaryContactUid
       address
       addressLine1
@@ -184,6 +188,8 @@ const CREATE_ORGANISATION_GQL = `
     $mainContactName: String
     $mainContactPhone: String
     $mainContactEmail: String
+    $pharmacyPhone: String
+    $pharmacyEmail: String
     $address: String!
     $primaryColour: String!
     $logoText: String!
@@ -198,6 +204,8 @@ const CREATE_ORGANISATION_GQL = `
       mainContactName: $mainContactName
       mainContactPhone: $mainContactPhone
       mainContactEmail: $mainContactEmail
+      pharmacyPhone: $pharmacyPhone
+      pharmacyEmail: $pharmacyEmail
       address: $address
       primaryColour: $primaryColour
       logoText: $logoText
@@ -306,6 +314,8 @@ const UPDATE_ORGANISATION_PROFILE_GQL = `
     $mainContactName: String
     $mainContactPhone: String
     $mainContactEmail: String
+    $pharmacyPhone: String
+    $pharmacyEmail: String
   ) {
     organisation_update(
       key: { id: $id }
@@ -325,6 +335,8 @@ const UPDATE_ORGANISATION_PROFILE_GQL = `
         mainContactName: $mainContactName
         mainContactPhone: $mainContactPhone
         mainContactEmail: $mainContactEmail
+        pharmacyPhone: $pharmacyPhone
+        pharmacyEmail: $pharmacyEmail
       }
     )
   }
@@ -492,6 +504,8 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
         mainContactName: input.mainContactName,
         mainContactPhone: input.mainContactPhone,
         mainContactEmail: input.mainContactEmail,
+        pharmacyPhone: input.pharmacyPhone,
+        pharmacyEmail: input.pharmacyEmail,
       },
     });
   }

@@ -347,6 +347,9 @@ export interface PharmacyTenant {
   mainContactName?: string;
   mainContactPhone?: string;
   mainContactEmail?: string;
+  /** Public landline and inbox. The main contact is the superintendent, reached by HHH admin only. */
+  pharmacyPhone?: string;
+  pharmacyEmail?: string;
   curaleafPharmacyCode?: string;
   address: string;
   addressLine1?: string;

@@ -19,6 +19,8 @@ export async function buildOrganisationProfileUpdate(
     mainContactName?: string;
     mainContactPhone?: string;
     mainContactEmail?: string;
+    pharmacyPhone?: string;
+    pharmacyEmail?: string;
   },
 ): Promise<UpdateOrganisationProfileInput> {
   const parsedAddress = input.address?.trim() && !input.addressLine1 && !input.postcode
@@ -50,6 +52,17 @@ export async function buildOrganisationProfileUpdate(
     mainContactName: input.mainContactName ?? current.mainContactName,
     mainContactPhone: input.mainContactPhone ?? current.mainContactPhone,
     mainContactEmail: input.mainContactEmail === '' ? null : (input.mainContactEmail ?? current.mainContactEmail),
+    // An empty string clears the field; absence leaves it alone.
+    pharmacyPhone: input.pharmacyPhone === '' ? null : (input.pharmacyPhone ?? current.pharmacyPhone ?? null),
+    pharmacyEmail: input.pharmacyEmail === '' ? null : (input.pharmacyEmail ?? current.pharmacyEmail ?? null),
+  };
+}
+
+/** What patients see: the pharmacy's own line and inbox, falling back to the superintendent's for older records. */
+export function publicPharmacyContacts(profile: Pick<UpdateOrganisationProfileInput, 'pharmacyPhone' | 'pharmacyEmail' | 'mainContactPhone' | 'mainContactEmail'>) {
+  return {
+    publicPhone: profile.pharmacyPhone ?? profile.mainContactPhone,
+    publicEmail: profile.pharmacyEmail || profile.mainContactEmail || null,
   };
 }
 
@@ -58,7 +71,8 @@ export async function syncDirectoryProfileFromOrganisation(
   organisationId: string,
   profile: UpdateOrganisationProfileInput,
 ) {
-  if (!profile.addressLine1 || !profile.locality || !profile.postcode || !profile.mainContactEmail) return;
+  const contacts = publicPharmacyContacts(profile);
+  if (!profile.addressLine1 || !profile.locality || !profile.postcode || !contacts.publicEmail) return;
   await directoryRepo.upsertProfile({
     organisationId,
     tradingName: profile.tradingName,
@@ -67,8 +81,8 @@ export async function syncDirectoryProfileFromOrganisation(
     addressLine2: profile.addressLine2,
     locality: profile.locality,
     postcode: profile.postcode,
-    publicEmail: profile.mainContactEmail,
-    publicPhone: profile.mainContactPhone,
+    publicEmail: contacts.publicEmail,
+    publicPhone: contacts.publicPhone,
     latitude: profile.latitude,
     longitude: profile.longitude,
   });

@@ -265,6 +265,8 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
   const [mainContactName, setMainContactName] = useState('');
   const [mainContactPhone, setMainContactPhone] = useState('');
   const [mainContactEmail, setMainContactEmail] = useState('');
+  const [pharmacyPhone, setPharmacyPhone] = useState('');
+  const [pharmacyEmail, setPharmacyEmail] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
   const [addressLocality, setAddressLocality] = useState('');
@@ -285,9 +287,9 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
     const websiteDomains = domain ? [domain.replace(/^https?:\/\//, '').replace(/\/$/, '')] : [];
     const address = [addressLine1, addressLine2, addressLocality, addressPostcode.toUpperCase()].map(value => value.trim()).filter(Boolean).join(', ');
     try {
-      const created = await createOrganisation({ name, tradingName, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, address, websiteDomains, primaryColour: primary, logoText, status: 'onboarding' });
+      const created = await createOrganisation({ name, tradingName, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, pharmacyPhone, pharmacyEmail, address, websiteDomains, primaryColour: primary, logoText, status: 'onboarding' });
       const organisation: PharmacyTenant = {
-        id: created.id, slug, referralToken: created.referralToken, name, tradingName, logoText, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, address, websiteDomains,
+        id: created.id, slug, referralToken: created.referralToken, name, tradingName, logoText, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, pharmacyPhone, pharmacyEmail, address, websiteDomains,
         status: 'onboarding', staffCount: 0, defaultPaymentRoute: 'manual', pharmacyDeliveryEnabled: false,
         brand: { primary, portalName: name },
         worldpay: { enabled: false, status: 'not-connected', environment: 'sandbox', merchantId: null, merchantName: null, lastSyncedAt: null },
@@ -330,8 +332,11 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
                 <label>Town or city<input className="input" value={addressLocality} onChange={event => setAddressLocality(event.target.value)} autoComplete="address-level2" required /></label>
                 <label>Postcode<input className="input" value={addressPostcode} onChange={event => setAddressPostcode(event.target.value.toUpperCase())} autoComplete="postal-code" required /></label>
               </div>
-              <div className="form-grid-two"><label>Main contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Main contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
-              <label>Main contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
+              <div className="form-grid-two"><label>Pharmacy landline<input className="input" type="tel" value={pharmacyPhone} onChange={event => setPharmacyPhone(event.target.value)} /></label><label>Pharmacy email<input className="input" type="email" value={pharmacyEmail} onChange={event => setPharmacyEmail(event.target.value)} /></label></div>
+              <small>Shown to patients in emails and the pharmacy finder.</small>
+              <div className="form-grid-two"><label>Superintendent contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Superintendent contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
+              <label>Superintendent contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
+              <small>For HHH admin to reach the pharmacy. Never shown to patients.</small>
               <label>Approved website domain<input className="input" type="text" value={domain} onChange={event => setDomain(event.target.value)} placeholder="pharmacy.co.uk" /></label>
             </section>
 
@@ -384,6 +389,8 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
   const [mainContactName, setMainContactName] = useState(organisation.mainContactName ?? organisation.superintendent);
   const [mainContactPhone, setMainContactPhone] = useState(organisation.mainContactPhone ?? '');
   const [mainContactEmail, setMainContactEmail] = useState(organisation.mainContactEmail ?? '');
+  const [pharmacyPhone, setPharmacyPhone] = useState(organisation.pharmacyPhone ?? '');
+  const [pharmacyEmail, setPharmacyEmail] = useState(organisation.pharmacyEmail ?? '');
   const initialAddress = splitPharmacyAddress(organisation);
   const [addressLine1, setAddressLine1] = useState(initialAddress.addressLine1);
   const [addressLine2, setAddressLine2] = useState(initialAddress.addressLine2);
@@ -437,7 +444,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
     const websiteDomains = [...new Set(domains.split(/[\n,]+/).map(value => value.trim().replace(/^https?:\/\//i, '').split('/')[0].toLowerCase()).filter(Boolean))];
     const address = [addressLine1, addressLine2, addressLocality, addressPostcode.toUpperCase()].map(value => value.trim()).filter(Boolean).join(', ');
     const input: UpdateOrganisationInput = {
-      name, tradingName, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail,
+      name, tradingName, gphcNumber, superintendent, companyNumber, mainContactName, mainContactPhone, mainContactEmail, pharmacyPhone, pharmacyEmail,
       address, addressLine1, addressLine2, locality: addressLocality, postcode: addressPostcode,
       websiteDomains, status, logoText: logoText.toUpperCase(),
       primaryColour, portalName: name.trim(),
@@ -465,7 +472,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
         logoUpdates = { emailLogoUrl: updated.emailLogoUrl ?? null, emailLogoStoragePath: updated.emailLogoStoragePath ?? null, emailLogoWidth: updated.emailLogoWidth ?? null, emailLogoHeight: updated.emailLogoHeight ?? null, emailLogoUpdatedAt: updated.emailLogoUpdatedAt ?? null };
       }
       onSaved({
-        name: name.trim(), tradingName: tradingName.trim(), gphcNumber: gphcNumber.trim(), superintendent: superintendent.trim(), companyNumber: companyNumber.trim() || undefined, mainContactName: mainContactName.trim(), mainContactPhone: mainContactPhone.trim(), mainContactEmail: mainContactEmail.trim(),
+        name: name.trim(), tradingName: tradingName.trim(), gphcNumber: gphcNumber.trim(), superintendent: superintendent.trim(), companyNumber: companyNumber.trim() || undefined, mainContactName: mainContactName.trim(), mainContactPhone: mainContactPhone.trim(), mainContactEmail: mainContactEmail.trim(), pharmacyPhone: pharmacyPhone.trim() || undefined, pharmacyEmail: pharmacyEmail.trim() || undefined,
         address: saved?.address ?? address.trim(),
         addressLine1: saved?.addressLine1 ?? addressLine1.trim(),
         addressLine2: saved?.addressLine2 ?? addressLine2.trim(),
@@ -514,8 +521,11 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
                 <label>Town or city<input className="input" value={addressLocality} onChange={event => setAddressLocality(event.target.value)} autoComplete="address-level2" required /></label>
                 <label>Postcode<input className="input" value={addressPostcode} onChange={event => setAddressPostcode(event.target.value.toUpperCase())} autoComplete="postal-code" required /></label>
               </div>
-              <div className="form-grid-two"><label>Main contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Main contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
-              <label>Main contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
+              <div className="form-grid-two"><label>Pharmacy landline<input className="input" type="tel" value={pharmacyPhone} onChange={event => setPharmacyPhone(event.target.value)} /></label><label>Pharmacy email<input className="input" type="email" value={pharmacyEmail} onChange={event => setPharmacyEmail(event.target.value)} /></label></div>
+              <small>Shown to patients in emails and the pharmacy finder.</small>
+              <div className="form-grid-two"><label>Superintendent contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Superintendent contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
+              <label>Superintendent contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
+              <small>For HHH admin to reach the pharmacy. Never shown to patients.</small>
               <label>Approved website domains<textarea className="input" value={domains} onChange={event => setDomains(event.target.value)} placeholder={'pharmacy.co.uk\nanother-pharmacy.co.uk'} /><small>Enter one domain per line. Protocols and page paths are removed automatically.</small></label>
               <div className="form-grid-two"><label>Account status<select className="input" value={status === 'intake_live' ? 'onboarding' : status} onChange={event => setStatus(event.target.value as PharmacyTenant['status'])}><option value="onboarding">Onboarding</option>{status === 'live' && <option value="live">Live</option>}<option value="paused">Paused</option></select><small>Onboarding means the workspace is still training. Public intake is already on. Use Go live to unlock the live pharmacy workspace.</small></label></div>
             </section>
@@ -1580,7 +1590,7 @@ export default function AdminPortal() {
     ...state.organisations.map((organisation): CommandDefinition => ({
       label: organisation.name,
       detail: `GPhC ${organisation.gphcNumber}`,
-      keywords: `${organisation.websiteDomains.join(' ')} ${organisation.mainContactEmail}`,
+      keywords: `${organisation.websiteDomains.join(' ')} ${organisation.pharmacyEmail ?? ''} ${organisation.mainContactEmail}`,
       group: 'Pharmacies',
       searchOnly: true,
       icon: <Building2 size={16} />,
@@ -1927,9 +1937,11 @@ export default function AdminPortal() {
                             <div><span>Company name</span><strong>{selectedPharmacy.tradingName}</strong></div>
                             <div><span>Company registration number</span><strong>{selectedPharmacy.companyNumber || 'Not supplied'}</strong></div>
                             <div><span>GPhC number</span><strong>{selectedPharmacy.gphcNumber}</strong></div>
-                            <div><span>Main contact name</span><strong>{selectedPharmacy.mainContactName || selectedPharmacy.superintendent}</strong></div>
-                            <div><span>Main contact number</span><strong>{selectedPharmacy.mainContactPhone || 'Not supplied'}</strong></div>
-                            <div><span>Main contact email</span><strong>{selectedPharmacy.mainContactEmail || 'Not supplied'}</strong></div>
+                            <div><span>Pharmacy landline</span><strong>{selectedPharmacy.pharmacyPhone || 'Not supplied'}</strong></div>
+                            <div><span>Pharmacy email</span><strong>{selectedPharmacy.pharmacyEmail || 'Not supplied'}</strong></div>
+                            <div><span>Superintendent contact name</span><strong>{selectedPharmacy.mainContactName || selectedPharmacy.superintendent}</strong></div>
+                            <div><span>Superintendent contact number</span><strong>{selectedPharmacy.mainContactPhone || 'Not supplied'}</strong></div>
+                            <div><span>Superintendent contact email</span><strong>{selectedPharmacy.mainContactEmail || 'Not supplied'}</strong></div>
                             <div><span>Registered office address</span><strong><MapPin size={13} /> {selectedPharmacy.address}</strong></div>
                             <div><span>Approved domains</span><strong><Globe2 size={13} /> {selectedPharmacy.websiteDomains.join(', ') || 'Not supplied'}</strong></div>
                             <div><span>Eligibility handling</span><strong>Managed by HHH admin</strong></div>

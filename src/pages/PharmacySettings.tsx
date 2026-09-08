@@ -69,6 +69,8 @@ export default function PharmacySettings() {
     mainContactName: '',
     mainContactPhone: '',
     mainContactEmail: '',
+    pharmacyPhone: '',
+    pharmacyEmail: '',
   });
 
   const profileFromOrganisation = useCallback(() => {
@@ -86,6 +88,8 @@ export default function PharmacySettings() {
       mainContactName: organisation.mainContactName ?? '',
       mainContactPhone: organisation.mainContactPhone ?? '',
       mainContactEmail: organisation.mainContactEmail ?? '',
+      pharmacyPhone: organisation.pharmacyPhone ?? '',
+      pharmacyEmail: organisation.pharmacyEmail ?? '',
     };
   }, [organisation]);
 
@@ -219,6 +223,8 @@ export default function PharmacySettings() {
           mainContactName: profileForm.mainContactName || undefined,
           mainContactPhone: profileForm.mainContactPhone || undefined,
           mainContactEmail: profileForm.mainContactEmail || undefined,
+          pharmacyPhone: profileForm.pharmacyPhone || undefined,
+          pharmacyEmail: profileForm.pharmacyEmail || undefined,
         },
       });
       setEditingProfile(false);
@@ -377,7 +383,16 @@ export default function PharmacySettings() {
                   </dl>
                 </div>
                 <div className="pharmacy-settings-profile__group">
-                  <h4>Main contact</h4>
+                  <h4>Pharmacy contact</h4>
+                  <p className="pharmacy-settings-profile__hint">Shown to patients in emails and the pharmacy finder.</p>
+                  <dl>
+                    <div><dt>Landline</dt><dd>{organisation.pharmacyPhone || '—'}</dd></div>
+                    <div><dt>Email</dt><dd>{organisation.pharmacyEmail || '—'}</dd></div>
+                  </dl>
+                </div>
+                <div className="pharmacy-settings-profile__group">
+                  <h4>Superintendent contact</h4>
+                  <p className="pharmacy-settings-profile__hint">Used by HHH admin to reach the pharmacy. Never shown to patients.</p>
                   <dl>
                     <div><dt>Name</dt><dd>{organisation.mainContactName || '—'}</dd></div>
                     <div><dt>Phone</dt><dd>{organisation.mainContactPhone || '—'}</dd></div>
@@ -407,11 +422,20 @@ export default function PharmacySettings() {
                   </div>
                 </fieldset>
                 <fieldset className="pharmacy-settings-form__group">
-                  <legend>Main contact</legend>
+                  <legend>Pharmacy contact</legend>
+                  <p className="pharmacy-settings-profile__hint">Shown to patients in emails and the pharmacy finder.</p>
                   <div className="pharmacy-settings-form__grid">
-                    <label>Main contact name<input className="input" value={profileForm.mainContactName} onChange={event => setProfileForm(current => ({ ...current, mainContactName: event.target.value }))} /></label>
-                    <label>Main contact phone<input className="input" type="tel" value={profileForm.mainContactPhone} onChange={event => setProfileForm(current => ({ ...current, mainContactPhone: event.target.value }))} /></label>
-                    <label className="is-wide">Main contact email<input className="input" type="email" value={profileForm.mainContactEmail} onChange={event => setProfileForm(current => ({ ...current, mainContactEmail: event.target.value }))} /></label>
+                    <label>Pharmacy landline<input className="input" type="tel" value={profileForm.pharmacyPhone} onChange={event => setProfileForm(current => ({ ...current, pharmacyPhone: event.target.value }))} autoComplete="tel" /></label>
+                    <label>Pharmacy email<input className="input" type="email" value={profileForm.pharmacyEmail} onChange={event => setProfileForm(current => ({ ...current, pharmacyEmail: event.target.value }))} autoComplete="email" /></label>
+                  </div>
+                </fieldset>
+                <fieldset className="pharmacy-settings-form__group">
+                  <legend>Superintendent contact</legend>
+                  <p className="pharmacy-settings-profile__hint">Used by HHH admin to reach the pharmacy. Never shown to patients.</p>
+                  <div className="pharmacy-settings-form__grid">
+                    <label>Contact name<input className="input" value={profileForm.mainContactName} onChange={event => setProfileForm(current => ({ ...current, mainContactName: event.target.value }))} /></label>
+                    <label>Contact phone<input className="input" type="tel" value={profileForm.mainContactPhone} onChange={event => setProfileForm(current => ({ ...current, mainContactPhone: event.target.value }))} /></label>
+                    <label className="is-wide">Contact email<input className="input" type="email" value={profileForm.mainContactEmail} onChange={event => setProfileForm(current => ({ ...current, mainContactEmail: event.target.value }))} /></label>
                   </div>
                 </fieldset>
                 <div className="pharmacy-settings-actions">

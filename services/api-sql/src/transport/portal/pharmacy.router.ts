@@ -47,6 +47,8 @@ const pharmacyProfileInputSchema = z.object({
   mainContactName: z.string().trim().max(160).optional(),
   mainContactPhone: z.string().trim().max(40).optional(),
   mainContactEmail: z.string().trim().email().max(254).optional().or(z.literal('')),
+  pharmacyPhone: z.string().trim().max(40).optional(),
+  pharmacyEmail: z.string().trim().email().max(254).optional().or(z.literal('')),
 }).strict().refine(value => Object.keys(value).length > 0, { message: 'At least one pharmacy detail must be supplied.' });
 
 export function createPortalPharmacyRouter(): Router {

@@ -24,6 +24,8 @@ type DirectoryOrganisationRow = {
   longitude: number | null;
   mainContactEmail: string | null;
   mainContactPhone: string | null;
+  pharmacyEmail?: string | null;
+  pharmacyPhone?: string | null;
   websiteDomains?: string[] | null;
   status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED';
   classification: 'STANDARD' | 'TRAINING' | 'ALLOCATION_HOLDING';
@@ -89,6 +91,8 @@ const LIST_DIRECTORY_ORGANISATIONS_GQL = `
       longitude
       mainContactEmail
       mainContactPhone
+      pharmacyEmail
+      pharmacyPhone
       status
       classification
       archivedAt
@@ -182,8 +186,9 @@ function toListedProfile(
     addressLine2: address.addressLine2,
     locality: address.locality,
     postcode: address.postcode,
-    publicEmail: profile?.publicEmail || organisation.mainContactEmail || '',
-    publicPhone: profile?.publicPhone ?? organisation.mainContactPhone,
+    // Patients get the pharmacy's own line and inbox; the superintendent's contact is a fallback for records that predate them.
+    publicEmail: profile?.publicEmail || organisation.pharmacyEmail || organisation.mainContactEmail || '',
+    publicPhone: profile?.publicPhone ?? organisation.pharmacyPhone ?? organisation.mainContactPhone,
     icoRegistrationNumber: profile?.icoRegistrationNumber ?? null,
     privacyContactEmail: profile?.privacyContactEmail ?? null,
     dataProtectionOfficer: profile?.dataProtectionOfficer ?? null,
