@@ -954,3 +954,6 @@ export function createPrescriptionRefund(orderId: string, prescriptionId: string
 export function confirmPrescriptionRefund(orderId: string, prescriptionId: string, refundId: string, externalReference: string) {
   return apiRequest<import('./contracts').OrderRefundState>(`/v1/portal/orders/${encodeURIComponent(orderId)}/prescriptions/${encodeURIComponent(prescriptionId)}/refunds/${encodeURIComponent(refundId)}/confirm`, { method: 'POST', body: JSON.stringify({ externalReference }) });
 }
+export function getPrescriptionReplacementPreview(orderId: string, prescriptionId: string) {
+  return apiRequest<import('./contracts').PrescriptionReplacementPreview>(`/v1/portal/orders/${encodeURIComponent(orderId)}/prescriptions/${encodeURIComponent(prescriptionId)}/replacement-preview`, { skipGetCache: true });
+}

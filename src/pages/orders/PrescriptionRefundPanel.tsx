@@ -31,7 +31,32 @@ export function PrescriptionRefundPanel({ order, prescription, index, onReplace,
   const refunds = order.prescriptionRefunds ?? [];
   const mine = refunds.filter(row => row.prescriptionId === prescription.backendId);
   const unresolved = refunds.some(row => !refundIsSettled(row.status));
+  const replacement = (order.prescriptionReplacements ?? []).find(row => row.prescriptionId === prescription.backendId)
+    ?? (prescription.replacedByOrderId ? { replacementOrderId: prescription.replacedByOrderId, amountPence: 0, carriedChargesPence: 0 } : null);
   const label = `Rx${index + 1}`;
+  if (replacement) {
+    return (
+      <section className="order-resolution order-resolution--complete">
+        <header>
+          <span>
+            <small>Prescription resolution</small>
+            <strong>{label} replaced using the paid balance</strong>
+          </span>
+        </header>
+        <div className="order-resolution__completed">
+          <CheckCircle2 size={16} />
+          <span>
+            <strong>{replacement.amountPence ? `${money(replacement.amountPence / 100)} carried over` : 'Paid balance carried over'}</strong>
+            <small>
+              {replacement.carriedChargesPence
+                ? 'Dispensing and delivery moved with it: this was the last prescription to leave the order.'
+                : 'Dispensing and delivery stayed on this order for its other prescription.'}
+            </small>
+          </span>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="order-resolution">
       <header>
@@ -48,8 +73,8 @@ export function PrescriptionRefundPanel({ order, prescription, index, onReplace,
           <Banknote size={13} /> {mine.length ? `Refund history · ${label}` : `Refund ${label}`}
         </button>
         <small>
-          Only {label}’s cancelled, unfulfilled medicines are refunded. Shared dispensing and delivery charges are
-          retained unless you choose to refund a share.
+          Only {label}’s cancelled, unfulfilled medicines are refunded or replaced. Shared dispensing and delivery charges
+          stay with the order while another prescription is live.
         </small>
       </div>
       {mine.map(row => (

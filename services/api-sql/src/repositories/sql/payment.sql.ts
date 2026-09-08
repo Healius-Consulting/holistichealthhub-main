@@ -420,7 +420,15 @@ const BIND_PAYMENT_QUOTE_GQL = `
 `;
 
 const ALLOCATION_FIELDS = `
-  id organisationId paymentId orderId sourceOrderId amountPence status version createdAt updatedAt transferredAt
+  id organisationId paymentId orderId sourceOrderId sourcePrescriptionId carriedChargesPence amountPence status version createdAt updatedAt transferredAt
+`;
+
+const LIST_SOURCE_ORDER_PAYMENT_ALLOCATIONS_GQL = `
+  query ListSourceOrderPaymentAllocations($sourceOrderId: UUID!, $organisationId: UUID!) {
+    paymentAllocations(where: { sourceOrderId: { eq: $sourceOrderId }, organisationId: { eq: $organisationId } }, limit: 100) {
+      ${ALLOCATION_FIELDS}
+    }
+  }
 `;
 
 const LIST_PAYMENT_ALLOCATIONS_GQL = `
@@ -480,6 +488,8 @@ const TRANSFER_PAYMENT_ALLOCATION_GQL = `
     $paymentId: UUID!
     $toOrderId: UUID!
     $fromOrderId: UUID!
+    $sourcePrescriptionId: UUID
+    $carriedChargesPence: Int64!
     $amountPence: Int64!
   ) @transaction {
     payment_updateMany(where: { id: { eq: $paymentId }, organisationId: { eq: $organisationId },
@@ -498,6 +508,8 @@ const TRANSFER_PAYMENT_ALLOCATION_GQL = `
       paymentId: $paymentId
       orderId: $toOrderId
       sourceOrderId: $fromOrderId
+      sourcePrescriptionId: $sourcePrescriptionId
+      carriedChargesPence: $carriedChargesPence
       amountPence: $amountPence
       status: ACTIVE
       version: 1
@@ -959,12 +971,21 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
     return result.data.paymentAllocations ?? [];
   }
 
+  async listPaymentAllocationsBySourceOrder(sourceOrderId: string, organisationId: string): Promise<PaymentAllocationRecord[]> {
+    const result = await dataConnect.executeGraphql<{ paymentAllocations: PaymentAllocationRecord[] }, any>(LIST_SOURCE_ORDER_PAYMENT_ALLOCATIONS_GQL, {
+      variables: { sourceOrderId, organisationId },
+    });
+    return result.data.paymentAllocations ?? [];
+  }
+
   async transferPaymentAllocation(data: {
     allocationId: string;
     organisationId: string;
     fromOrderId: string;
     toOrderId: string;
     amountPence: number;
+    sourcePrescriptionId?: string | null;
+    carriedChargesPence?: number;
   }): Promise<PaymentAllocationRecord> {
     const tenantPayments = await this.listTenantPayments(data.organisationId, 1000);
     let source: PaymentAllocationRecord | undefined;
@@ -977,8 +998,14 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
     if (!source || source.status !== 'ACTIVE' || source.orderId !== data.fromOrderId) throw new Error('Active source payment allocation not found.');
     if (data.amountPence <= 0 || data.amountPence > Number(source.amountPence)) throw new Error('Invalid payment allocation transfer amount.');
     const payment = tenantPayments.find(row => row.id === paymentId)!;
+    // A reserved refund is mid-mutation on this payment; a refund on the same
+    // prescription (or the whole order) means its value has already left.
     const refunds = await this.listRefundsByOrderId(data.fromOrderId, data.organisationId);
-    if (payment.pendingRefundId || refunds.some(row => row.prescriptionId)) throw new HttpError(409, 'Reconcile the prescription refund allocation before replacement.', 'REPLACEMENT_ALLOCATION_RECONCILIATION');
+    const open = refunds.filter(row => !['FAILED', 'CANCELLED', 'VOIDED'].includes(String(row.status).toUpperCase()));
+    if (payment.pendingRefundId) throw new HttpError(409, 'A refund on this payment is awaiting confirmation.', 'REPLACEMENT_REFUND_CONFLICT');
+    if (open.some(row => !row.prescriptionId || row.prescriptionId === data.sourcePrescriptionId)) {
+      throw new HttpError(409, 'Reconcile the refund on this prescription before replacement.', 'REPLACEMENT_REFUND_CONFLICT');
+    }
     const remaining = Number(source.amountPence) - data.amountPence;
     const result = await dataConnect.executeGraphql<{ paymentAllocation_insert: { id: string } }, any>(TRANSFER_PAYMENT_ALLOCATION_GQL, {
       variables: {
@@ -993,6 +1020,8 @@ export class SqlPaymentRepository implements PaymentRepositoryPort {
         paymentId,
         toOrderId: data.toOrderId,
         fromOrderId: data.fromOrderId,
+        sourcePrescriptionId: data.sourcePrescriptionId ?? null,
+        carriedChargesPence: data.carriedChargesPence ?? 0,
         amountPence: data.amountPence,
       },
     });

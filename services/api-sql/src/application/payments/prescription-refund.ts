@@ -3,7 +3,7 @@ import { HttpError } from '../../domain/common/errors.js';
 import type { OrderRecord } from '../../repositories/ports/order.port.js';
 import type { OrderLineRecord } from '../../repositories/ports/order-line.port.js';
 import type { PaymentRecord, PaymentAllocationRecord, RefundRecord } from '../../repositories/ports/payment.port.js';
-import { asSnapshotRecord, snapshotRxList, lookupKeyedRecord, curaleafSubOrders } from '../prescriptions/snapshot-rx.js';
+import { asSnapshotRecord, snapshotRxList, resolvePrescriptionSupplierOrder } from '../prescriptions/snapshot-rx.js';
 
 export type PrescriptionRefundBreakdown = {
   version: 1;
@@ -50,30 +50,23 @@ export function prescriptionRefundPreview(input: {
   if (order.archivedAt || order.resolutionStatus === 'RESOLVED') refundConflict('This order is already resolved.');
   const allocation = input.allocations.filter(row => row.orderId === order.id && ['ACTIVE', 'REFUNDED'].includes(row.status));
   if (allocation.length !== 1) refundConflict('The remaining payment allocation needs reconciliation.');
-  // Transfers cannot be attributed to individual medicines in legacy records.
-  if (input.allocations.some(row => row.sourceOrderId === order.id || (row.orderId === order.id && row.status === 'TRANSFERRED'))
+  const replacements = input.allocations.filter(row => row.sourceOrderId === order.id && row.status !== 'RELEASED');
+  // A legacy order-level transfer cannot be attributed to one prescription; a scoped one can.
+  if (replacements.some(row => !row.sourcePrescriptionId)
     || snapshot.redoneByOrderId || ['REPLACED', 'REPLACEMENT_PENDING'].includes(String(asSnapshotRecord(snapshot.resolution).status))) {
     refundConflict('A replacement uses this payment. Reconcile its medicine allocation before refunding.');
+  }
+  if (replacements.some(row => row.sourcePrescriptionId === prescriptionId)) {
+    refundConflict('This prescription was replaced using the paid balance. Its medicines are no longer refundable.', 'PRESCRIPTION_REPLACED');
   }
   const history = refundableHistory(input.refunds.filter(row => row.paymentId === payment.id));
   const legacySnapshotRefund = asSnapshotRecord(snapshot.refund);
   if (legacySnapshotRefund.id && !history.some(row => row.id === legacySnapshotRefund.id)) refundConflict('An earlier refund has no durable ledger entry. Reconcile it before another refund.');
   if (history.some(row => !refundBreakdown(row))) refundConflict('An earlier refund has no attributable breakdown. Reconcile it before another refund.');
-  const sub = lookupKeyedRecord(curaleafSubOrders(snapshot), rx);
-  const flow = asSnapshotRecord(lookupKeyedRecord(asSnapshotRecord(snapshot.prescriptionFlow), rx));
-  const root = asSnapshotRecord(snapshot.curaleaf);
-  const poId = String(sub?.purchaseOrderId || flow.purchaseOrderId || (prescriptions.length === 1 ? root.purchaseOrderId : '') || '');
-  const supplier = poId && poId === String(root.purchaseOrderId || root.id || '') ? { ...root, ...sub } : sub;
-  const cancelled = String(supplier?.purchaseOrderState || supplier?.state || '').toUpperCase() === 'CANCELLED'
-    || (poId && poId === String(root.purchaseOrderId || root.id || '') && String(root.purchaseOrderState || root.state).toUpperCase() === 'CANCELLED')
-    || (!poId && supplier?.prescriptionState === 'CANCELLED');
-  if (!cancelled) refundConflict('Curaleaf must confirm this prescription’s cancellation before refunding.', 'CURALEAF_CANCEL_REQUIRED');
-  const supplierLines = Array.isArray(supplier?.lines) ? supplier.lines.map(asSnapshotRecord) : [];
-  const flowLines = Array.isArray(flow.lines) ? flow.lines.map(asSnapshotRecord) : [];
-  const supplierItems = Array.isArray(supplier?.items) ? supplier.items.map(asSnapshotRecord) : [];
-  const sharedPo = prescriptions.length > 1 && prescriptions.some(other => other !== rx &&
-    String(lookupKeyedRecord(curaleafSubOrders(snapshot), other)?.purchaseOrderId || asSnapshotRecord(lookupKeyedRecord(asSnapshotRecord(snapshot.prescriptionFlow), other)).purchaseOrderId || '') === poId);
-  if (sharedPo) refundConflict('This legacy shared purchase order needs prescription-level fulfilment reconciliation before a partial refund.');
+  const supplierOrder = resolvePrescriptionSupplierOrder(snapshot, rx, prescriptions);
+  if (!supplierOrder.cancelled) refundConflict('Curaleaf must confirm this prescription’s cancellation before refunding.', 'CURALEAF_CANCEL_REQUIRED');
+  const { supplierLines, flowLines, supplierItems } = supplierOrder;
+  if (supplierOrder.sharedPurchaseOrder) refundConflict('This legacy shared purchase order needs prescription-level fulfilment reconciliation before a partial refund.');
   const medicines = lines.map(line => {
     if (lines.filter(other => other.packId === line.packId).length !== 1) refundConflict('Repeated medicine lines need fulfilment reconciliation.');
     const candidates = [...supplierLines, ...flowLines].filter(row => String(row.productId || row.packId || '') === line.packId);
@@ -91,10 +84,12 @@ export function prescriptionRefundPreview(input: {
     if (used > quantity - shipped) refundConflict('Refund history exceeds the unfulfilled quantity.');
     return { orderLineId: line.id, label: line.formulaName || line.packId, quantity: quantity - shipped - used, unitPricePence };
   });
+  // Shared charges move whole to the replacement that empties the order; after that nothing of them is left to refund.
+  const chargesCarried = replacements.some(row => Number(row.carriedChargesPence || 0) > 0);
   const charge = (kind: 'dispensingFeePence' | 'deliveryFeePence', originalPence: number) => {
     const used = history.reduce((sum, row) => sum + refundBreakdown(row)![kind], 0);
     if (used > originalPence) refundConflict('Earlier fee refunds need reconciliation.');
-    return { originalPence, remainingPence: originalPence - used };
+    return { originalPence, remainingPence: chargesCarried ? 0 : originalPence - used };
   };
   const pending = history.filter(row => row.status !== 'COMPLETED');
   const reservedPence = pending.reduce((sum, row) => sum + Number(row.amountPence), 0);

@@ -19,6 +19,9 @@ type Step4CheckoutPanelProps = {
   paidRedo: boolean;
   paidRedoAmountMatches: boolean;
   paidRedoAmountDifference: number;
+  replacementPreview: import('../../shared/contracts').PrescriptionReplacementPreview | null;
+  replacementPreviewError: string | null;
+  onRetryReplacementPreview: () => void;
   wholesaleKnown: boolean;
   pharmacyDeliveryCurrentlyEnabled: boolean;
   workspaceMode: string;
@@ -92,6 +95,9 @@ export default function Step4CheckoutPanel({
   paidRedo,
   paidRedoAmountMatches,
   paidRedoAmountDifference,
+  replacementPreview,
+  replacementPreviewError,
+  onRetryReplacementPreview,
   wholesaleKnown,
   pharmacyDeliveryCurrentlyEnabled,
   workspaceMode,
@@ -269,12 +275,13 @@ export default function Step4CheckoutPanel({
                   type="button"
                   key={amount}
                   aria-pressed={activeOrder.dispensingFee === amount}
+                  disabled={paidRedo}
                   onClick={() => onSetDispensingFee(amount)}
                 >
                   {money(amount)}
                 </button>
               ))}
-              <button type="button" aria-pressed={activeOrder.dispensingFee === 0} onClick={() => onSetDispensingFee(0)}>
+              <button type="button" aria-pressed={activeOrder.dispensingFee === 0} disabled={paidRedo} onClick={() => onSetDispensingFee(0)}>
                 None
               </button>
             </div>
@@ -287,6 +294,7 @@ export default function Step4CheckoutPanel({
                   max="15"
                   step="0.01"
                   value={activeOrder.dispensingFee || ''}
+                  disabled={paidRedo}
                   onFocus={event => event.currentTarget.select()}
                   onChange={event => {
                     const amount = Number(event.target.value);
@@ -297,6 +305,13 @@ export default function Step4CheckoutPanel({
                 />
               </span>
             </label>
+            {paidRedo ? (
+              <p className="rx-dispensing-hint" role="status">
+                {replacementPreview?.carriesCharges
+                  ? 'Carried over from the original order: it was the last prescription to leave, so its paid charges move with it.'
+                  : 'Already paid on the original order and still covering its other prescription. Not charged again.'}
+              </p>
+            ) : null}
             <p className="rx-dispensing-hint" id="rx-dispensing-custom-hint">Any amount from £0 to £15. Presets above are shortcuts.</p>
           </div>
 
@@ -305,12 +320,19 @@ export default function Step4CheckoutPanel({
               <p className="section-label">{PHARMACY_DELIVERY_LABEL}</p>
               {!pharmacyDeliveryCurrentlyEnabled ? <p className="rx-dispensing-hint" role="status">This draft can retain Pharmacy Delivery because it was created while the setting was enabled.</p> : null}
               <div className="rx-dispensing-presets" role="group" aria-label="Set delivery charge">
-                {[5, 10, 15].map(amount => <button type="button" key={amount} aria-pressed={activeOrder.pharmacyDelivery === amount} onClick={() => onSetPharmacyDelivery(amount)}>{money(amount)}</button>)}
-                <button type="button" aria-pressed={activeOrder.pharmacyDelivery === 0} onClick={() => onSetPharmacyDelivery(0)}>None</button>
+                {[5, 10, 15].map(amount => <button type="button" key={amount} aria-pressed={activeOrder.pharmacyDelivery === amount} disabled={paidRedo} onClick={() => onSetPharmacyDelivery(amount)}>{money(amount)}</button>)}
+                <button type="button" aria-pressed={activeOrder.pharmacyDelivery === 0} disabled={paidRedo} onClick={() => onSetPharmacyDelivery(0)}>None</button>
               </div>
               <label className="rx-dispensing-custom">
-                <span className="money-input"><span>£</span><input type="number" min="0" max="15" step="0.01" value={activeOrder.pharmacyDelivery || ''} onFocus={event => event.currentTarget.select()} onChange={event => { const amount = Number(event.target.value); onSetPharmacyDelivery(event.target.value === '' ? 0 : Math.max(0, Math.min(15, amount))); }} aria-label="Delivery charge" aria-describedby="rx-pharmacy-delivery-hint" /></span>
+                <span className="money-input"><span>£</span><input type="number" min="0" max="15" step="0.01" value={activeOrder.pharmacyDelivery || ''} disabled={paidRedo} onFocus={event => event.currentTarget.select()} onChange={event => { const amount = Number(event.target.value); onSetPharmacyDelivery(event.target.value === '' ? 0 : Math.max(0, Math.min(15, amount))); }} aria-label="Delivery charge" aria-describedby="rx-pharmacy-delivery-hint" /></span>
               </label>
+              {paidRedo ? (
+                <p className="rx-dispensing-hint" role="status">
+                  {replacementPreview?.carriesCharges
+                    ? 'Carried over from the original order with the dispensing charge.'
+                    : 'Already paid on the original order and still covering its other prescription. Not charged again.'}
+                </p>
+              ) : null}
               <p className="rx-dispensing-hint" id="rx-pharmacy-delivery-hint">Any amount from £0 to £15. Presets above are shortcuts.</p>
             </div>
           ) : null}
@@ -377,8 +399,12 @@ export default function Step4CheckoutPanel({
         {activeOrder.redoContext?.isPaidRedo && redoSourceOrder ? (
           <div className={`rx-step4-redo${paidRedoAmountMatches ? ' is-matched' : ' is-different'}`}>
             <span>
-              <small>Verified payment carried by order {orderReference(redoSourceOrder)}</small>
-              <strong>{money(redoSourceOrder.payment.amount)}</strong>
+              <small>
+                {replacementPreview
+                  ? `Carried over from ${replacementPreview.customerReference}`
+                  : `Verified payment carried by order ${orderReference(redoSourceOrder)}`}
+              </small>
+              <strong>{money(replacementPreview ? replacementPreview.transferPence / 100 : redoSourceOrder.payment.amount)}</strong>
             </span>
             <span>
               <small>Replacement difference</small>
@@ -388,9 +414,29 @@ export default function Step4CheckoutPanel({
                   : `${paidRedoAmountDifference > 0 ? '+' : '−'}${money(Math.abs(paidRedoAmountDifference))}`}
               </strong>
             </span>
+            {replacementPreview ? (
+              <ul className="rx-step4-redo__carry">
+                {replacementPreview.medicines.map(line => (
+                  <li key={line.orderLineId}><span>{line.label} × {line.quantity}</span><strong>{money(line.amountPence / 100)}</strong></li>
+                ))}
+                <li>
+                  <span>
+                    {replacementPreview.carriesCharges
+                      ? 'Dispensing and delivery, carried with the last prescription to leave the order'
+                      : `Dispensing ${money(replacementPreview.charges.dispensing.remainingPence / 100)} and delivery ${money(replacementPreview.charges.delivery.remainingPence / 100)} stay on ${orderReference(redoSourceOrder)} — still covering ${replacementPreview.siblings.filter(sibling => sibling.state === 'live').map(sibling => sibling.customerReference).join(', ') || 'its other prescription'}`}
+                  </span>
+                  <strong>{money(replacementPreview.carriedChargesPence / 100)}</strong>
+                </li>
+              </ul>
+            ) : replacementPreviewError ? (
+              <p className="order-refund-composer__error" role="alert">
+                {replacementPreviewError}{' '}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={onRetryReplacementPreview}>Retry</button>
+              </p>
+            ) : null}
             <p>
               {paidRedoAmountMatches
-                ? 'Amounts match. The original verified payment may be carried over after authentication.'
+                ? 'Amounts match. The carried value may be applied after authentication.'
                 : activeOrder.redoContext.priceResolution === 'absorb'
                   ? `The pharmacy will contribute ${money(paidRedoAmountDifference)}; the patient is not charged again.`
                   : `The pharmacy absorbs the ${money(Math.abs(paidRedoAmountDifference))} ${paidRedoAmountDifference > 0 ? 'increase' : 'decrease'}; the patient payment remains unchanged.`}

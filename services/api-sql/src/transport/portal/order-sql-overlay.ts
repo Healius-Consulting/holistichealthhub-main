@@ -11,7 +11,22 @@ export type OrderSqlChildren = {
   lines: OrderLineRecord[];
   quoteChecks?: QuoteCheckRecord[];
   paymentAllocations?: PaymentAllocationRecord[];
+  /** Allocations this order's payment has funded on replacement orders, one per replaced prescription. */
+  replacementAllocations?: PaymentAllocationRecord[];
 };
+
+export function prescriptionReplacementsFromSql(rows: PaymentAllocationRecord[]) {
+  return rows
+    .filter(row => row.sourcePrescriptionId && row.status !== 'RELEASED')
+    .map(row => ({
+      prescriptionId: String(row.sourcePrescriptionId),
+      replacementOrderId: row.orderId,
+      amountPence: Number(row.amountPence || 0),
+      carriedChargesPence: Number(row.carriedChargesPence || 0),
+      status: row.status,
+      committedAt: row.createdAt,
+    }));
+}
 
 export function sqlLinesToPortal(lines: OrderLineRecord[]): PortalSqlLine[] {
   return lines.map(line => ({
@@ -50,7 +65,12 @@ export function mapPortalOrderFromSql(order: OrderRecord, children?: OrderSqlChi
     sqlQuoteChecks: children?.quoteChecks?.length ? children.quoteChecks : undefined,
     sqlPaymentAllocation: paymentAllocation,
   });
-  return { ...mapped, prescriptionRefundsEnabled: true, prescriptionRefunds: (children?.refunds ?? []).filter(row => row.prescriptionId).map(portalRefundFromSql) };
+  return {
+    ...mapped,
+    prescriptionRefundsEnabled: true,
+    prescriptionRefunds: (children?.refunds ?? []).filter(row => row.prescriptionId).map(portalRefundFromSql),
+    prescriptionReplacements: prescriptionReplacementsFromSql(children?.replacementAllocations ?? []),
+  };
 }
 
 export async function loadOrganisationOrderChildren(
@@ -62,6 +82,7 @@ export async function loadOrganisationOrderChildren(
   linesByOrder: Map<string, OrderLineRecord[]>;
   quoteChecksByOrder: Map<string, QuoteCheckRecord[]>;
   paymentAllocationsByOrder: Map<string, PaymentAllocationRecord[]>;
+  replacementsBySourceOrder: Map<string, PaymentAllocationRecord[]>;
 }> {
   const [refunds, lines, quoteChecks, paymentAllocations] = await Promise.all([
     paymentRepo.listTenantRefunds(organisationId, 500).catch(() => [] as RefundRecord[]),
@@ -88,12 +109,18 @@ export async function loadOrganisationOrderChildren(
     quoteChecksByOrder.set(quoteCheck.orderId, list);
   }
   const paymentAllocationsByOrder = new Map<string, PaymentAllocationRecord[]>();
+  const replacementsBySourceOrder = new Map<string, PaymentAllocationRecord[]>();
   for (const allocation of paymentAllocations) {
     const list = paymentAllocationsByOrder.get(allocation.orderId) ?? [];
     list.push(allocation);
     paymentAllocationsByOrder.set(allocation.orderId, list);
+    if (allocation.sourceOrderId) {
+      const funded = replacementsBySourceOrder.get(allocation.sourceOrderId) ?? [];
+      funded.push(allocation);
+      replacementsBySourceOrder.set(allocation.sourceOrderId, funded);
+    }
   }
-  return { refundsByOrder, linesByOrder, quoteChecksByOrder, paymentAllocationsByOrder };
+  return { refundsByOrder, linesByOrder, quoteChecksByOrder, paymentAllocationsByOrder, replacementsBySourceOrder };
 }
 
 export async function loadOrderChildren(
@@ -101,11 +128,12 @@ export async function loadOrderChildren(
   paymentRepo: SqlPaymentRepository,
   orderLineRepo: SqlOrderLineRepository,
 ): Promise<OrderSqlChildren> {
-  const [refunds, lines, quoteChecks, paymentAllocations] = await Promise.all([
+  const [refunds, lines, quoteChecks, paymentAllocations, replacementAllocations] = await Promise.all([
     paymentRepo.listRefundsByOrderId(order.id, order.organisationId).catch(() => [] as RefundRecord[]),
     orderLineRepo.listByOrderId(order.id).catch(() => [] as OrderLineRecord[]),
     paymentRepo.listQuoteChecksByOrder(order.id, order.organisationId).catch(() => [] as QuoteCheckRecord[]),
     paymentRepo.listPaymentAllocationsByOrder(order.id, order.organisationId).catch(() => [] as PaymentAllocationRecord[]),
+    paymentRepo.listPaymentAllocationsBySourceOrder(order.id, order.organisationId).catch(() => [] as PaymentAllocationRecord[]),
   ]);
-  return { refunds, lines, quoteChecks, paymentAllocations };
+  return { refunds, lines, quoteChecks, paymentAllocations, replacementAllocations };
 }

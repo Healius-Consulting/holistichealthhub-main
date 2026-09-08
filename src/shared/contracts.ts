@@ -463,8 +463,48 @@ export interface PaymentAllocationSummary {
   amountPence: number;
   status: 'ACTIVE' | 'TRANSFER_PENDING' | 'TRANSFERRED' | 'REFUNDED' | 'RELEASED' | 'RECONCILIATION_REQUIRED';
   sourceOrderId?: string | null;
+  sourcePrescriptionId?: string | null;
+  carriedChargesPence?: number;
+  /** Set on a replacement commit response: no prescription still holds the source order open. */
+  sourceResolved?: boolean;
   replacementOrderId?: string | null;
   updatedAt: string;
+}
+
+/** One prescription's replacement, funded from the source order's payment. */
+export interface PrescriptionReplacementSummary {
+  prescriptionId: string;
+  replacementOrderId: string;
+  amountPence: number;
+  carriedChargesPence: number;
+  status: string;
+  committedAt?: string;
+}
+
+export interface PrescriptionReplacementCharge {
+  originalPence: number;
+  refundedPence: number;
+  remainingPence: number;
+  carriedPence: number;
+}
+
+/** What replacing one cancelled prescription would carry over, computed server-side. */
+export interface PrescriptionReplacementPreview {
+  prescriptionId: string;
+  prescriptionIndex: number;
+  customerReference: string;
+  purchaseOrderId: string | null;
+  previewVersion: string;
+  medicines: Array<{ orderLineId: string; packId: string; label: string; quantity: number; unitPricePence: number; amountPence: number }>;
+  medicinePence: number;
+  charges: { dispensing: PrescriptionReplacementCharge; delivery: PrescriptionReplacementCharge; supplierDelivery: PrescriptionReplacementCharge; tax: PrescriptionReplacementCharge };
+  carried: { dispensingPence: number; deliveryPence: number };
+  carriesCharges: boolean;
+  carriedChargesPence: number;
+  transferPence: number;
+  activeAllocationPence: number;
+  siblings: Array<{ prescriptionId: string; index: number; customerReference: string; state: 'live' | 'cancelled_open' | 'replaced' | 'refunded' }>;
+  sourceResolvedAfter: boolean;
 }
 
 export interface OrderResolutionSummary {
@@ -537,6 +577,9 @@ export interface PortalOrderInput {
   currency: 'GBP';
   redoContext?: {
     originalOrderId: string | number;
+    /** The cancelled prescription this replaces; the server refuses to guess on a multi-prescription order. */
+    originalPrescriptionId?: string;
+    replacementPreviewVersion?: string;
     isPaidRedo: boolean;
     originalTotalPence?: number;
     priceDifferencePence?: number;
@@ -681,6 +724,7 @@ export interface PortalOrderRecord {
   refund?: OrderRefundState;
   prescriptionRefunds?: OrderRefundState[];
   prescriptionRefundsEnabled?: boolean;
+  prescriptionReplacements?: PrescriptionReplacementSummary[];
   cancellation?: OrderCancellationState;
   curaleafCancellation?: CuraleafCancellationState;
   curaleafApprovedAt?: string;

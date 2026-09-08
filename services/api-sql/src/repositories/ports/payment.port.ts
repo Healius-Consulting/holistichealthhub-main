@@ -85,6 +85,8 @@ export interface PaymentAllocationRecord {
   paymentId: string;
   orderId: string;
   sourceOrderId?: string | null;
+  sourcePrescriptionId?: string | null;
+  carriedChargesPence?: number | null;
   amountPence: number;
   status: 'ACTIVE' | 'TRANSFERRED' | 'REFUNDED' | 'RELEASED';
   version: number;
@@ -191,12 +193,15 @@ export interface PaymentRepositoryPort {
   listPaymentAllocations(paymentId: string, organisationId: string): Promise<PaymentAllocationRecord[]>;
   listPaymentAllocationsByOrder(orderId: string, organisationId: string): Promise<PaymentAllocationRecord[]>;
   listTenantPaymentAllocations(organisationId: string, limit?: number): Promise<PaymentAllocationRecord[]>;
+  listPaymentAllocationsBySourceOrder(sourceOrderId: string, organisationId: string): Promise<PaymentAllocationRecord[]>;
   transferPaymentAllocation(data: {
     allocationId: string;
     organisationId: string;
     fromOrderId: string;
     toOrderId: string;
     amountPence: number;
+    sourcePrescriptionId?: string | null;
+    carriedChargesPence?: number;
   }): Promise<PaymentAllocationRecord>;
   refundPaymentAllocation(data: {
     organisationId: string;

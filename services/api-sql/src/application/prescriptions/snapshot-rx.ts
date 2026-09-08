@@ -220,3 +220,45 @@ export function filterRecordsByPackIds<T extends PackIdSource>(rows: T[], packId
   if (!allowed.size) return [];
   return rows.filter(row => allowed.has(packIdFromRecord(row)));
 }
+
+/**
+ * One prescription's supplier order. Multi-prescription orders keep a purchase
+ * order per prescription under curaleafSubOrders; a single-prescription order
+ * may only have the legacy root record. Refunds and replacements both need the
+ * same answer, so it lives here rather than in either of them.
+ */
+export function resolvePrescriptionSupplierOrder(
+  snapshot: unknown,
+  rx: Record<string, unknown>,
+  prescriptions: Array<Record<string, unknown>> = snapshotRxList(snapshot),
+) {
+  const record = asSnapshotRecord(snapshot);
+  const subOrders = curaleafSubOrders(record);
+  const flowMap = asSnapshotRecord(record.prescriptionFlow);
+  const sub = lookupKeyedRecord(subOrders, rx);
+  const flow = asSnapshotRecord(lookupKeyedRecord(flowMap, rx));
+  const root = asSnapshotRecord(record.curaleaf);
+  const rootPurchaseOrderId = String(root.purchaseOrderId || root.id || '');
+  const purchaseOrderId = String(sub?.purchaseOrderId || flow.purchaseOrderId || (prescriptions.length === 1 ? rootPurchaseOrderId : '') || '');
+  const supplier = purchaseOrderId && purchaseOrderId === rootPurchaseOrderId ? { ...root, ...(sub ?? {}) } : (sub ?? null);
+  const stateOf = (value: Record<string, unknown> | null) => String(value?.purchaseOrderState || value?.state || '').toUpperCase();
+  const cancelled = stateOf(supplier) === 'CANCELLED'
+    || (Boolean(purchaseOrderId) && purchaseOrderId === rootPurchaseOrderId && stateOf(root) === 'CANCELLED')
+    || (!purchaseOrderId && String(supplier?.prescriptionState || '').toUpperCase() === 'CANCELLED');
+  const purchaseOrderIdOf = (other: Record<string, unknown>) =>
+    String(lookupKeyedRecord(subOrders, other)?.purchaseOrderId || asSnapshotRecord(lookupKeyedRecord(flowMap, other)).purchaseOrderId || '');
+  const sharedPurchaseOrder = prescriptions.length > 1
+    && prescriptions.some(other => other !== rx && purchaseOrderIdOf(other) === purchaseOrderId);
+  const asList = (value: unknown) => (Array.isArray(value) ? value.map(asSnapshotRecord) : []);
+  return {
+    purchaseOrderId,
+    supplier,
+    flow,
+    cancelled,
+    sharedPurchaseOrder,
+    hasPurchaseOrder: Boolean(purchaseOrderId || stateOf(supplier) || asList(supplier?.shipments).length),
+    supplierLines: asList(supplier?.lines),
+    flowLines: asList(flow.lines),
+    supplierItems: asList(supplier?.items),
+  };
+}

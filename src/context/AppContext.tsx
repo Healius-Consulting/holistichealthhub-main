@@ -1,7 +1,7 @@
 import { createContext, useContext, useReducer, useEffect, useRef, type ReactNode } from 'react';
 import { prescriptionDateIsCurrent } from '@hhh/domain/prescription-date';
 import { getCuraleafCatalogue, getCuraleafConnectionStatus, getDevCuraleafCatalogue, getOrderDrafts, getPortalPatientDirectory, getPortalOrders, getWorldpayConnectionStatus, isApiConfigured } from '../shared/api';
-import type { CuraleafCancellationState, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, RedoPriceResolution } from '../shared/contracts';
+import type { CuraleafCancellationState, OrderCancellationState, OrderDraftRecord, OrderRefundState, PortalOrderRecord, PortalPendingEnquiryRecord, PrescriptionReplacementSummary, RedoPriceResolution } from '../shared/contracts';
 import { activeRedoPriceResolution } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
@@ -125,6 +125,8 @@ export interface Prescription {
   curaleafPrescriptionId?: string;
   curaleafPrescriptionState?: 'ACTIVE' | 'FULFILLED' | 'EXPIRED' | 'CANCELLED' | 'PENDING';
   purchaseOrderState?: 'CREATED' | 'PROCESSING' | 'FULLY_ALLOCATED' | 'CANCELLED' | null;
+  /** The linked order that replaced this cancelled prescription, funded from the same payment. */
+  replacedByOrderId?: string | null;
   dispatchStatus?: 'not_dispatched' | 'partial' | 'complete';
   quantityMismatch?: boolean;
   curaleafPatientName?: string;
@@ -185,6 +187,8 @@ export type UnresolvedOrderReason = 'expired' | 'rejected' | 'cancelled';
 export interface OrderRedoContext {
   originalOrderId: number;
   originalPrescriptionId?: number;
+  /** The cancelled prescription's HHH id, sent so the server replaces that one and not the first. */
+  originalPrescriptionBackendId?: string;
   originalBackendId?: string;
   rootOrderId?: number;
   rootBackendId?: string;
@@ -203,6 +207,8 @@ export function orderReference(order: PatientOrder) {
 export interface PatientOrder {
   prescriptionRefunds?: OrderRefundState[];
   prescriptionRefundsEnabled?: boolean;
+  /** Replacements this order's payment has funded, one per replaced prescription. */
+  prescriptionReplacements?: PrescriptionReplacementSummary[];
   id: number;
   backendId?: string;
   orderNumber?: string;
@@ -681,7 +687,7 @@ export type Action =
   // Payment
   | { type: 'SEND_PAYMENT_LINK'; orderId: number }
   | { type: 'START_MANUAL_PAYMENT'; orderId: number }
-  | { type: 'CARRY_OVER_PAYMENT'; orderId: number; sourceOrderId: number }
+  | { type: 'CARRY_OVER_PAYMENT'; orderId: number; sourceOrderId: number; carriedPence?: number; carriedChargesPence?: number; sourcePrescriptionBackendId?: string; sourceResolved?: boolean }
   | { type: 'SET_REDO_PRICE_RESOLUTION'; orderId: number; resolution: RedoPriceResolution | undefined }
   | { type: 'START_ORDER_REFUND'; orderId: number; reason: OrderRefundState['reason']; resolution: OrderRefundState['resolution']; amountPence?: number; scope?: OrderRefundState['scope']; lines?: OrderRefundState['lines'] }
   | { type: 'CONFIRM_ORDER_REFUND'; orderId: number; externalReference: string }
@@ -922,6 +928,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
         return {
           id: orderId * 100 + rxIndex + 1,
           backendId: flowKey,
+          replacedByOrderId: record.prescriptionReplacements?.find(replacement => replacement.prescriptionId === prescription.hhhPrescriptionId)?.replacementOrderId ?? null,
           entryMode: prescription.clinicScanId ? 'clinic' : 'manual',
           clinicScanId: prescription.clinicScanId,
           customerReference: isMatchedPO ? rawCuraleaf?.customerReference : undefined,
@@ -1051,6 +1058,7 @@ function mapPortalOrder(record: PortalOrderRecord, index: number, records: Porta
     refund: record.refund,
     prescriptionRefunds: record.prescriptionRefunds,
     prescriptionRefundsEnabled: record.prescriptionRefundsEnabled,
+    prescriptionReplacements: record.prescriptionReplacements,
     cancellation: record.cancellation,
     curaleafCancellation: record.curaleafCancellation,
     pharmacyContribution: record.pharmacyContributionPence ? record.pharmacyContributionPence / 100 : 0,
@@ -1190,11 +1198,16 @@ function applyRedoOntoDraft(draft: PatientOrder, source: PatientOrder, reason: U
     redoContext: {
       originalOrderId: source.id,
       originalPrescriptionId,
+      originalPrescriptionBackendId: sourceRx?.backendId,
       originalBackendId: source.backendId,
       rootOrderId: source.redoContext?.rootOrderId ?? source.redoContext?.originalOrderId ?? source.id,
       rootBackendId: source.redoContext?.rootBackendId ?? source.redoContext?.originalBackendId ?? source.backendId,
       replacementSequence: (source.redoContext?.replacementSequence ?? 0) + 1,
-      isPaidRedo: source.payment.status === 'paid' && source.refund?.status !== 'completed',
+      // The paid balance carries only if this prescription's share is still on the payment.
+      isPaidRedo: source.payment.status === 'paid'
+        && source.refund?.status !== 'completed'
+        && !sourceRx?.replacedByOrderId
+        && !(source.prescriptionRefunds ?? []).some(refund => refund.prescriptionId && refund.prescriptionId === sourceRx?.backendId),
       reason,
     },
     prescriptions: [{
@@ -1900,9 +1913,13 @@ function reducer(state: AppState, action: Action): AppState {
       const source = findOrder(state, action.sourceOrderId);
       if (!order?.redoContext?.isPaidRedo || order.redoContext.originalOrderId !== source?.id || source.payment.status !== 'paid') return state;
       const amount = orderRevenue(order);
-      const absorbedDifference = order.redoContext.priceResolution === 'absorb' ? Math.max(0, amount - source.payment.amount) : 0;
-      const absorbedReduction = order.redoContext.priceResolution === 'absorb' ? Math.max(0, source.payment.amount - amount) : 0;
-      if (Math.abs(amount - source.payment.amount) >= 0.005 && absorbedDifference <= 0 && absorbedReduction <= 0) return state;
+      // Only the replaced prescription's share moves; the source keeps the rest for its siblings.
+      const carried = action.carriedPence != null ? action.carriedPence / 100 : source.payment.amount;
+      const absorbedDifference = order.redoContext.priceResolution === 'absorb' ? Math.max(0, amount - carried) : 0;
+      const absorbedReduction = order.redoContext.priceResolution === 'absorb' ? Math.max(0, carried - amount) : 0;
+      if (Math.abs(amount - carried) >= 0.005 && absorbedDifference <= 0 && absorbedReduction <= 0) return state;
+      const sourcePrescriptionId = order.redoContext.originalPrescriptionId;
+      const sourceResolved = action.sourceResolved ?? true;
       const nextState = {
         ...state,
         orders: state.orders.map(candidate => {
@@ -1911,17 +1928,27 @@ function reducer(state: AppState, action: Action): AppState {
             payment: {
               ...source.payment,
               status: 'paid' as const,
-              amount: order.redoContext?.priceResolution === 'absorb' ? source.payment.amount : amount,
+              amount: order.redoContext?.priceResolution === 'absorb' ? carried : amount,
               paidAt: source.payment.paidAt ?? new Date(),
             },
-            pharmacyContribution: order.redoContext?.priceResolution === 'absorb' ? amount - source.payment.amount : 0,
+            pharmacyContribution: order.redoContext?.priceResolution === 'absorb' ? amount - carried : 0,
           };
           if (candidate.id === source.id) return {
             ...candidate,
-            redoneByOrderId: String(order.id),
-            unresolvedReason: order.redoContext?.reason,
-            redoEligible: false,
-            ...(order.redoContext?.reason === 'expired' ? { lifecycleStatus: 'archived', isExpired: true } : {}),
+            prescriptions: candidate.prescriptions.map(prescription => prescription.id === sourcePrescriptionId
+              ? { ...prescription, replacedByOrderId: order.backendId ?? String(order.id) }
+              : prescription),
+            prescriptionReplacements: action.sourcePrescriptionBackendId ? [
+              ...(candidate.prescriptionReplacements ?? []).filter(row => row.prescriptionId !== action.sourcePrescriptionBackendId),
+              { prescriptionId: action.sourcePrescriptionBackendId, replacementOrderId: order.backendId ?? String(order.id), amountPence: action.carriedPence ?? Math.round(carried * 100), carriedChargesPence: action.carriedChargesPence ?? 0, status: 'ACTIVE' },
+            ] : candidate.prescriptionReplacements,
+            // A live sibling keeps the source order open; only the last replacement closes it.
+            ...(sourceResolved ? {
+              redoneByOrderId: String(order.id),
+              unresolvedReason: order.redoContext?.reason,
+              redoEligible: false,
+              ...(order.redoContext?.reason === 'expired' ? { lifecycleStatus: 'archived' as const, isExpired: true } : {}),
+            } : {}),
           };
           return candidate;
         }),

@@ -31,7 +31,7 @@ import {
 } from '../../context/AppContext';
 import { TRAINING_PRESCRIBER, TRAINING_PRODUCT, isOpenPharmacyWorkspace } from '../../training/workspace';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
-import { ApiRequestError, checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
+import { ApiRequestError, checkPrescriptionSerialAvailability, createOrderDraft, createPortalOrder, createWorldpaySession, deleteOrderDraft, deletePrescriptionFile, getCuraleafQuote, getDevCuraleafQuote, getPrescriptionReplacementPreview, isApiConfigured, scanCuraleafClinicPrescription, updateOrderDraft, uploadPrescriptionFile } from '../../shared/api';
 import { curaleafPlacementUnlocked, snapshotQuoteFromCatalogue } from '../../utils/curaleafPlacement';
 import { formatPatientDob } from '../../utils/patientDob';
 import { canCreateOrderForPatient, canLinkPatientOnOrderDraft } from '../../utils/patientOrderEligibility';
@@ -77,6 +77,30 @@ export default function CreateOrderPage() {
   const redoSourceOrder = activeOrder?.redoContext
     ? state.orders.find(order => order.organisationId === state.currentOrganisationId && order.id === activeOrder.redoContext!.originalOrderId) ?? null
     : null;
+  // What the cancelled prescription actually carries, from the server: its own
+  // medicines, and the shared charges only if it is the last one leaving the order.
+  const [replacementPreview, setReplacementPreview] = useState<import('../../shared/contracts').PrescriptionReplacementPreview | null>(null);
+  const [replacementPreviewError, setReplacementPreviewError] = useState<string | null>(null);
+  const [replacementPreviewNonce, setReplacementPreviewNonce] = useState(0);
+  const replacementSourceBackendId = activeOrder?.redoContext?.isPaidRedo ? activeOrder.redoContext.originalBackendId ?? null : null;
+  const replacementPrescriptionBackendId = activeOrder?.redoContext?.isPaidRedo ? activeOrder.redoContext.originalPrescriptionBackendId ?? null : null;
+  const replacementDraftId = activeOrder?.id ?? null;
+  useEffect(() => {
+    setReplacementPreview(null);
+    setReplacementPreviewError(null);
+    if (!replacementSourceBackendId || !replacementPrescriptionBackendId || replacementDraftId == null || isLocalPortalPreview) return;
+    let current = true;
+    getPrescriptionReplacementPreview(replacementSourceBackendId, replacementPrescriptionBackendId)
+      .then(preview => {
+        if (!current) return;
+        setReplacementPreview(preview);
+        // The replacement never re-charges dispensing or delivery; it shows what the source still carries.
+        dispatch({ type: 'SET_ORDER_DISPENSING_FEE', orderId: replacementDraftId, amount: preview.carried.dispensingPence / 100 });
+        dispatch({ type: 'SET_ORDER_PHARMACY_DELIVERY', orderId: replacementDraftId, amount: preview.carried.deliveryPence / 100 });
+      })
+      .catch(error => { if (current) setReplacementPreviewError(error instanceof Error ? error.message : 'The carry-over could not be prepared.'); });
+    return () => { current = false; };
+  }, [replacementSourceBackendId, replacementPrescriptionBackendId, replacementDraftId, replacementPreviewNonce, dispatch]);
   const patient = activeOrder?.patientId ? organisationPatients.find(candidate => candidate.id === activeOrder.patientId) ?? null : null;
   const [selectedRxId, setSelectedRxId] = useState<number | null>(null);
   const [changingPatient, setChangingPatient] = useState(false);
@@ -354,8 +378,9 @@ export default function CreateOrderPage() {
   const quoteGateComplete = !requiresLiveCuraleafEvidence || quoteAvailable;
   const paidRedo = Boolean(activeOrder?.redoContext?.isPaidRedo);
   const paymentRouteReady = paidRedo || selectedPaymentRoute === 'manual' || canUseWorldpay;
+  const carriedOverAmount = replacementPreview ? replacementPreview.transferPence / 100 : redoSourceOrder?.payment.amount ?? 0;
   const paidRedoAmountDifference = activeOrder?.redoContext?.isPaidRedo && redoSourceOrder
-    ? Math.round((orderRevenue(activeOrder) - redoSourceOrder.payment.amount) * 100) / 100
+    ? Math.round((orderRevenue(activeOrder) - carriedOverAmount) * 100) / 100
     : 0;
   const paidRedoAmountMatches = !activeOrder?.redoContext?.isPaidRedo || Math.abs(paidRedoAmountDifference) < 0.005;
   const redoPriceResolutionReady = paidRedoAmountMatches
@@ -745,11 +770,17 @@ export default function CreateOrderPage() {
           ...(activeOrder.redoContext ? {
             redoContext: {
               originalOrderId: activeOrder.redoContext.originalBackendId ?? activeOrder.redoContext.originalOrderId,
+              originalPrescriptionId: activeOrder.redoContext.originalPrescriptionBackendId,
+              replacementPreviewVersion: replacementPreview?.previewVersion,
               isPaidRedo: activeOrder.redoContext.isPaidRedo,
               requireCuraleafAuth: true as const,
               priceResolution: activeOrder.redoContext.priceResolution === 'absorb' ? 'absorb' : undefined,
             },
           } : {}),
+        }).catch(error => {
+          // The source's balance moved under this draft; show the refreshed carry-over rather than committing against stale figures.
+          if (error instanceof ApiRequestError && error.code === 'REPLACEMENT_PREVIEW_STALE') setReplacementPreviewNonce(value => value + 1);
+          throw error;
         });
         if (!activeOrder.backendId) {
           dispatch({ type: 'SET_ORDER_BACKEND_ID', orderId: activeOrder.id, backendId: persisted.id, orderNumber: 'orderNumber' in persisted ? persisted.orderNumber : undefined });
@@ -762,8 +793,19 @@ export default function CreateOrderPage() {
           });
         }
         if (paidRedo) {
-          dispatch({ type: 'CARRY_OVER_PAYMENT', orderId: activeOrder.id, sourceOrderId: activeOrder.redoContext!.originalOrderId });
-          dispatch({ type: 'ADD_TOAST', message: 'The verified payment was carried over. No second patient payment was requested.', toastType: 'success' });
+          const moved = 'paymentAllocation' in persisted ? persisted.paymentAllocation : undefined;
+          dispatch({
+            type: 'CARRY_OVER_PAYMENT',
+            orderId: activeOrder.id,
+            sourceOrderId: activeOrder.redoContext!.originalOrderId,
+            carriedPence: moved?.amountPence,
+            carriedChargesPence: moved?.carriedChargesPence,
+            sourcePrescriptionBackendId: moved?.sourcePrescriptionId ?? activeOrder.redoContext!.originalPrescriptionBackendId,
+            sourceResolved: moved?.sourceResolved,
+          });
+          dispatch({ type: 'ADD_TOAST', message: moved && !moved.sourceResolved
+            ? `${money((moved.amountPence ?? 0) / 100)} carried over from ${activeOrder.redoContext!.originalOrderNumber ?? 'the original order'}. Its other prescription keeps the rest of the payment.`
+            : 'The verified payment was carried over. No second patient payment was requested.', toastType: 'success' });
         } else if (selectedPaymentRoute === 'worldpay') {
           if (!canUseWorldpay) throw new Error('This pharmacy’s Worldpay connection is not verified. Change the default route in Settings.');
           const session = await createWorldpaySession(persisted.id, {
@@ -779,7 +821,7 @@ export default function CreateOrderPage() {
           dispatch({ type: 'ADD_TOAST', message: 'Order saved. Confirm the pharmacy payment before sending its prescriptions to Curaleaf.', toastType: 'success' });
         }
       } else if (paidRedo) {
-        dispatch({ type: 'CARRY_OVER_PAYMENT', orderId: activeOrder.id, sourceOrderId: activeOrder.redoContext!.originalOrderId });
+        dispatch({ type: 'CARRY_OVER_PAYMENT', orderId: activeOrder.id, sourceOrderId: activeOrder.redoContext!.originalOrderId, sourcePrescriptionBackendId: activeOrder.redoContext!.originalPrescriptionBackendId, sourceResolved: redoSourceOrder ? redoSourceOrder.prescriptions.length <= 1 : true });
         dispatch({ type: 'ADD_TOAST', message: 'Training payment carry-over recorded. No second payment request was created.', toastType: 'info' });
       } else if (selectedPaymentRoute === 'worldpay') {
         if (!canUseWorldpay) return;
@@ -1317,6 +1359,9 @@ export default function CreateOrderPage() {
                   paidRedo={paidRedo}
                   paidRedoAmountMatches={paidRedoAmountMatches}
                   paidRedoAmountDifference={paidRedoAmountDifference}
+                  replacementPreview={replacementPreview}
+                  replacementPreviewError={replacementPreviewError}
+                  onRetryReplacementPreview={() => setReplacementPreviewNonce(value => value + 1)}
                   wholesaleKnown={wholesaleKnown}
                   pharmacyDeliveryCurrentlyEnabled={organisation.pharmacyDeliveryEnabled}
                   workspaceMode={state.workspaceMode}

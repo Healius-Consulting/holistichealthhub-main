@@ -53,8 +53,12 @@ test('the whole-order refund routes hand multi-prescription orders to the scoped
   assert.match(requestHandler, /PRESCRIPTION_REFUND_REQUIRED/);
   assert.match(requestHandler, /snapshotRxList\(order\.quoteSnapshot\)\.length > 1/);
   assert.match(orderRouterSource, /row\.id === refundId && row\.prescriptionId[\s\S]{0,120}PRESCRIPTION_REFUND_REQUIRED/);
-  assert.match(orderRouterSource, /payment\.pendingRefundId \|\| refundHistory\.some\(row => row\.prescriptionId\)/,
-    'a reserved or scoped refund blocks a replacement funded by the same payment');
+  const replacementBlock = orderRouterSource.match(/if \(redoContext\?\.isPaidRedo\) \{[\s\S]*?\n      \}\n/)?.[0] ?? '';
+  assert.match(replacementBlock, /resolvePrescriptionReplacement\(\{/, 'a replacement resolves the one cancelled prescription it belongs to');
+  assert.match(replacementBlock, /prescriptionId: redoContext\.originalPrescriptionId \?\? null/);
+  assert.doesNotMatch(replacementBlock, /sourcePrescriptions\[0\]/, 'the first prescription is never assumed to be the cancelled one');
+  assert.match(replacementBlock, /dispensingFeePence = resolved\.charges\.dispensing\.carriedPence/,
+    'the replacement charges only what the source still carries, never the draft’s own fees');
 });
 
 test('a repeated Worldpay callback cannot refund or reopen a settled prescription refund', () => {

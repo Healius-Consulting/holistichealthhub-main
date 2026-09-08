@@ -19281,6 +19281,36 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
   min-height: 44px;
 }
 
+/* What the replaced prescription carries: its medicines, then the shared charges' fate. */
+.rx-step4-redo .rx-step4-redo__carry{
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.rx-step4-redo .rx-step4-redo__carry li{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.rx-step4-redo .rx-step4-redo__carry li:last-child{ border-bottom: 0; }
+.rx-step4-redo .rx-step4-redo__carry li > span{ min-width: 0; }
+.rx-step4-redo .rx-step4-redo__carry li > strong{ flex: 0 0 auto; font-size: 12px; }
+
 .rx-step4-commit{
   display: grid;
   gap: 12px;

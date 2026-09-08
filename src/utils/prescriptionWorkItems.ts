@@ -47,6 +47,11 @@ function prescriptionProjection(order: PatientOrder, prescription: Prescription,
   const ownsException = index === exceptionOwnerIndex(order);
   const cancelled = prescriptionIsCancelled(prescription);
   const preserveTerminalOrderState = cancelled || order.prescriptions.length === 1;
+  // Each prescription resolves on its own: a replacement or completed refund
+  // scoped to this one closes its lane without touching a live sibling.
+  const ownRefund = cancelled
+    ? (order.prescriptionRefunds ?? []).find(refund => refund.prescriptionId && refund.prescriptionId === prescription.backendId)
+    : undefined;
 
   return {
     ...order,
@@ -54,13 +59,13 @@ function prescriptionProjection(order: PatientOrder, prescription: Prescription,
     quoteReview: ownsException ? order.quoteReview : undefined,
     activeQuoteCheck: ownsException ? order.activeQuoteCheck : undefined,
     quoteChecks: ownsException ? order.quoteChecks : undefined,
-    refund: ownsException && cancelled ? order.refund : undefined,
+    refund: ownRefund ?? (ownsException && cancelled ? order.refund : undefined),
     cancellation: ownsException && cancelled ? order.cancellation : undefined,
     curaleafCancellation: ownsException && cancelled ? order.curaleafCancellation : undefined,
     resolution: ownsException && cancelled ? order.resolution : undefined,
     lifecycleStatus: preserveTerminalOrderState ? order.lifecycleStatus : undefined,
     unresolvedReason: preserveTerminalOrderState ? order.unresolvedReason : null,
-    redoneByOrderId: ownsException && cancelled ? order.redoneByOrderId : null,
+    redoneByOrderId: prescription.replacedByOrderId ?? (ownsException && cancelled ? order.redoneByOrderId : null),
   };
 }
 

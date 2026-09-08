@@ -1,4 +1,6 @@
 import { createPrescriptionRefundRouter } from './prescription-refund.router.js';
+import { createPrescriptionReplacementRouter } from './prescription-replacement.router.js';
+import { resolvePrescriptionReplacement, stampPrescriptionReplacement } from '../../application/orders/prescription-replacement.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
@@ -7,7 +9,7 @@ import { queryWorldpayPayment, submitWorldpayRefund } from '../../application/in
 import { verifyWorldpayRefund } from '../../application/payments/worldpay-query.js';
 import { catalogFromPortalOrderSources, resolveStaffRefund } from '../../application/payments/refund-composition.js';
 import { assertCuraleafSerialAvailableForCreate, executeCuraleafOrderPlacement, fetchCuraleafQuote } from '../../application/integrations/curaleaf.service.js';
-import { curaleafOwnsCancellation, curaleafRequiresSupplierCancel, stampCuraleafCancellationOnSnapshot, supplierCancellationAlreadyConfirmed } from '../../application/integrations/curaleaf-events.js';
+import { curaleafOwnsCancellation, curaleafRequiresSupplierCancel, stampCuraleafCancellationOnSnapshot } from '../../application/integrations/curaleaf-events.js';
 import {
   curaleafCancellationBlocksPlacement,
   evaluateQuoteReview,
@@ -51,7 +53,7 @@ import {
 } from './order-sql-overlay.js';
 import { stampPackFieldsOnSnapshot } from '../../application/orders/prescription-units.js';
 import { CURRENT_PRICING_POLICY_VERSION, authoritativeQuoteLineItems, authoritativeQuotePricing, evaluateQuoteGate, quoteCheckInput } from '../../application/orders/quote-gate.js';
-import { replacementAllocationAmount, replacementPrescriptionPolicy, replacementSupplierResolution } from '../../application/orders/replacement-resolution.js';
+import { replacementPrescriptionPolicy } from '../../application/orders/replacement-resolution.js';
 import { generateOrderNumber, pharmacyDeliveryChargeAllowed, pharmacyDeliveryPermitted } from '../../application/orders/order-policy.js';
 import {
   completedManualRefund,
@@ -222,6 +224,9 @@ const createOrderInputSchema = z.object({
   quoteSnapshot: z.record(z.string(), z.unknown()).optional(),
   redoContext: z.object({
     originalOrderId: uuidLikeSchema,
+    // Which cancelled prescription this replaces. Optional only for legacy single-prescription orders.
+    originalPrescriptionId: uuidLikeSchema.optional(),
+    replacementPreviewVersion: z.string().length(64).optional(),
     isPaidRedo: z.boolean(),
     requireCuraleafAuth: z.literal(true),
     priceResolution: z.enum(['absorb', 'refund_and_recharge']).optional(),
@@ -231,6 +236,7 @@ const createOrderInputSchema = z.object({
 export function createPortalOrderRouter(): Router {
   const router = Router();
   router.use(createPrescriptionRefundRouter());
+  router.use(createPrescriptionReplacementRouter());
   const orderRepo = new SqlOrderRepository();
   const orderLineRepo = new SqlOrderLineRepository();
   const paymentRepo = new SqlPaymentRepository();
@@ -393,7 +399,7 @@ export function createPortalOrderRouter(): Router {
         draftEnabledAtCreation: sourceDraft?.pharmacyDeliveryEnabledAtCreation,
         organisationEnabled: organisation.pharmacyDeliveryEnabled,
       });
-      const pharmacyDeliveryPence = input.pharmacyDeliveryPence ?? 0;
+      let pharmacyDeliveryPence = input.pharmacyDeliveryPence ?? 0;
       if (!pharmacyDeliveryChargeAllowed(pharmacyDeliveryPence, pharmacyDeliveryAllowed)) {
         throw new HttpError(409, 'Pharmacy Delivery was not enabled when this order was started.', 'PHARMACY_DELIVERY_NOT_ALLOWED');
       }
@@ -402,7 +408,7 @@ export function createPortalOrderRouter(): Router {
       assertPatientEligibleForOrder(patient);
 
       let medicineTotalPence = 0;
-      const dispensingFeePence = input.dispensingFeePence ?? 0;
+      let dispensingFeePence = input.dispensingFeePence ?? 0;
       let deliveryPence = 0;
       let taxPence = 0;
       let totalPence = 0;
@@ -422,6 +428,10 @@ export function createPortalOrderRouter(): Router {
         rawQuote: unknown;
         pharmacyAdjustmentPence: number;
         reusesSourceSerial: boolean;
+        prescriptionId: string;
+        sourceCustomerReference: string;
+        carriedChargesPence: number;
+        sourceResolvedAfter: boolean;
       } = null;
       let sourceSerial: string | null = null;
 
@@ -436,26 +446,32 @@ export function createPortalOrderRouter(): Router {
         if (!orderMoneyWasTaken(source) || snapshotRefundCompleted(source.quoteSnapshot)) {
           throw new HttpError(409, 'The source order has no transferable settled payment.', 'REPLACEMENT_PAYMENT_UNAVAILABLE');
         }
-        const sourceRefunds = await paymentRepo.listRefundsByOrderId(source.id, scope.organisationId);
-        if (sourceRefunds.some(row => !['FAILED', 'CANCELLED'].includes(String(row.status).toUpperCase()))) {
-          throw new HttpError(409, 'A refund is already open for the source payment.', 'REPLACEMENT_REFUND_CONFLICT');
-        }
         const payment = await paymentRepo.findPaymentByOrderId(source.id, scope.organisationId);
         if (!payment || !['PAID', 'REFUND_REQUIRED'].includes(payment.status)) {
           throw new HttpError(409, 'The settled source payment could not be verified.', 'REPLACEMENT_PAYMENT_UNAVAILABLE');
         }
 
-        const sourceSnapshot = source.quoteSnapshot && typeof source.quoteSnapshot === 'object'
-          ? source.quoteSnapshot as Record<string, any>
-          : {};
-        const sourceCuraleaf = sourceSnapshot.curaleaf && typeof sourceSnapshot.curaleaf === 'object'
-          ? sourceSnapshot.curaleaf as Record<string, any>
-          : {};
-        const sourceLines = await orderLineRepo.listByOrderId(source.id);
-        const sourcePrescriptions = Array.isArray(sourceSnapshot.prescriptions) ? sourceSnapshot.prescriptions : [];
-        const sourcePrescription = sourcePrescriptions[0] && typeof sourcePrescriptions[0] === 'object'
-          ? sourcePrescriptions[0] as Record<string, any>
-          : {};
+        // The replacement belongs to one cancelled prescription. Its medicines,
+        // supplier state and carry-over are resolved against that prescription
+        // alone; the sibling prescriptions keep their own payment share.
+        const [allSourceLines, sourceRefunds, sourceAllocations] = await Promise.all([
+          orderLineRepo.listByOrderId(source.id),
+          paymentRepo.listRefundsByOrderId(source.id, scope.organisationId),
+          paymentRepo.listPaymentAllocations(payment.id, scope.organisationId),
+        ]);
+        const resolved = resolvePrescriptionReplacement({
+          order: source,
+          payment,
+          allocations: sourceAllocations,
+          refunds: sourceRefunds,
+          lines: allSourceLines,
+          prescriptionId: redoContext.originalPrescriptionId ?? null,
+        });
+        if (redoContext.replacementPreviewVersion && redoContext.replacementPreviewVersion !== resolved.previewVersion) {
+          throw new HttpError(409, 'The paid balance changed since this replacement was prepared. Review the refreshed carry-over.', 'REPLACEMENT_PREVIEW_STALE');
+        }
+        const sourcePrescription = resolved.sourceRx;
+        const sourceLines = resolved.sourceLines;
         sourceSerial = String(sourcePrescription.serialNumber || '') || null;
         const sourceRxItems = Array.isArray(sourcePrescription.items) ? sourcePrescription.items as Array<Record<string, unknown>> : [];
         const replacementRx = (input.prescriptions[0] ?? {}) as {
@@ -496,37 +512,11 @@ export function createPortalOrderRouter(): Router {
         if (!prescriptionPolicy.allowed) {
           throw serialPolicyConflict(prescriptionPolicy);
         }
-        const hasPurchaseOrder = Boolean(sourceCuraleaf.purchaseOrderId || sourceCuraleaf.purchaseOrderState || sourceCuraleaf.shipments?.length);
-        const fulfilmentLines = Array.isArray(sourceCuraleaf.lines) ? sourceCuraleaf.lines : [];
-        const supplierResolution = replacementSupplierResolution({
-          hasPurchaseOrder,
-          cancellationConfirmed: supplierOrderCancelled(source.quoteSnapshot)
-            || supplierCancellationAlreadyConfirmed(source.quoteSnapshot),
-          fulfilmentLines,
-        });
-        if (!supplierResolution.resolved) {
-          throw new HttpError(409, 'Resolve every shipped and cancelled source line with Curaleaf before committing its replacement.', 'CURALEAF_CANCEL_REQUIRED', { reason: supplierResolution.reason });
-        }
-
-        const refundHistory = await paymentRepo.listRefundsByOrderId(source.id, scope.organisationId);
-        if (payment.pendingRefundId || refundHistory.some(row => row.prescriptionId)) throw new HttpError(409, 'Reconcile the prescription refund allocation before replacement.', 'REPLACEMENT_ALLOCATION_RECONCILIATION');
-        const allocations = await paymentRepo.listPaymentAllocations(payment.id, scope.organisationId);
-        if (allocations.some(row => row.sourceOrderId === source.id && !['REFUNDED', 'RELEASED'].includes(row.status))) {
-          throw new HttpError(409, 'A paid replacement has already been committed for this source order.', 'REPLACEMENT_ALREADY_COMMITTED');
-        }
-        const activeAllocation = allocations.find(row => row.orderId === source.id && row.status === 'ACTIVE') ?? null;
-        const activeAllocationPence = Number(activeAllocation?.amountPence ?? payment.amountPence);
-        let transferPence: number;
-        try {
-          transferPence = replacementAllocationAmount({
-            activeAllocationPence,
-            hasPurchaseOrder,
-            sourceLines,
-            fulfilmentLines,
-          });
-        } catch (error) {
-          throw new HttpError(409, error instanceof Error ? error.message : 'The replacement value requires reconciliation.', 'REPLACEMENT_ALLOCATION_RECONCILIATION');
-        }
+        // A replacement charges only what the source still carries, never the
+        // draft's own dispensing and delivery: those were paid once for the order.
+        dispensingFeePence = resolved.charges.dispensing.carriedPence;
+        pharmacyDeliveryPence = resolved.charges.delivery.carriedPence;
+        const { transferPence, activeAllocation, activeAllocationPence } = resolved;
 
         const connection = await integrationRepo.findConnection(scope.organisationId, 'CURALEAF').catch(() => null);
         if (!connection?.secretResourceName) throw new HttpError(409, 'A live Curaleaf quote is required for this replacement.', 'QUOTE_UNAVAILABLE');
@@ -552,6 +542,10 @@ export function createPortalOrderRouter(): Router {
           rawQuote,
           pharmacyAdjustmentPence,
           reusesSourceSerial: prescriptionPolicy.reusesSourceSerial,
+          prescriptionId: resolved.prescriptionId,
+          sourceCustomerReference: resolved.customerReference,
+          carriedChargesPence: resolved.carriedChargesPence,
+          sourceResolvedAfter: resolved.sourceResolvedAfter,
         };
       }
 
@@ -595,6 +589,10 @@ export function createPortalOrderRouter(): Router {
           pharmacyContributionPence: replacement.pharmacyAdjustmentPence,
           redoContext: {
             originalOrderId: replacement.source.id,
+            originalPrescriptionId: replacement.prescriptionId,
+            sourceCustomerReference: replacement.sourceCustomerReference,
+            transferPence: replacement.transferPence,
+            carriedChargesPence: replacement.carriedChargesPence,
             isPaidRedo: true,
             requireCuraleafAuth: true,
             priceResolution: replacement.pharmacyAdjustmentPence === 0 ? 'matched' : 'absorb',
@@ -756,6 +754,7 @@ export function createPortalOrderRouter(): Router {
                 reason: replacement.pharmacyAdjustmentPence === 0 ? 'replacement_matches_allocation' : 'replacement_absorbed',
                 signedAdjustmentPence: replacement.pharmacyAdjustmentPence,
                 sourceOrderId: replacement.source.id,
+                sourcePrescriptionId: replacement.prescriptionId,
               },
               decidedByUid: scope.uid,
             });
@@ -775,6 +774,8 @@ export function createPortalOrderRouter(): Router {
               fromOrderId: replacement.source.id,
               toOrderId: result.id,
               amountPence: replacement.transferPence,
+              sourcePrescriptionId: replacement.prescriptionId,
+              carriedChargesPence: replacement.carriedChargesPence,
             });
             await orderRepo.updateQuoteSnapshot({
               id: result.id,
@@ -797,6 +798,8 @@ export function createPortalOrderRouter(): Router {
                   id: moved.id,
                   paymentId: moved.paymentId,
                   sourceOrderId: replacement.source.id,
+                  sourcePrescriptionId: replacement.prescriptionId,
+                  carriedChargesPence: replacement.carriedChargesPence,
                   replacementOrderId: result.id,
                   amountPence: replacement.transferPence,
                   status: moved.status,
@@ -805,10 +808,21 @@ export function createPortalOrderRouter(): Router {
               },
               fulfilmentStatus: 'SUPPLIER_PENDING',
             });
-            await orderRepo.linkReplacementResolution({
+            await orderRepo.updateQuoteSnapshot({
+              id: replacement.source.id,
+              organisationId: scope.organisationId,
+              quoteSnapshot: stampPrescriptionReplacement(replacement.source.quoteSnapshot, {
+                prescriptionId: replacement.prescriptionId,
+                replacementOrderId: result.id,
+                transferPence: replacement.transferPence,
+                carriedChargesPence: replacement.carriedChargesPence,
+              }),
+            });
+            await orderRepo.linkPrescriptionReplacement({
               sourceOrderId: replacement.source.id,
               replacementOrderId: result.id,
               organisationId: scope.organisationId,
+              resolveSource: replacement.sourceResolvedAfter,
             });
             await orderRepo.appendPlacementEvent({
               organisationId: scope.organisationId,
@@ -865,7 +879,10 @@ export function createPortalOrderRouter(): Router {
         ...(replacement ? {
           paymentAllocation: {
             sourceOrderId: replacement.source.id,
+            sourcePrescriptionId: replacement.prescriptionId,
             amountPence: replacement.transferPence,
+            carriedChargesPence: replacement.carriedChargesPence,
+            sourceResolved: replacement.sourceResolvedAfter,
           },
         } : {}),
       });
@@ -885,6 +902,7 @@ export function createPortalOrderRouter(): Router {
         lines: children.linesByOrder.get(order.id) ?? [],
         quoteChecks: children.quoteChecksByOrder.get(order.id) ?? [],
         paymentAllocations: children.paymentAllocationsByOrder.get(order.id) ?? [],
+        replacementAllocations: children.replacementsBySourceOrder.get(order.id) ?? [],
       })));
     } catch (error) {
       next(error);

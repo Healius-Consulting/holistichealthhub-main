@@ -93,10 +93,15 @@ export interface OrderRepositoryPort {
     dispensingFeePence?: number;
     medicineTotalPence?: number;
   }): Promise<boolean>;
-  linkReplacementResolution(data: {
+  /**
+   * Marks the replacement as paid and, only once no prescription still holds the
+   * source open, resolves and archives the source order.
+   */
+  linkPrescriptionReplacement(data: {
     sourceOrderId: string;
     replacementOrderId: string;
     organisationId: string;
+    resolveSource: boolean;
   }): Promise<void>;
   markRefundResolution(data: { orderId: string; organisationId: string; fullyRefunded: boolean }): Promise<void>;
   appendPlacementEvent(data: {

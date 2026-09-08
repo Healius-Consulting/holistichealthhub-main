@@ -290,6 +290,18 @@ const LINK_REPLACEMENT_RESOLUTION_GQL = `
   }
 `;
 
+const LINK_REPLACEMENT_ORDER_GQL = `
+  mutation LinkReplacementOrder($sourceOrderId: UUID!, $replacementOrderId: UUID!) {
+    order_update(key: { id: $replacementOrderId }, data: {
+      redoOfId: $sourceOrderId
+      status: PROCESSING
+      paymentStatus: PAID
+      paidAt_expr: "request.time"
+      updatedAt_expr: "request.time"
+    })
+  }
+`;
+
 const MARK_REFUND_RESOLUTION_GQL = `
   mutation MarkRefundResolution($orderId: UUID!, $paymentStatus: PaymentStatus!) {
     order_update(key: { id: $orderId }, data: {
@@ -595,17 +607,20 @@ export class SqlOrderRepository implements OrderRepositoryPort {
     return true;
   }
 
-  async linkReplacementResolution(data: {
+  async linkPrescriptionReplacement(data: {
     sourceOrderId: string;
     replacementOrderId: string;
     organisationId: string;
+    resolveSource: boolean;
   }): Promise<void> {
     const [source, replacement] = await Promise.all([
       this.findOrderById(data.sourceOrderId, data.organisationId),
       this.findOrderById(data.replacementOrderId, data.organisationId),
     ]);
     if (!source || !replacement) throw new Error('Replacement orders must belong to the same pharmacy.');
-    await dataConnect.executeGraphql(LINK_REPLACEMENT_RESOLUTION_GQL, {
+    // A sibling prescription still being fulfilled keeps the source order live;
+    // only the last replacement closes it.
+    await dataConnect.executeGraphql(data.resolveSource ? LINK_REPLACEMENT_RESOLUTION_GQL : LINK_REPLACEMENT_ORDER_GQL, {
       variables: { sourceOrderId: data.sourceOrderId, replacementOrderId: data.replacementOrderId },
     });
   }

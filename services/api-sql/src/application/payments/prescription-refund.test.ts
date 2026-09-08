@@ -67,3 +67,18 @@ test('fee shares round once to pennies and cannot exceed balance', () => {
   assert.throws(() => composePrescriptionRefund(preview, request(preview, { dispensingPercent: 13 })), /supported/);
   assert.throws(() => composePrescriptionRefund(preview, request(preview, { medicines: [{ orderLineId: 'line1', quantity: 1 }, { orderLineId: 'line1', quantity: 1 }] })), /once/);
 });
+test('a sibling’s replacement leaves this prescription refundable, and carried charges leave nothing of them to refund', () => {
+  const data = refundFixture();
+  data.order.quoteSnapshot.curaleafSubOrders.rx2.purchaseOrderState = 'CANCELLED';
+  const replacedRx1 = { id: 'moved', orderId: 'replacement-1', sourceOrderId: 'order', sourcePrescriptionId: 'rx1', status: 'ACTIVE', amountPence: 8500, carriedChargesPence: 0 };
+  data.allocations[0].amountPence = 6500;
+  const preview = prescriptionRefundPreview({ ...data, allocations: [...data.allocations, replacedRx1 as any], prescriptionId: 'rx2' });
+  assert.equal(preview.medicines[0]!.orderLineId, 'line2');
+  assert.equal(preview.dispensing.remainingPence, 1000, 'the shared charges stayed on the order while P2 was live');
+  assert.throws(() => prescriptionRefundPreview({ ...data, allocations: [...data.allocations, replacedRx1 as any] }), /replaced using the paid balance/);
+
+  const carried = { ...replacedRx1, carriedChargesPence: 1500 };
+  const afterCarry = prescriptionRefundPreview({ ...data, allocations: [...data.allocations, carried as any], prescriptionId: 'rx2' });
+  assert.equal(afterCarry.dispensing.remainingPence, 0);
+  assert.equal(afterCarry.delivery.remainingPence, 0);
+});

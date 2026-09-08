@@ -948,7 +948,7 @@ type QuoteCheck @table {
   decidedAt: Timestamp
 }
 
-type PaymentAllocation @table @unique(fields: ["paymentId", "orderId"]) {
+type PaymentAllocation @table @unique(fields: ["paymentId", "orderId"]) @unique(fields: ["sourceOrderId", "sourcePrescriptionId"]) {
   id: UUID! @default(expr: "uuidV4()")
   organisation: Organisation! @ref(fields: "organisationId")
   organisationId: UUID! @index
@@ -956,10 +956,16 @@ type PaymentAllocation @table @unique(fields: ["paymentId", "orderId"]) {
   paymentId: UUID! @index
   order: Order! @ref(fields: "orderId")
   orderId: UUID! @index
-  # A settled source order can fund at most one replacement. Nullable values are
-  # used by the original/source allocation, while transferred allocations carry
-  # the source order id and are protected from concurrent duplicate commits.
-  sourceOrderId: UUID @unique
+  # Each cancelled prescription on a settled order can fund at most one
+  # replacement; the composite unique above guards concurrent duplicate commits.
+  # Nullable values belong to the original/source allocation. Legacy order-level
+  # transfers left sourcePrescriptionId empty and Postgres treats those nulls as
+  # distinct, so the application guard still covers them.
+  sourceOrderId: UUID @index
+  sourcePrescriptionId: UUID
+  # Dispensing, delivery, supplier shipping and tax carried by the replacement
+  # that emptied the source order. Empty while a sibling prescription is live.
+  carriedChargesPence: Int64
   amountPence: Int64!
   status: PaymentAllocationStatus! @default(value: ACTIVE) @index
   version: Int! @default(value: 1)
