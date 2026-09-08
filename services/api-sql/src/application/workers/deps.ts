@@ -8,6 +8,7 @@ import { SqlPatientFinanceRepository } from '../../repositories/sql/patient-fina
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
+import { StorageProvider } from '../../providers/storage/storage.provider.js';
 
 export function sqlWorkerDeps() {
   const paymentRepo = new SqlPaymentRepository();
@@ -20,7 +21,10 @@ export function sqlWorkerDeps() {
   const notificationRepo = new SqlNotificationRepository();
   const organisationRepo = new SqlOrganisationRepository();
   const prescriptionRepo = new SqlPrescriptionRepository();
+  // Email delivery reads each pharmacy's uploaded logo through this.
+  const storage = new StorageProvider();
   return {
+    storage,
     paymentRepo,
     orderRepo,
     integrationRepo,

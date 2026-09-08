@@ -5,6 +5,7 @@ export const EMAIL_EVENT_NAMES = [
   'enquiry.submitted',
   'enquiry.reassigned',
   'enquiry.declined',
+  'enquiry.withdrawn',
   'referral.activated',
   'payment.link_created',
   'payment.reminder',
@@ -25,9 +26,16 @@ export const EMAIL_EVENT_NAMES = [
 
 export type EmailEventName = (typeof EMAIL_EVENT_NAMES)[number];
 export type EmailAudience = 'patient' | 'pharmacy_owner' | 'staff' | 'admin';
+
+/**
+ * Added to a copy of the payload at send time, never stored on the outbox row: a
+ * logo uploaded after a message was queued must still reach the message.
+ */
+export const BRAND_LOGO_PAYLOAD_KEY = 'hasBrandLogo';
 export type EmailSchedule = 'immediate' | 'collection_hours' | 'payment_reminder';
 
 export const EMAIL_TEMPLATE_CODES = [
+  'patient_enquiry_declined',
   'patient_referred',
   'patient_payment_request',
   'patient_payment_confirmation',
@@ -52,6 +60,26 @@ export const EMAIL_TEMPLATE_CODES = [
 
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
 
+/**
+ * Monitored mailboxes a patient may reply into. The From address stays a single
+ * Holistic Health Hub sender — only Reply-To changes — so nothing here depends on
+ * per-pharmacy sending domains. A template with no alias gets no Reply-To header,
+ * which is the right default: most of this catalog tells the patient to phone.
+ *
+ * Copy must never invite a reply unless the template names an alias here, or the
+ * patient is writing to a mailbox nobody reads.
+ */
+export type EmailAlias = 'referrals';
+
+export function emailAliasDomain() {
+  return process.env.EMAIL_ALIAS_DOMAIN?.trim() || 'holistichealthhub.live';
+}
+
+export function replyToFor(kind: EmailTemplateCode): string | null {
+  const definition: EmailDefinition = EMAILS[kind];
+  return definition.replyTo ? `${definition.replyTo}@${emailAliasDomain()}` : null;
+}
+
 export type RenderedEmail = {
   subject: string;
   text: string;
@@ -63,6 +91,8 @@ type EmailDefinition = {
   events: readonly EmailEventName[];
   schedule: EmailSchedule;
   summary: string;
+  /** Monitored mailbox for replies. Omit unless the copy invites one. */
+  replyTo?: EmailAlias;
   render: (payload: unknown) => RenderedEmail;
 };
 
@@ -153,6 +183,9 @@ function render(input: {
         audience: admin ? 'admin' : 'pharmacy',
         organisationId: value(input.payload, 'organisationId'),
         pharmacyName: value(input.payload, 'pharmacyName'),
+        // Set by the delivery worker once it has the uploaded logo in hand, so the
+        // markup and the attachment list can never disagree about whether one exists.
+        hasBrandLogo: value(input.payload, BRAND_LOGO_PAYLOAD_KEY) === 'true',
       }),
       // Staff and admin mail is internal; only a patient needs to be told who the
       // controller is, and an internal footer naming their own pharmacy reads oddly.
@@ -209,31 +242,143 @@ function fields(payload: unknown) {
   };
 }
 
+/**
+ * Who a patient-facing email is from. Referral-stage mail is sent in the pharmacy's
+ * name, but an enquiry can be closed before one is assigned, and "the pharmacy" —
+ * the neutral fallback used everywhere else — reads as a mistake in a subject line
+ * or over a signature. HHH signs those itself.
+ */
+function patientSender(payload: unknown) {
+  const name = value(payload, 'pharmacyName').trim();
+  return name && name !== 'the pharmacy' ? name : 'Holistic Health Hub';
+}
+
+/** `[Pharmacy name]: <subject>`. The category term never appears — these land on lock screens. */
+function patientSubject(payload: unknown, subject: string) {
+  return `${patientSender(payload)}: ${subject}`;
+}
+
+/**
+ * The sign-off patient mail carries: who wrote to them, and how to check that is
+ * genuine. The website line is dropped when the pharmacy has no website recorded.
+ * The controller block in the footer is a separate, legal identity statement.
+ */
+function signatureLines(payload: unknown) {
+  return [
+    patientSender(payload),
+    value(payload, 'pharmacyGphcNumber').trim() ? `GPhC ${value(payload, 'pharmacyGphcNumber').trim()}` : '',
+    value(payload, 'pharmacyPhone').trim(),
+    value(payload, 'pharmacyWebsite').trim(),
+  ].filter(Boolean);
+}
+
+function signatureHtml(payload: unknown) {
+  return `Best wishes,<br>${signatureLines(payload).map(line => escapeHtml(line)).join('<br>')}`;
+}
+
+function signatureText(payload: unknown) {
+  return `Best wishes,\n${signatureLines(payload).join('\n')}\n`;
+}
+
+/** Which PT-00 wording a closure gets. The recorded reason itself is never sent. */
+export type EnquiryClosureVariant = 'declined' | 'incomplete' | 'withdrawn';
+
+export function closureVariantForReason(reason: string): EnquiryClosureVariant {
+  return reason === 'INCOMPLETE_INFORMATION' || reason === 'NO_RESPONSE' ? 'incomplete' : 'declined';
+}
+
+const CLOSURE_COPY: Record<EnquiryClosureVariant, string[]> = {
+  declined: [
+    'Thank you for your enquiry. We have looked carefully at the information you gave us and the medical records you allowed us to check, and on this occasion we are not able to refer you to our partner clinic.',
+    'This is about whether our service can refer you. It is not a diagnosis, and no one has assessed your health.',
+    'We would encourage you to speak to your GP. They know your medical history and can discuss the options available to you, including specialist referral where appropriate. If your health gets worse or you need help urgently, contact your GP or call NHS 111.',
+    'If your circumstances change, you are welcome to enquire again. If you have any questions about this email, call us or reply to it.',
+  ],
+  incomplete: [
+    'Thank you for your enquiry. We asked for some further information and have not heard back, so we have closed your enquiry for now. Nothing has been decided about your eligibility.',
+    'If you would still like to be considered, reply to this email or call us and we will pick it up where we left off. If you have any concerns about your health in the meantime, speak to your GP.',
+  ],
+  withdrawn: [
+    'As you asked, we have closed your enquiry and will not take it any further. Thank you for letting us know. If you change your mind, you are welcome to enquire again at any time. If you have any concerns about your health, speak to your GP.',
+  ],
+};
+
 export const EMAILS = {
+  /**
+   * PT-00. Sent when an administrator closes an enquiry by hand. Never sent for the
+   * eligibility form's automatic on-screen decline: that patient was already told,
+   * on the page, at the time.
+   */
+  patient_enquiry_declined: {
+    audience: 'patient',
+    events: ['enquiry.declined', 'enquiry.withdrawn'],
+    schedule: 'immediate',
+    replyTo: 'referrals',
+    summary: 'Sent to the patient when HHH admin declines or closes their enquiry. Three variants; the recorded reason is never quoted.',
+    render: (payload) => {
+      const { firstName } = fields(payload);
+      const raw = value(payload, 'variant');
+      const variant: EnquiryClosureVariant = raw === 'incomplete' || raw === 'withdrawn' ? raw : 'declined';
+      const body = CLOSURE_COPY[variant];
+      return render({
+        kind: 'patient_enquiry_declined',
+        payload,
+        subject: patientSubject(payload, 'Your referral enquiry'),
+        preheader: variant === 'withdrawn'
+          ? 'Your enquiry is closed, as you asked.'
+          : 'An update on the referral enquiry you made.',
+        title: 'Your referral enquiry',
+        text: `Dear ${value(payload, 'firstName') || 'there'},\n\n${body.join('\n\n')}\n\n${signatureText(payload)}`,
+        paragraphs: [
+          `Dear ${firstName},`,
+          ...body.map(escapeHtml),
+          signatureHtml(payload),
+        ],
+      });
+    },
+  },
+  /**
+   * PT-01. Naming Curaleaf Clinic is a deliberate exception to the "clinic never
+   * named" rule: this is transactional and post-referral, and the patient is about
+   * to receive an email from a company they have never heard of.
+   */
   patient_referred: {
     audience: 'patient',
     events: ['referral.activated'],
     schedule: 'immediate',
+    replyTo: 'referrals',
     summary: 'Sent when HHH admin completes a referral and activates the pharmacy patient record.',
     render: (payload) => {
-      const { firstName, pharmacyName, pharmacyDetails } = fields(payload);
+      const { firstName } = fields(payload);
+      const closing = 'If anything is unclear, pop into the pharmacy and ask at the counter, call us, or reply to this email. We are happy to help.';
+      const ongoing = 'Ongoing care. Once you start treatment, we work with Curaleaf Clinic to keep your repeat prescriptions coming without gaps. For questions about your treatment, contact the clinic; for questions about your order or collection, contact us.';
+      const steps = [
+        'The clinic will email you. Within two working days, you will get an email from Curaleaf Clinic asking you to register. Check your junk or spam folder if you cannot see it. If nothing arrives after two working days, call us or reply to this email and we will chase it for you.',
+        'Register and confirm who you are. Follow the instructions in the clinic’s email to set up your Curaleaf Clinic login — a username and password you will use each time you visit their website. You will need to show photo ID — a passport or driving licence — before an appointment can be booked, so have one to hand. Occasionally the clinic may ask for more information about your health or current medicines.',
+        'Book your appointment. Once registered, book an appointment through the clinic’s website. It is a video call with a consultant doctor, so you will need a phone, tablet or computer with a camera. The doctor will decide whether treatment is suitable for you. You can pay per appointment or choose one of the clinic’s payment plans. Medicine is charged separately by us.',
+        'We take it from there. The clinic sends your prescription to us and we will email you to arrange payment, and again when your medicine is ready to collect. You do not need to do anything until you hear from us.',
+      ];
+      const opening = 'We have reviewed your medical records and referred you to our partner clinic, Curaleaf Clinic. Here is what happens next:';
       return render({
         kind: 'patient_referred',
         payload,
-        subject: 'You have been referred',
-        preheader: `${value(payload, 'pharmacyName') || 'Your pharmacy'} will be your point of contact for prescription orders.`,
-        title: 'You have been referred',
-        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nYou have been referred. ${value(payload, 'pharmacyName') || 'The pharmacy'} will be your point of contact for your prescription orders.\n`,
+        subject: patientSubject(payload, 'Your referral — what happens next'),
+        preheader: 'Curaleaf Clinic will email you within two working days.',
+        title: 'Your referral — what happens next',
+        text: [
+          `Dear ${value(payload, 'firstName') || 'there'},`,
+          opening,
+          ...steps.map((step, index) => `${index + 1}. ${step}`),
+          ongoing,
+          closing,
+          signatureText(payload),
+        ].join('\n\n'),
         paragraphs: [
-          `Hi ${firstName},`,
-          `You have been referred. <strong>${pharmacyName}</strong> will be your point of contact for your prescription orders.`,
+          `Dear ${firstName},`,
+          escapeHtml(opening),
         ],
-        detailsTitle: 'Your pharmacy',
-        details: pharmacyDetails,
-        nextSteps: [
-          'Use the contact details above if you have questions about your prescription orders.',
-        ],
-        footerNote: 'If you were not expecting this email, you can ignore it.',
+        nextSteps: steps,
+        footerNote: `${escapeHtml(ongoing)}<br><br>${escapeHtml(closing)}<br><br>${signatureHtml(payload)}`,
       });
     },
   },
@@ -740,7 +885,9 @@ export function formatEmailRoster(): string {
     'Source of truth: `services/api-sql/src/application/notifications/email-catalog.ts`.',
     'Change copy, audience, or send-when there. This file is generated from that catalog.',
     '',
-    'Sender is one Holistic Health Hub address (`noreply@holistichealthhub.live` when the live Resend records are published). There is no Reply-To. This mailbox is not monitored. Pharmacy contact details are included in the body where useful. Do not invent pharmacy-branded From addresses.',
+    'Sender is one Holistic Health Hub address (`noreply@holistichealthhub.live` when the live Resend records are published). That mailbox is not monitored. Pharmacy contact details are included in the body where useful. Do not invent pharmacy-branded From addresses.',
+    '',
+    `Templates marked with a Reply-To below send one, pointing at a monitored alias on \`${emailAliasDomain()}\`. Every other template sends none. Do not write copy that invites a reply without setting \`replyTo\` on the template.`,
     '',
     'Operational pharmacy emails go to the **owner** account only (the earliest staff user for that pharmacy). Other staff do not receive them. Account emails (invite, password reset, 2FA) still go to the individual staff member.',
     '',
@@ -751,7 +898,8 @@ export function formatEmailRoster(): string {
     for (const code of EMAIL_TEMPLATE_CODES) {
       if (EMAILS[code].audience !== audience) continue;
       const events = EMAILS[code].events.join(', ');
-      lines.push(`- \`${code}\` (${events}): ${EMAILS[code].summary}`);
+      const replyTo = replyToFor(code);
+      lines.push(`- \`${code}\` (${events}): ${EMAILS[code].summary}${replyTo ? ` Reply-To: \`${replyTo}\`.` : ''}`);
     }
     lines.push('');
   }

@@ -3,13 +3,40 @@ import { config } from '../../bootstrap/config.js';
 import { emailInlineImages } from '../notifications/email-assets.js';
 import { resolveEmailHeader } from '../notifications/email-layout.js';
 import { isEmailTemplateCode } from '../notifications/message-kinds.js';
+import { BRAND_LOGO_PAYLOAD_KEY, replyToFor } from '../notifications/email-catalog.js';
 import { renderEmailTemplate } from '../notifications/email-renderer.js';
+import { readOrganisationLogoBytes } from '../organisation/brand-logo.js';
+import type { StorageProvider } from '../../providers/storage/storage.provider.js';
 import type { NotificationOutboxRecord, NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 
 export type MessageDeliveryDeps = {
   notificationRepo: NotificationRepositoryPort;
+  /** Reads pharmacy logo uploads. Omitted in tests; every email then sends unbranded. */
+  storage?: Pick<StorageProvider, 'listPaths' | 'downloadFile'>;
   fetchImpl?: typeof fetch;
 };
+
+/**
+ * One read per pharmacy per sweep. A sweep can carry many messages for the same
+ * pharmacy, and the logo cannot change midway through one.
+ */
+async function brandLogoLoader(deps: MessageDeliveryDeps) {
+  const cache = new Map<string, string | null>();
+  return async function load(organisationId: string): Promise<string | null> {
+    if (!deps.storage || !organisationId) return null;
+    const cached = cache.get(organisationId);
+    if (cached !== undefined) return cached;
+    let bytes: string | null = null;
+    try {
+      bytes = await readOrganisationLogoBytes(deps.storage, organisationId);
+    } catch (error) {
+      // A missing or unreadable logo must never hold up the message itself.
+      console.warn('Pharmacy logo unavailable for email', organisationId, error instanceof Error ? error.message : 'unknown');
+    }
+    cache.set(organisationId, bytes);
+    return bytes;
+  };
+}
 
 const MAX_DELIVERY_ATTEMPTS = 3;
 
@@ -72,13 +99,14 @@ function payloadValue(payload: unknown, key: string) {
   return found == null ? '' : String(found);
 }
 
-function headerFor(record: NotificationOutboxRecord) {
+function headerFor(record: NotificationOutboxRecord, hasBrandLogo: boolean) {
   const admin = record.templateCode === 'admin_new_enquiry_received'
     || payloadValue(record.payload, 'pharmacyName') === 'HHH admin workspace';
   return resolveEmailHeader({
     audience: admin ? 'admin' : 'pharmacy',
     organisationId: payloadValue(record.payload, 'organisationId'),
     pharmacyName: payloadValue(record.payload, 'pharmacyName'),
+    hasBrandLogo,
   });
 }
 
@@ -86,15 +114,23 @@ async function deliverOne(
   record: NotificationOutboxRecord,
   deps: MessageDeliveryDeps,
   provider: ProviderConfig,
+  loadBrandLogo: (organisationId: string) => Promise<string | null>,
 ) {
   if (record.status !== 'PENDING') return 'skipped' as const;
   if (!isEmailTemplateCode(record.templateCode)) return 'deferred' as const;
   await deps.notificationRepo.markProcessing(record.id, record.attemptCount + 1);
   const fetchImpl = deps.fetchImpl ?? fetch;
+  const brandLogo = await loadBrandLogo(payloadValue(record.payload, 'organisationId'));
   const response = provider.kind === 'resend'
     ? await (() => {
-      const rendered = renderEmailTemplate(record.templateCode, record.payload);
+      const payload = brandLogo && record.payload && typeof record.payload === 'object'
+        ? { ...record.payload as Record<string, unknown>, [BRAND_LOGO_PAYLOAD_KEY]: 'true' }
+        : record.payload;
+      const rendered = renderEmailTemplate(record.templateCode, payload);
       const from = provider.from.includes('<') ? provider.from : `Holistic Health Hub <${provider.from}>`;
+      // Only templates whose copy invites a reply carry one, so a patient never
+      // writes into the unmonitored From address.
+      const replyTo = replyToFor(record.templateCode);
       return fetchImpl('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -106,11 +142,12 @@ async function deliverOne(
         },
         body: JSON.stringify({
           from,
+          ...(replyTo ? { reply_to: replyTo } : {}),
           to: [record.encryptedRecipient],
           subject: rendered.subject,
           html: rendered.html,
           text: rendered.text,
-          attachments: emailInlineImages(headerFor(record)),
+          attachments: emailInlineImages(headerFor(record, Boolean(brandLogo)), brandLogo),
           tags: [
             { name: 'template', value: record.templateCode },
             { name: 'channel', value: record.channel.toLowerCase() },
@@ -150,9 +187,10 @@ export async function deliverPatientMessages(deps: MessageDeliveryDeps, limit = 
     summary.deferred = pending.length;
     return summary;
   }
+  const loadBrandLogo = await brandLogoLoader(deps);
   for (const record of pending) {
     try {
-      const result = await deliverOne(record, deps, provider);
+      const result = await deliverOne(record, deps, provider, loadBrandLogo);
       if (result === 'sent') summary.sent += 1;
       else summary.deferred += 1;
     } catch (error) {

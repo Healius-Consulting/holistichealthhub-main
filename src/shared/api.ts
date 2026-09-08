@@ -196,8 +196,23 @@ export function updateIntakeFollowUp(caseId: string, input: Record<string, unkno
   return apiRequest<Record<string, unknown>>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/follow-up`, { method: 'PATCH', body: JSON.stringify(input) });
 }
 
-export function decideV2ProgrammeOnboarding(caseId: string, input: { expectedVersion: number; decision: 'approved' | 'declined'; notes: string | null }) {
+export const DECLINE_REASONS = [
+  { value: 'ELIGIBILITY_NOT_MET', label: 'Eligibility not met' },
+  { value: 'PSYCHIATRIC_EXCLUSION', label: 'Psychosis or schizophrenia exclusion' },
+  { value: 'CLINICAL_UNSUITABILITY', label: 'Clinically unsuitable on records review' },
+  { value: 'INCOMPLETE_INFORMATION', label: 'Incomplete information' },
+  { value: 'NO_RESPONSE', label: 'No response from the patient' },
+  { value: 'OTHER', label: 'Other' },
+] as const;
+
+export type DeclineReason = (typeof DECLINE_REASONS)[number]['value'];
+
+export function decideV2ProgrammeOnboarding(caseId: string, input: { expectedVersion: number; decision: 'approved' | 'declined'; notes: string | null; reason?: DeclineReason }) {
   return apiRequest<Record<string, unknown>>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/programme-onboarding`, { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function withdrawV2Intake(caseId: string, input: { expectedVersion: number; notes: string | null }) {
+  return apiRequest<Record<string, unknown>>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/withdraw`, { method: 'POST', body: JSON.stringify(input) });
 }
 
 export function getDirectoryProfilesV2() {

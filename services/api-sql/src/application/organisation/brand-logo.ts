@@ -62,6 +62,25 @@ export async function resolveOrganisationLogo(
   };
 }
 
+/**
+ * The pharmacy's uploaded logo as base64, for inlining in an email.
+ *
+ * Email carries the bytes rather than a link: the stored asset is only reachable
+ * through a signed URL that expires within hours, and a patient may open the message
+ * days later. Returns null when nothing has been uploaded, which is not an error —
+ * the header falls back to the pharmacy's name.
+ */
+export async function readOrganisationLogoBytes(
+  storage: Pick<StorageProvider, 'listPaths' | 'downloadFile'>,
+  organisationId: string,
+): Promise<string | null> {
+  const files = await storage.listPaths(brandLogoPrefix(organisationId));
+  const current = latestLogo(files.filter(file => file.storagePath.includes('/email-logo-') && file.storagePath.endsWith('.png')));
+  if (!current) return null;
+  const { bytes } = await storage.downloadFile(current.storagePath);
+  return bytes.toString('base64');
+}
+
 export async function resolveOrganisationLogos(
   storage: Pick<StorageProvider, 'listPaths' | 'generateDownloadUrl'>,
   organisationIds: string[],

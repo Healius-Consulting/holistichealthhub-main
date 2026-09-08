@@ -14,6 +14,18 @@
       "port": 5183
     },
     {
+      "name": "admin",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "vite.admin.config.ts",
+        "--port",
+        "5184"
+      ],
+      "port": 5184
+    },
+    {
       "name": "eligibility",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

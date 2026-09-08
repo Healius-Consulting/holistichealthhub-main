@@ -279,7 +279,7 @@ export default function PharmacySettings() {
         <div className="tenant-mark" style={brandSwatchStyle(organisation.brand.primary)}>{organisation.logoText}</div>
         <div className="pharmacy-settings__identity">
           <h2>{organisation.brand.portalName}</h2>
-          <p>{organisation.name} · GPhC {organisation.gphcNumber}</p>
+          <p>{organisation.tradingName} · GPhC {organisation.gphcNumber}</p>
         </div>
         <span className={`pill ${organisation.status === 'paused' ? 'pill-red' : state.workspaceMode === 'live' ? 'pill-green' : state.workspaceMode === 'test' ? 'pill-info' : 'pill-amber'}`}>
           {organisation.status === 'paused' ? 'Paused' : pharmacyWorkspaceStatusLabel(state.workspaceMode)}
@@ -520,7 +520,7 @@ export default function PharmacySettings() {
               <header><h3><QrCode size={16} aria-hidden="true" /> Print-ready QR code</h3></header>
               <p className="pharmacy-settings-section__lead">The same link as a high-resolution image, for leaflets, posters and counter cards.</p>
               {qr ? (
-                <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
+                <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.tradingName}`} />
               ) : (
                 <div className="pharmacy-settings-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>
               )}
@@ -558,7 +558,7 @@ export default function PharmacySettings() {
 
           <p className="pharmacy-settings-attribution">
             <Link2 size={14} aria-hidden="true" />
-            <span>Submissions from this link are attributed to {organisation.name}. The token is specific to your pharmacy — do not share another pharmacy&rsquo;s URL.</span>
+            <span>Submissions from this link are attributed to {organisation.tradingName}. The token is specific to your pharmacy — do not share another pharmacy&rsquo;s URL.</span>
           </p>
         </div>
       )}

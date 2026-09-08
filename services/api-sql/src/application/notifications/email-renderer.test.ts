@@ -32,14 +32,65 @@ describe('email template renderer', () => {
       firstName: 'Avery',
       pharmacyName: 'Eastwood Health',
       pharmacyPhone: '01522 000 000',
+      pharmacyGphcNumber: '9010203',
       pharmacyEmail: 'contact@eastwoodhealthpharmacy.co.uk',
       pharmacyAddress: 'Nottinghamshire',
     });
-    assert.match(rendered.subject, /referred/i);
-    assert.match(rendered.text, /point of contact for your prescription orders/);
+    assert.equal(rendered.subject, 'Eastwood Health: Your referral — what happens next');
+    assert.match(rendered.text, /Curaleaf Clinic/);
+    assert.match(rendered.text, /within two working days/i);
     assert.match(rendered.html, /Eastwood Health/);
     assert.match(rendered.html, /01522 000 000/);
+    assert.match(rendered.html, /GPhC 9010203/);
     assert.doesNotMatch(rendered.html, /Avery Patel/);
+  });
+
+  it('closes an enquiry without repeating the reason back to the patient', () => {
+    const rendered = renderEmailTemplate('patient_enquiry_declined', {
+      firstName: 'Avery',
+      variant: 'declined',
+      pharmacyName: 'Eastwood Health',
+      pharmacyPhone: '01522 000 000',
+      pharmacyGphcNumber: '9010203',
+    });
+    assert.equal(rendered.subject, 'Eastwood Health: Your referral enquiry');
+    assert.match(rendered.text, /not able to refer you/);
+    assert.match(rendered.text, /It is not a diagnosis/);
+    assert.match(rendered.text, /NHS 111/);
+    // The subject is visible on a lock screen, so it must not say what was declined.
+    assert.doesNotMatch(rendered.subject, /cannabis|psychosis|schizophrenia|eligib/i);
+    assert.doesNotMatch(rendered.text, /psychosis|schizophrenia/i);
+  });
+
+  it('tells a patient who did not reply that nothing was decided', () => {
+    const rendered = renderEmailTemplate('patient_enquiry_declined', {
+      firstName: 'Avery',
+      variant: 'incomplete',
+      pharmacyName: 'Eastwood Health',
+    });
+    assert.match(rendered.text, /have not heard back/);
+    assert.match(rendered.text, /Nothing has been decided about your eligibility/);
+    assert.doesNotMatch(rendered.text, /not able to refer you/);
+  });
+
+  it('answers a withdrawal as the patient own decision', () => {
+    const rendered = renderEmailTemplate('patient_enquiry_declined', {
+      firstName: 'Avery',
+      variant: 'withdrawn',
+      pharmacyName: 'Eastwood Health',
+    });
+    assert.match(rendered.text, /As you asked/);
+    assert.doesNotMatch(rendered.text, /not able to refer you/);
+  });
+
+  it('signs an unassigned enquiry as HHH rather than "the pharmacy"', () => {
+    const rendered = renderEmailTemplate('patient_enquiry_declined', {
+      firstName: 'Avery',
+      variant: 'declined',
+      pharmacyName: 'the pharmacy',
+    });
+    assert.equal(rendered.subject, 'Holistic Health Hub: Your referral enquiry');
+    assert.doesNotMatch(rendered.text, /the pharmacy: /);
   });
 
   it('renders a patient payment confirmation', () => {
@@ -54,6 +105,7 @@ describe('email template renderer', () => {
       receiptHash: 'a'.repeat(64),
       pharmacyName: 'Eastwood Health',
       organisationId: '6d0176bb-89a0-4e32-9bce-c934c9557c42',
+      hasBrandLogo: 'true',
     });
     assert.match(rendered.subject, /Payment received/);
     assert.match(rendered.text, /Avery/);
@@ -66,6 +118,20 @@ describe('email template renderer', () => {
     assert.match(rendered.html, /Powered by/);
     assert.match(rendered.html, /View receipt/);
     assert.match(rendered.html, /holistichealthhub\.live\/receipt\/a{64}/);
+  });
+
+  it('sets the pharmacy name in type when no logo has been uploaded', () => {
+    const rendered = renderEmailTemplate('patient_payment_confirmation', {
+      firstName: 'Avery',
+      amountPence: 12500,
+      orderNumber: 'ORD-123',
+      pharmacyName: 'Eastwood Health',
+      organisationId: '6d0176bb-89a0-4e32-9bce-c934c9557c42',
+    });
+    // No pharmacy logo ships with the repository, so a known organisation id alone
+    // must never produce one.
+    assert.doesNotMatch(rendered.html, /cid:email-header-logo/);
+    assert.match(rendered.html, /Eastwood Health/);
   });
 
   it('renders a pharmacy dispatch update', () => {

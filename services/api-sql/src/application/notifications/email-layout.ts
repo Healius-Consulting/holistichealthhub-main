@@ -27,22 +27,12 @@ const FOOTER_LOGOS = {
   curaleaf: { width: 124, height: 41 },
 } as const;
 
-const PHARMACY_HEADER_LOGOS = [
-  {
-    ids: ['6d0176bb-89a0-4e32-9bce-c934c9557c42'],
-    names: ['eastwood'],
-    assetFile: 'eastwood-health-logo.png',
-    width: 240,
-    height: 22,
-  },
-  {
-    ids: ['3e9f74ff-4fed-497d-904d-4d3ee3e5e126'],
-    names: ['k-chem', 'kchem'],
-    assetFile: 'k-chem-logo.png',
-    width: 150,
-    height: 100,
-  },
-] as const;
+/**
+ * Display size for a pharmacy's own uploaded logo. The stored asset is a fixed
+ * 640×192 canvas (see brand-logo.ts), so one ratio serves every pharmacy and the
+ * header never has to be told the dimensions of the file it is showing.
+ */
+const BRAND_LOGO_DISPLAY = { width: 240, height: 72 } as const;
 
 export type EmailHeader = {
   logoUrl: string;
@@ -78,10 +68,17 @@ function imageSrc(value: string) {
   return safeHttpUrl(value);
 }
 
+/**
+ * A pharmacy's header is its own uploaded logo or nothing — never a logo picked for
+ * it here. `hasBrandLogo` is set by the delivery worker, which is the only place
+ * that knows whether the upload actually exists at the moment of sending; a pharmacy
+ * that has not uploaded one gets its name set in type instead.
+ */
 export function resolveEmailHeader(input: {
   audience: 'admin' | 'pharmacy';
   organisationId?: string;
   pharmacyName?: string;
+  hasBrandLogo?: boolean;
 }): EmailHeader {
   if (input.audience === 'admin') {
     return {
@@ -93,20 +90,13 @@ export function resolveEmailHeader(input: {
       assetFile: 'hhh-logo.png',
     };
   }
-  const organisationId = (input.organisationId || '').toLowerCase();
   const pharmacyName = (input.pharmacyName || '').trim();
-  const key = pharmacyName.toLowerCase();
-  const match = PHARMACY_HEADER_LOGOS.find(item => (
-    (item.ids as readonly string[]).includes(organisationId)
-    || item.names.some(name => key.includes(name))
-  ));
   return {
-    logoUrl: match ? `cid:${EMAIL_CID.header}` : '',
+    logoUrl: input.hasBrandLogo ? `cid:${EMAIL_CID.header}` : '',
     logoAlt: pharmacyName || 'Pharmacy',
-    width: match?.width || 190,
-    height: match?.height || 90,
+    width: BRAND_LOGO_DISPLAY.width,
+    height: BRAND_LOGO_DISPLAY.height,
     fallbackText: pharmacyName || 'the pharmacy',
-    assetFile: match?.assetFile,
   };
 }
 

@@ -31,5 +31,8 @@ export async function queuePharmacyEnquiryEmail(input: {
       ...pharmacyEmailContext(organisation),
     },
     keyParts: [keyPrefix, input.submissionId, input.organisationId, input.assignmentVersion ?? 1],
+    // The patient's own closure email is queued separately, with their address and
+    // the wording their reason calls for. Nothing here can supply either.
+    mails: { patient_enquiry_declined: { skip: true } },
   });
 }

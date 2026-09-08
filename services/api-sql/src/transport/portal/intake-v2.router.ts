@@ -11,6 +11,8 @@ import { SqlOrganisationRepository } from '../../repositories/sql/organisation.s
 import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
 import { pharmacyEmailContext } from '../../application/notifications/email-outbox.js';
 import { canActivateReferredPatient, canReceiveReferral, pharmacyIntakeDirectoryAccess } from '../../domain/organisation/access.js';
+import { closureVariantForReason } from '../../application/notifications/email-catalog.js';
+import { queuePatientEnquiryClosureEmail } from '../../application/notifications/patient-enquiry-closure-email.js';
 import { queuePharmacyEnquiryEmail } from '../../application/notifications/pharmacy-enquiry-email.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
@@ -56,9 +58,32 @@ const followUpSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   followUpStatus: followUpStatusSchema,
 }).strict();
+const declineReasonSchema = z.enum([
+  'ELIGIBILITY_NOT_MET',
+  'PSYCHIATRIC_EXCLUSION',
+  'CLINICAL_UNSUITABILITY',
+  'INCOMPLETE_INFORMATION',
+  'NO_RESPONSE',
+  'OTHER',
+]);
+
+/**
+ * A decline must record why. The reason is never quoted to the patient — it decides
+ * which of PT-00's wordings they get, and it is the only structured account of the
+ * decision in the record.
+ */
 const onboardingSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   decision: z.enum(['approved', 'declined']),
+  notes: z.string().trim().max(1500).nullable(),
+  reason: declineReasonSchema.optional(),
+}).strict().refine(
+  input => input.decision !== 'declined' || Boolean(input.reason),
+  { path: ['reason'], message: 'Choose a reason for declining this application.' },
+);
+
+const withdrawSchema = z.object({
+  expectedVersion: z.number().int().nonnegative(),
   notes: z.string().trim().max(1500).nullable(),
 }).strict();
 
@@ -213,7 +238,7 @@ export function createPortalIntakeV2Router(): Router {
         intakeRepo.listSubmissionConditions(caseId),
         organisationRepo.listOrganisations(),
       ]);
-      const names = new Map(organisations.map(organisation => [organisation.id, organisation.tradingName || organisation.name]));
+      const names = new Map(organisations.map(organisation => [organisation.id, organisation.tradingName]));
       await identityRepo.appendAudit({
         organisationId: record.assignedOrganisationId,
         actorUid: scope.uid,
@@ -245,7 +270,7 @@ export function createPortalIntakeV2Router(): Router {
         .filter(organisation => !query || `${organisation.tradingName} ${organisation.gphcNumber} ${organisation.address}`.toLowerCase().includes(query))
         .map(organisation => ({
           id: organisation.id,
-          tradingName: organisation.tradingName || organisation.name,
+          tradingName: organisation.tradingName,
           gphcNumber: organisation.gphcNumber,
           address: organisation.address,
           intakeState: 'available',
@@ -383,11 +408,13 @@ export function createPortalIntakeV2Router(): Router {
       }
       const newVersion = record.assignmentVersion + 1;
       if (input.decision === 'declined') {
+        const reason = input.reason!;
         await intakeRepo.declineSubmission({
           id: caseId,
           expectedAssignmentVersion: record.assignmentVersion,
           newAssignmentVersion: newVersion,
           onboardingNote: input.notes,
+          reason,
         });
         await identityRepo.appendAudit({
           organisationId: record.assignedOrganisationId,
@@ -399,7 +426,7 @@ export function createPortalIntakeV2Router(): Router {
           requestId: scope.requestId,
           sessionHashPrefix: scope.sessionHash.slice(0, 12),
           surface: 'admin',
-          details: { notePresent: Boolean(input.notes) },
+          details: { reason, notePresent: Boolean(input.notes) },
         });
         await queuePharmacyEnquiryEmail({
           notificationRepo,
@@ -410,6 +437,17 @@ export function createPortalIntakeV2Router(): Router {
           caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
           assignmentVersion: newVersion,
           event: 'declined',
+        });
+        await queuePatientEnquiryClosureEmail({
+          notificationRepo,
+          identityRepo,
+          organisationRepo,
+          organisationId: record.assignedOrganisationId,
+          submissionId: record.id,
+          assignmentVersion: newVersion,
+          email: record.email,
+          firstName: record.firstName,
+          variant: closureVariantForReason(reason),
         });
         res.setHeader('Cache-Control', 'no-store');
         res.status(200).json({ id: caseId, decision: 'declined', assignmentVersion: newVersion });
@@ -487,6 +525,60 @@ export function createPortalIntakeV2Router(): Router {
       });
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({ id: caseId, decision: 'approved', patientId, assignmentVersion: newVersion });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * The patient asked us to stop. Recorded by hand, because a withdrawal arrives by
+   * phone or by email rather than through the platform. It is not a decline: nothing
+   * was decided on the merits, so onboardingDecision stays PENDING. Retention counts
+   * from this moment either way (Privacy 6).
+   */
+  router.post('/portal/admin/intake/:caseId/withdraw', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const caseId = caseIdSchema.parse(req.params.caseId);
+      const input = withdrawSchema.parse(req.body);
+      const record = await intakeRepo.findSubmissionById(caseId) as PlatformSubmissionRecord | null;
+      if (!record) throw new HttpError(404, 'The requested record was not found.', 'NOT_FOUND');
+      assertPending(record);
+      if (record.assignmentVersion !== input.expectedVersion) {
+        throw new HttpError(409, 'This intake changed. Refresh before recording the withdrawal.', 'VERSION_CONFLICT');
+      }
+      const newVersion = record.assignmentVersion + 1;
+      await intakeRepo.withdrawSubmission({
+        id: caseId,
+        expectedAssignmentVersion: record.assignmentVersion,
+        newAssignmentVersion: newVersion,
+        onboardingNote: input.notes,
+      });
+      await identityRepo.appendAudit({
+        organisationId: record.assignedOrganisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'eligibility.withdrawn',
+        recordType: 'EligibilitySubmission',
+        recordId: caseId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: 'admin',
+        details: { notePresent: Boolean(input.notes) },
+      });
+      await queuePatientEnquiryClosureEmail({
+        notificationRepo,
+        identityRepo,
+        organisationRepo,
+        organisationId: record.assignedOrganisationId,
+        submissionId: record.id,
+        assignmentVersion: newVersion,
+        email: record.email,
+        firstName: record.firstName,
+        variant: 'withdrawn',
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ id: caseId, outcomeStatus: 'withdrawn', assignmentVersion: newVersion });
     } catch (error) {
       next(error);
     }

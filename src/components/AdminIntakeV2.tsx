@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ClipboardList, Globe, Inbox, LoaderCircle, LockKeyhole, MapPin, QrCode, RefreshCw, Search, Send, ShieldCheck, UserRound, type LucideIcon } from 'lucide-react';
-import { decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp } from '../shared/api';
+import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason } from '../shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { compactPatientName } from '../utils/patientName';
@@ -78,6 +78,7 @@ export default function AdminIntakeV2() {
   const [reason, setReason] = useState<(typeof assignmentReasons)[number]>('patient_preference');
   const [allocationNote, setAllocationNote] = useState('');
   const [onboardingNote, setOnboardingNote] = useState('');
+  const [declineReason, setDeclineReason] = useState<DeclineReason | ''>('');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('not_started');
   const [queueQuery, setQueueQuery] = useState('');
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all');
@@ -224,6 +225,10 @@ export default function AdminIntakeV2() {
 
   const decideOnboarding = async (decision: 'approved' | 'declined') => {
     if (!selected || !detail) return;
+    if (decision === 'declined' && !declineReason) {
+      setMessage('Choose a reason before declining. It is never shown to the patient, but it decides which email they receive.');
+      return;
+    }
     setBusy(true);
     setMessage('');
     try {
@@ -232,6 +237,7 @@ export default function AdminIntakeV2() {
           expectedVersion: Number(detail.assignmentVersion ?? selected.version),
           decision,
           notes: onboardingNote.trim() || null,
+          ...(decision === 'declined' ? { reason: declineReason as DeclineReason } : {}),
         });
         setSelected(null);
         setDetail(null);
@@ -239,9 +245,31 @@ export default function AdminIntakeV2() {
       }
       setMessage(decision === 'approved'
         ? 'Referral completed. The patient record is now visible only to the currently assigned pharmacy.'
-        : 'Application declined and removed from the active intake queue.');
+        : 'Application declined and removed from the active intake queue. The patient has been emailed.');
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : 'The onboarding decision could not be recorded.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const recordWithdrawal = async () => {
+    if (!selected || !detail) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      if (!isLocalPortalPreview) {
+        await withdrawV2Intake(selected.id, {
+          expectedVersion: Number(detail.assignmentVersion ?? selected.version),
+          notes: onboardingNote.trim() || null,
+        });
+        setSelected(null);
+        setDetail(null);
+        await load();
+      }
+      setMessage('Withdrawal recorded and removed from the active intake queue. The patient has been emailed.');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : 'The withdrawal could not be recorded.');
     } finally {
       setBusy(false);
     }
@@ -486,9 +514,12 @@ export default function AdminIntakeV2() {
                       </div>
                     </div>
                     <label>Onboarding decision note<textarea className="input" rows={3} value={onboardingNote} onChange={event => setOnboardingNote(event.target.value)} /></label>
+                    <label>Reason for declining<select className="input" value={declineReason} onChange={event => setDeclineReason(event.target.value as DeclineReason | '')}><option value="">Choose a reason…</option>{DECLINE_REASONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+                    <p className="admin-v2-intake__decision-hint">The reason and the note above stay internal. The reason chooses which email the patient is sent; neither is quoted to them.</p>
                     <div className="admin-v2-intake__decision-actions">
                       <button type="button" className="btn btn-primary" disabled={busy || !canRefer} onClick={() => void decideOnboarding('approved')}><Send size={15} /> Refer and activate patient</button>
-                      <button type="button" className="btn" disabled={busy} onClick={() => void decideOnboarding('declined')}>Decline application</button>
+                      <button type="button" className="btn" disabled={busy || !declineReason} onClick={() => void decideOnboarding('declined')}>Decline application</button>
+                      <button type="button" className="btn" disabled={busy} onClick={() => void recordWithdrawal()}>Record withdrawal</button>
                     </div>
                   </section>
                 </div>

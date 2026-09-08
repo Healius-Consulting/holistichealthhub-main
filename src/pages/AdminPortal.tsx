@@ -280,8 +280,8 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const slug = slugify(tradingName || name);
-    const logoText = (tradingName || name).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+    const slug = slugify(tradingName);
+    const logoText = tradingName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
     const websiteDomains = domain ? [domain.replace(/^https?:\/\//, '').replace(/\/$/, '')] : [];
     const address = [addressLine1, addressLine2, addressLocality, addressPostcode.toUpperCase()].map(value => value.trim()).filter(Boolean).join(', ');
     try {
@@ -351,9 +351,9 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
                   </div>
                 </div>
                 <div className="tenant-brand-preview" aria-hidden="true" style={{ borderTopColor: onboardingTheme.primary, background: onboardingTheme.surfaceTint }}>
-                  <div className="tenant-mark" style={brandSwatchStyle(primary)}>{(tradingName || name).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PH'}</div>
+                  <div className="tenant-mark" style={brandSwatchStyle(primary)}>{tradingName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PH'}</div>
                   <span>
-                    <strong>{tradingName || name || 'Pharmacy workspace'}</strong>
+                    <strong>{tradingName || 'Pharmacy workspace'}</strong>
                     <small>Staff portal and eligibility form</small>
                   </span>
                   <span className="brand-preview-button" style={{ background: onboardingTheme.primary, color: onboardingTheme.onPrimary }}>Primary action</span>
@@ -391,7 +391,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
   const [addressPostcode, setAddressPostcode] = useState(initialAddress.postcode);
   const [domains, setDomains] = useState(organisation.websiteDomains.join('\n'));
   const [status, setStatus] = useState(organisation.status);
-  const logoText = (tradingName || name).split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || organisation.logoText;
+  const logoText = tradingName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || organisation.logoText;
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(organisation.emailLogoUrl ?? null);
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
@@ -474,7 +474,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
         websiteDomains: saved?.websiteDomains ?? websiteDomains,
         status, logoText: logoText.trim().toUpperCase(),
         brand: { primary: primaryColour, portalName: name.trim() },
-        slug: slugify(tradingName || name),
+        slug: slugify(tradingName),
         emailLogoUrl: logoUpdates.emailLogoUrl ?? saved?.emailLogoUrl ?? organisation.emailLogoUrl ?? null,
         emailLogoStoragePath: logoUpdates.emailLogoStoragePath ?? saved?.emailLogoStoragePath ?? organisation.emailLogoStoragePath ?? null,
         emailLogoWidth: logoUpdates.emailLogoWidth ?? saved?.emailLogoWidth ?? organisation.emailLogoWidth ?? null,
@@ -1579,7 +1579,7 @@ export default function AdminPortal() {
     { label: 'Onboard pharmacy', detail: 'Create a new pharmacy workspace', group: 'Actions', icon: <Plus size={16} />, run: () => { setView('overview'); setShowOnboarding(true); } },
     ...state.organisations.map((organisation): CommandDefinition => ({
       label: organisation.tradingName,
-      detail: `${organisation.name} · GPhC ${organisation.gphcNumber}`,
+      detail: `GPhC ${organisation.gphcNumber}`,
       keywords: `${organisation.websiteDomains.join(' ')} ${organisation.mainContactEmail}`,
       group: 'Pharmacies',
       searchOnly: true,

@@ -106,6 +106,21 @@ enum OnboardingDecision {
   DECLINED
 }
 
+"""
+Why an administrator declined an application. Recorded for the audit trail and to
+choose which wording the patient is sent; the reason itself is never quoted to them.
+INCOMPLETE_INFORMATION and NO_RESPONSE close a case that was never decided on its
+merits, so they read differently to the patient than the rest.
+"""
+enum DeclineReason {
+  ELIGIBILITY_NOT_MET
+  PSYCHIATRIC_EXCLUSION
+  CLINICAL_UNSUITABILITY
+  INCOMPLETE_INFORMATION
+  NO_RESPONSE
+  OTHER
+}
+
 enum PatientStatus {
   REFERRED
   ACTIVE
@@ -560,6 +575,11 @@ type EligibilitySubmission @table {
   can be explained to the patient and audited. TREATMENTS_NOT_TRIED or PSYCHOSIS_HISTORY.
   """
   declineRule: String
+  """
+  Why an administrator declined the application, as opposed to declineRule above,
+  which records an automatic screening decline made at submission.
+  """
+  declineReason: DeclineReason
   declinedAt: Timestamp
   """ Set when the patient emails info@ asking a pharmacist to reconsider a decline. """
   reviewRequestedAt: Timestamp

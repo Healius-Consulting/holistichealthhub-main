@@ -3,13 +3,16 @@
 Source of truth: `services/api-sql/src/application/notifications/email-catalog.ts`.
 Change copy, audience, or send-when there. This file is generated from that catalog.
 
-Sender is one Holistic Health Hub address (`noreply@holistichealthhub.live` when the live Resend records are published). There is no Reply-To. This mailbox is not monitored. Pharmacy contact details are included in the body where useful. Do not invent pharmacy-branded From addresses.
+Sender is one Holistic Health Hub address (`noreply@holistichealthhub.live` when the live Resend records are published). That mailbox is not monitored. Pharmacy contact details are included in the body where useful. Do not invent pharmacy-branded From addresses.
+
+Templates marked with a Reply-To below send one, pointing at a monitored alias on `holistichealthhub.live`. Every other template sends none. Do not write copy that invites a reply without setting `replyTo` on the template.
 
 Operational pharmacy emails go to the **owner** account only (the earliest staff user for that pharmacy). Other staff do not receive them. Account emails (invite, password reset, 2FA) still go to the individual staff member.
 
 ## Patient emails
 
-- `patient_referred` (referral.activated): Sent when HHH admin completes a referral and activates the pharmacy patient record.
+- `patient_enquiry_declined` (enquiry.declined, enquiry.withdrawn): Sent to the patient when HHH admin declines or closes their enquiry. Three variants; the recorded reason is never quoted. Reply-To: `referrals@holistichealthhub.live`.
+- `patient_referred` (referral.activated): Sent when HHH admin completes a referral and activates the pharmacy patient record. Reply-To: `referrals@holistichealthhub.live`.
 - `patient_payment_request` (payment.link_created, payment.reminder): Sent when a Worldpay payment link is created or resent, and again as 24h/48h reminders.
 - `patient_payment_confirmation` (payment.settled): Sent once payment has been received (Worldpay settlement or manual pay), with a receipt link when available.
 - `patient_refunded` (payment.refunded): Sent when pharmacy confirms a completed refund.

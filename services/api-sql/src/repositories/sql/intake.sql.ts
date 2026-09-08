@@ -15,6 +15,7 @@ import type {
   SubmissionConditionRecord,
   TenantPendingEnquiryRecord,
   UpdateSubmissionFollowUpInput,
+  WithdrawSubmissionInput,
 } from '../ports/intake.port.js';
 
 const GET_SUBMISSION_BY_ID_GQL = `
@@ -47,6 +48,7 @@ const GET_SUBMISSION_BY_ID_GQL = `
       assignmentReason
       privateAllocationNote
       privateOnboardingNote
+      declineReason
       consentVersion
       referralConsent
       dataSharingConsent
@@ -121,6 +123,7 @@ const LIST_PLATFORM_SUBMISSIONS_GQL = `
       assignmentReason
       privateAllocationNote
       privateOnboardingNote
+      declineReason
       consentVersion
       referralConsent
       dataSharingConsent
@@ -508,6 +511,7 @@ const DECLINE_SUBMISSION_GQL = `
     $expectedAssignmentVersion: Int!
     $newAssignmentVersion: Int!
     $onboardingNote: String
+    $reason: DeclineReason!
   ) @transaction {
     updated: eligibilitySubmission_updateMany(
       where: {
@@ -520,6 +524,38 @@ const DECLINE_SUBMISSION_GQL = `
         pharmacyAccessStatus: REVOKED
         onboardingDecision: DECLINED
         outcomeStatus: DECLINED
+        assignmentVersion: $newAssignmentVersion
+        privateOnboardingNote: $onboardingNote
+        declineReason: $reason
+        declinedAt_expr: "request.time"
+        completedAt_expr: "request.time"
+        updatedAt_expr: "request.time"
+      }
+    ) @check(expr: "this == 1", message: "INTAKE_STATE_CONFLICT") @redact
+  }
+`;
+
+/**
+ * A withdrawal is the patient's decision, not ours, so it leaves onboardingDecision
+ * PENDING: nothing was decided on the merits. completedAt still moves, because
+ * retention counts three months from the decision *or* the withdrawal alike.
+ */
+const WITHDRAW_SUBMISSION_GQL = `
+  mutation WithdrawSubmission(
+    $id: UUID!
+    $expectedAssignmentVersion: Int!
+    $newAssignmentVersion: Int!
+    $onboardingNote: String
+  ) @transaction {
+    updated: eligibilitySubmission_updateMany(
+      where: {
+        id: { eq: $id }
+        assignmentVersion: { eq: $expectedAssignmentVersion }
+        outcomeStatus: { eq: OPEN }
+      }
+      data: {
+        pharmacyAccessStatus: REVOKED
+        outcomeStatus: WITHDRAWN
         assignmentVersion: $newAssignmentVersion
         privateOnboardingNote: $onboardingNote
         completedAt_expr: "request.time"
@@ -812,6 +848,16 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
   async declineSubmission(input: DeclineSubmissionInput): Promise<void> {
     try {
       await dataConnect.executeGraphql<any, any>(DECLINE_SUBMISSION_GQL, {
+        variables: { ...input, id: asUuid(input.id) },
+      });
+    } catch (error) {
+      rethrowMutationError(error);
+    }
+  }
+
+  async withdrawSubmission(input: WithdrawSubmissionInput): Promise<void> {
+    try {
+      await dataConnect.executeGraphql<any, any>(WITHDRAW_SUBMISSION_GQL, {
         variables: { ...input, id: asUuid(input.id) },
       });
     } catch (error) {

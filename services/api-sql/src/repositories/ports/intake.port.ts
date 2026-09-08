@@ -116,6 +116,7 @@ export interface PlatformSubmissionRecord extends SubmissionQueueItem {
   assignmentReason: string | null;
   privateAllocationNote: string | null;
   privateOnboardingNote: string | null;
+  declineReason?: string | null;
   consentVersion: string;
   referralConsent: boolean;
   dataSharingConsent: boolean;
@@ -167,7 +168,36 @@ export interface ActivateSubmissionInput {
   onboardingNote: string | null;
 }
 
+/**
+ * Why an administrator declined an application. Never quoted to the patient; it
+ * chooses which wording they are sent and it explains the decision in the audit log.
+ */
+export type DeclineReason =
+  | 'ELIGIBILITY_NOT_MET'
+  | 'PSYCHIATRIC_EXCLUSION'
+  | 'CLINICAL_UNSUITABILITY'
+  | 'INCOMPLETE_INFORMATION'
+  | 'NO_RESPONSE'
+  | 'OTHER';
+
+export const DECLINE_REASONS: readonly DeclineReason[] = [
+  'ELIGIBILITY_NOT_MET',
+  'PSYCHIATRIC_EXCLUSION',
+  'CLINICAL_UNSUITABILITY',
+  'INCOMPLETE_INFORMATION',
+  'NO_RESPONSE',
+  'OTHER',
+];
+
 export interface DeclineSubmissionInput {
+  id: string;
+  expectedAssignmentVersion: number;
+  newAssignmentVersion: number;
+  onboardingNote: string | null;
+  reason: DeclineReason;
+}
+
+export interface WithdrawSubmissionInput {
   id: string;
   expectedAssignmentVersion: number;
   newAssignmentVersion: number;
@@ -196,4 +226,5 @@ export interface IntakeRepositoryPort {
   /** Replace a patient's condition rows with exactly this set, removing any dropped. */
   rewritePatientConditions(patientId: string, existing: FormConditionRecord[], records: FormConditionRecord[]): Promise<void>;
   declineSubmission(input: DeclineSubmissionInput): Promise<void>;
+  withdrawSubmission(input: WithdrawSubmissionInput): Promise<void>;
 }

@@ -45,7 +45,7 @@ function EligibilityBrand({
   identity,
   token,
 }: {
-  identity: Pick<PublicPharmacy, 'name' | 'logoUrl'>;
+  identity: Pick<PublicPharmacy, 'tradingName' | 'logoUrl'>;
   token: string;
 }) {
   const [logoFailed, setLogoFailed] = useState(false);
@@ -55,10 +55,10 @@ function EligibilityBrand({
     <img className="eligibility-brand__mark" src={HHH_MARK} alt="" width="46" height="46" />
     <span>
       <strong>Holistic Health Hub</strong>
-      <small>{token ? `In partnership with ${identity.name}` : 'Personalised healthcare'}</small>
+      <small>{token ? `In partnership with ${identity.tradingName}` : 'Personalised healthcare'}</small>
     </span>
   </>;
-  return <header className={`eligibility-brand${pharmacyLogo ? ' eligibility-brand--pharmacy-logo' : ''}`} aria-label={token ? `${identity.name} eligibility` : 'Holistic Health Hub eligibility'}>
+  return <header className={`eligibility-brand${pharmacyLogo ? ' eligibility-brand--pharmacy-logo' : ''}`} aria-label={token ? `${identity.tradingName} eligibility` : 'Holistic Health Hub eligibility'}>
     <div className="eligibility-brand__inner">
       {token
         ? <div className="eligibility-brand__identity">{identityMarkup}</div>
@@ -67,7 +67,7 @@ function EligibilityBrand({
         <img
           className="eligibility-brand__pharmacy-logo"
           src={pharmacyLogo}
-          alt={`${identity.name} logo`}
+          alt={`${identity.tradingName} logo`}
           width={EMAIL_LOGO_SPEC.displayWidth}
           height={EMAIL_LOGO_SPEC.displayHeight}
           onError={() => setLogoFailed(true)}
@@ -317,7 +317,7 @@ export default function EligibilityApp() {
     </EligibilityShell>;
   }
 
-  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>Thank you — your application has gone to {pharmacy.tradingName}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.tradingName}`}</p><h1>Thank you — your application has gone to {pharmacy.tradingName}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
 
   return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
     <EligibilityBrand identity={brandIdentity} token={token} />
