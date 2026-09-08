@@ -25,7 +25,7 @@ describe('public directory organisation query', () => {
   it('publishes the pharmacy trading name, never the owning company name', () => {
     // `organisation.name` is the registered company. It belongs on the admin
     // identity tab and nowhere a patient can see.
-    assert.match(listedProfile, /name: profile\?\.tradingName \|\| organisation\.tradingName/);
-    assert.doesNotMatch(listedProfile, /organisation\.name/);
+    assert.match(listedProfile, /name: organisation\.name/);
+    assert.doesNotMatch(listedProfile, /name: profile\?\.tradingName/);
   });
 });

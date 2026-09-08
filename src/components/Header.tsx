@@ -21,7 +21,7 @@ export default function Header() {
 
   return (
     <WorkspacePageHeader
-      section={organisation.tradingName}
+      section={organisation.name}
       context={title}
       title={title}
       commandLabel="Find anything"

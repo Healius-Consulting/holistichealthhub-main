@@ -148,7 +148,7 @@ export function createAdminStaffRouter(): Router {
         organisationId: input.organisationId,
         to: { email: input.email, displayName: input.displayName },
         payload: {
-          pharmacyName: organisation.tradingName,
+          pharmacyName: organisation.name,
           organisationId: organisation.id,
           actionLink,
         },
@@ -418,7 +418,7 @@ export function createAdminStaffRouter(): Router {
         organisationId: profile.organisationId,
         to: { email: profile.email, displayName: profile.displayName },
         payload: {
-          pharmacyName: organisation.tradingName,
+          pharmacyName: organisation.name,
           organisationId: organisation.id,
           actionLink,
         },
@@ -516,7 +516,7 @@ export function createAdminStaffRouter(): Router {
         organisationId: profile.organisationId,
         to: { email: profile.email, displayName: profile.displayName },
         payload: {
-          pharmacyName: organisation.tradingName,
+          pharmacyName: organisation.name,
           organisationId: organisation.id,
           actionLink,
         },
@@ -598,7 +598,7 @@ export function createAdminStaffRouter(): Router {
         payload: {
           pharmacyName: profile.role === 'HHH_ADMIN'
             ? 'HHH admin workspace'
-            : organisation?.tradingName || 'the pharmacy',
+            : organisation?.name || 'the pharmacy',
           organisationId: organisation?.id || '',
         },
         keyParts: ['pharmacy-2fa-disabled', profile.uid, Date.now()],

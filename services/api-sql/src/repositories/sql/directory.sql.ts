@@ -173,9 +173,9 @@ function toListedProfile(
   const address = structuredAddress(organisation, profile);
   return {
     organisationId: organisation.id,
-    // The directory is patient-facing: the pharmacy's trading name, never the
-    // owning company's registered name.
-    name: profile?.tradingName || organisation.tradingName,
+    // The directory is patient-facing: the pharmacy's own name, never the owning
+    // company held in tradingName.
+    name: organisation.name,
     tradingName: profile?.tradingName || organisation.tradingName,
     gphcNumber: profile?.gphcNumber || organisation.gphcNumber,
     addressLine1: address.addressLine1,

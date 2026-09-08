@@ -41,8 +41,8 @@ const previewDedicated: V2EligibilityQueueItem = {
   nextFollowUpAt: null, destinationLocked: false,
 };
 const previewCandidates: Detail[] = [
-  { id: 'preview-pharmacy', tradingName: 'Primary Branch', gphcNumber: 'TRAINING-PRIMARY', address: 'Leeds' },
-  { id: 'preview-pharmacy-2', tradingName: 'Alternate Pharmacy', gphcNumber: 'TRAINING-ALTERNATE', address: 'Manchester' },
+  { id: 'preview-pharmacy', name: 'Primary Branch', gphcNumber: 'TRAINING-PRIMARY', address: 'Leeds' },
+  { id: 'preview-pharmacy-2', name: 'Alternate Pharmacy', gphcNumber: 'TRAINING-ALTERNATE', address: 'Manchester' },
 ];
 
 function previewDetail(record: V2EligibilityQueueItem): Detail {
@@ -123,7 +123,7 @@ export default function AdminIntakeV2() {
   const loadCandidates = async (caseId: string, query = '') => {
     if (isLocalPortalPreview) {
       const normalised = query.toLowerCase();
-      setCandidates(previewCandidates.filter(candidate => !normalised || String(candidate.tradingName).toLowerCase().includes(normalised)));
+      setCandidates(previewCandidates.filter(candidate => !normalised || String(candidate.name).toLowerCase().includes(normalised)));
       return;
     }
     setCandidates((await getAssignmentCandidates(caseId, query)).records);
@@ -190,7 +190,7 @@ export default function AdminIntakeV2() {
         });
         await Promise.all([refreshDetail(), load()]);
       } else {
-        applyDetail({ ...detail, effectiveAssignedOrganisationId: destination, assignedOrganisationId: destination, assignedOrganisationName: candidates.find(candidate => candidate.id === destination)?.tradingName, assignmentVersion: Number(detail.assignmentVersion ?? 0) + 1 });
+        applyDetail({ ...detail, effectiveAssignedOrganisationId: destination, assignedOrganisationId: destination, assignedOrganisationName: candidates.find(candidate => candidate.id === destination)?.name, assignmentVersion: Number(detail.assignmentVersion ?? 0) + 1 });
       }
       setAllocationNote('');
       setMessage('Pending destination updated. The previous pharmacy can no longer see this enquiry; it now appears for the new pharmacy.');
@@ -318,7 +318,7 @@ export default function AdminIntakeV2() {
   const destinationSaved = Boolean(currentDestinationId) && sameId(destination, currentDestinationId);
   const reviewComplete = detail?.followUpStatus === 'completed';
   const sourceName = String(detail?.sourceOrganisationName ?? (detail?.sourceType === 'general_hhh_website' ? 'Main HHH website' : 'Original QR pharmacy'));
-  const destinationName = String(detail?.assignedOrganisationName ?? candidates.find(candidate => candidate.id === currentDestinationId)?.tradingName ?? 'Not assigned');
+  const destinationName = String(detail?.assignedOrganisationName ?? candidates.find(candidate => candidate.id === currentDestinationId)?.name ?? 'Not assigned');
   const selectedReview = reviewMeta(selected?.followUpStatus);
   const canRefer = reviewComplete && destinationSaved;
   const queueLabel = queueFilter === 'website' ? 'Website' : queueFilter === 'qr' ? 'QR links' : 'Intake queue';
@@ -490,7 +490,7 @@ export default function AdminIntakeV2() {
                     <label>Pending destination<select className="input" value={destination} onChange={event => setDestination(event.target.value)}><option value="">Select a pharmacy</option>{candidates.map(candidate => {
                       const classification = String(candidate.workspaceClassification ?? '');
                       const extra = classification === 'allocation_holding' || classification === 'training' ? ` · ${workspaceClassificationLabel(classification)}` : '';
-                      return <option key={String(candidate.id)} value={String(candidate.id)}>{String(candidate.tradingName)} · GPhC {String(candidate.gphcNumber ?? 'not recorded')}{extra}</option>;
+                      return <option key={String(candidate.id)} value={String(candidate.id)}>{String(candidate.name)} · GPhC {String(candidate.gphcNumber ?? 'not recorded')}{extra}</option>;
                     })}</select></label>
                     <label>Reason<select className="input" value={reason} onChange={event => setReason(event.target.value as typeof reason)}><option value="patient_preference">Patient preference</option><option value="capacity">Capacity</option><option value="delivery_or_collection">Delivery or collection needs</option><option value="geographic_coverage">Geographic coverage</option><option value="service_compatibility">Service compatibility</option><option value="administrative_correction">Administrative correction</option></select></label>
                     <label>Private HHH note<textarea className="input" rows={3} value={allocationNote} onChange={event => setAllocationNote(event.target.value)} /></label>

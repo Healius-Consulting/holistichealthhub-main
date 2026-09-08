@@ -1167,6 +1167,8 @@ export interface PharmacyOverview {
   asOf: string;
   organisation: {
     id: string;
+    /** The pharmacy's own name. `tradingName` is the owning company. */
+    name: string;
     tradingName: string;
     status: 'onboarding' | 'intake_live' | 'live' | 'paused';
     trainingMode: boolean;

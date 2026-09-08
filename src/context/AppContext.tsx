@@ -590,8 +590,8 @@ export const PHARMACY = {
   initials: urlOrganisation.logoText,
   logoText: urlOrganisation.logoText,
   formUrl: `/eligibility?token=${urlOrganisation.referralToken}`,
-  brandName: `${urlOrganisation.tradingName} × Curaleaf`,
-  collectionPlace: urlOrganisation.tradingName,
+  brandName: `${urlOrganisation.name} × Curaleaf`,
+  collectionPlace: urlOrganisation.name,
 };
 
 /* ═══════════════════════════════════════════════════════════

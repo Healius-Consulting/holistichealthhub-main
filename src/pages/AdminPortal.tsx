@@ -280,8 +280,8 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
     event.preventDefault();
     setBusy(true);
     setError(null);
-    const slug = slugify(tradingName);
-    const logoText = tradingName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
+    const slug = slugify(name);
+    const logoText = name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase();
     const websiteDomains = domain ? [domain.replace(/^https?:\/\//, '').replace(/\/$/, '')] : [];
     const address = [addressLine1, addressLine2, addressLocality, addressPostcode.toUpperCase()].map(value => value.trim()).filter(Boolean).join(', ');
     try {
@@ -293,7 +293,7 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
         worldpay: { enabled: false, status: 'not-connected', environment: 'sandbox', merchantId: null, merchantName: null, lastSyncedAt: null },
       };
       dispatch({ type: 'ADD_ORGANISATION', organisation });
-      dispatch({ type: 'ADD_TOAST', message: `${tradingName} onboarding record created in Firebase.`, toastType: 'success' });
+      dispatch({ type: 'ADD_TOAST', message: `${name} onboarding record created in Firebase.`, toastType: 'success' });
       onCreated(created.id);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The onboarding record could not be created.');
@@ -351,9 +351,9 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
                   </div>
                 </div>
                 <div className="tenant-brand-preview" aria-hidden="true" style={{ borderTopColor: onboardingTheme.primary, background: onboardingTheme.surfaceTint }}>
-                  <div className="tenant-mark" style={brandSwatchStyle(primary)}>{tradingName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PH'}</div>
+                  <div className="tenant-mark" style={brandSwatchStyle(primary)}>{name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'PH'}</div>
                   <span>
-                    <strong>{tradingName || 'Pharmacy workspace'}</strong>
+                    <strong>{name || 'Pharmacy workspace'}</strong>
                     <small>Staff portal and eligibility form</small>
                   </span>
                   <span className="brand-preview-button" style={{ background: onboardingTheme.primary, color: onboardingTheme.onPrimary }}>Primary action</span>
@@ -391,7 +391,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
   const [addressPostcode, setAddressPostcode] = useState(initialAddress.postcode);
   const [domains, setDomains] = useState(organisation.websiteDomains.join('\n'));
   const [status, setStatus] = useState(organisation.status);
-  const logoText = tradingName.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || organisation.logoText;
+  const logoText = name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || organisation.logoText;
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(organisation.emailLogoUrl ?? null);
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
@@ -474,7 +474,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
         websiteDomains: saved?.websiteDomains ?? websiteDomains,
         status, logoText: logoText.trim().toUpperCase(),
         brand: { primary: primaryColour, portalName: name.trim() },
-        slug: slugify(tradingName),
+        slug: slugify(name),
         emailLogoUrl: logoUpdates.emailLogoUrl ?? saved?.emailLogoUrl ?? organisation.emailLogoUrl ?? null,
         emailLogoStoragePath: logoUpdates.emailLogoStoragePath ?? saved?.emailLogoStoragePath ?? organisation.emailLogoStoragePath ?? null,
         emailLogoWidth: logoUpdates.emailLogoWidth ?? saved?.emailLogoWidth ?? organisation.emailLogoWidth ?? null,
@@ -1270,7 +1270,7 @@ export default function AdminPortal() {
           ?? toValidDate(submission.submittedAt);
         if (!completedAt) return;
 
-        const pharmacyName = organisations.get(submission.organisationId)?.tradingName
+        const pharmacyName = organisations.get(submission.organisationId)?.name
           ?? submission.pharmacyName
           ?? 'Unknown pharmacy';
         const eventBase = {
@@ -1479,7 +1479,7 @@ export default function AdminPortal() {
 
   const toRegisterRow = useCallback((patient: typeof displayedPatients[number]): PatientRegisterExportRow => {
     const organisation = state.organisations.find(item => item.id === patient.organisationId);
-    const pharmacyName = 'pharmacyName' in patient ? patient.pharmacyName : organisation?.tradingName;
+    const pharmacyName = 'pharmacyName' in patient ? patient.pharmacyName : organisation?.name;
     const gphcNumber = 'gphcNumber' in patient ? patient.gphcNumber : organisation?.gphcNumber;
     return {
       id: patient.id,
@@ -1521,7 +1521,7 @@ export default function AdminPortal() {
       const exportRows = isLocalPortalPreview
         ? filteredPatients.map(patient => {
             const organisation = state.organisations.find(item => item.id === patient.organisationId);
-            return { ...patient, pharmacyName: organisation?.tradingName ?? 'Unknown pharmacy' };
+            return { ...patient, pharmacyName: organisation?.name ?? 'Unknown pharmacy' };
           })
         : (await recordPatientRegisterExport({ query: query.trim(), organisationId: patientOrganisationId, status: patientStatus, from: patientFrom || null, to: patientTo || null, expectedScopeHash: serverPatientRegister?.recordScopeHash ?? '' })).rows;
       const header = ['Patient', 'Attributed pharmacy', 'Current stage', 'Last recorded'];
@@ -1578,7 +1578,7 @@ export default function AdminPortal() {
     { label: 'View admins', detail: 'HHH administrator accounts', group: 'Navigate', icon: <Users size={16} />, run: () => { setAdminDialogFocus('list'); setShowAdminDialog(true); } },
     { label: 'Onboard pharmacy', detail: 'Create a new pharmacy workspace', group: 'Actions', icon: <Plus size={16} />, run: () => { setView('overview'); setShowOnboarding(true); } },
     ...state.organisations.map((organisation): CommandDefinition => ({
-      label: organisation.tradingName,
+      label: organisation.name,
       detail: `GPhC ${organisation.gphcNumber}`,
       keywords: `${organisation.websiteDomains.join(' ')} ${organisation.mainContactEmail}`,
       group: 'Pharmacies',
@@ -1590,7 +1590,7 @@ export default function AdminPortal() {
       const organisation = state.organisations.find(item => item.id === patient.organisationId);
       return {
         label: patient.name,
-        detail: `${organisation?.tradingName ?? 'Unknown pharmacy'} · ${patient.email}`,
+        detail: `${organisation?.name ?? 'Unknown pharmacy'} · ${patient.email}`,
         keywords: `${patient.mobile} ${patient.dob} ${patient.stage}`,
         group: 'Patients',
         searchOnly: true,
@@ -1664,7 +1664,7 @@ export default function AdminPortal() {
           key={organisation.id}
           className={`order-crm-row order-crm-row--${tone}${overviewPharmacyId === organisation.id ? ' selected' : ''}`}
           aria-pressed={overviewPharmacyId === organisation.id}
-          aria-label={`${organisation.tradingName}, ${statusLabel(organisation.status)}`}
+          aria-label={`${organisation.name}, ${statusLabel(organisation.status)}`}
           onClick={() => {
             if (organisation.id !== overviewPharmacyId) {
               setOverviewManagePanel('summary');
@@ -1676,7 +1676,7 @@ export default function AdminPortal() {
         >
           <span className={`order-crm-row__stage order-tone--${tone}`} aria-hidden="true">{organisation.logoText}</span>
           <span className="order-crm-row__identity">
-            <strong title={organisation.tradingName}>{organisation.tradingName}</strong>
+            <strong title={organisation.name}>{organisation.name}</strong>
             <span className={`order-stage-pill order-tone--${tone}`}>{statusLabel(organisation.status)}</span>
           </span>
           <span className="order-crm-row__position">
@@ -1814,7 +1814,7 @@ export default function AdminPortal() {
                     <div className="order-crm-record__identity">
                       <span className={`order-crm-record__stage order-tone--${pharmacyTone(selectedPharmacy.status)}`} aria-hidden="true">{selectedPharmacy.logoText}</span>
                       <div className="order-crm-record__titles">
-                        <strong>{selectedPharmacy.tradingName}</strong>
+                        <strong>{selectedPharmacy.name}</strong>
                         <span className="order-crm-record__ref">{selectedPharmacy.name} · GPhC {selectedPharmacy.gphcNumber}</span>
                         <em>{workspaceLabel}</em>
                       </div>
@@ -1839,7 +1839,7 @@ export default function AdminPortal() {
                           aria-haspopup="menu"
                           aria-expanded={overviewManageOpen}
                           aria-controls="overview-manage-menu"
-                          aria-label={`Manage ${selectedPharmacy.tradingName}, ${managePanelLabel} panel`}
+                          aria-label={`Manage ${selectedPharmacy.name}, ${managePanelLabel} panel`}
                           onClick={() => setOverviewManageOpen(open => !open)}
                         >
                           <span>Manage · {managePanelLabel}</span>
@@ -2032,7 +2032,7 @@ export default function AdminPortal() {
             <CompactPatientCell name={submission.name} email={submission.email} mobile={submission.mobile} dob={submission.dob} />
             <div className="admin-referral-item__pharmacy">
               <span className="admin-referral-item__label">Attributed pharmacy</span>
-              <strong>{organisation?.tradingName ?? submission.pharmacyName}</strong>
+              <strong>{organisation?.name ?? submission.pharmacyName}</strong>
               <small>Token-attributed record</small>
             </div>
           </div>
@@ -2170,7 +2170,7 @@ export default function AdminPortal() {
               <span className="sr-only">Pharmacy</span>
               <select value={patientOrganisationId} onChange={event => setPatientOrganisationId(event.target.value)} aria-label="Filter by pharmacy">
                 <option value="all">All pharmacies</option>
-                {state.organisations.map(organisation => <option key={organisation.id} value={organisation.id}>{organisation.tradingName}</option>)}
+                {state.organisations.map(organisation => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}
               </select>
             </label>
             <label className="admin-register-crm__date">
@@ -2740,7 +2740,7 @@ export default function AdminPortal() {
           onClose={() => setShowPharmacyEditor(false)}
           onSaved={updates => {
             dispatch({ type: 'UPDATE_ORGANISATION', organisationId: overviewPharmacy.id, updates });
-            dispatch({ type: 'ADD_TOAST', message: `${updates.tradingName ?? overviewPharmacy.tradingName} details saved to Firebase.`, toastType: 'success' });
+            dispatch({ type: 'ADD_TOAST', message: `${updates.name ?? overviewPharmacy.name} details saved to Firebase.`, toastType: 'success' });
           }}
         />
       ) : null}

@@ -115,7 +115,12 @@ export function brandedEmail(input: {
   cta?: { label: string; href: string };
   detailsTitle?: string;
   details?: Array<{ label: string; value: string }>;
-  nextSteps?: string[];
+  /**
+   * A plain string is one short line. A step with more to say than fits on one
+   * takes a heading and a body, so four long steps read as four things to do
+   * rather than as a wall of numbered prose.
+   */
+  nextSteps?: Array<string | { title: string; body?: string }>;
   footerNote?: string;
   header: EmailHeader;
   /**
@@ -134,6 +139,12 @@ export function brandedEmail(input: {
   } | null;
   /** Marketing only: PECR reg. 22 requires a working opt-out in every message. */
   unsubscribeUrl?: string | null;
+  /**
+   * The monitored address this message sets as Reply-To, when it sets one. The
+   * footer otherwise tells the reader the mailbox is unread, which would flatly
+   * contradict copy that invites a reply.
+   */
+  replyTo?: string | null;
 }) {
   const paragraphs = input.paragraphs.filter(Boolean).map((paragraph, index, items) =>
     `<p style="margin:0 0 ${index === items.length - 1 ? '28px' : '12px'}; color:#2f3c39; font-size:19px; line-height:31px;">${paragraph}</p>`
@@ -153,9 +164,22 @@ export function brandedEmail(input: {
   const detailsBlock = details
     ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; margin:0 0 24px; border:1px solid #d7e0de; border-radius:18px; background:#f6fbfa;"><tr><td style="padding:24px 26px;">${input.detailsTitle ? `<p style="margin:0 0 12px; color:#1f2725; font-size:18px; line-height:24px; font-weight:700;">${escapeHtml(input.detailsTitle)}</p>` : ''}${details}</td></tr></table>`
     : '';
-  const nextSteps = (input.nextSteps ?? []).filter(Boolean).map((step, index, items) =>
-    `<tr><td style="padding:0 26px ${index === items.length - 1 ? '24px' : '8px'}; color:#34423f; font-size:16px; line-height:24px;">${index + 1}. ${escapeHtml(step)}</td></tr>`
-  ).join('');
+  const nextSteps = (input.nextSteps ?? []).filter(Boolean).map((step, index, items) => {
+    const { title, body } = typeof step === 'string' ? { title: step, body: '' } : step;
+    const last = index === items.length - 1;
+    // Nested tables and a fixed-width number cell, because email clients that
+    // ignore flexbox still lay this out correctly. The badge degrades to a
+    // square in Outlook, which is fine — the number is what carries the order.
+    const bodyLine = body
+      ? `<p style="margin:5px 0 0; color:#4d5a56; font-size:15px; line-height:23px;">${escapeHtml(body)}</p>`
+      : '';
+    return `<tr><td style="padding:0 26px ${last ? '24px' : '18px'};"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>`
+      + `<td width="28" valign="top" style="width:28px; padding:1px 14px 0 0;">`
+      + `<div style="width:26px; height:26px; line-height:26px; border-radius:13px; background:#e3f1ed; color:#12564a; font-family:Arial, Helvetica, sans-serif; font-size:13px; font-weight:700; text-align:center;">${index + 1}</div>`
+      + `</td><td valign="top">`
+      + `<p style="margin:0; color:#1f2725; font-size:16px; line-height:23px; font-weight:700;">${escapeHtml(title)}</p>${bodyLine}`
+      + `</td></tr></table></td></tr>`;
+  }).join('');
   const nextStepsBlock = nextSteps
     ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; margin:0 0 24px; border:1px solid #e1e8e6; border-radius:18px; background:#ffffff;"><tr><td style="padding:24px 26px 10px;"><p style="margin:0; color:#1f2725; font-size:18px; line-height:24px; font-weight:700;">What happens next</p></td></tr>${nextSteps}</table>`
     : '';
@@ -180,6 +204,10 @@ export function brandedEmail(input: {
     return `<p style="margin:18px 0 0; color:#9fb4af; font-size:12px; line-height:18px;"><strong style="color:#dce9e5;">${escapeHtml(c.pharmacyName.trim())}</strong>${parts ? `<br>${parts}` : ''}${contacts ? `<br>${contacts}` : ''}</p>`;
   })();
   const unsubscribeHref = input.unsubscribeUrl ? safeHttpUrl(input.unsubscribeUrl) : '';
+  const replyTo = (input.replyTo || '').trim();
+  const mailboxNote = replyTo
+    ? `Replies to this email go to ${escapeHtml(replyTo)}.`
+    : 'This mailbox is not monitored.';
   const unsubscribeLine = unsubscribeHref
     ? `<p style="margin:12px 0 0; color:#9fb4af; font-size:12px; line-height:18px;"><a href="${escapeHtml(unsubscribeHref)}" style="color:#dce9e5; text-decoration:underline;">Unsubscribe from these messages</a></p>`
     : '';
@@ -232,7 +260,7 @@ export function brandedEmail(input: {
                   </td>
                 </tr>
               </table>
-              <p style="margin:18px 0 0; color:#9fb4af; font-size:12px; line-height:18px;">This mailbox is not monitored.</p>
+              <p style="margin:18px 0 0; color:#9fb4af; font-size:12px; line-height:18px;">${mailboxNote}</p>
               ${controllerLines}
               ${unsubscribeLine}
             </td>

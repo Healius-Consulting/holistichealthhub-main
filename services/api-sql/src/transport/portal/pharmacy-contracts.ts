@@ -1063,6 +1063,7 @@ export function buildSqlPharmacyOverview(params: {
     asOf: new Date(now).toISOString(),
     organisation: {
       id: organisation.id,
+      name: organisation.name,
       tradingName: organisation.tradingName,
       status: portalAccountStatus(organisation.status),
       trainingMode: false,

@@ -135,7 +135,7 @@ export function AdminGoLivePanel({
         </label>
       ) : null}
 
-      <ul className="admin-golive-facts" aria-label={`Go-live status for ${organisation.tradingName}`}>
+      <ul className="admin-golive-facts" aria-label={`Go-live status for ${organisation.name}`}>
         {facts.map(row => (
           <li key={row.id}>
             <span>{row.title}</span>

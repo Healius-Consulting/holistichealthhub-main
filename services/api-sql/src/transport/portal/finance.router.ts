@@ -201,7 +201,7 @@ export function createPortalFinanceRouter(): Router {
         .map(event => ({
           id: event.id,
           organisationId: event.organisationId,
-          pharmacyName: event.organisation?.tradingName ?? 'Unknown pharmacy',
+          pharmacyName: event.organisation?.name ?? 'Unknown pharmacy',
           patientId: event.patientId,
           patientName: event.patient ? `${event.patient.firstName} ${event.patient.surname}`.trim() : 'Patient record',
           patientEmail: event.patient?.email ?? '',

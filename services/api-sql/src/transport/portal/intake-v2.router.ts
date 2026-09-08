@@ -238,7 +238,7 @@ export function createPortalIntakeV2Router(): Router {
         intakeRepo.listSubmissionConditions(caseId),
         organisationRepo.listOrganisations(),
       ]);
-      const names = new Map(organisations.map(organisation => [organisation.id, organisation.tradingName]));
+      const names = new Map(organisations.map(organisation => [organisation.id, organisation.name]));
       await identityRepo.appendAudit({
         organisationId: record.assignedOrganisationId,
         actorUid: scope.uid,
@@ -267,10 +267,10 @@ export function createPortalIntakeV2Router(): Router {
       assertPending(record);
       const organisations = (await organisationRepo.listOrganisations())
         .filter(pharmacyIntakeDirectoryAccess)
-        .filter(organisation => !query || `${organisation.tradingName} ${organisation.gphcNumber} ${organisation.address}`.toLowerCase().includes(query))
+        .filter(organisation => !query || `${organisation.name} ${organisation.gphcNumber} ${organisation.address}`.toLowerCase().includes(query))
         .map(organisation => ({
           id: organisation.id,
-          tradingName: organisation.tradingName,
+          name: organisation.name,
           gphcNumber: organisation.gphcNumber,
           address: organisation.address,
           intakeState: 'available',

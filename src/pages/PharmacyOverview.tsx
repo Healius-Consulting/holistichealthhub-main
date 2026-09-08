@@ -172,7 +172,7 @@ export default function PharmacyOverview() {
               48pt type told staff nothing they could act on. The landmark keeps the
               meaning for assistive technology without spending the top of the page. */}
           <p className="sr-only">Authenticated pharmacy workspace</p>
-          <h1>{overview.organisation.tradingName}</h1>
+          <h1>{overview.organisation.name}</h1>
           <div className="secure-overview__identity">
             <span className={`status-badge status-badge--${state.workspaceMode}`}>
               {pharmacyWorkspaceStatusLabel(state.workspaceMode)}

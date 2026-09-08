@@ -377,13 +377,14 @@ export function sandboxPortalPack(organisationId: string, now = new Date()) {
   };
 }
 
-export function sandboxOverviewSnapshot(organisationId: string, now = new Date(), tradingName = 'Primary Branch'): PharmacyOverview {
+export function sandboxOverviewSnapshot(organisationId: string, now = new Date(), name = 'Primary Branch'): PharmacyOverview {
   const asOf = now.toISOString();
   return {
     asOf,
     organisation: {
       id: organisationId,
-      tradingName,
+      name,
+      tradingName: name,
       status: 'onboarding',
       trainingMode: true,
       allocationHoldingMode: false,
@@ -494,13 +495,13 @@ export function hydrateSandboxWorkspace(organisationId: string, now = new Date()
   };
 }
 
-export function sandboxOverviewForOrganisation(organisation: Pick<PharmacyTenant, 'id' | 'tradingName' | 'status'>, now = new Date()): PharmacyOverview {
-  const snapshot = sandboxOverviewSnapshot(organisation.id, now, organisation.tradingName);
+export function sandboxOverviewForOrganisation(organisation: Pick<PharmacyTenant, 'id' | 'name' | 'status'>, now = new Date()): PharmacyOverview {
+  const snapshot = sandboxOverviewSnapshot(organisation.id, now, organisation.name);
   return {
     ...snapshot,
     organisation: {
       ...snapshot.organisation,
-      tradingName: organisation.tradingName,
+      name: organisation.name,
       status: organisation.status === 'paused' || organisation.status === 'live' || organisation.status === 'intake_live' || organisation.status === 'onboarding'
         ? organisation.status
         : 'onboarding',

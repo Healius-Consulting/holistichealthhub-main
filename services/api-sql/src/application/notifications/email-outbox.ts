@@ -46,9 +46,9 @@ export function pharmacyEmailContext(
 ) {
   return {
     organisationId: organisation?.id || '',
-    // Trading name only. `organisation.name` is the owning company, which a patient
-    // has never heard of and must never be shown; it belongs on the admin identity tab.
-    pharmacyName: organisation?.tradingName || 'the pharmacy',
+    // The pharmacy's own name. `tradingName` holds the owning company (the onboarding
+    // form calls it "Company name"), which a patient has never heard of.
+    pharmacyName: organisation?.name || 'the pharmacy',
     pharmacyPhone: organisation?.mainContactPhone || '',
     pharmacyEmail: organisation?.mainContactEmail || '',
     pharmacyAddress: organisation?.address || '',

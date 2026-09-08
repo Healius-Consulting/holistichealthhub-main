@@ -45,7 +45,7 @@ function EligibilityBrand({
   identity,
   token,
 }: {
-  identity: Pick<PublicPharmacy, 'tradingName' | 'logoUrl'>;
+  identity: Pick<PublicPharmacy, 'name' | 'logoUrl'>;
   token: string;
 }) {
   const [logoFailed, setLogoFailed] = useState(false);
@@ -55,10 +55,10 @@ function EligibilityBrand({
     <img className="eligibility-brand__mark" src={HHH_MARK} alt="" width="46" height="46" />
     <span>
       <strong>Holistic Health Hub</strong>
-      <small>{token ? `In partnership with ${identity.tradingName}` : 'Personalised healthcare'}</small>
+      <small>{token ? `In partnership with ${identity.name}` : 'Personalised healthcare'}</small>
     </span>
   </>;
-  return <header className={`eligibility-brand${pharmacyLogo ? ' eligibility-brand--pharmacy-logo' : ''}`} aria-label={token ? `${identity.tradingName} eligibility` : 'Holistic Health Hub eligibility'}>
+  return <header className={`eligibility-brand${pharmacyLogo ? ' eligibility-brand--pharmacy-logo' : ''}`} aria-label={token ? `${identity.name} eligibility` : 'Holistic Health Hub eligibility'}>
     <div className="eligibility-brand__inner">
       {token
         ? <div className="eligibility-brand__identity">{identityMarkup}</div>
@@ -67,7 +67,7 @@ function EligibilityBrand({
         <img
           className="eligibility-brand__pharmacy-logo"
           src={pharmacyLogo}
-          alt={`${identity.tradingName} logo`}
+          alt={`${identity.name} logo`}
           width={EMAIL_LOGO_SPEC.displayWidth}
           height={EMAIL_LOGO_SPEC.displayHeight}
           onError={() => setLogoFailed(true)}
@@ -105,7 +105,7 @@ function directoryFulfilmentLine(result: PublicDirectoryResult) {
  * rather than shown as an empty label.
  */
 function PharmacyControllerDetails({ pharmacy, className }: {
-  pharmacy: Pick<PublicPharmacy, 'tradingName' | 'address' | 'gphcNumber' | 'icoRegistrationNumber' | 'privacyContactEmail' | 'dataProtectionOfficer' | 'complaintsContactEmail' | 'complaintsContactPhone'>;
+  pharmacy: Pick<PublicPharmacy, 'name' | 'address' | 'gphcNumber' | 'icoRegistrationNumber' | 'privacyContactEmail' | 'dataProtectionOfficer' | 'complaintsContactEmail' | 'complaintsContactPhone'>;
   className?: string;
 }) {
   const rows: Array<[string, string]> = [];
@@ -299,8 +299,8 @@ export default function EligibilityApp() {
   const maxDateOfBirth = latestEligibleDateOfBirth();
   // "[Pharmacy]" in the approved copy: the trading name on a token form, and a
   // generic reference on the master site, where the choice is made in section 01.
-  const pharmacyRef = token ? pharmacy.tradingName : 'your pharmacy';
-  const consentPharmacyRef = token ? pharmacy.tradingName : 'my pharmacy';
+  const pharmacyRef = token ? pharmacy.name : 'your pharmacy';
+  const consentPharmacyRef = token ? pharmacy.name : 'my pharmacy';
 
   if (complete && declineRule) {
     const reason = declineRule === 'TREATMENTS_NOT_TRIED' ? 'the treatments question' : 'the family-history question';
@@ -308,7 +308,7 @@ export default function EligibilityApp() {
       <EligibilityBrand identity={brandIdentity} token={token} />
       <section className="eligibility-card eligibility-message eligibility-decline">
         <div className="eligibility-result-icon review"><Info size={32} /></div>
-        <h1>{pharmacy.tradingName} cannot refer you at the moment</h1>
+        <h1>{pharmacy.name} cannot refer you at the moment</h1>
         <p>Based on your answer to {reason}, you do not currently meet the clinic’s criteria for a referral. This was an automatic check.</p>
         <p>If you think this does not reflect your situation, or you would like a pharmacist to look at your application, email <a href={`mailto:${REVIEW_REQUEST_EMAIL}?subject=${encodeURIComponent('Eligibility review request')}`}>{REVIEW_REQUEST_EMAIL}</a> quoting your name and date of birth. A registered pharmacist will reply within 3 working days.</p>
         <p>Otherwise your application is deleted within 3 months.</p>
@@ -317,7 +317,7 @@ export default function EligibilityApp() {
     </EligibilityShell>;
   }
 
-  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.tradingName}`}</p><h1>Thank you — your application has gone to {pharmacy.tradingName}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>Thank you — your application has gone to {pharmacy.name}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
 
   return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
     <EligibilityBrand identity={brandIdentity} token={token} />
@@ -326,7 +326,7 @@ export default function EligibilityApp() {
         <p className="section-label">Private pre-screening · about 2 minutes</p>
         <h1>Could specialist care be right for you?</h1>
         <p className="eligibility-intro__lead">Answer a few confidential questions so {pharmacyRef} can review whether a referral may be appropriate.</p>
-        <div className="eligibility-trust"><span><ShieldCheck size={17} /> {token ? `Your details go to ${pharmacy.tradingName} only` : 'Your details go to the pharmacy you choose'}</span><span><LockKeyhole size={17} /> Health information handled securely</span></div>
+        <div className="eligibility-trust"><span><ShieldCheck size={17} /> {token ? `Your details go to ${pharmacy.name} only` : 'Your details go to the pharmacy you choose'}</span><span><LockKeyhole size={17} /> Health information handled securely</span></div>
         <div className="eligibility-next-steps">
           <p>What happens next</p>
           <ol>
@@ -388,7 +388,7 @@ export default function EligibilityApp() {
                 );
               })}
             </div>
-            {selectedDirectoryProfileId ? <><div className="banner banner-green" role="status"><CheckCircle2 size={17} /> You are applying to {pharmacy.tradingName}. Nothing is shared with any other pharmacy unless you agree.</div>{(() => {
+            {selectedDirectoryProfileId ? <><div className="banner banner-green" role="status"><CheckCircle2 size={17} /> You are applying to {pharmacy.name}. Nothing is shared with any other pharmacy unless you agree.</div>{(() => {
               const chosen = search.results.find(result => result.id === selectedDirectoryProfileId);
               return chosen ? <PharmacyControllerDetails pharmacy={{ ...chosen, address: chosen.addressSummary }} /> : null;
             })()}</> : <div className="eligibility-location-required" role="status"><MapPin size={17} /><span><strong>Select one pharmacy to continue</strong><small>You can use a pin or the list. The form cannot be submitted until you choose.</small></span></div>}
@@ -436,7 +436,7 @@ export default function EligibilityApp() {
         </section>
         {error && <div className="banner banner-red"><AlertTriangle size={16} /> {error}</div>}
         <footer className="eligibility-form-footer"><button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{!token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>
-        <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : <>This service is provided by {token ? pharmacy.tradingName : 'the partner pharmacy you select'}. Website operated by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX · ICO ZB639206 · <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> · <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink> · Protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</>}</p>
+        <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : <>This service is provided by {token ? pharmacy.name : 'the partner pharmacy you select'}. Website operated by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX · ICO ZB639206 · <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> · <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink> · Protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</>}</p>
       </form>
     </div>
   </EligibilityShell>;

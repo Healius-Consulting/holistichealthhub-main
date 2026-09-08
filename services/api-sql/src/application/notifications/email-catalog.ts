@@ -161,7 +161,7 @@ function render(input: {
   cta?: { label: string; href: string };
   detailsTitle?: string;
   details?: Array<{ label: string; value: string }>;
-  nextSteps?: string[];
+  nextSteps?: Array<string | { title: string; body?: string }>;
   footerNote?: string;
 }): RenderedEmail {
   const admin = isAdminAudience(input.kind, input.payload);
@@ -179,6 +179,8 @@ function render(input: {
       details: input.details,
       nextSteps: input.nextSteps,
       footerNote: input.footerNote,
+      // Keeps the footer honest about whether anyone reads a reply.
+      replyTo: replyToFor(input.kind),
       header: resolveEmailHeader({
         audience: admin ? 'admin' : 'pharmacy',
         organisationId: value(input.payload, 'organisationId'),
@@ -351,12 +353,25 @@ export const EMAILS = {
     render: (payload) => {
       const { firstName } = fields(payload);
       const closing = 'If anything is unclear, pop into the pharmacy and ask at the counter, call us, or reply to this email. We are happy to help.';
-      const ongoing = 'Ongoing care. Once you start treatment, we work with Curaleaf Clinic to keep your repeat prescriptions coming without gaps. For questions about your treatment, contact the clinic; for questions about your order or collection, contact us.';
+      const ongoingBody = 'Once you start treatment, we work with Curaleaf Clinic to keep your repeat prescriptions coming without gaps. For questions about your treatment, contact the clinic; for questions about your order or collection, contact us.';
+      const ongoing = `Ongoing care. ${ongoingBody}`;
       const steps = [
-        'The clinic will email you. Within two working days, you will get an email from Curaleaf Clinic asking you to register. Check your junk or spam folder if you cannot see it. If nothing arrives after two working days, call us or reply to this email and we will chase it for you.',
-        'Register and confirm who you are. Follow the instructions in the clinic’s email to set up your Curaleaf Clinic login — a username and password you will use each time you visit their website. You will need to show photo ID — a passport or driving licence — before an appointment can be booked, so have one to hand. Occasionally the clinic may ask for more information about your health or current medicines.',
-        'Book your appointment. Once registered, book an appointment through the clinic’s website. It is a video call with a consultant doctor, so you will need a phone, tablet or computer with a camera. The doctor will decide whether treatment is suitable for you. You can pay per appointment or choose one of the clinic’s payment plans. Medicine is charged separately by us.',
-        'We take it from there. The clinic sends your prescription to us and we will email you to arrange payment, and again when your medicine is ready to collect. You do not need to do anything until you hear from us.',
+        {
+          title: 'The clinic will email you',
+          body: 'Within two working days you will get an email from Curaleaf Clinic asking you to register. Check your junk or spam folder if you cannot see it. If nothing arrives, call us or reply to this email and we will chase it for you.',
+        },
+        {
+          title: 'Register and confirm who you are',
+          body: 'Follow the instructions in the clinic’s email to set up your Curaleaf Clinic login. You will need photo ID — a passport or driving licence — before an appointment can be booked, so have one to hand. The clinic may also ask about your health or current medicines.',
+        },
+        {
+          title: 'Book your appointment',
+          body: 'Book through the clinic’s website. It is a video call with a consultant doctor, so you will need a phone, tablet or computer with a camera. The doctor decides whether treatment is suitable for you. You can pay per appointment or choose one of the clinic’s payment plans — medicine is charged separately by us.',
+        },
+        {
+          title: 'We take it from there',
+          body: 'The clinic sends your prescription to us. We will email you to arrange payment, and again when your medicine is ready. You do not need to do anything until you hear from us.',
+        },
       ];
       const opening = 'We have reviewed your medical records and referred you to our partner clinic, Curaleaf Clinic. Here is what happens next:';
       return render({
@@ -368,7 +383,7 @@ export const EMAILS = {
         text: [
           `Dear ${value(payload, 'firstName') || 'there'},`,
           opening,
-          ...steps.map((step, index) => `${index + 1}. ${step}`),
+          ...steps.map((step, index) => `${index + 1}. ${step.title}\n   ${step.body}`),
           ongoing,
           closing,
           signatureText(payload),
@@ -378,7 +393,11 @@ export const EMAILS = {
           escapeHtml(opening),
         ],
         nextSteps: steps,
-        footerNote: `${escapeHtml(ongoing)}<br><br>${escapeHtml(closing)}<br><br>${signatureHtml(payload)}`,
+        footerNote: [
+          `<p style="margin:0 0 14px; color:#4d5a56; font-size:15px; line-height:23px;"><strong style="color:#1f2725;">Ongoing care.</strong> ${escapeHtml(ongoingBody)}</p>`,
+          `<p style="margin:0 0 20px; color:#4d5a56; font-size:15px; line-height:23px;">${escapeHtml(closing)}</p>`,
+          `<p style="margin:0; color:#1f2725; font-size:15px; line-height:23px;">${signatureHtml(payload)}</p>`,
+        ].join(''),
       });
     },
   },

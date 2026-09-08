@@ -178,7 +178,7 @@ export function createAuthRouter(): Router {
             organisationId: profile.organisationId,
             to: { email: profile.email, displayName: profile.displayName },
             payload: {
-              pharmacyName: organisation?.tradingName || 'HHH admin workspace',
+              pharmacyName: organisation?.name || 'HHH admin workspace',
               organisationId: organisation?.id || '',
               actionLink,
             },
@@ -249,7 +249,7 @@ export function createAuthRouter(): Router {
         payload: {
           pharmacyName: profile.role === 'HHH_ADMIN'
             ? 'HHH admin workspace'
-            : organisation?.tradingName || 'the pharmacy',
+            : organisation?.name || 'the pharmacy',
           organisationId: organisation?.id || '',
         },
         keyParts: ['pharmacy-2fa-enabled', profile.uid, Date.now()],

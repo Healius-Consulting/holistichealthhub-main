@@ -37,7 +37,7 @@ import { surfaceRelativePath, surfaceRoutePath } from './routing/surfaceRoute';
 function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
   return {
     id: record.id,
-    slug: record.tradingName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+    slug: record.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
     referralToken: record.referralToken ?? '',
     name: record.name,
     tradingName: record.tradingName,

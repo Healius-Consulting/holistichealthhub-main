@@ -1819,7 +1819,7 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
             order={order}
             selectedPrescription={selectedPrescription}
             selectedPrescriptionIndex={selectedPrescriptionIndex}
-            pharmacyName={pharmacy?.tradingName || null}
+            pharmacyName={pharmacy?.name || null}
             showOrderDetails={showOrderDetails}
             onToggle={() => setShowOrderDetails(prev => !prev)}
             copiedDetailKey={copiedDetailKey}
