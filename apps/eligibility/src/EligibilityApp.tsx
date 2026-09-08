@@ -84,7 +84,7 @@ function EligibilityBrand({
 }
 
 function directoryContactLine(result: PublicDirectoryResult) {
-  return [result.website, result.publicPhone].filter(value => value?.trim()).join(' · ');
+  return result.website?.trim() ?? '';
 }
 
 /**
