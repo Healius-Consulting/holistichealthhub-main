@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { PatientOrder, Prescription } from '../src/context/AppContext.tsx';
+import { orderRequiresCuraleafCancel } from '../src/utils/orderStage.ts';
 import { orderBoardLane } from '../src/utils/orderBoardLanes.ts';
 import { buildPrescriptionWorkItems, prescriptionWorkItemIsLive } from '../src/utils/prescriptionWorkItems.ts';
 
@@ -101,4 +102,31 @@ test('terminal siblings remain in the order dialog but leave the live board', ()
   const items = buildPrescriptionWorkItems({ order: source, patient: null });
   assert.equal(items.length, 2);
   assert.deepEqual(items.filter(prescriptionWorkItemIsLive).map(item => item.prescription?.id), [2]);
+});
+
+test('both cancelled siblings can resolve even when only the first owns cancellation metadata', () => {
+  const source = order([1, 2].map(id => prescription(id, 'cancelled', {
+    purchaseOrderId: 'shared-po', purchaseOrderState: 'CANCELLED',
+    curaleafPrescriptionId: `supplier-rx-${id}`, curaleafPrescriptionState: 'ACTIVE',
+  })), {
+    curaleafCancellation: { status: 'confirmed', purchaseOrderId: 'shared-po' },
+  });
+  const items = buildPrescriptionWorkItems({ order: source, patient: null });
+  assert.equal(items[1]!.record.order.curaleafCancellation, undefined);
+  for (const item of items) {
+    assert.equal(item.record.stage, 'cancelled');
+    assert.equal(orderBoardLane(item.record), 'needs-action');
+    assert.equal(orderRequiresCuraleafCancel(item.record.order), false);
+  }
+});
+
+test('a flow-confirmed cancellation overrides retained supplier metadata, without unlocking a live sibling', () => {
+  const source = order([
+    prescription(1, 'cancelled', { curaleafPrescriptionId: 'supplier-rx-1', curaleafPrescriptionState: 'ACTIVE' }),
+    prescription(2, 'processing', { curaleafPrescriptionId: 'supplier-rx-2', purchaseOrderState: 'PROCESSING' }),
+  ], { curaleafCancellation: { status: 'confirmed', purchaseOrderId: 'PO-1' } });
+  const items = buildPrescriptionWorkItems({ order: source, patient: null });
+  assert.equal(orderRequiresCuraleafCancel(items[0]!.record.order), false);
+  assert.equal(orderRequiresCuraleafCancel(items[1]!.record.order), true);
+  assert.equal(orderRequiresCuraleafCancel(source), true);
 });

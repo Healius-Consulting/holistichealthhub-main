@@ -43,7 +43,11 @@ export function pharmacyReferencePrefix(organisationId: string) {
 
 export function prescriptionReference(order: BusinessReferenceOrder, index: number) {
   const supplied = order.prescriptions?.[index]?.customerReference?.trim();
-  if (supplied && /^[A-Z0-9]{3}-[A-Z0-9]+-(?:P|r)[1-9][0-9]*$/i.test(supplied)) return supplied;
+  // Historical shared POs can repeat the last Rx's supplier reference on every
+  // sibling. Keep each work item's P-number distinct in that case.
+  const sharedReference = supplied && order.prescriptions?.some((rx, otherIndex) =>
+    otherIndex !== index && rx.customerReference?.trim().toUpperCase() === supplied.toUpperCase());
+  if (supplied && !sharedReference && /^[A-Z0-9]{3}-[A-Z0-9]+-(?:P|r)[1-9][0-9]*$/i.test(supplied)) return supplied;
   const base = businessOrderReference(order).replace(/^#/, '');
   return base === 'Draft' ? `Draft P${index + 1}` : `${base}-P${index + 1}`;
 }

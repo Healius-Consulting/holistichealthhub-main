@@ -24,11 +24,30 @@ test('replacement references use the root business number plus sequence suffix',
   })), '#ORD-ROOTB');
 });
 
- test('pharmacy references match the supplier code and retain prescription suffixes', () => {
+test('pharmacy references match the supplier code and retain prescription suffixes', () => {
   const sample = order({ payment: { status: 'paid' }, organisationId: 'org-1', orderNumber: 'ORD-MTSPRZ6G-382166C694' });
   assert.equal(businessOrderReference(sample), `#${pharmacyReferencePrefix('org-1')}-382166C694`);
   assert.equal(prescriptionReference(sample, 1), `${pharmacyReferencePrefix('org-1')}-382166C694-P2`);
   sample.prescriptions = [{ customerReference: '1DZ-382166C694-P1' }, { customerReference: '1DZ-382166C694-P2' }];
   assert.equal(businessOrderReference(sample), '#1DZ-382166C694');
   assert.equal(prescriptionReference(sample, 1), '1DZ-382166C694-P2');
+});
+
+test('legacy shared supplier references do not label every card as P2 or P3', () => {
+  for (const count of [2, 3]) {
+    const sample = order({
+      payment: { status: 'paid' },
+      prescriptions: Array.from({ length: count }, () => ({ customerReference: `1DZ-81DB74B60D-P${count}` })),
+    });
+    assert.deepEqual(sample.prescriptions!.map((_, index) => prescriptionReference(sample, index)),
+      Array.from({ length: count }, (_, index) => `1DZ-81DB74B60D-P${index + 1}`));
+  }
+});
+
+test('distinct supplier references survive a different display order', () => {
+  const sample = order({ payment: { status: 'paid' }, prescriptions: [
+    { customerReference: '1DZ-81DB74B60D-P2' }, { customerReference: '1DZ-81DB74B60D-P1' },
+  ] });
+  assert.equal(prescriptionReference(sample, 0), '1DZ-81DB74B60D-P2');
+  assert.equal(prescriptionReference(sample, 1), '1DZ-81DB74B60D-P1');
 });

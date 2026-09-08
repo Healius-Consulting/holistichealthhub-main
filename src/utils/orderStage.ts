@@ -356,25 +356,22 @@ function orderAllOrderedPacksReceived(order: PatientOrder) {
  * After Prescriber → Prescription → Purchase starts, Curaleaf owns cancellation.
  */
 export function orderRequiresCuraleafCancel(order: PatientOrder): boolean {
-  if (order.curaleafCancellation?.status === 'confirmed') return false;
-  const livePurchaseOrder = order.prescriptions.some(prescription =>
-    Boolean(prescription.purchaseOrderState)
-    && prescription.purchaseOrderState !== 'CANCELLED'
-  );
-  const livePrescription = order.prescriptions.some(prescription =>
-    prescription.curaleafPrescriptionState === 'PENDING'
-    || prescription.curaleafPrescriptionState === 'ACTIVE'
-    || prescription.curaleafPrescriptionState === 'FULFILLED'
-    || Boolean(prescription.curaleafPrescriptionId)
-  );
-  if (livePurchaseOrder || livePrescription) return true;
-  if (order.prescriptions.some(prescription =>
-    prescription.purchaseOrderState === 'CANCELLED'
-    || prescription.curaleafPrescriptionState === 'CANCELLED'
-  )) {
-    return false;
-  }
-  return order.prescriptions.some(prescription => prescription.placed);
+  const confirmation = order.curaleafCancellation;
+  return order.prescriptions.some(prescription => {
+    // Supplier cancellation is terminal for this prescription's fulfilment. The
+    // supplier ID and ACTIVE prescription metadata remain for audit afterwards.
+    if (prescription.purchaseOrderState === 'CANCELLED'
+      || (!prescription.purchaseOrderState && (prescription.status === 'cancelled' || prescription.curaleafPrescriptionState === 'CANCELLED'))) return false;
+    if (confirmation?.status === 'confirmed') {
+      if (confirmation.purchaseOrderId && confirmation.purchaseOrderId === prescription.purchaseOrderId) return false;
+      if (confirmation.prescriptionId && confirmation.prescriptionId === prescription.curaleafPrescriptionId) return false;
+      if (!confirmation.purchaseOrderId && !confirmation.prescriptionId && order.prescriptions.length === 1) return false;
+    }
+    return Boolean(prescription.purchaseOrderState
+      || prescription.curaleafPrescriptionId
+      || ['PENDING', 'ACTIVE', 'FULFILLED'].includes(prescription.curaleafPrescriptionState ?? '')
+      || prescription.placed);
+  });
 }
 
 /** HHH started cancel/refund while Rocky still has a live PO or accepted prescription. */
