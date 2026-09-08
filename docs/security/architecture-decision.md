@@ -25,8 +25,8 @@ Production authentication is `cookie-enforced`. Bearer modes exist only to obser
 
 - Active Vercel protected gateway: `api/page-gate.ts`
 - Deferred Cloud Run gateway: `services/web/src/server.ts`
-- Session/CSRF boundary: `services/api/src/session-auth.ts`
-- Authentication middleware: `services/api/src/auth.ts`
-- Overview computation: `services/api/src/pharmacy-overview.ts`
+- Session/CSRF boundary: `services/api-sql/src/security/csrf.ts`
+- Authentication middleware: `services/api-sql/src/security/require-staff.ts`
+- Overview computation: `services/api-sql/src/transport/portal/pharmacy-contracts.ts`
 - Deferred Cloud Run resources: `infra/terraform`
 - Deployable surfaces: `public` and `portal`; internal portal bundles: `apps/pharmacy`, `apps/admin`

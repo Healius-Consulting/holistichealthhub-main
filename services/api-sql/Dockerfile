@@ -1,7 +1,6 @@
 FROM node:22-alpine AS build
 WORKDIR /workspace
 COPY package.json package-lock.json ./
-COPY services/api/package.json services/api/package.json
 COPY services/api-sql/package.json services/api-sql/package.json
 COPY services/web/package.json services/web/package.json
 COPY packages/domain/package.json packages/domain/package.json
@@ -15,7 +14,6 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-COPY services/api/package.json services/api/package.json
 COPY services/api-sql/package.json services/api-sql/package.json
 COPY services/web/package.json services/web/package.json
 COPY packages/domain/package.json packages/domain/package.json

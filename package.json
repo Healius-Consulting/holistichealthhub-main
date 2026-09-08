@@ -7,7 +7,6 @@
     "node": "22.x"
   },
   "workspaces": [
-    "services/api",
     "services/api-sql",
     "services/web",
     "packages/domain",
@@ -21,7 +20,6 @@
     "dev:public": "vite --config vite.public.config.ts",
     "dev:pharmacy": "vite --config vite.pharmacy.config.ts",
     "dev:admin": "vite --config vite.admin.config.ts",
-    "dev:api": "npm run dev --workspace @hhh/api",
     "build": "tsc -b && npm run build:vercel:portal",
     "build:eligibility": "vite build --config vite.eligibility.config.ts",
     "build:public": "vite build --config vite.public.config.ts",
@@ -30,14 +28,13 @@
     "build:vercel": "node scripts/build-vercel-surface.mjs",
     "build:vercel:public": "node scripts/build-vercel-surface.mjs public",
     "build:vercel:portal": "node scripts/build-vercel-surface.mjs portal",
-    "build:api": "npm run build --workspace @hhh/api",
     "repair:legacy-qr": "node scripts/register-legacy-referral-aliases.mjs",
     "repair:curaleaf-false-rejection": "tsx scripts/repair-curaleaf-false-rejection.ts",
     "repair:multi-rx-placement": "tsx scripts/repair-multi-rx-placement.ts",
     "migrate:primary-allocation-holding": "node scripts/migrate-primary-allocation-holding.mjs",
     "migrate:supplier-shipment-rows": "tsx scripts/backfill-supplier-shipment-rows.ts",
     "migrate:prescription-refund-breakdowns": "tsx scripts/backfill-prescription-refunds.ts",
-    "build:all": "npm run build --workspace @hhh/ui && npm run build:vercel:public && npm run build:vercel:portal && npm run build:api",
+    "build:all": "npm run build:vercel:public && npm run build:vercel:portal",
     "lint": "oxlint",
     "preview": "vite preview",
     "retention:dry-run": "tsx scripts/apply-retention.ts --dry-run",
@@ -53,8 +50,7 @@
     "lucide-react": "^1.22.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.2"
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
