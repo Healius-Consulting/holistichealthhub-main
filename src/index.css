@@ -13164,6 +13164,25 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .admin-v2-case__notice{ display: flex; align-items: flex-start; gap: 11px; margin: 18px 0; padding: 13px 14px; color: var(--tenant-primary-strong); background: var(--tenant-primary-soft); border: 1px solid color-mix(in srgb, var(--tenant-primary) 28%, var(--border)); border-radius: 10px; }
 .admin-v2-case__notice > span{ display: grid; gap: 3px; }
 .admin-v2-case__notice small{ color: var(--text-secondary); line-height: 1.45; }
+/* Other records that look like the same person: a tag and a way to them, not a verdict. */
+.admin-intake-duplicates{
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+  background: #eef2ff;
+}
+.admin-intake-duplicates > p{ display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; margin: 0; color: #3730a3; font-size: 12.5px; line-height: 1.5; }
+.admin-intake-duplicates > p strong{ color: #312e81; }
+.admin-intake-duplicates ul{ display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-intake-duplicates li{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 10px; border: 1px solid #e0e7ff; border-radius: 8px; background: var(--bg-surface); font-size: 12.5px; }
+.admin-intake-duplicates li > span:not(.pill){ display: grid; min-width: 0; flex: 1 1 220px; }
+.admin-intake-duplicates li strong{ color: var(--text-primary); }
+.admin-intake-duplicates li small{ color: var(--text-tertiary); font-size: 11px; }
+.admin-intake-duplicates li .btn{ margin-left: auto; }
+
 .admin-v2-case__summary{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .admin-v2-case__summary > section{ overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
 .admin-v2-case__summary h3{ display: flex; align-items: center; gap: 7px; padding: 13px 14px; background: var(--bg-elevated); border-bottom: 1px solid var(--border); font-size: 13px; }

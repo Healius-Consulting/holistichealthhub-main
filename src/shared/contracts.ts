@@ -152,6 +152,20 @@ export type V2IntakeInput = V2IntakeAnswers & (
 /** A screening check the answers failed at submission. A flag for HHH admin, not a decision. */
 export type ScreeningRule = 'TREATMENTS_NOT_TRIED' | 'PSYCHOSIS_HISTORY';
 
+/** Another record that looks like the same person as an application: a tag for the admin, not a verdict. */
+export interface DuplicateRecordMatch {
+  kind: 'patient' | 'application';
+  id: string;
+  organisationId: string | null;
+  organisationName: string | null;
+  /** Register stage words: 'HHH approved', 'Referred', 'Suspended', 'Declined', 'Withdrawn', 'New', 'Under HHH review'. */
+  stage: string;
+  name: string;
+  email: string;
+  date: string | null;
+  matchedOn: 'email' | 'identity';
+}
+
 export interface V2IntakeReceipt {
   caseReference: string;
   submittedAt: string;
@@ -187,6 +201,8 @@ export interface V2EligibilityQueueItem {
   destinationLocked?: boolean;
   /** Which screening check the answers failed at submission, for the admin to weigh. */
   screeningFlag?: ScreeningRule | null;
+  /** Other records that look like the same person, patient row first. */
+  duplicateOf?: DuplicateRecordMatch[];
 }
 
 export interface CuraleafValidationCheck {

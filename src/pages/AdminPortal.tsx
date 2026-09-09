@@ -44,7 +44,7 @@ import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboa
 import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
 import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
-import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
+import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
 import { useModalFocus } from '../accessibility/useModalFocus';
@@ -1560,7 +1560,7 @@ export default function AdminPortal() {
   useEffect(() => {
     if (view !== 'patients') return;
     if (pendingRegisterKey) {
-      const pending = displayedPatients.find(patient => registerPatientKey(patient) === pendingRegisterKey);
+      const pending = displayedPatients.find(patient => registerRowKey(patient) === pendingRegisterKey || registerPatientKey(patient) === pendingRegisterKey);
       if (pending) {
         setSelectedRegisterPatient(toRegisterRow(pending));
         setPendingRegisterKey(null);
@@ -2133,7 +2133,7 @@ export default function AdminPortal() {
     };
     return (
       <>
-        <AdminIntakeV2 />
+        <AdminIntakeV2 onOpenRecord={openRegisterRecord} />
         <section className="integration-boundary card"><ShieldCheck size={20} /><div><strong>HHH referral boundary</strong><p>The current assigned pharmacy can see this enquiry. Completing referral above marks them referred for that pharmacy. This does not diagnose, prescribe, replace a doctor’s prescription, or replace the pharmacy’s legal and professional checks before dispensing.</p></div></section>
         <section className="card admin-referral-section">
           <div className="admin-directory-head"><div><p className="section-label">Legacy compatibility</p><h2>Previous-form applications</h2><p>Only schema-v1 applications use this older workflow. New main-site and dedicated-link cases are managed in the HHH intake workspace above.</p></div><span className="pill pill-amber">{pending.length} waiting</span></div>
@@ -2151,7 +2151,19 @@ export default function AdminPortal() {
   // readable through the SQL admin intake projection.
   void renderLegacyReferrals;
 
-  const renderReferrals = () => <AdminIntakeV2 />;
+  // A duplicate's real record lives in the register: clear the filters that
+  // could hide it, then select it once the register has loaded.
+  const openRegisterRecord = (match: DuplicateRecordMatch) => {
+    setQuery('');
+    setPatientOrganisationId('all');
+    setPatientStatus('all');
+    setPatientFrom('');
+    setPatientTo('');
+    setPendingRegisterKey(`${match.organisationId ?? ''}:${match.kind === 'patient' ? match.id : `sub-${match.id}`}`);
+    setView('patients');
+  };
+
+  const renderReferrals = () => <AdminIntakeV2 onOpenRecord={openRegisterRecord} />;
 
   const renderPatients = () => {
     const activeCount = stageCounts['HHH approved'] ?? 0;

@@ -1,3 +1,4 @@
+import type { DuplicateRecordMatch } from '../../domain/eligibility/duplicates.js';
 import type { PlatformSubmissionRecord, SubmissionConditionRecord } from '../../repositories/ports/intake.port.js';
 import { portalSourceType } from './intake-source.js';
 
@@ -25,7 +26,7 @@ export function isOpenSqlIntake(record: PlatformSubmissionRecord) {
   return !['COMPLETED', 'DECLINED', 'WITHDRAWN'].includes(record.outcomeStatus);
 }
 
-export function toAdminIntakeQueueItem(record: PlatformSubmissionRecord) {
+export function toAdminIntakeQueueItem(record: PlatformSubmissionRecord, duplicateOf: DuplicateRecordMatch[] = []) {
   return {
     id: record.id,
     caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
@@ -51,6 +52,8 @@ export function toAdminIntakeQueueItem(record: PlatformSubmissionRecord) {
     destinationLocked: false,
     /** Which screening check the answers failed, if any; the admin decides what it means. */
     screeningFlag: record.declineRule ?? null,
+    /** Other records that look like the same person, so a re-submitted form is recognised at a glance. */
+    duplicateOf,
   };
 }
 
@@ -58,8 +61,9 @@ export function toAdminIntakeDetail(
   record: PlatformSubmissionRecord,
   conditions: SubmissionConditionRecord[],
   organisationNames: Map<string, string>,
+  duplicateOf: DuplicateRecordMatch[] = [],
 ) {
-  const queue = toAdminIntakeQueueItem(record);
+  const queue = toAdminIntakeQueueItem(record, duplicateOf);
   const primary = conditions.find(condition => condition.primary)?.conditionCode ?? null;
   return {
     ...record,

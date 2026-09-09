@@ -18,6 +18,8 @@ import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { isDedicatedSqlIntake, isOpenSqlIntake, sqlIntakeCaseReference, toAdminIntakeDetail, toAdminIntakeQueueItem } from './intake-contracts.js';
+import { buildDuplicateIndex, type DuplicateRecordMatch } from '../../domain/eligibility/duplicates.js';
+import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { portalSourceType } from './intake-source.js';
 
 export { canReceiveReferral };
@@ -88,9 +90,9 @@ const withdrawSchema = z.object({
   notes: z.string().trim().max(1500).nullable(),
 }).strict();
 
-function page(records: PlatformSubmissionRecord[], request: Request) {
+function page(records: PlatformSubmissionRecord[], request: Request, duplicatesFor: (record: PlatformSubmissionRecord) => DuplicateRecordMatch[]) {
   const { cursor, limit } = queueQuerySchema.parse(request.query);
-  const projected = records.map(toAdminIntakeQueueItem);
+  const projected = records.map(record => toAdminIntakeQueueItem(record, duplicatesFor(record)));
   let offset = 0;
   if (cursor) {
     try {
@@ -125,11 +127,25 @@ export function createPortalIntakeV2Router(): Router {
   const organisationRepo = new SqlOrganisationRepository();
   const identityRepo = new SqlIdentityRepository();
   const notificationRepo = new SqlNotificationRepository();
+  const patientRepo = new SqlPatientRepository();
+
+  // Every patient and application, indexed once per request, so each queue
+  // record can be tagged with the other records that look like the same person.
+  async function duplicateIndex(submissions?: PlatformSubmissionRecord[]) {
+    const [patients, allSubmissions, organisations] = await Promise.all([
+      patientRepo.listPlatformPatients(),
+      submissions ?? intakeRepo.listPlatformSubmissions(),
+      organisationRepo.listOrganisations(),
+    ]);
+    return buildDuplicateIndex(patients, allSubmissions, new Map(organisations.map(organisation => [organisation.id, organisation.name])));
+  }
 
   const queue = (source: 'general' | 'pharmacy') => async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertPlatformScope(req.context!);
-      const submissions = (await intakeRepo.listPlatformSubmissions())
+      const allSubmissions = await intakeRepo.listPlatformSubmissions();
+      const duplicatesFor = await duplicateIndex(allSubmissions);
+      const submissions = allSubmissions
         .filter(isOpenSqlIntake)
         .filter(record => source === 'general' ? !isDedicatedSqlIntake(record.sourceType) : isDedicatedSqlIntake(record.sourceType))
         .sort((left, right) => left.submittedAt.localeCompare(right.submittedAt));
@@ -143,7 +159,7 @@ export function createPortalIntakeV2Router(): Router {
         details: { source, resultCount: submissions.length },
       });
       res.setHeader('Cache-Control', 'no-store');
-      res.status(200).json(page(submissions, req));
+      res.status(200).json(page(submissions, req, duplicatesFor));
     } catch (error) {
       next(error);
     }
@@ -235,9 +251,10 @@ export function createPortalIntakeV2Router(): Router {
       const caseId = caseIdSchema.parse(req.params.caseId);
       const record = await intakeRepo.findSubmissionById(caseId) as PlatformSubmissionRecord | null;
       if (!record) throw new HttpError(404, 'The requested record was not found.', 'NOT_FOUND');
-      const [conditions, organisations] = await Promise.all([
+      const [conditions, organisations, duplicatesFor] = await Promise.all([
         intakeRepo.listSubmissionConditions(caseId),
         organisationRepo.listOrganisations(),
+        duplicateIndex(),
       ]);
       const names = new Map(organisations.map(organisation => [organisation.id, organisation.name]));
       await identityRepo.appendAudit({
@@ -252,7 +269,7 @@ export function createPortalIntakeV2Router(): Router {
         surface: 'admin',
       });
       res.setHeader('Cache-Control', 'no-store');
-      res.status(200).json(toAdminIntakeDetail(record, conditions, names));
+      res.status(200).json(toAdminIntakeDetail(record, conditions, names, duplicatesFor(record)));
     } catch (error) {
       next(error);
     }

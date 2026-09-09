@@ -4,9 +4,11 @@ import test from 'node:test';
 
 const adminPortal = readFileSync(new URL('../src/pages/AdminPortal.tsx', import.meta.url), 'utf8');
 const register = readFileSync(new URL('../services/api-sql/src/transport/portal/patient-register.ts', import.meta.url), 'utf8');
+const stages = readFileSync(new URL('../services/api-sql/src/domain/eligibility/record-stage.ts', import.meta.url), 'utf8');
 
 test('the register holds patients and closed applications, withdrawn ones included', () => {
-  assert.match(register, /outcomeStatus === 'WITHDRAWN'\) return 'Withdrawn'/);
+  assert.match(stages, /outcomeStatus === 'WITHDRAWN'\) return 'Withdrawn'/);
+  assert.match(register, /isClosedApplicationStage\(stage\) \? stage : null/);
   assert.match(register, /if \(!stage\) continue;/, 'an open application is left to the intake queue');
 });
 

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { formConditionRecords, primaryConditionCode } from '../../domain/eligibility/form-conditions.js';
+import { applicationStage, isClosedApplicationStage, patientStage } from '../../domain/eligibility/record-stage.js';
 import type { PlatformSubmissionRecord } from '../../repositories/ports/intake.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
 import type { PatientRecord } from '../../repositories/ports/patient.port.js';
@@ -50,24 +51,14 @@ function londonDateKey(value: string | null) {
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
 
-function patientStage(status: PatientRecord['status']) {
-  if (status === 'ACTIVE') return 'HHH approved';
-  if (status === 'REFERRED') return 'Referred';
-  return 'Suspended';
-}
-
 /**
  * An open application belongs to the intake queue, not the register: listing it
  * in both is what made the two counts disagree. The register holds patients and
  * closed applications only — declined, or withdrawn by the patient.
  */
-function registerStage(record: PlatformSubmissionRecord): 'Referred' | 'Declined' | 'Withdrawn' | null {
-  if (record.outcomeStatus === 'WITHDRAWN') return 'Withdrawn';
-  if (record.onboardingDecision === 'DECLINED' || record.outcomeStatus === 'DECLINED') return 'Declined';
-  // A referred application normally has a patient row that takes precedence; an
-  // older one without is still a referral, never an "approved" third thing.
-  if (record.onboardingDecision === 'APPROVED' || record.outcomeStatus === 'COMPLETED') return 'Referred';
-  return null;
+function registerStage(record: PlatformSubmissionRecord) {
+  const stage = applicationStage(record);
+  return isClosedApplicationStage(stage) ? stage : null;
 }
 
 export function buildPatientRegister(

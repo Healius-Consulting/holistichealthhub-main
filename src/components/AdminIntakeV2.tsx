@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, ClipboardList, Globe, Inbox, LoaderCircle, LockKeyhole, MapPin, QrCode, RefreshCw, Search, Send, ShieldCheck, UserRound, type LucideIcon } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, LockKeyhole, MapPin, QrCode, RefreshCw, Search, Send, ShieldCheck, UserRound, type LucideIcon } from 'lucide-react';
 import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason, type PatientAgreementChannel } from '../shared/api';
-import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type V2EligibilityQueueItem } from '../shared/contracts';
+import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type DuplicateRecordMatch, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
 import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
@@ -33,6 +34,10 @@ const previewGeneral: V2EligibilityQueueItem = {
   assignmentStatus: 'awaiting_hhh_allocation', pharmacyReviewStatus: 'not_opened', outcomeStatus: 'open',
   version: 2, legacy: false, sourceType: 'general_hhh_website', assignedOrganisationId: null,
   postcode: 'SW1A 1AA', followUpStatus: 'in_progress', nextFollowUpAt: null, destinationLocked: false,
+  duplicateOf: [
+    { kind: 'patient', id: 'preview-patient', organisationId: 'preview-pharmacy', organisationName: 'Primary Branch', stage: 'HHH approved', name: 'Avery Morgan', email: 'preview.patient@example.test', date: '2026-08-10T09:00:00.000Z', matchedOn: 'email' },
+    { kind: 'application', id: 'preview-withdrawn', organisationId: 'preview-pharmacy', organisationName: 'Primary Branch', stage: 'Withdrawn', name: 'Avery Morgan', email: 'preview.patient@example.test', date: '2026-08-12T09:00:00.000Z', matchedOn: 'email' },
+  ],
 };
 const previewDedicated: V2EligibilityQueueItem = {
   id: 'preview-dedicated', caseReference: 'HHH-PREVIEW-002', patientDisplayName: 'Jordan Taylor',
@@ -64,12 +69,23 @@ function previewDetail(record: V2EligibilityQueueItem): Detail {
   };
 }
 
+const isOpenStage = (stage: string) => stage === 'New' || stage === 'Under HHH review';
+
+function duplicateMatches(value: unknown): DuplicateRecordMatch[] {
+  return Array.isArray(value) ? value as DuplicateRecordMatch[] : [];
+}
+
 function reviewMeta(status: unknown) {
   const key = String(status || 'not_started').toLowerCase();
   return REVIEW_META[key] ?? { label: words(key), tone: 'neutral' };
 }
 
-export default function AdminIntakeV2() {
+interface AdminIntakeV2Props {
+  /** Opens a record that lives outside the intake queue — a patient row or a closed application — in the register. */
+  onOpenRecord?: (match: DuplicateRecordMatch) => void;
+}
+
+export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {}) {
   const [general, setGeneral] = useState<V2EligibilityQueueItem[]>([]);
   const [referrals, setReferrals] = useState<V2EligibilityQueueItem[]>([]);
   const [selected, setSelected] = useState<V2EligibilityQueueItem | null>(null);
@@ -162,6 +178,17 @@ export default function AdminIntakeV2() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  // A duplicate still in the queue is opened in place; anything else lives in the register.
+  const openDuplicate = (match: DuplicateRecordMatch) => {
+    if (match.kind === 'application' && isOpenStage(match.stage)) {
+      const record = [...general, ...referrals].find(item => sameId(item.id, match.id));
+      if (record) { void open(record); return; }
+      setMessage('That application is not in the loaded queue. Refresh the queue and try again.');
+      return;
+    }
+    onOpenRecord?.(match);
   };
 
   const refreshDetail = async () => {
@@ -326,6 +353,7 @@ export default function AdminIntakeV2() {
 
   const currentDestinationId = String(detail?.effectiveAssignedOrganisationId ?? '');
   const screeningFlag = String(detail?.screeningFlag ?? '') || null;
+  const duplicates = duplicateMatches(detail?.duplicateOf ?? selected?.duplicateOf);
   // Mirrors the server's rule: agreement is needed only when a pharmacy already holds the enquiry.
   const movingFromPharmacy = Boolean(detail?.assignedOrganisationId);
   const destinationSaved = Boolean(currentDestinationId) && sameId(destination, currentDestinationId);
@@ -468,6 +496,29 @@ export default function AdminIntakeV2() {
                   </span>
                 </section>
 
+                {duplicates.length ? (
+                  <section className="admin-intake-duplicates" aria-label="Possible duplicate entry">
+                    <p>
+                      <Copy size={14} aria-hidden="true" />
+                      <strong>Duplicate entry.</strong>{' '}
+                      {duplicates.length === 1 ? 'One other record' : `${duplicates.length} other records`} look like the same person. Check where they stand before deciding — a second form is usually a re-submission, not a new patient.
+                    </p>
+                    <ul>
+                      {duplicates.map(match => (
+                        <li key={`${match.kind}:${match.id}`}>
+                          <span className={`pill ${onboardingStatusPillClass(match.stage)}`}>{onboardingStatusLabel(match.stage)}</span>
+                          <span>
+                            <strong>{match.kind === 'patient' ? 'Patient record' : 'Application'}{match.organisationName ? ` · ${match.organisationName}` : ''}</strong>
+                            <small>{match.name} · last updated {shortDate(match.date)} · matched on {match.matchedOn === 'email' ? 'email address' : 'name and date of birth'}</small>
+                          </span>
+                          {match.kind === 'patient' || !isOpenStage(match.stage) ? (onOpenRecord ? <button type="button" className="btn btn-sm" onClick={() => openDuplicate(match)}>View record</button> : null)
+                            : <button type="button" className="btn btn-sm" onClick={() => openDuplicate(match)}>Open in queue</button>}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
                 <div className="admin-v2-case__summary">
                   <section>
                     <h3><UserRound size={16} /> Patient and contact</h3>
@@ -607,6 +658,7 @@ function IntakeListRow({ record, selected, onSelect }: { record: V2EligibilityQu
         <strong title={record.patientDisplayName}>{compactPatientName(record.patientDisplayName)}</strong>
         <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
         {record.screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : null}
+        {record.duplicateOf?.length ? <span className="order-stage-pill order-tone--curaleaf-review" title="Another record looks like the same person">Duplicate · {onboardingStatusLabel(record.duplicateOf[0].stage)}</span> : null}
       </span>
       <span className="order-crm-row__position">
         <strong>{record.postcode || 'No postcode'}</strong>
