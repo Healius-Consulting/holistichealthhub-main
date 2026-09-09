@@ -1520,6 +1520,9 @@ export default function AdminPortal() {
       gphcNumber: gphcNumber ?? '',
       stage: patient.stage,
       date: patient.date ? (typeof patient.date === 'string' ? patient.date : new Date(patient.date).toISOString()) : null,
+      // The server row carries the patient's eligibility answers; re-shaping the row must not drop them.
+      conditions: 'conditions' in patient ? patient.conditions : undefined,
+      primaryCondition: 'primaryCondition' in patient ? patient.primaryCondition : undefined,
     };
   }, [state.organisations]);
 
@@ -2397,7 +2400,16 @@ export default function AdminPortal() {
                   <section className="admin-register-crm__panel">
                     <h3>Conditions</h3>
                     {!adminConditionPatientId ? (
-                      <p>This record has no patient row yet, so its conditions are still owned by the intake submission.</p>
+                      // Still an application: show what the patient answered, read-only.
+                      // Editing starts once referral creates the patient row that owns them.
+                      <>
+                        {adminConditions.length ? (
+                          <ConditionList conditions={adminConditions} primaryCondition={adminPrimaryCondition || adminConditions[0]} />
+                        ) : (
+                          <p>No conditions were given on this application.</p>
+                        )}
+                        <p>These are the patient’s own eligibility answers. They can be edited once the referral creates the patient record.</p>
+                      </>
                     ) : editingAdminConditions ? (
                       <ConditionEditor
                         conditions={adminConditions}
