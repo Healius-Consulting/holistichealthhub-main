@@ -12418,6 +12418,38 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   min-width: 0;
 }
 
+.admin-register-crm__toggle{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-register-crm__toggle input{
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--tenant-primary);
+}
+
+.admin-register-crm__toggle:has(input:checked){
+  color: var(--tenant-primary-strong);
+  border-color: var(--tenant-primary);
+}
+
+.admin-register-crm__toggle:has(input:focus-visible){
+  outline: 2px solid var(--focus-ring, var(--tenant-primary));
+  outline-offset: 1px;
+}
+
 .admin-register-crm__select select,
 .admin-register-crm__date input{
   min-height: 32px;

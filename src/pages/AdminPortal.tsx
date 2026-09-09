@@ -1003,6 +1003,8 @@ export default function AdminPortal() {
   const [patientOrganisationId, setPatientOrganisationId] = useState('all');
   const [patientStatus, setPatientStatus] = useState('all');
   const [patientFrom, setPatientFrom] = useState('');
+  // Off by default: the register is a complete record, and hiding is an explicit choice.
+  const [hideTestPatients, setHideTestPatients] = useState(false);
   const [patientTo, setPatientTo] = useState('');
   const [patientExportBusy, setPatientExportBusy] = useState(false);
   const [patientExportError, setPatientExportError] = useState<string | null>(null);
@@ -1471,20 +1473,34 @@ export default function AdminPortal() {
   }, [patientFrom, patientOrganisationId, patientStatus, patientTo, query, view]);
 
   const patientStatuses = [...new Set(allPatients.map(patient => patient.stage))].sort((a, b) => onboardingStatusLabel(a).localeCompare(onboardingStatusLabel(b)));
+  // A test patient is one whose pharmacy is a platform test account or a
+  // training workspace — the same rule the rest of the admin surface uses.
+  const isTestPatientRow = useCallback((row: { organisationId: string }) => {
+    const organisation = state.organisations.find(item => item.id === row.organisationId);
+    return Boolean(organisation && (isPlatformTestPharmacy(organisation) || organisation.testAccount));
+  }, [state.organisations]);
   const filteredPatients = useMemo(() => allPatients.filter(patient => {
     const org = state.organisations.find(item => item.id === patient.organisationId);
     const searchMatches = `${patient.name} ${patient.email} ${patient.mobile} ${patient.dob} ${formatPatientDob(patient.dob)} ${org?.name ?? ''} ${org?.tradingName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase());
     if (!searchMatches) return false;
+    if (hideTestPatients && isTestPatientRow(patient)) return false;
     if (patientOrganisationId !== 'all' && patient.organisationId !== patientOrganisationId) return false;
     if (patientStatus !== 'all' && patient.stage !== patientStatus) return false;
     const date = londonDateKey(patient.date);
     if (patientFrom && (!date || date < patientFrom)) return false;
     if (patientTo && (!date || date > patientTo)) return false;
     return true;
-  }), [allPatients, patientFrom, patientOrganisationId, patientStatus, patientTo, query, state.organisations]);
+  }), [allPatients, hideTestPatients, isTestPatientRow, patientFrom, patientOrganisationId, patientStatus, patientTo, query, state.organisations]);
+  // The server applies the search, pharmacy, stage and date filters; the test
+  // toggle is applied here so the export's server-side scope stays untouched.
   const displayedPatients = useMemo(
-    () => (isLocalPortalPreview ? filteredPatients : serverPatientRegister?.rows ?? []),
-    [filteredPatients, serverPatientRegister],
+    () => (isLocalPortalPreview ? filteredPatients : serverPatientRegister?.rows ?? [])
+      .filter(row => !hideTestPatients || !isTestPatientRow(row)),
+    [filteredPatients, hideTestPatients, isTestPatientRow, serverPatientRegister],
+  );
+  const visibleRegisterPatients = useMemo(
+    () => (hideTestPatients ? allPatients.filter(patient => !isTestPatientRow(patient)) : allPatients),
+    [allPatients, hideTestPatients, isTestPatientRow],
   );
 
   const toRegisterRow = useCallback((patient: typeof displayedPatients[number]): PatientRegisterExportRow => {
@@ -2103,8 +2119,8 @@ export default function AdminPortal() {
 
   const renderPatients = () => {
     const registerStatuses = [...new Set([...patientStatuses, ...displayedPatients.map(patient => patient.stage)])].sort((a, b) => onboardingStatusLabel(a).localeCompare(onboardingStatusLabel(b)));
-    const activeCount = allPatients.filter(patient => patient.stage === 'HHH approved').length;
-    const referredCount = allPatients.filter(patient => patient.stage === 'Approved').length;
+    const activeCount = visibleRegisterPatients.filter(patient => patient.stage === 'HHH approved').length;
+    const referredCount = visibleRegisterPatients.filter(patient => patient.stage === 'Approved').length;
     const financeReady = isLocalPortalPreview || Boolean(adminFinanceReport) || !adminFinanceLoading;
     const registerAccrued = referralFeeEvents.reduce((total, event) => total + event.amount, 0);
     const selectedKey = selectedRegisterPatient ? registerPatientKey(selectedRegisterPatient) : null;
@@ -2133,7 +2149,7 @@ export default function AdminPortal() {
     const adminConditions = [selectedCrm?.conditions, selectedIntake?.conditions, selectedRegisterPatient?.conditions]
       .find(candidate => candidate && candidate.length > 0) ?? [];
     const adminPrimaryCondition = selectedCrm?.primaryCondition ?? selectedIntake?.primaryCondition ?? selectedRegisterPatient?.primaryCondition ?? adminConditions[0] ?? '';
-    const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo);
+    const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo || hideTestPatients);
 
     return (
       <div className="page-body order-crm patient-crm admin-register-crm">
@@ -2197,8 +2213,12 @@ export default function AdminPortal() {
               <span className="sr-only">To date</span>
               <input type="date" value={patientTo} min={patientFrom || undefined} onChange={event => setPatientTo(event.target.value)} aria-label="To date" />
             </label>
+            <label className="admin-register-crm__toggle">
+              <input type="checkbox" checked={hideTestPatients} onChange={event => setHideTestPatients(event.target.checked)} />
+              <span>Hide test patients</span>
+            </label>
             {filtersActive ? (
-              <button type="button" onClick={() => { setQuery(''); setPatientOrganisationId('all'); setPatientStatus('all'); setPatientFrom(''); setPatientTo(''); }}>
+              <button type="button" onClick={() => { setQuery(''); setPatientOrganisationId('all'); setPatientStatus('all'); setPatientFrom(''); setPatientTo(''); setHideTestPatients(false); }}>
                 Clear
               </button>
             ) : null}
