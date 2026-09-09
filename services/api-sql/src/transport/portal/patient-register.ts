@@ -77,7 +77,9 @@ export function buildPatientRegister(
   filters: PatientRegisterFilters,
 ) {
   const organisationById = new Map(organisations.map(organisation => [organisation.id, organisation]));
-  const rowsByOwnerAndEmail = new Map<string, PatientRegisterRow>();
+  const rows: PatientRegisterRow[] = [];
+  const patientKeys = new Set<string>();
+  const referredSubmissionIds = new Set(patients.map(patient => patient.sourceSubmissionId).filter(Boolean));
 
   for (const patient of patients) {
     const organisation = organisationById.get(patient.organisationId);
@@ -88,7 +90,8 @@ export function buildPatientRegister(
       primaryConditionCode: patient.sourceSubmission?.primaryConditionCode,
       conditions: patient.conditions,
     });
-    rowsByOwnerAndEmail.set(`${patient.organisationId}:${patient.email.toLowerCase()}`, {
+    patientKeys.add(`${patient.organisationId}:${patient.email.toLowerCase()}`);
+    rows.push({
       conditions: conditions.map(condition => condition.conditionCode),
       primaryCondition: primaryConditionCode(conditions),
       id: patient.id,
@@ -109,14 +112,17 @@ export function buildPatientRegister(
     if (!stage) continue;
     const organisationId = submission.assignedOrganisationId ?? submission.sourceOrganisationId;
     if (!organisationId || !submission.email) continue;
-    const key = `${organisationId}:${submission.email.toLowerCase()}`;
-    if (rowsByOwnerAndEmail.has(key)) continue;
+    // A referral is the same event as the patient row it produced, so it is
+    // not listed twice. A declined or withdrawn application is its own record:
+    // a patient who sent two forms and had one withdrawn has both, and the
+    // register says so rather than folding the withdrawal into the patient.
+    if (stage === 'Referred' && (referredSubmissionIds.has(submission.id) || patientKeys.has(`${organisationId}:${submission.email.toLowerCase()}`))) continue;
     const organisation = organisationById.get(organisationId);
     const conditions = formConditionRecords({
       conditionCodes: submission.conditionCodes,
       primaryConditionCode: submission.primaryConditionCode,
     });
-    rowsByOwnerAndEmail.set(key, {
+    rows.push({
       conditions: conditions.map(condition => condition.conditionCode),
       primaryCondition: primaryConditionCode(conditions),
       id: `sub-${submission.id}`,
@@ -136,7 +142,7 @@ export function buildPatientRegister(
   // The scope is everything the search, pharmacy and date filters admit. The
   // stage filter narrows the rows within it, but the scope counts are reported
   // for every stage so the stage buttons can say what each one would show.
-  const scope = [...rowsByOwnerAndEmail.values()].filter(row => {
+  const scope = rows.filter(row => {
     if (filters.organisationId !== 'all' && row.organisationId !== filters.organisationId) return false;
     const date = londonDateKey(row.date);
     if (filters.from && (!date || date < filters.from)) return false;
@@ -151,12 +157,12 @@ export function buildPatientRegister(
     entry.count += 1;
     countsByKey.set(key, entry);
   }
-  const rows = scope
+  const matched = scope
     .filter(row => filters.status === 'all' || row.stage === filters.status)
-    .sort((left, right) => left.name.localeCompare(right.name));
+    .sort((left, right) => left.name.localeCompare(right.name) || (right.date ?? '').localeCompare(left.date ?? ''));
 
   const recordScopeHash = createHash('sha256')
-    .update(rows.map(row => `${row.organisationId}:${row.id}`).sort().join('|'))
+    .update(matched.map(row => `${row.organisationId}:${row.id}`).sort().join('|'))
     .digest('hex');
-  return { rows, resultCount: rows.length, scopeCounts: [...countsByKey.values()], generatedAt: new Date().toISOString(), recordScopeHash };
+  return { rows: matched, resultCount: matched.length, scopeCounts: [...countsByKey.values()], generatedAt: new Date().toISOString(), recordScopeHash };
 }

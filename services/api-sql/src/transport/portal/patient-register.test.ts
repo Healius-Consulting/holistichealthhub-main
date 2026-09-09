@@ -91,6 +91,18 @@ describe('register holds patients and closed applications only', () => {
     );
   });
 
+  it('lists a withdrawn duplicate form beside the patient it duplicates', () => {
+    const duplicate = { ...application, email: patient.email, outcomeStatus: 'WITHDRAWN' } as PlatformSubmissionRecord;
+    const result = buildPatientRegister([patient], [duplicate], [organisation], filters);
+    assert.deepEqual(result.rows.map(row => row.stage), ['HHH approved', 'Withdrawn']);
+  });
+
+  it('does not list the referral that produced a patient row a second time', () => {
+    const referral = { ...application, email: patient.email, outcomeStatus: 'COMPLETED', onboardingDecision: 'APPROVED' } as PlatformSubmissionRecord;
+    const sourced = { ...patient, sourceSubmissionId: application.id };
+    assert.equal(buildPatientRegister([sourced], [referral], [organisation], filters).resultCount, 1);
+  });
+
   it('shows a referred application without a patient row as Referred, not a third stage', () => {
     const referred = { ...application, outcomeStatus: 'COMPLETED', onboardingDecision: 'APPROVED' } as PlatformSubmissionRecord;
     assert.equal(buildPatientRegister([], [referred], [organisation], filters).rows[0]?.stage, 'Referred');

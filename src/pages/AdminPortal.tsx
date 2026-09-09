@@ -158,6 +158,11 @@ function registerPatientKey(patient: { organisationId: string; email: string }) 
   return `${patient.organisationId}:${patient.email.trim().toLowerCase()}`;
 }
 
+/** One person can hold several rows — a patient record plus a withdrawn duplicate form — so rows are told apart by id, not email. */
+function registerRowKey(row: { organisationId: string; id: string }) {
+  return `${row.organisationId}:${row.id}`;
+}
+
 function stageTone(status: string) {
   if (status === 'Approved' || status === 'HHH approved') return 'paid';
   if (status === 'Declined' || status === 'Rejected' || status === 'Suspended') return 'danger';
@@ -1564,7 +1569,7 @@ export default function AdminPortal() {
       if (patientRegisterLoading) return;
       setPendingRegisterKey(null);
     }
-    if (selectedRegisterPatient && displayedPatients.some(patient => registerPatientKey(patient) === registerPatientKey(selectedRegisterPatient))) {
+    if (selectedRegisterPatient && displayedPatients.some(patient => registerRowKey(patient) === registerRowKey(selectedRegisterPatient))) {
       return;
     }
     const first = displayedPatients[0];
@@ -2153,7 +2158,7 @@ export default function AdminPortal() {
     const referredCount = stageCounts.Referred ?? 0;
     const financeReady = isLocalPortalPreview || Boolean(adminFinanceReport) || !adminFinanceLoading;
     const registerAccrued = referralFeeEvents.reduce((total, event) => total + event.amount, 0);
-    const selectedKey = selectedRegisterPatient ? registerPatientKey(selectedRegisterPatient) : null;
+    const selectedKey = selectedRegisterPatient ? registerRowKey(selectedRegisterPatient) : null;
     const selectedFees = selectedRegisterPatient
       ? referralFeeEvents.filter(event => event.organisationId === selectedRegisterPatient.organisationId && event.patientEmail.trim().toLowerCase() === selectedRegisterPatient.email.trim().toLowerCase())
       : [];
@@ -2311,11 +2316,11 @@ export default function AdminPortal() {
                 ) : displayedPatients.map(patient => {
                   const row = toRegisterRow(patient);
                   const tone = stageTone(row.stage);
-                  const selected = selectedKey === registerPatientKey(row);
+                  const selected = selectedKey === registerRowKey(row);
                   return (
                     <button
                       type="button"
-                      key={registerPatientKey(row)}
+                      key={registerRowKey(row)}
                       className={`order-crm-row order-crm-row--${tone}${selected ? ' selected' : ''}`}
                       aria-pressed={selected}
                       aria-label={`${row.name}, ${onboardingStatusLabel(row.stage)}, ${row.pharmacyName}`}
