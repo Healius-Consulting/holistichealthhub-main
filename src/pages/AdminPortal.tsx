@@ -1005,8 +1005,9 @@ export default function AdminPortal() {
   const [patientOrganisationId, setPatientOrganisationId] = useState('all');
   const [patientStatus, setPatientStatus] = useState('all');
   const [patientFrom, setPatientFrom] = useState('');
-  // Off by default: the register is a complete record, and hiding is an explicit choice.
-  const [hideTestPatients, setHideTestPatients] = useState(false);
+  // Hidden by default: day to day the register is about real patients, and
+  // showing the test accounts' records is the explicit choice.
+  const [hideTestPatients, setHideTestPatients] = useState(true);
   const [patientTo, setPatientTo] = useState('');
   const [patientExportBusy, setPatientExportBusy] = useState(false);
   const [patientExportError, setPatientExportError] = useState<string | null>(null);
@@ -2154,7 +2155,7 @@ export default function AdminPortal() {
     const adminConditions = [selectedCrm?.conditions, selectedIntake?.conditions, selectedRegisterPatient?.conditions]
       .find(candidate => candidate && candidate.length > 0) ?? [];
     const adminPrimaryCondition = selectedCrm?.primaryCondition ?? selectedIntake?.primaryCondition ?? selectedRegisterPatient?.primaryCondition ?? adminConditions[0] ?? '';
-    const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo || hideTestPatients);
+    const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo || !hideTestPatients);
 
     return (
       <div className="page-body order-crm patient-crm admin-register-crm">
@@ -2223,7 +2224,7 @@ export default function AdminPortal() {
               <span>Hide test patients</span>
             </label>
             {filtersActive ? (
-              <button type="button" onClick={() => { setQuery(''); setPatientOrganisationId('all'); setPatientStatus('all'); setPatientFrom(''); setPatientTo(''); setHideTestPatients(false); }}>
+              <button type="button" onClick={() => { setQuery(''); setPatientOrganisationId('all'); setPatientStatus('all'); setPatientFrom(''); setPatientTo(''); setHideTestPatients(true); }}>
                 Clear
               </button>
             ) : null}
