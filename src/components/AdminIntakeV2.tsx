@@ -507,6 +507,7 @@ export default function AdminIntakeV2() {
                         <option value="email">By email</option>
                         <option value="sms">By text message</option>
                         <option value="in_person">In person</option>
+                        <option value="not_applicable">N/A</option>
                       </select><small>This enquiry is already with {destinationName}. Nothing is shared with another pharmacy without the patient’s agreement, so record how they gave it.</small></label>
                     ) : null}
                     <label>Private HHH note<textarea className="input" rows={3} value={allocationNote} onChange={event => setAllocationNote(event.target.value)} /></label>

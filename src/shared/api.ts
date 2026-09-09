@@ -188,7 +188,7 @@ export function getAssignmentCandidates(caseId: string, query = '') {
   return apiRequest<{ records: Array<Record<string, unknown>> }>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/assignment-candidates?q=${encodeURIComponent(query)}`);
 }
 
-export type PatientAgreementChannel = 'phone' | 'email' | 'sms' | 'in_person';
+export type PatientAgreementChannel = 'phone' | 'email' | 'sms' | 'in_person' | 'not_applicable';
 
 export function reassignIntake(caseId: string, input: {
   destinationOrganisationId: string;

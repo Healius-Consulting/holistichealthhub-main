@@ -12,7 +12,8 @@ test('moving an enquiry away from its pharmacy records how the patient agreed', 
   assert.match(intake, /patientAgreementChannel: agreementChannel \|\| null/, 'the reassignment request carries the agreement channel');
   assert.match(intake, /movingFromPharmacy = Boolean\(detail\?\.assignedOrganisationId\)/, 'the form asks exactly when the server would refuse');
   assert.match(intake, /\(movingFromPharmacy && !agreementChannel\)/, 'the move button waits for the agreement to be recorded');
-  for (const channel of ['phone', 'email', 'sms', 'in_person']) {
+  for (const channel of ['phone', 'email', 'sms', 'in_person', 'not_applicable']) {
     assert.match(intake, new RegExp(`<option value="${channel}">`), `the form offers the server's ${channel} channel`);
+    assert.match(router, new RegExp(`'${channel}'`), `the server accepts ${channel}`);
   }
 });

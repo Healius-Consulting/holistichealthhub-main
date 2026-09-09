@@ -47,7 +47,8 @@ const pendingAssignmentSchema = z.object({
    * shared with another pharmacy unless they agree, so a transfer away from a pharmacy
    * the patient chose cannot proceed without recording that agreement.
    */
-  patientAgreementChannel: z.enum(['phone', 'email', 'sms', 'in_person']).nullable().default(null),
+  // 'not_applicable' is a deliberate, audited answer — distinct from the field being absent.
+  patientAgreementChannel: z.enum(['phone', 'email', 'sms', 'in_person', 'not_applicable']).nullable().default(null),
 }).strict();
 const followUpStatusSchema = z.enum(['not_started', 'due', 'attempted', 'in_progress', 'completed', 'unable_to_contact']);
 const reviewRequestSchema = z.object({
