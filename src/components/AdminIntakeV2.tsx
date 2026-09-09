@@ -121,6 +121,9 @@ export default function AdminIntakeV2() {
       ? currentReason as (typeof assignmentReasons)[number]
       : 'patient_preference');
     setReviewStatus(String(next.followUpStatus ?? 'not_started').toLowerCase() as ReviewStatus);
+    // A screening flag suggests the matching decline reason; the admin still decides.
+    const flag = String(next.screeningFlag ?? '');
+    setDeclineReason(flag === 'TREATMENTS_NOT_TRIED' ? 'ELIGIBILITY_NOT_MET' : flag === 'PSYCHOSIS_HISTORY' ? 'PSYCHIATRIC_EXCLUSION' : '');
   };
 
   const loadCandidates = async (caseId: string, query = '') => {
@@ -320,6 +323,7 @@ export default function AdminIntakeV2() {
   }, [syncListOverflow, filteredRecords.length, queueFilter, loading]);
 
   const currentDestinationId = String(detail?.effectiveAssignedOrganisationId ?? '');
+  const screeningFlag = String(detail?.screeningFlag ?? '') || null;
   // Mirrors the server's rule: agreement is needed only when a pharmacy already holds the enquiry.
   const movingFromPharmacy = Boolean(detail?.assignedOrganisationId);
   const destinationSaved = Boolean(currentDestinationId) && sameId(destination, currentDestinationId);
@@ -474,11 +478,20 @@ export default function AdminIntakeV2() {
                   </section>
                   <section>
                     <h3><ClipboardList size={16} /> Eligibility answers</h3>
+                    {screeningFlag ? (
+                      <p className="banner banner-amber" role="status">
+                        <strong>Screening flag.</strong>{' '}
+                        {screeningFlag === 'TREATMENTS_NOT_TRIED'
+                          ? 'The patient answered that they have not tried two licensed treatments.'
+                          : 'The patient reported a psychosis or schizophrenia diagnosis for themselves or immediate family.'}
+                        {' '}This is not a decision: accept or decline below. The matching decline reason is pre-selected.
+                      </p>
+                    ) : null}
                     <dl>
                       <div><dt>Primary condition</dt><dd>{words(detail.primaryCondition || '—')}</dd></div>
                       <div><dt>Conditions</dt><dd>{Array.isArray(detail.conditions) ? detail.conditions.map(words).join(', ') : '—'}</dd></div>
-                      <div><dt>Two treatments</dt><dd>{detail.triedTwoTreatments ? 'Yes' : 'No / not confirmed'}</dd></div>
-                      <div><dt>Psychosis exclusion</dt><dd>{detail.psychosisExclusion ? 'Reported' : 'Not reported'}</dd></div>
+                      <div><dt>Two treatments</dt><dd>{detail.triedTwoTreatments ? 'Yes' : <mark>No / not confirmed</mark>}</dd></div>
+                      <div><dt>Psychosis exclusion</dt><dd>{detail.psychosisExclusion ? <mark>Reported</mark> : 'Not reported'}</dd></div>
                     </dl>
                   </section>
                 </div>
@@ -591,6 +604,7 @@ function IntakeListRow({ record, selected, onSelect }: { record: V2EligibilityQu
       <span className="order-crm-row__identity">
         <strong title={record.patientDisplayName}>{compactPatientName(record.patientDisplayName)}</strong>
         <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
+        {record.screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : null}
       </span>
       <span className="order-crm-row__position">
         <strong>{record.postcode || 'No postcode'}</strong>

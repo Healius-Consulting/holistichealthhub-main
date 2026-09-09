@@ -4,7 +4,7 @@ import { ELIGIBILITY_CONDITION_IDS } from '../../domain/eligibility/conditions.j
 import { HttpError } from '../../domain/common/errors.js';
 import { PRIVACY_NOTICE_VERSION } from '../../domain/legal/notice-version.js';
 import { isEligibleAge } from '../../domain/eligibility/age.js';
-import { automaticDeclineRule } from '../../domain/eligibility/screening.js';
+import { screeningFlagFor } from '../../domain/eligibility/screening.js';
 import { TERMS_VERSION } from '../../domain/legal/notice-version.js';
 import { asUuid, uuidKey } from '../../domain/common/uuid.js';
 import { normaliseUkPostcode } from '../../domain/geography/postcode.js';
@@ -108,7 +108,8 @@ function answersPayload(input: z.infer<typeof intakeSchema>, assignment: {
   assignmentStatus: CreateSubmissionInput['assignmentStatus'];
   submissionIpHash: string;
 }): CreateSubmissionInput {
-  const declineRule = automaticDeclineRule({
+  // A failed screening check is a flag for HHH admin, never a decision made here.
+  const screeningFlag = screeningFlagFor({
     triedTwoTreatments: input.tried2,
     psychiatricExclusion: input.psychExclusion,
   });
@@ -142,9 +143,9 @@ function answersPayload(input: z.infer<typeof intakeSchema>, assignment: {
     // Recorded only when they opted in; an unticked box has no consent to version.
     marketingConsentVersion: input.marketing ? input.consentVersion : null,
     submissionIpHash: assignment.submissionIpHash,
-    outcomeStatus: declineRule ? 'DECLINED' : 'OPEN',
-    declineRule,
-    declinedAt: declineRule ? new Date().toISOString() : null,
+    outcomeStatus: 'OPEN',
+    declineRule: screeningFlag,
+    declinedAt: null,
   };
 }
 
@@ -179,7 +180,7 @@ export function createPublicIntakeV2Router(): Router {
   router.post('/public/intakes', publicSubmissionLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = intakeSchema.parse(req.body);
-      const declineRule = automaticDeclineRule({
+      const screeningFlag = screeningFlagFor({
         triedTwoTreatments: input.tried2,
         psychiatricExclusion: input.psychExclusion,
       });
@@ -244,25 +245,14 @@ export function createPublicIntakeV2Router(): Router {
 
       await intakeRepo.saveSubmissionConditions(submission.id, input.conditions, input.primaryCondition);
 
-      if (created && declineRule) {
-        await identityRepo.appendAudit({
-          organisationId: assignedOrganisationId ?? sourceOrganisationId,
-          event: 'eligibility.auto_declined',
-          recordType: 'EligibilitySubmission',
-          recordId: submission.id,
-          surface: 'public',
-          details: { sourceType, declineRule, conditionCount: input.conditions.length },
-        });
-      }
-
-      if (created && !declineRule) {
+      if (created) {
         await identityRepo.appendAudit({
           organisationId: assignedOrganisationId ?? sourceOrganisationId,
           event: 'eligibility.submitted',
           recordType: 'EligibilitySubmission',
           recordId: submission.id,
           surface: 'public',
-          details: { sourceType, conditionCount: input.conditions.length },
+          details: { sourceType, conditionCount: input.conditions.length, screeningFlag },
         });
         const caseRef = caseReference(submission.id, submission.submittedAt || new Date().toISOString());
         const assignedOrganisation = assignedOrganisationId
@@ -304,7 +294,6 @@ export function createPublicIntakeV2Router(): Router {
         assignmentStatus: assignmentStatus.toLowerCase(),
         provisionalPharmacyName,
         warning: null,
-        declineRule,
       });
     } catch (error) {
       next(error);

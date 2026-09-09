@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type R
 import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, Info, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
 import { CONDITIONS, conditionLabel } from '@hhh/domain';
 import { createEligibilitySubmission, createV2Intake, resolvePublicReferralToken, searchPublicPharmacies } from '../../../src/shared/api';
-import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type DeclineRule, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
+import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
 import { tenantThemeVariables } from '../../../src/utils/tenantTheme';
 import { EMAIL_LOGO_SPEC } from '../../../src/utils/pharmacyLogo';
 import { parseEligibilityReferralRoute } from './referralRoute';
@@ -30,7 +30,6 @@ const PUBLIC_SITE_HREF = 'https://holistichealthhub.live';
 const TERMS_HREF = '/terms';
 const PRIVACY_HREF = '/privacy';
 /** Review requests land in the pharmacist queue; a pharmacist, not the form, reconsiders. */
-const REVIEW_REQUEST_EMAIL = 'info@holistichealthhub.live';
 
 /**
  * The pharmacy is the controller for the referral service, so patient-facing copy
@@ -159,7 +158,6 @@ export default function EligibilityApp() {
   const [submitting, setSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
   const [eligible, setEligible] = useState(false);
-  const [declineRule, setDeclineRule] = useState<DeclineRule | null>(null);
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [primaryCondition, setPrimaryCondition] = useState('');
   const [conditionError, setConditionError] = useState('');
@@ -267,11 +265,9 @@ export default function EligibilityApp() {
           consentVersion, idempotencyKey: idempotencyKey.current,
         }));
       }
-      const rule = !input.tried2 ? 'TREATMENTS_NOT_TRIED' as const
-        : input.psychExclusion ? 'PSYCHOSIS_HISTORY' as const
-        : null;
-      setDeclineRule(rule);
-      setEligible(!rule);
+      // The screening answers are recorded for HHH admin to weigh; every application
+      // is received the same way and the decision comes from a person.
+      setEligible(true);
       setComplete(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
@@ -301,21 +297,6 @@ export default function EligibilityApp() {
   // generic reference on the master site, where the choice is made in section 01.
   const pharmacyRef = token ? pharmacy.name : 'your pharmacy';
   const consentPharmacyRef = token ? pharmacy.name : 'my pharmacy';
-
-  if (complete && declineRule) {
-    const reason = declineRule === 'TREATMENTS_NOT_TRIED' ? 'the treatments question' : 'the family-history question';
-    return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
-      <EligibilityBrand identity={brandIdentity} token={token} />
-      <section className="eligibility-card eligibility-message eligibility-decline">
-        <div className="eligibility-result-icon review"><Info size={32} /></div>
-        <h1>{pharmacy.name} cannot refer you at the moment</h1>
-        <p>Based on your answer to {reason}, you do not currently meet the clinic’s criteria for a referral. This was an automatic check.</p>
-        <p>If you think this does not reflect your situation, or you would like a pharmacist to look at your application, email <a href={`mailto:${REVIEW_REQUEST_EMAIL}?subject=${encodeURIComponent('Eligibility review request')}`}>{REVIEW_REQUEST_EMAIL}</a> quoting your name and date of birth. A registered pharmacist will reply within 3 working days.</p>
-        <p>Otherwise your application is deleted within 3 months.</p>
-        <a className="eligibility-home" href={token ? PUBLIC_SITE_HREF : PUBLIC_HOME_HREF}>Close</a>
-      </section>
-    </EligibilityShell>;
-  }
 
   if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>Thank you — your application has gone to {pharmacy.name}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
 

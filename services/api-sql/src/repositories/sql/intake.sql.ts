@@ -48,6 +48,7 @@ const GET_SUBMISSION_BY_ID_GQL = `
       assignmentReason
       privateAllocationNote
       privateOnboardingNote
+      declineRule
       declineReason
       consentVersion
       referralConsent
@@ -123,6 +124,7 @@ const LIST_PLATFORM_SUBMISSIONS_GQL = `
       assignmentReason
       privateAllocationNote
       privateOnboardingNote
+      declineRule
       declineReason
       consentVersion
       referralConsent

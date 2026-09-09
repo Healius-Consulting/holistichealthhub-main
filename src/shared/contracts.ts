@@ -149,7 +149,8 @@ export type V2IntakeInput = V2IntakeAnswers & (
 );
 
 /** Which automatic screening rule declined an application, if any. */
-export type DeclineRule = 'TREATMENTS_NOT_TRIED' | 'PSYCHOSIS_HISTORY';
+/** A screening check the answers failed at submission. A flag for HHH admin, not a decision. */
+export type ScreeningRule = 'TREATMENTS_NOT_TRIED' | 'PSYCHOSIS_HISTORY';
 
 export interface V2IntakeReceipt {
   caseReference: string;
@@ -157,7 +158,6 @@ export interface V2IntakeReceipt {
   assignmentStatus: 'awaiting_hhh_allocation' | 'provisional';
   provisionalPharmacyName: string | null;
   warning: 'SELECTED_PHARMACY_UNAVAILABLE' | null;
-  declineRule: DeclineRule | null;
 }
 
 export interface V2EligibilityQueueItem {
@@ -185,6 +185,8 @@ export interface V2EligibilityQueueItem {
   locationPreferenceDistanceMetres?: number | null;
   pharmacyActivated?: boolean;
   destinationLocked?: boolean;
+  /** Which screening check the answers failed at submission, for the admin to weigh. */
+  screeningFlag?: ScreeningRule | null;
 }
 
 export interface CuraleafValidationCheck {

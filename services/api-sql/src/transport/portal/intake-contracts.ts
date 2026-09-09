@@ -49,6 +49,8 @@ export function toAdminIntakeQueueItem(record: PlatformSubmissionRecord) {
     nextFollowUpAt: null,
     pharmacyActivated: record.pharmacyAccessStatus === 'ACTIVATED',
     destinationLocked: false,
+    /** Which screening check the answers failed, if any; the admin decides what it means. */
+    screeningFlag: record.declineRule ?? null,
   };
 }
 

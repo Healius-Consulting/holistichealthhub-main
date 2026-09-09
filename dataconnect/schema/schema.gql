@@ -575,13 +575,14 @@ type EligibilitySubmission @table {
   termsVersion: String
   submissionIpHash: String
   """
-  Which automatic screening rule declined this application, if any, so the decision
-  can be explained to the patient and audited. TREATMENTS_NOT_TRIED or PSYCHOSIS_HISTORY.
+  Which screening check the application failed at submission, if any, recorded as
+  a flag for HHH admin's decision rather than a decision itself. TREATMENTS_NOT_TRIED
+  or PSYCHOSIS_HISTORY.
   """
   declineRule: String
   """
   Why an administrator declined the application, as opposed to declineRule above,
-  which records an automatic screening decline made at submission.
+  which only records what the screening flagged.
   """
   declineReason: DeclineReason
   declinedAt: Timestamp

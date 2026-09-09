@@ -116,6 +116,8 @@ export interface PlatformSubmissionRecord extends SubmissionQueueItem {
   assignmentReason: string | null;
   privateAllocationNote: string | null;
   privateOnboardingNote: string | null;
+  /** Which screening check the answers failed at submission, if any. A flag for admin, not an outcome. */
+  declineRule?: string | null;
   declineReason?: string | null;
   consentVersion: string;
   referralConsent: boolean;

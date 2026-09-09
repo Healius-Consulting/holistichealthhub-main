@@ -1374,7 +1374,7 @@ function TermsPage() {
           <p>4.2 The clinic decides whether to offer you an appointment.</p>
           <p>4.3 The specialist decides, after assessing you, whether to prescribe. Any medicine prescribed may be unlicensed; the clinic will explain what that means.</p>
           <p>4.4 We refer to one partner clinic. You are free to arrange a consultation with any other clinic without using this service.</p>
-          <p>4.5 Two answers on the form are checked automatically against the clinic’s criteria: whether you have tried at least two licensed treatments, and whether you or an immediate family member has been diagnosed with psychosis or schizophrenia. If either falls outside the criteria you are told immediately and we cannot refer you. You can ask one of our pharmacists to review that result by emailing <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>.</p>
+          <p>4.5 Two answers on the form are checked automatically against the clinic’s criteria: whether you have tried at least two licensed treatments, and whether you or an immediate family member has been diagnosed with psychosis or schizophrenia. If either falls outside the criteria, those answers are flagged for one of our pharmacists, who decides whether we can refer you and tells you the outcome. You can ask for that decision to be reviewed by emailing <a href="mailto:info@holistichealthhub.live">info@holistichealthhub.live</a>.</p>
 
           <h2>5. What happens after you apply</h2>
           <p>5.1 <strong>Review and contact.</strong> A registered pharmacist or technician — from our own team or from the HHH team acting for us — reviews your application and may phone, email or text you. We aim to do this within 3 working days.</p>

@@ -6,7 +6,7 @@ import { publicSubmissionLimiter } from '../../security/public-limits.js';
 import { ipHash, sha256 } from '../../security/session-utils.js';
 import { PRIVACY_NOTICE_VERSION } from '../../domain/legal/notice-version.js';
 import { isEligibleAge } from '../../domain/eligibility/age.js';
-import { automaticDeclineRule } from '../../domain/eligibility/screening.js';
+import { screeningFlagFor } from '../../domain/eligibility/screening.js';
 import { TERMS_VERSION } from '../../domain/legal/notice-version.js';
 
 const submissionInputSchema = z.object({
@@ -41,7 +41,8 @@ export function createPublicEligibilityRouter(): Router {
   router.post('/public/eligibility-submissions', publicSubmissionLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = submissionInputSchema.parse(req.body);
-      const declineRule = automaticDeclineRule({
+      // Recorded for HHH admin to decide on; the application stays open.
+      const screeningFlag = screeningFlagFor({
         triedTwoTreatments: input.tried2,
         psychiatricExclusion: input.psychExclusion,
       });
@@ -96,9 +97,9 @@ export function createPublicEligibilityRouter(): Router {
         dataSharingConsentVersion: input.consentVersion,
         marketingConsentVersion: input.marketing ? input.consentVersion : null,
         submissionIpHash: ipHash(req),
-        outcomeStatus: declineRule ? 'DECLINED' : 'OPEN',
-        declineRule,
-        declinedAt: declineRule ? new Date().toISOString() : null,
+        outcomeStatus: 'OPEN',
+        declineRule: screeningFlag,
+        declinedAt: null,
       });
       const submissionId = result.id
         ?? (await intakeRepo.findSubmissionByIdempotencyHash(idempotencyKeyHash))?.id;
