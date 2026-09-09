@@ -41,6 +41,7 @@ import {
 import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources';
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
+import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
 import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
@@ -161,8 +162,16 @@ function stageTone(status: string) {
   if (status === 'Approved' || status === 'HHH approved') return 'paid';
   if (status === 'Declined' || status === 'Rejected' || status === 'Suspended') return 'danger';
   if (status === 'Under HHH review') return 'warning';
+  if (status === 'Withdrawn') return 'neutral';
   return 'info';
 }
+
+/**
+ * The register's stages, in the order the filter shows them. A fixed list: the
+ * buttons used to be built from the rows on screen, so picking one stage made
+ * every other stage's button vanish until "All" was pressed again.
+ */
+const REGISTER_STAGES = ['HHH approved', 'Referred', 'Suspended', 'Declined', 'Withdrawn'] as const;
 
 function patientInitials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -1475,25 +1484,29 @@ export default function AdminPortal() {
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [patientFrom, patientOrganisationId, patientStatus, patientTo, query, view]);
 
-  const patientStatuses = [...new Set(allPatients.map(patient => patient.stage))].sort((a, b) => onboardingStatusLabel(a).localeCompare(onboardingStatusLabel(b)));
   // A test patient is one whose pharmacy is a platform test account or a
   // training workspace — the same rule the rest of the admin surface uses.
   const isTestPatientRow = useCallback((row: { organisationId: string }) => {
     const organisation = state.organisations.find(item => item.id === row.organisationId);
     return Boolean(organisation && (isPlatformTestPharmacy(organisation) || organisation.testAccount));
   }, [state.organisations]);
-  const filteredPatients = useMemo(() => allPatients.filter(patient => {
+  // Everything the search, pharmacy and date filters admit, before the stage
+  // filter narrows it: the stage buttons count from here. Preview only.
+  const previewScope = useMemo(() => allPatients.filter(patient => {
     const org = state.organisations.find(item => item.id === patient.organisationId);
     const searchMatches = `${patient.name} ${patient.email} ${patient.mobile} ${patient.dob} ${formatPatientDob(patient.dob)} ${org?.name ?? ''} ${org?.tradingName ?? ''}`.toLowerCase().includes(query.trim().toLowerCase());
     if (!searchMatches) return false;
     if (hideTestPatients && isTestPatientRow(patient)) return false;
     if (patientOrganisationId !== 'all' && patient.organisationId !== patientOrganisationId) return false;
-    if (patientStatus !== 'all' && patient.stage !== patientStatus) return false;
     const date = londonDateKey(patient.date);
     if (patientFrom && (!date || date < patientFrom)) return false;
     if (patientTo && (!date || date > patientTo)) return false;
     return true;
-  }), [allPatients, hideTestPatients, isTestPatientRow, patientFrom, patientOrganisationId, patientStatus, patientTo, query, state.organisations]);
+  }), [allPatients, hideTestPatients, isTestPatientRow, patientFrom, patientOrganisationId, patientTo, query, state.organisations]);
+  const filteredPatients = useMemo(
+    () => previewScope.filter(patient => patientStatus === 'all' || patient.stage === patientStatus),
+    [patientStatus, previewScope],
+  );
   // The server applies the search, pharmacy, stage and date filters; the test
   // toggle is applied here so the export's server-side scope stays untouched.
   const displayedPatients = useMemo(
@@ -1501,10 +1514,22 @@ export default function AdminPortal() {
       .filter(row => !hideTestPatients || !isTestPatientRow(row)),
     [filteredPatients, hideTestPatients, isTestPatientRow, serverPatientRegister],
   );
-  const visibleRegisterPatients = useMemo(
-    () => (hideTestPatients ? allPatients.filter(patient => !isTestPatientRow(patient)) : allPatients),
-    [allPatients, hideTestPatients, isTestPatientRow],
-  );
+  // How many records each stage holds in the current scope. The server reports
+  // them per pharmacy so the test toggle can leave test pharmacies out here,
+  // exactly as it does for the rows. A build that predates the counts falls
+  // back to the rows on screen, which is right whenever no stage is selected.
+  const stageCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const source = isLocalPortalPreview
+      ? previewScope.map(patient => ({ organisationId: patient.organisationId, stage: patient.stage, count: 1 }))
+      : serverPatientRegister?.scopeCounts ?? displayedPatients.map(row => ({ organisationId: row.organisationId, stage: row.stage, count: 1 }));
+    for (const entry of source) {
+      if (hideTestPatients && isTestPatientRow(entry)) continue;
+      counts[entry.stage] = (counts[entry.stage] ?? 0) + entry.count;
+    }
+    return counts;
+  }, [displayedPatients, hideTestPatients, isTestPatientRow, previewScope, serverPatientRegister]);
+  const scopeTotal = Object.values(stageCounts).reduce((total, count) => total + count, 0);
 
   const toRegisterRow = useCallback((patient: typeof displayedPatients[number]): PatientRegisterExportRow => {
     const organisation = state.organisations.find(item => item.id === patient.organisationId);
@@ -2124,9 +2149,8 @@ export default function AdminPortal() {
   const renderReferrals = () => <AdminIntakeV2 />;
 
   const renderPatients = () => {
-    const registerStatuses = [...new Set([...patientStatuses, ...displayedPatients.map(patient => patient.stage)])].sort((a, b) => onboardingStatusLabel(a).localeCompare(onboardingStatusLabel(b)));
-    const activeCount = visibleRegisterPatients.filter(patient => patient.stage === 'HHH approved').length;
-    const referredCount = visibleRegisterPatients.filter(patient => patient.stage === 'Referred').length;
+    const activeCount = stageCounts['HHH approved'] ?? 0;
+    const referredCount = stageCounts.Referred ?? 0;
     const financeReady = isLocalPortalPreview || Boolean(adminFinanceReport) || !adminFinanceLoading;
     const registerAccrued = referralFeeEvents.reduce((total, event) => total + event.amount, 0);
     const selectedKey = selectedRegisterPatient ? registerPatientKey(selectedRegisterPatient) : null;
@@ -2156,6 +2180,18 @@ export default function AdminPortal() {
       .find(candidate => candidate && candidate.length > 0) ?? [];
     const adminPrimaryCondition = selectedCrm?.primaryCondition ?? selectedIntake?.primaryCondition ?? selectedRegisterPatient?.primaryCondition ?? adminConditions[0] ?? '';
     const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo || !hideTestPatients);
+    // One sentence that says what the list holds, so nobody has to work it
+    // out from the state of six controls.
+    const scopePharmacy = patientOrganisationId === 'all' ? null : (state.organisations.find(item => item.id === patientOrganisationId)?.name ?? 'the selected pharmacy');
+    const stageNoun = patientStatus === 'all' ? 'record' : `${onboardingStatusLabel(patientStatus)} record`;
+    const scopeDetail = [
+      scopePharmacy ? `at ${scopePharmacy}` : 'across all pharmacies',
+      patientFrom && patientTo ? `last updated ${formatUkDayDate(patientFrom)} to ${formatUkDayDate(patientTo)}`
+        : patientFrom ? `last updated on or after ${formatUkDayDate(patientFrom)}`
+        : patientTo ? `last updated on or before ${formatUkDayDate(patientTo)}` : null,
+      query.trim() ? `matching “${query.trim()}”` : null,
+      hideTestPatients ? 'test patients hidden' : 'test patients included',
+    ].filter(Boolean).join(' · ');
 
     return (
       <div className="page-body order-crm patient-crm admin-register-crm">
@@ -2163,7 +2199,7 @@ export default function AdminPortal() {
           <div className="order-crm-summary__tiles">
             <article className="order-crm-metric">
               <span className="order-crm-metric__icon"><Users size={16} /></span>
-              <span><small>Register</small><strong>{isLocalPortalPreview ? allPatients.length : (serverPatientRegister?.resultCount ?? displayedPatients.length)}</strong><em>{isLocalPortalPreview ? 'Attributed records in this preview' : 'Records in the current server scope'}</em></span>
+              <span><small>Register</small><strong>{scopeTotal}</strong><em>Every stage in the current scope</em></span>
             </article>
             <article className="order-crm-metric">
               <span className="order-crm-metric__icon"><UserCheck size={16} /></span>
@@ -2197,27 +2233,27 @@ export default function AdminPortal() {
           </div>
           <div className="order-crm-filters" role="group" aria-label="Filter the patient register">
             <button type="button" className={patientStatus === 'all' ? 'active' : ''} aria-pressed={patientStatus === 'all'} onClick={() => setPatientStatus('all')}>
-              <span>All</span>
+              <span>All stages</span><strong>{scopeTotal}</strong>
             </button>
-            {registerStatuses.map(status => (
-              <button type="button" key={status} className={patientStatus === status ? 'active' : ''} aria-pressed={patientStatus === status} onClick={() => setPatientStatus(status)}>
-                <span>{onboardingStatusLabel(status)}</span>
+            {REGISTER_STAGES.map(stage => (
+              <button type="button" key={stage} className={patientStatus === stage ? 'active' : ''} aria-pressed={patientStatus === stage} onClick={() => setPatientStatus(stage)}>
+                <span>{onboardingStatusLabel(stage)}</span><strong>{stageCounts[stage] ?? 0}</strong>
               </button>
             ))}
             <label className="admin-register-crm__select">
-              <span className="sr-only">Pharmacy</span>
+              <small>Pharmacy</small>
               <select value={patientOrganisationId} onChange={event => setPatientOrganisationId(event.target.value)} aria-label="Filter by pharmacy">
                 <option value="all">All pharmacies</option>
                 {state.organisations.map(organisation => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}
               </select>
             </label>
             <label className="admin-register-crm__date">
-              <span className="sr-only">From date</span>
-              <input type="date" value={patientFrom} max={patientTo || undefined} onChange={event => setPatientFrom(event.target.value)} aria-label="From date" />
+              <small>Last updated from</small>
+              <input type="date" value={patientFrom} max={patientTo || undefined} onChange={event => setPatientFrom(event.target.value)} aria-label="Last updated from" />
             </label>
             <label className="admin-register-crm__date">
-              <span className="sr-only">To date</span>
-              <input type="date" value={patientTo} min={patientFrom || undefined} onChange={event => setPatientTo(event.target.value)} aria-label="To date" />
+              <small>Last updated to</small>
+              <input type="date" value={patientTo} min={patientFrom || undefined} onChange={event => setPatientTo(event.target.value)} aria-label="Last updated to" />
             </label>
             <label className="admin-register-crm__toggle">
               <input type="checkbox" checked={hideTestPatients} onChange={event => setHideTestPatients(event.target.checked)} />
@@ -2225,7 +2261,7 @@ export default function AdminPortal() {
             </label>
             {filtersActive ? (
               <button type="button" onClick={() => { setQuery(''); setPatientOrganisationId('all'); setPatientStatus('all'); setPatientFrom(''); setPatientTo(''); setHideTestPatients(true); }}>
-                Clear
+                Clear filters
               </button>
             ) : null}
             <button
@@ -2238,6 +2274,11 @@ export default function AdminPortal() {
             </button>
           </div>
         </section>
+        <p className="admin-register-crm__scope" aria-live="polite">
+          {patientRegisterLoading && !isLocalPortalPreview
+            ? 'Loading the register for this scope…'
+            : <>Showing <strong>{displayedPatients.length}</strong> {stageNoun}{displayedPatients.length === 1 ? '' : 's'}{patientStatus === 'all' ? '' : ` of ${scopeTotal} in scope`} {scopeDetail}.</>}
+        </p>
 
         {patientExportError ? <div className="banner banner-red" role="alert"><AlertCircle size={16} /> {patientExportError}</div> : null}
         {adminFinanceError ? (
@@ -2251,7 +2292,7 @@ export default function AdminPortal() {
         <div className="order-crm-workspace">
           <aside className="order-crm-list" aria-label="Patient register">
             <header>
-              <span><small>Register</small><strong>{patientRegisterLoading && !isLocalPortalPreview ? 'Loading' : `${displayedPatients.length} result${displayedPatients.length === 1 ? '' : 's'}`}</strong></span>
+              <span><small>{patientStatus === 'all' ? 'All stages' : onboardingStatusLabel(patientStatus)}</small><strong>{patientRegisterLoading && !isLocalPortalPreview ? 'Loading' : patientStatus === 'all' ? `${displayedPatients.length} record${displayedPatients.length === 1 ? '' : 's'}` : `${displayedPatients.length} of ${scopeTotal}`}</strong></span>
             </header>
             <div className="order-crm-list__scroller">
               <div className="order-crm-list__rows">
@@ -2264,8 +2305,8 @@ export default function AdminPortal() {
                 ) : displayedPatients.length === 0 ? (
                   <div className="order-crm-empty">
                     <Users size={26} />
-                    <strong>No matching records</strong>
-                    <span>Try another search, pharmacy, stage or date range.</span>
+                    <strong>No {stageNoun}s match</strong>
+                    <span>Try another search, pharmacy, stage or date range{hideTestPatients ? ', or show test patients' : ''}.</span>
                   </div>
                 ) : displayedPatients.map(patient => {
                   const row = toRegisterRow(patient);

@@ -658,9 +658,17 @@ export interface PatientRegisterExportRow {
   primaryCondition?: string | null;
 }
 
+export interface PatientRegisterScopeCount {
+  organisationId: string;
+  stage: string;
+  count: number;
+}
+
 export interface PatientRegisterExportResult {
   rows: PatientRegisterExportRow[];
   resultCount: number;
+  /** Every stage in the search/pharmacy/date scope, before the stage filter narrows the rows. */
+  scopeCounts?: PatientRegisterScopeCount[];
   generatedAt: string;
   recordScopeHash: string;
 }

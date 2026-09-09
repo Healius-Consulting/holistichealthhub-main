@@ -12471,6 +12471,27 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   outline-offset: 2px;
 }
 
+.admin-register-crm__select small,
+.admin-register-crm__date small{
+  margin: 0 0 3px 1px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* What the list holds, in one sentence, under the controls that decide it. */
+.admin-register-crm__scope{
+  margin: -6px 0 14px;
+  padding: 0 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.admin-register-crm__scope strong{ color: var(--text-primary); font-weight: 700; }
+
 .admin-register-crm .order-crm-row__stage,
 .admin-register-crm .order-crm-record__stage,
 .admin-finance-crm .order-crm-row__stage,

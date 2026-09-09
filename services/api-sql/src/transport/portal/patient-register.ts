@@ -12,6 +12,13 @@ export interface PatientRegisterFilters {
   to: string | null;
 }
 
+/** One stage's share of the scope, per pharmacy so the client can leave test pharmacies out. */
+export interface PatientRegisterScopeCount {
+  organisationId: string;
+  stage: string;
+  count: number;
+}
+
 export interface PatientRegisterRow {
   id: string;
   name: string;
@@ -52,9 +59,10 @@ function patientStage(status: PatientRecord['status']) {
 /**
  * An open application belongs to the intake queue, not the register: listing it
  * in both is what made the two counts disagree. The register holds patients and
- * closed applications only.
+ * closed applications only — declined, or withdrawn by the patient.
  */
-function registerStage(record: PlatformSubmissionRecord): 'Referred' | 'Declined' | null {
+function registerStage(record: PlatformSubmissionRecord): 'Referred' | 'Declined' | 'Withdrawn' | null {
+  if (record.outcomeStatus === 'WITHDRAWN') return 'Withdrawn';
   if (record.onboardingDecision === 'DECLINED' || record.outcomeStatus === 'DECLINED') return 'Declined';
   // A referred application normally has a patient row that takes precedence; an
   // older one without is still a referral, never an "approved" third thing.
@@ -125,18 +133,30 @@ export function buildPatientRegister(
   }
 
   const query = filters.query.trim().toLowerCase();
-  const rows = [...rowsByOwnerAndEmail.values()].filter(row => {
+  // The scope is everything the search, pharmacy and date filters admit. The
+  // stage filter narrows the rows within it, but the scope counts are reported
+  // for every stage so the stage buttons can say what each one would show.
+  const scope = [...rowsByOwnerAndEmail.values()].filter(row => {
     if (filters.organisationId !== 'all' && row.organisationId !== filters.organisationId) return false;
-    if (filters.status !== 'all' && row.stage !== filters.status) return false;
     const date = londonDateKey(row.date);
     if (filters.from && (!date || date < filters.from)) return false;
     if (filters.to && (!date || date > filters.to)) return false;
     const formattedDob = /^\d{4}-\d{2}-\d{2}$/.test(row.dob) ? row.dob.split('-').reverse().join('/') : row.dob;
     return !query || `${row.name} ${row.email} ${row.mobile} ${row.dob} ${formattedDob} ${row.pharmacyName}`.toLowerCase().includes(query);
-  }).sort((left, right) => left.name.localeCompare(right.name));
+  });
+  const countsByKey = new Map<string, PatientRegisterScopeCount>();
+  for (const row of scope) {
+    const key = `${row.organisationId}|${row.stage}`;
+    const entry = countsByKey.get(key) ?? { organisationId: row.organisationId, stage: row.stage, count: 0 };
+    entry.count += 1;
+    countsByKey.set(key, entry);
+  }
+  const rows = scope
+    .filter(row => filters.status === 'all' || row.stage === filters.status)
+    .sort((left, right) => left.name.localeCompare(right.name));
 
   const recordScopeHash = createHash('sha256')
     .update(rows.map(row => `${row.organisationId}:${row.id}`).sort().join('|'))
     .digest('hex');
-  return { rows, resultCount: rows.length, generatedAt: new Date().toISOString(), recordScopeHash };
+  return { rows, resultCount: rows.length, scopeCounts: [...countsByKey.values()], generatedAt: new Date().toISOString(), recordScopeHash };
 }

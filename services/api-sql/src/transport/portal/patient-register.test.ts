@@ -76,6 +76,21 @@ describe('register holds patients and closed applications only', () => {
     assert.deepEqual(result.rows[0]?.conditions, ['insomnia']);
   });
 
+  it('shows an application the patient withdrew as Withdrawn', () => {
+    const withdrawn = { ...application, outcomeStatus: 'WITHDRAWN' } as PlatformSubmissionRecord;
+    assert.equal(buildPatientRegister([], [withdrawn], [organisation], filters).rows[0]?.stage, 'Withdrawn');
+  });
+
+  it('counts every stage in the scope even when the rows are narrowed to one', () => {
+    const declined = { ...application, outcomeStatus: 'DECLINED', onboardingDecision: 'DECLINED' } as PlatformSubmissionRecord;
+    const result = buildPatientRegister([patient], [declined], [organisation], { ...filters, status: 'Declined' });
+    assert.equal(result.resultCount, 1);
+    assert.deepEqual(
+      result.scopeCounts.sort((a, b) => a.stage.localeCompare(b.stage)),
+      [{ organisationId: organisation.id, stage: 'Declined', count: 1 }, { organisationId: organisation.id, stage: 'HHH approved', count: 1 }],
+    );
+  });
+
   it('shows a referred application without a patient row as Referred, not a third stage', () => {
     const referred = { ...application, outcomeStatus: 'COMPLETED', onboardingDecision: 'APPROVED' } as PlatformSubmissionRecord;
     assert.equal(buildPatientRegister([], [referred], [organisation], filters).rows[0]?.stage, 'Referred');
