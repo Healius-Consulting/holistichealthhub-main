@@ -88,16 +88,38 @@ export function setApiCsrfToken(token: string | null) {
   invalidateResponseCache();
 }
 
+export type ApiFieldIssue = { path: string; message: string };
+
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly code: string;
+  /** Field-level validation issues from the server, when it names them. */
+  readonly details: ApiFieldIssue[];
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details: ApiFieldIssue[] = []) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
     this.name = 'ApiRequestError';
   }
+}
+
+function fieldIssues(value: unknown): ApiFieldIssue[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(entry => {
+    const issue = entry as { path?: unknown; message?: unknown };
+    return typeof issue?.message === 'string' ? [{ path: String(issue.path ?? ''), message: issue.message }] : [];
+  });
+}
+
+/** "The request contains invalid fields" is useless on its own; say which. */
+export function describeApiError(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) return fallback;
+  if (error instanceof ApiRequestError && error.details.length) {
+    return `${error.message} ${error.details.map(issue => (issue.path ? `${issue.path}: ${issue.message}` : issue.message)).join('; ')}`;
+  }
+  return error.message;
 }
 
 async function performApiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -109,7 +131,7 @@ async function performApiRequest<T>(path: string, init?: RequestInit): Promise<T
     headers: { 'Content-Type': 'application/json', ...securityHeaders, ...(!['GET', 'HEAD', 'OPTIONS'].includes(method) && csrfToken ? { 'X-CSRF-Token': csrfToken } : {}), ...init?.headers },
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+    const body = await response.json().catch(() => null) as { code?: string; message?: string; details?: unknown } | null;
     const retryAfter = response.headers.get('retry-after');
     const rateMessage = response.status === 429
       ? `Too many requests. Try again${retryAfter ? ` in ${retryAfter} seconds` : ' shortly'}.`
@@ -118,7 +140,7 @@ async function performApiRequest<T>(path: string, init?: RequestInit): Promise<T
     if (shouldDispatchSessionEnded(response.status, code, typeof window === 'undefined' ? '' : window.location.pathname)) {
       window.dispatchEvent(new CustomEvent('hhh:session-ended', { detail: { code } }));
     }
-    throw new ApiRequestError(response.status, code, body?.message || rateMessage || `Request failed with status ${response.status}.`);
+    throw new ApiRequestError(response.status, code, body?.message || rateMessage || `Request failed with status ${response.status}.`, fieldIssues(body?.details));
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
