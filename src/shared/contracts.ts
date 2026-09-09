@@ -651,6 +651,9 @@ export interface PatientRegisterExportRow {
   gphcNumber: string;
   stage: string;
   date: string | null;
+  /** From the application's answers, so a referred patient's conditions survive leaving the intake queue. */
+  conditions?: string[];
+  primaryCondition?: string | null;
 }
 
 export interface PatientRegisterExportResult {

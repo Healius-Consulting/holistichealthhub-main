@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { formConditionRecords, primaryConditionCode } from '../../domain/eligibility/form-conditions.js';
 import type { PlatformSubmissionRecord } from '../../repositories/ports/intake.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
 import type { PatientRecord } from '../../repositories/ports/patient.port.js';
@@ -22,6 +23,13 @@ export interface PatientRegisterRow {
   gphcNumber: string;
   stage: string;
   date: string | null;
+  /**
+   * Carried on the row because HHH admin has no other source for them: the
+   * pharmacy directory is a pharmacy-staff route, and a referred application
+   * has left the intake queue.
+   */
+  conditions: string[];
+  primaryCondition: string | null;
 }
 
 function londonDateKey(value: string | null) {
@@ -60,7 +68,15 @@ export function buildPatientRegister(
   for (const patient of patients) {
     const organisation = organisationById.get(patient.organisationId);
     if (!patient.organisationId || !patient.email) continue;
+    // Same precedence as the pharmacy's own view: the application's answers, then the patient's rows.
+    const conditions = formConditionRecords({
+      conditionCodes: patient.sourceSubmission?.conditionCodes,
+      primaryConditionCode: patient.sourceSubmission?.primaryConditionCode,
+      conditions: patient.conditions,
+    });
     rowsByOwnerAndEmail.set(`${patient.organisationId}:${patient.email.toLowerCase()}`, {
+      conditions: conditions.map(condition => condition.conditionCode),
+      primaryCondition: primaryConditionCode(conditions),
       id: patient.id,
       name: `${patient.firstName} ${patient.surname}`.trim(),
       email: patient.email,
@@ -80,7 +96,13 @@ export function buildPatientRegister(
     const key = `${organisationId}:${submission.email.toLowerCase()}`;
     if (rowsByOwnerAndEmail.has(key)) continue;
     const organisation = organisationById.get(organisationId);
+    const conditions = formConditionRecords({
+      conditionCodes: submission.conditionCodes,
+      primaryConditionCode: submission.primaryConditionCode,
+    });
     rowsByOwnerAndEmail.set(key, {
+      conditions: conditions.map(condition => condition.conditionCode),
+      primaryCondition: primaryConditionCode(conditions),
       id: `sub-${submission.id}`,
       name: `${submission.firstName} ${submission.surname}`.trim(),
       email: submission.email,

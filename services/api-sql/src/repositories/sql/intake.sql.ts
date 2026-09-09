@@ -776,15 +776,22 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
 
   async copySubmissionConditionsToPatient(patientId: string, submissionId: string): Promise<void> {
     const conditions = await this.listSubmissionConditions(submissionId);
-    await Promise.all(conditions.map(condition =>
-      dataConnect.executeGraphql(UPSERT_PATIENT_CONDITION_GQL, {
-        variables: {
-          patientId: asUuid(patientId),
-          conditionCode: condition.conditionCode,
-          primary: condition.primary,
-        },
-      }),
-    ));
+    // The application's answers remain the authoritative copy; a catalogue link
+    // that cannot be written must not fail a referral the transaction has already
+    // committed, so it is logged and skipped exactly as it is at submission time.
+    await Promise.all(conditions.map(async condition => {
+      try {
+        await dataConnect.executeGraphql(UPSERT_PATIENT_CONDITION_GQL, {
+          variables: {
+            patientId: asUuid(patientId),
+            conditionCode: condition.conditionCode,
+            primary: condition.primary,
+          },
+        });
+      } catch (error) {
+        console.warn('[Eligibility] Patient condition link skipped:', { patientId, submissionId, conditionCode: condition.conditionCode, error });
+      }
+    }));
   }
 
   /**

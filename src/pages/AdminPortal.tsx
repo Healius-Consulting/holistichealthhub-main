@@ -2127,8 +2127,12 @@ export default function AdminPortal() {
     // only an intake submission has no patient record to edit yet.
     const adminConditionPatientId = selectedCrm?.id
       ?? (selectedRegisterPatient && !selectedRegisterPatient.id.startsWith('sub-') ? selectedRegisterPatient.id : null);
-    const adminConditions = selectedCrm?.conditions ?? selectedIntake?.conditions ?? [];
-    const adminPrimaryCondition = selectedCrm?.primaryCondition ?? selectedIntake?.primaryCondition ?? adminConditions[0] ?? '';
+    // A referred application has left the intake queue and HHH admin cannot read
+    // the pharmacy directory, so the register row itself carries the conditions.
+    // An empty list is "nothing known here", not "none": keep looking.
+    const adminConditions = [selectedCrm?.conditions, selectedIntake?.conditions, selectedRegisterPatient?.conditions]
+      .find(candidate => candidate && candidate.length > 0) ?? [];
+    const adminPrimaryCondition = selectedCrm?.primaryCondition ?? selectedIntake?.primaryCondition ?? selectedRegisterPatient?.primaryCondition ?? adminConditions[0] ?? '';
     const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo);
 
     return (

@@ -33,3 +33,23 @@ describe('SQL admin patient register', () => {
     assert.equal(result.resultCount, 0);
   });
 });
+
+describe('register rows carry conditions', () => {
+  it('keeps a referred patient’s conditions from the application they came from', () => {
+    const referred = {
+      ...patient, id: '22222222222241118111111111111111', email: 'jordan@example.test', status: 'REFERRED',
+      sourceSubmissionId: '33333333333341118111111111111111', conditions: [],
+      sourceSubmission: { sourceType: 'PHARMACY_QR', triedTwoTreatments: true, psychiatricExclusion: false, heardAbout: null, marketingConsent: false, conditionCodes: ['chronic-pain', 'insomnia'], primaryConditionCode: 'insomnia' },
+    } as unknown as PatientRecord;
+    const result = buildPatientRegister([referred], [], [organisation], { query: '', organisationId: 'all', status: 'all', from: null, to: null });
+    assert.deepEqual(result.rows[0]?.conditions, ['chronic-pain', 'insomnia']);
+    assert.equal(result.rows[0]?.primaryCondition, 'insomnia');
+  });
+
+  it('falls back to the patient’s own condition rows when the application has none', () => {
+    const migrated = { ...patient, conditions: [{ conditionCode: 'migraine', primary: true }] } as PatientRecord;
+    const result = buildPatientRegister([migrated], [], [organisation], { query: '', organisationId: 'all', status: 'all', from: null, to: null });
+    assert.deepEqual(result.rows[0]?.conditions, ['migraine']);
+    assert.equal(result.rows[0]?.primaryCondition, 'migraine');
+  });
+});
