@@ -49,11 +49,17 @@ function patientStage(status: PatientRecord['status']) {
   return 'Suspended';
 }
 
-function submissionStage(record: PlatformSubmissionRecord) {
-  if (record.onboardingDecision === 'APPROVED') return 'Approved';
+/**
+ * An open application belongs to the intake queue, not the register: listing it
+ * in both is what made the two counts disagree. The register holds patients and
+ * closed applications only.
+ */
+function registerStage(record: PlatformSubmissionRecord): 'Referred' | 'Declined' | null {
   if (record.onboardingDecision === 'DECLINED' || record.outcomeStatus === 'DECLINED') return 'Declined';
-  if (record.followUpStatus === 'NOT_STARTED') return 'New';
-  return 'Under HHH review';
+  // A referred application normally has a patient row that takes precedence; an
+  // older one without is still a referral, never an "approved" third thing.
+  if (record.onboardingDecision === 'APPROVED' || record.outcomeStatus === 'COMPLETED') return 'Referred';
+  return null;
 }
 
 export function buildPatientRegister(
@@ -91,6 +97,8 @@ export function buildPatientRegister(
   }
 
   for (const submission of submissions) {
+    const stage = registerStage(submission);
+    if (!stage) continue;
     const organisationId = submission.assignedOrganisationId ?? submission.sourceOrganisationId;
     if (!organisationId || !submission.email) continue;
     const key = `${organisationId}:${submission.email.toLowerCase()}`;
@@ -111,7 +119,7 @@ export function buildPatientRegister(
       organisationId,
       pharmacyName: organisation?.name || 'Unknown pharmacy',
       gphcNumber: organisation?.gphcNumber ?? '',
-      stage: submissionStage(submission),
+      stage,
       date: submission.updatedAt || submission.submittedAt || null,
     });
   }

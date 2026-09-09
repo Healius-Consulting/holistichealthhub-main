@@ -2126,7 +2126,7 @@ export default function AdminPortal() {
   const renderPatients = () => {
     const registerStatuses = [...new Set([...patientStatuses, ...displayedPatients.map(patient => patient.stage)])].sort((a, b) => onboardingStatusLabel(a).localeCompare(onboardingStatusLabel(b)));
     const activeCount = visibleRegisterPatients.filter(patient => patient.stage === 'HHH approved').length;
-    const referredCount = visibleRegisterPatients.filter(patient => patient.stage === 'Approved').length;
+    const referredCount = visibleRegisterPatients.filter(patient => patient.stage === 'Referred').length;
     const financeReady = isLocalPortalPreview || Boolean(adminFinanceReport) || !adminFinanceLoading;
     const registerAccrued = referralFeeEvents.reduce((total, event) => total + event.amount, 0);
     const selectedKey = selectedRegisterPatient ? registerPatientKey(selectedRegisterPatient) : null;
