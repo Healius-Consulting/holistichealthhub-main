@@ -1,3 +1,4 @@
+import { formatUkDate, formatUkDateTime, formatUkDayDate } from '../utils/ukDates';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { curaleafDeliveryGuidance } from '@hhh/domain/delivery';
@@ -313,29 +314,15 @@ function recordCardTag(record: OrderRecord) {
 
 function formatDate(value: Date | string | null | undefined, includeTime = false) {
   if (!value) return 'Not recorded';
-  return new Date(value).toLocaleString('en-GB', includeTime
-    ? { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-    : { day: 'numeric', month: 'short', year: 'numeric' });
+  return includeTime ? formatUkDateTime(value) : formatUkDate(value);
 }
 
 function formatTimelineDate(value: Date | string) {
-  return new Date(value).toLocaleString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  return formatUkDateTime(value);
 }
 
 function formatDeliveryDate(dateKey: string) {
-  return new Date(`${dateKey}T12:00:00Z`).toLocaleDateString('en-GB', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  });
+  return formatUkDayDate(dateKey);
 }
 
 function OrderFilterControl({

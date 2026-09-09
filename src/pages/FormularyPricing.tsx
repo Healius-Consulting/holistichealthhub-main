@@ -1,3 +1,4 @@
+import { formatUkDateTime } from '../utils/ukDates';
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ChevronLeft, ChevronRight, CircleDollarSign, Package, RefreshCw, Search, ShieldCheck, Tags } from 'lucide-react';
 import ProviderStatusNotice from '../components/ProviderStatusNotice';
@@ -40,7 +41,7 @@ export default function FormularyPricing() {
   const inStockCount = state.catalogue.filter(product => catalogueStockStatus(product) === 'in').length;
   const pricedCount = state.catalogue.filter(product => product.retail > 0).length;
   const updatedAt = state.catalogueUpdatedAt
-    ? new Date(state.catalogueUpdatedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+    ? formatUkDateTime(state.catalogueUpdatedAt)
     : null;
 
   useEffect(() => {

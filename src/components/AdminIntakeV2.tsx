@@ -4,6 +4,8 @@ import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, ge
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { compactPatientName } from '../utils/patientName';
+import { formatPatientDob } from '../utils/patientDob';
+import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
 
 type Detail = Record<string, unknown>;
 type ReviewStatus = 'not_started' | 'due' | 'attempted' | 'in_progress' | 'completed' | 'unable_to_contact';
@@ -11,8 +13,8 @@ type QueueFilter = 'all' | 'website' | 'qr';
 
 const assignmentReasons = ['patient_preference', 'capacity', 'delivery_or_collection', 'geographic_coverage', 'service_compatibility', 'administrative_correction'] as const;
 const words = (value: unknown) => String(value ?? '').replaceAll('_', ' ');
-const dateTime = (value: unknown) => value ? new Date(String(value)).toLocaleString('en-GB') : 'Not recorded';
-const shortDate = (value: unknown) => value ? new Date(String(value)).toLocaleDateString('en-GB') : '—';
+const dateTime = (value: unknown) => formatUkDateTime(value == null ? null : String(value), 'Not recorded');
+const shortDate = (value: unknown) => formatUkDate(value == null ? null : String(value));
 const sameId = (left: string, right: string) => left.replaceAll('-', '').toLowerCase() === right.replaceAll('-', '').toLowerCase();
 const isWebsite = (record: V2EligibilityQueueItem) => record.sourceType === 'general_hhh_website';
 
@@ -470,7 +472,7 @@ export default function AdminIntakeV2() {
                   <section>
                     <h3><UserRound size={16} /> Patient and contact</h3>
                     <dl>
-                      <div><dt>Date of birth</dt><dd>{String(detail.dob ?? '—')}</dd></div>
+                      <div><dt>Date of birth</dt><dd>{formatPatientDob(detail.dob == null ? null : String(detail.dob))}</dd></div>
                       <div><dt>Postcode</dt><dd>{String(detail.postcode ?? '—')}</dd></div>
                       <div><dt>Email</dt><dd>{String(detail.email ?? '—')}</dd></div>
                       <div><dt>Mobile</dt><dd>{String(detail.mobile ?? '—')}</dd></div>

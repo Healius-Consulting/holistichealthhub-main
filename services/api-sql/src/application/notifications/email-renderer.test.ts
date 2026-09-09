@@ -105,7 +105,8 @@ describe('email template renderer', () => {
     });
     assert.match(rendered.subject, /Avery Mitchell/);
     assert.match(rendered.text, /HHH-20260908-A1B2C3D4/);
-    assert.match(rendered.text, /14 March 1988/);
+    // Written the way the pharmacy stores a date of birth, so it can be checked against their record.
+    assert.match(rendered.text, /14\/03\/1988/);
     assert.match(rendered.text, /07700 900123/);
     assert.match(rendered.html, /avery\.mitchell@example\.test/);
     // A UUID reaching the pharmacy is the bug this replaced.

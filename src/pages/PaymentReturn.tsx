@@ -1,3 +1,4 @@
+import { formatUkDateTime } from '../utils/ukDates';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock, XCircle, RefreshCw, ShieldCheck, ArrowRight, Package, FileCheck } from 'lucide-react';
 import HhhBrandMark from '../components/HhhBrandMark';
@@ -141,7 +142,7 @@ export default function PaymentReturn({ status }: { status: PaymentReturnStatus 
               )}
               <div className="receipt-card-row">
                 <span>Date</span>
-                <span>{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                <span>{formatUkDateTime(new Date())}</span>
               </div>
             </div>
 

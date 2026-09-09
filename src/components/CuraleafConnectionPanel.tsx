@@ -1,3 +1,4 @@
+import { formatUkDateTime } from '../utils/ukDates';
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck } from 'lucide-react';
 import { activateCuraleafPharmacy, getCuraleafConnectionStatus, refreshCuraleafConnection } from '../shared/api';
@@ -189,7 +190,7 @@ export default function CuraleafConnectionPanel({
           <div><span>Customer ID</span><strong>{status.customerId ?? 'Not recorded'}</strong></div>
           {/* Null means the credential has never succeeded against Curaleaf — say that
               rather than printing today's date as if it had just been confirmed. */}
-          <div><span>Last confirmed</span><strong>{status.checkedAt ? new Date(status.checkedAt).toLocaleString('en-GB') : 'Never confirmed'}</strong></div>
+          <div><span>Last confirmed</span><strong>{formatUkDateTime(status.checkedAt, 'Never confirmed')}</strong></div>
         </div>
       ) : (
         <div className="empty-state">{busy ? 'Loading the connection status…' : 'Connection status unavailable.'}</div>

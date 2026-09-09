@@ -1,3 +1,4 @@
+import { formatUkDateTime } from '../utils/ukDates';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Clock, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
 import HhhBrandMark from '../components/HhhBrandMark';
@@ -16,15 +17,8 @@ function money(amountPence: number, currency = 'GBP') {
 
 function formatWhen(value?: string | null) {
   if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const formatted = formatUkDateTime(value, '');
+  return formatted || null;
 }
 
 function receiptPresentation(receipt: PublicPaymentReceiptResponse) {

@@ -1,3 +1,4 @@
+import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, LayoutGrid, List, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, getUnresolvedReason, marginPercent, marginToneClass, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
@@ -249,7 +250,7 @@ function newOrderGateMessage(workspaceLive: boolean, patient: UnifiedPatient, tr
 }
 
 function fmtDate(d: Date | string) {
-  return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatUkDate(d);
 }
 
 function recordMatchesQuery(record: CrmRecord, query: string) {
@@ -920,7 +921,7 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
                   <div>
                     <strong>{log.type}</strong>
                     <time dateTime={new Date(log.ts).toISOString()}>
-                      {new Date(log.ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} · {new Date(log.ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      {formatUkDateTime(log.ts).replace(', ', ' · ')}
                     </time>
                     <p>{log.detail}</p>
                   </div>

@@ -126,6 +126,12 @@ function paymentReceiptUrl(receiptHash: string) {
   return `https://holistichealthhub.live/receipt/${encodeURIComponent(receiptHash)}`;
 }
 
+/** A stored date (YYYY-MM-DD) as "14/03/1988": how a date of birth is read against a record. */
+function shortDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : longDate(value);
+}
+
 /** A stored date (YYYY-MM-DD) as "14 March 1988". Read in UTC so the day never shifts. */
 function longDate(value: string) {
   const trimmed = value.trim();
@@ -714,7 +720,8 @@ export const EMAILS = {
     summary: 'Sent when HHH admin activates a referred patient for that pharmacy. Carries the patient name and contact details.',
     render: (payload) => {
       const { pharmacyName, caseReference, enquiry } = fields(payload);
-      const dob = longDate(value(payload, 'dob'));
+      // An identifier the pharmacy checks against its own records, so it is written the way they store it.
+      const dob = shortDate(value(payload, 'dob'));
       const patientDetails = [
         { label: 'Name', value: enquiry.name },
         { label: 'Date of birth', value: dob },

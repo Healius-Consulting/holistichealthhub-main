@@ -1,3 +1,4 @@
+import { formatUkDate } from '../utils/ukDates';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { PATIENT_PRICE_LABEL, PHARMACY_COST_LABEL, WHOLESALE_LABEL, money, useApp } from '../context/AppContext';
@@ -165,7 +166,7 @@ function eventDate(row: FinanceRow) {
 }
 
 function formatDate(value: Date) {
-  return value.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return formatUkDate(value);
 }
 
 /** Prefer API flags; if Firebase deploy lags, derive from fulfilment + recognised. */
