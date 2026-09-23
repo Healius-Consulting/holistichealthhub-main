@@ -21,8 +21,11 @@ describe('admin intake queue query', () => {
   it('accepts the trusted admin surface marker added by the portal rewrite', () => {
     assert.deepEqual(queueQuerySchema.parse({ __hhh_surface: 'admin' }), {
       __hhh_surface: 'admin',
-      limit: 50,
     });
+  });
+
+  it('still accepts an explicit page size without inventing a 50 row default', () => {
+    assert.equal(queueQuerySchema.parse({ __hhh_surface: 'admin', limit: '80' }).limit, 80);
   });
 
   it('still rejects arbitrary query fields and non-admin surface markers', () => {

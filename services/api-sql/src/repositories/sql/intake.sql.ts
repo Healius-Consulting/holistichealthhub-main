@@ -98,7 +98,7 @@ const LIST_TENANT_PENDING_ENQUIRIES_GQL = `
 
 const LIST_PLATFORM_SUBMISSIONS_GQL = `
   query ListPlatformEligibilitySubmissions($limit: Int!) {
-    eligibilitySubmissions(limit: $limit) {
+    eligibilitySubmissions(orderBy: [{ submittedAt: DESC }], limit: $limit) {
       id
       sourceOrganisationId
       assignedOrganisationId

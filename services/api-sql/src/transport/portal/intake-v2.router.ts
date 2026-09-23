@@ -27,7 +27,9 @@ export { canReceiveReferral };
 const caseIdSchema = z.string().regex(/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
 export const queueQuerySchema = z.object({
   cursor: z.string().max(500).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  // Optional. The admin queue used to default to 50 and the portal never asked
+  // for the next page, so applications after the oldest 50 never appeared.
+  limit: z.coerce.number().int().min(1).max(20_000).optional(),
   __hhh_surface: z.literal('admin').optional(),
 }).strict();
 
@@ -105,8 +107,8 @@ function page(records: PlatformSubmissionRecord[], request: Request, duplicatesF
       throw new HttpError(400, 'The queue cursor is invalid.', 'INVALID_CURSOR');
     }
   }
-  const recordsPage = projected.slice(offset, offset + limit);
-  const hasMore = offset + recordsPage.length < projected.length;
+  const recordsPage = limit == null ? projected.slice(offset) : projected.slice(offset, offset + limit);
+  const hasMore = limit != null && offset + recordsPage.length < projected.length;
   return {
     records: recordsPage,
     nextCursor: hasMore && recordsPage.length
@@ -143,7 +145,7 @@ export function createPortalIntakeV2Router(): Router {
   const queue = (source: 'general' | 'pharmacy') => async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertPlatformScope(req.context!);
-      const allSubmissions = await intakeRepo.listPlatformSubmissions();
+      const allSubmissions = await intakeRepo.listPlatformSubmissions(20_001);
       const duplicatesFor = await duplicateIndex(allSubmissions);
       const submissions = allSubmissions
         .filter(isOpenSqlIntake)
