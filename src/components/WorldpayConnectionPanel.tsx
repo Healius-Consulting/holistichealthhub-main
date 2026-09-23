@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
 import {
   connectWorldpayPharmacy,
+  describeApiError,
   getWorldpayConnectionStatus,
   refreshWorldpayConnection,
   removeWorldpayConnection,
@@ -12,7 +13,7 @@ import './WorldpayConnectionPanel.css';
 const EMPTY_FORM = { username: '', password: '', entityId: '' };
 
 function worldpayErrorMessage(error: unknown, fallback: string) {
-  const message = error instanceof Error ? error.message.trim() : '';
+  const message = describeApiError(error, fallback).trim();
   return message && !/^request failed with status \d+/i.test(message) ? message : fallback;
 }
 
@@ -85,16 +86,21 @@ export default function WorldpayConnectionPanel({
     return () => onRefreshControl?.(null);
   }, [busy, onRefreshControl, refresh]);
 
+  const password = form.password.trim();
+  const entityId = form.entityId.replace(/\s+/g, '');
+  const passwordTooShort = password.length > 0 && password.length < 8;
+  const canSave = Boolean(form.username.trim() && password.length >= 8 && entityId);
+
   const connect = async () => {
-    if (!form.username.trim() || !form.password || !form.entityId.trim()) return;
+    if (!canSave) return;
     setBusy(true);
     setError(null);
     try {
       applyStatus(await connectWorldpayPharmacy({
         organisationId,
         username: form.username.trim(),
-        password: form.password,
-        entityId: form.entityId.trim(),
+        password,
+        entityId,
       }));
     } catch (connectError) {
       setError(worldpayErrorMessage(connectError, 'Worldpay could not verify these merchant details. Check them and try again.'));
@@ -138,7 +144,8 @@ export default function WorldpayConnectionPanel({
           <label><span>Worldpay password</span><input className="input" type={showSecrets ? 'text' : 'password'} autoComplete="new-password" value={form.password} onChange={event => setForm(current => ({ ...current, password: event.target.value }))} /></label>
           <label><span>Merchant entity ID</span><input className="input" autoComplete="off" placeholder="PO…" value={form.entityId} onChange={event => setForm(current => ({ ...current, entityId: event.target.value }))} /></label>
           <button type="button" className="btn btn-sm worldpay-connect-panel__reveal" onClick={() => setShowSecrets(value => !value)}>{showSecrets ? <EyeOff size={13} /> : <Eye size={13} />}{showSecrets ? 'Hide secrets' : 'Show while entering'}</button>
-          <button type="button" className="btn btn-primary" disabled={busy || !form.username.trim() || !form.password || !form.entityId.trim()} onClick={() => void connect()}>{busy ? <RefreshCw size={14} className="spin" /> : <ShieldCheck size={14} />}{busy ? 'Verifying with Worldpay…' : rotating ? 'Rotate and verify connection' : 'Save and verify connection'}</button>
+          {passwordTooShort ? <small className="worldpay-connect-panel__error">The password needs at least 8 characters. Check the whole password was pasted.</small> : null}
+          <button type="button" className="btn btn-primary" disabled={busy || !canSave} onClick={() => void connect()}>{busy ? <RefreshCw size={14} className="spin" /> : <ShieldCheck size={14} />}{busy ? 'Verifying with Worldpay…' : rotating ? 'Rotate and verify connection' : 'Save and verify connection'}</button>
         </div>
       )}
 

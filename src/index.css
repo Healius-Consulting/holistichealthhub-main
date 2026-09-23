@@ -12874,6 +12874,10 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   align-self: end;
 }
 
+.admin-curaleaf-connect__fields .admin-curaleaf-connect__error{
+  grid-column: 1 / -1;
+}
+
 .admin-curaleaf-connect__reveal{
   justify-self: start;
   align-self: end;

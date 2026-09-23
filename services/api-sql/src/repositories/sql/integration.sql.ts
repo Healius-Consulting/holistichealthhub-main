@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { dataConnect } from '../../bootstrap/firebase.js';
+import { HttpError } from '../../domain/common/errors.js';
 import type {
   IntegrationConnectionRecord,
+  IntegrationEnvironment,
   IntegrationName,
   IntegrationRepositoryPort,
+  IntegrationStatus,
   RestoreIntegrationConnectionInput,
 } from '../ports/integration.port.js';
+import { planConnectionRestore, preferIntegrationConnection } from './connection-restore.js';
 
 const CONNECTION_FIELDS = `
   id organisationId integration environment status secretResourceName externalCustomerId
@@ -54,6 +58,7 @@ const INSERT_CONNECTION_GQL = `
 const UPDATE_CONNECTION_GQL = `
   mutation UpdateIntegrationConnection(
     $id: UUID!
+    $environment: IntegrationEnvironment!
     $status: IntegrationStatus!
     $secretResourceName: String!
     $externalCustomerId: String
@@ -63,6 +68,7 @@ const UPDATE_CONNECTION_GQL = `
     integrationConnection_update(
       key: { id: $id }
       data: {
+        environment: $environment
         status: $status
         secretResourceName: $secretResourceName
         externalCustomerId: $externalCustomerId
@@ -101,38 +107,73 @@ export class SqlIntegrationRepository implements IntegrationRepositoryPort {
     return result.data.integrationConnections ?? [];
   }
 
-  async findConnection(organisationId: string, integration: IntegrationName): Promise<IntegrationConnectionRecord | null> {
+  private async connectionsFor(organisationId: string, integration: IntegrationName) {
     const result = await dataConnect.executeGraphql<{ integrationConnections: IntegrationConnectionRecord[] }, any>(
       FIND_CONNECTION_GQL,
       { variables: { organisationId, integration } },
     );
-    const connections = result.data.integrationConnections ?? [];
-    return connections.find(connection => connection.status === 'ACTIVE')
-      ?? connections.find(connection => connection.status === 'PENDING_VALIDATION')
-      ?? connections[0]
-      ?? null;
+    return result.data.integrationConnections ?? [];
+  }
+
+  async findConnection(organisationId: string, integration: IntegrationName): Promise<IntegrationConnectionRecord | null> {
+    return preferIntegrationConnection(await this.connectionsFor(organisationId, integration));
+  }
+
+  private async updateConnection(input: {
+    id: string;
+    environment: IntegrationEnvironment;
+    status: IntegrationStatus;
+    secretResourceName: string;
+    externalCustomerId: string | null;
+    maskedCredential: string | null;
+    version: number;
+  }) {
+    await dataConnect.executeGraphql(UPDATE_CONNECTION_GQL, { variables: input });
   }
 
   async restoreConnection(input: RestoreIntegrationConnectionInput): Promise<IntegrationConnectionRecord> {
-    const existing = await this.findConnection(input.organisationId, input.integration);
-    if (existing) {
-      await dataConnect.executeGraphql(UPDATE_CONNECTION_GQL, {
-        variables: {
-          id: existing.id,
+    const rows = await this.connectionsFor(input.organisationId, input.integration);
+    const plan = planConnectionRestore(rows, input.environment);
+    const writtenId = plan.update?.id ?? randomUUID();
+    try {
+      if (plan.update) {
+        await this.updateConnection({
+          id: plan.update.id,
+          environment: input.environment,
           status: input.status,
           secretResourceName: input.secretResourceName,
           externalCustomerId: input.externalCustomerId,
           maskedCredential: input.maskedCredential,
-          version: existing.version + 1,
-        },
-      });
-    } else {
-      await dataConnect.executeGraphql(INSERT_CONNECTION_GQL, {
-        variables: { id: randomUUID(), ...input },
-      });
+          version: plan.update.version,
+        });
+      } else {
+        await dataConnect.executeGraphql(INSERT_CONNECTION_GQL, {
+          variables: { id: writtenId, ...input },
+        });
+      }
+      for (const staleId of plan.disconnectIds) {
+        const stale = rows.find(row => row.id === staleId);
+        if (!stale) continue;
+        await this.updateConnection({
+          id: stale.id,
+          environment: stale.environment,
+          status: 'DISCONNECTED',
+          secretResourceName: stale.secretResourceName || input.secretResourceName,
+          externalCustomerId: stale.externalCustomerId,
+          maskedCredential: stale.maskedCredential,
+          version: Number(stale.version) + 1,
+        });
+      }
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      console.error('Integration connection could not be saved', error);
+      throw new HttpError(503, 'The connection could not be saved. Try again.', 'INTEGRATION_SAVE_FAILED');
     }
-    const restored = await this.findConnection(input.organisationId, input.integration);
-    if (!restored) throw new Error('Integration connection could not be verified after restoration.');
+    const restored = (await this.connectionsFor(input.organisationId, input.integration))
+      .find(row => row.id === writtenId);
+    if (!restored) {
+      throw new HttpError(503, 'The connection could not be confirmed after saving.', 'INTEGRATION_SAVE_FAILED');
+    }
     return restored;
   }
 

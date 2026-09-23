@@ -161,6 +161,14 @@ function customerIds(value: unknown): string[] {
   ].filter((item): item is string => Boolean(item));
 }
 
+/**
+ * Formula records are shared and have no customerId, so they cannot tell two
+ * pharmacies apart. Product records are pharmacy-scoped and carry customerId.
+ */
+export function unexpectedCuraleafCustomerId(body: unknown, expectedCustomerId: string) {
+  return customerIds(body).find(id => id !== expectedCustomerId) ?? null;
+}
+
 async function requestPage(path: string, apiKey: string, environment: IntegrationEnvironment) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -193,7 +201,9 @@ async function probeCuraleafApiKey(apiKey: string, expectedCustomerId: string, b
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await fetch(new URL('v1/formulas/?pageNumber=0&pageSize=1', `${baseUrl}/`), {
+    // Products, not formulas: a formula page never includes customerId, so the
+    // old check stored whatever ID was typed and the mismatch only appeared later.
+    const response = await fetch(new URL('v1/products/?pageNumber=0&pageSize=1', `${baseUrl}/`), {
       method: 'GET',
       signal: controller.signal,
       headers: { Accept: 'application/json', 'X-API-Key': apiKey },
@@ -210,9 +220,8 @@ async function probeCuraleafApiKey(apiKey: string, expectedCustomerId: string, b
     } catch {
       throw new HttpError(502, 'Curaleaf returned an invalid validation response.', 'CURALEAF_VALIDATION_FAILED');
     }
-    const unexpectedCustomer = customerIds(body).find(id => id !== expectedCustomerId);
-    if (unexpectedCustomer) {
-      throw new HttpError(502, 'Curaleaf returned data for a different pharmacy.', 'CURALEAF_TENANT_MISMATCH');
+    if (unexpectedCuraleafCustomerId(body, expectedCustomerId)) {
+      throw new HttpError(400, 'Curaleaf accepted the API key, but the customer ID does not match this key.', 'CURALEAF_TENANT_MISMATCH');
     }
   } catch (error) {
     if (error instanceof HttpError) throw error;

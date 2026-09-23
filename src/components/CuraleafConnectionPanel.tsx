@@ -1,7 +1,7 @@
 import { formatUkDateTime } from '../utils/ukDates';
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck } from 'lucide-react';
-import { activateCuraleafPharmacy, getCuraleafConnectionStatus, refreshCuraleafConnection } from '../shared/api';
+import { activateCuraleafPharmacy, describeApiError, getCuraleafConnectionStatus, refreshCuraleafConnection } from '../shared/api';
 import type { CuraleafConnectionStatus } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { useApp } from '../context/AppContext';
@@ -80,7 +80,9 @@ export default function CuraleafConnectionPanel({
   const firstConnect = status !== null && !connected;
   const showKeyForm = status !== null && (firstConnect || rotating || status.status === 'not_configured' || status.status === 'credential_update_required');
   const pinLiveEstate = replacingTestWithLive || rotatingLive;
-  const canSave = form.customerId.trim().length > 0 && form.apiKey.trim().length >= 16;
+  const apiKey = form.apiKey.replace(/\s+/g, '');
+  const canSave = form.customerId.trim().length > 0 && apiKey.length >= 16;
+  const keyLooksShort = form.apiKey.trim().length > 0 && apiKey.length < 16;
 
   const refresh = async () => {
     setBusy(true);
@@ -91,14 +93,14 @@ export default function CuraleafConnectionPanel({
         : await refreshCuraleafConnection(organisationId));
       dispatch({ type: 'ADD_TOAST', message: 'Curaleaf connection checked.', toastType: 'success' });
     } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : 'The Curaleaf connection could not be refreshed.');
+      setError(describeApiError(refreshError, 'The Curaleaf connection could not be refreshed.'));
     } finally {
       setBusy(false);
     }
   };
 
   const saveKeys = async () => {
-    if (!form.customerId.trim() || form.apiKey.trim().length < 16) return;
+    if (!form.customerId.trim() || apiKey.length < 16) return;
     setBusy(true);
     setError(null);
     try {
@@ -111,7 +113,7 @@ export default function CuraleafConnectionPanel({
         : await activateCuraleafPharmacy({
           organisationId,
           customerId: form.customerId.trim(),
-          writeApiKey: form.apiKey.trim(),
+          writeApiKey: apiKey,
           ...(pinLiveEstate ? { environment: 'PRODUCTION' as const } : {}),
         }));
       dispatch({
@@ -124,7 +126,7 @@ export default function CuraleafConnectionPanel({
         toastType: 'success',
       });
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Curaleaf could not verify this API key.');
+      setError(describeApiError(saveError, 'Curaleaf could not verify this API key.'));
     } finally {
       setBusy(false);
     }
@@ -227,6 +229,7 @@ export default function CuraleafConnectionPanel({
             {showSecrets ? <EyeOff size={13} /> : <Eye size={13} />}
             {showSecrets ? 'Hide key' : 'Show while entering'}
           </button>
+          {keyLooksShort ? <small className="admin-curaleaf-connect__error">The API key looks incomplete. Paste the full key Curaleaf issued.</small> : null}
           <button type="button" className="btn btn-primary" disabled={busy || !canSave} onClick={() => void saveKeys()}>
             {busy ? <RefreshCw size={14} className="spin" /> : <ShieldCheck size={14} />}
             {busy

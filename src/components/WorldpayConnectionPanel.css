@@ -15,6 +15,7 @@
 .worldpay-connect-panel__actions .btn { min-height: 44px; }
 .worldpay-connect-panel__actions .btn-danger { margin-left: auto; }
 .worldpay-connect-panel__error { margin: 0; padding: 9px 11px; border-left: 3px solid var(--red-500); background: var(--red-50); color: var(--red-700); font-size: 11px; }
+.worldpay-connect-panel__fields .worldpay-connect-panel__error { grid-column: 1 / -1; }
 @media (max-width: 680px) {
   .payment-route-settings { grid-template-columns: 1fr; }
   .worldpay-connect-panel__fields { grid-template-columns: 1fr; }

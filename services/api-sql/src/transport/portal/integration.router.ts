@@ -51,7 +51,9 @@ export async function authorisedOrganisationId(
 const worldpayCredentialSchema = z.object({
   organisationId: z.string().optional(),
   username: z.string().trim().min(1).max(500),
-  password: z.string().min(8).max(1_000),
+  // Trim pasted whitespace. A trailing line break used to reach Worldpay and
+  // come back as a rejected password, with no field to point at.
+  password: z.string().trim().min(8).max(1_000),
   entityId: z.string().trim().min(1).max(200),
 });
 const curaleafCredentialSchema = z.object({
@@ -174,7 +176,13 @@ export function createPortalIntegrationRouter(): Router {
 
   router.put('/portal/integrations/curaleaf/credentials', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const input = curaleafCredentialSchema.parse(req.body);
+      const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+      const withoutLineBreaks = (value: unknown) => typeof value === 'string' ? value.replace(/\s+/g, '') : value;
+      const input = curaleafCredentialSchema.parse({
+        ...body,
+        apiKey: withoutLineBreaks(body.apiKey),
+        writeApiKey: withoutLineBreaks(body.writeApiKey),
+      });
       const organisationId = await authorisedOrganisationId(req.context, input.organisationId, organisationRepo);
       const apiKey = (input.apiKey ?? input.writeApiKey)!;
       const credential = {
@@ -237,7 +245,12 @@ export function createPortalIntegrationRouter(): Router {
 
   router.put('/portal/integrations/worldpay/credentials', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const input = worldpayCredentialSchema.parse(req.body);
+      const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+      const input = worldpayCredentialSchema.parse({
+        ...body,
+        entityId: typeof body.entityId === 'string' ? body.entityId.replace(/\s+/g, '') : body.entityId,
+        password: typeof body.password === 'string' ? body.password.trim() : body.password,
+      });
       const organisationId = await authorisedOrganisationId(req.context, input.organisationId, organisationRepo);
       const credential: WorldpayCredential = {
         username: input.username,
