@@ -10,6 +10,7 @@ const SCREEN_TITLES: Record<string, string> = {
   patients: 'Patients hub',
   finance: 'Prescription financials',
   settings: 'Settings & assets',
+  contacts: 'Key contacts',
 };
 
 export default function Header() {

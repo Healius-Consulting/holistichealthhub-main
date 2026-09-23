@@ -27,6 +27,10 @@
     "./curaleaf-catalogue-label": {
       "types": "./curaleaf-catalogue-label.d.ts",
       "default": "./curaleaf-catalogue-label.js"
+    },
+    "./key-contacts": {
+      "types": "./key-contacts.d.ts",
+      "default": "./key-contacts.js"
     }
   }
 }

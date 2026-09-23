@@ -1,4 +1,4 @@
-import { ArrowUpRight, BadgePoundSterling, FilePlus, Home, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
+import { ArrowUpRight, BadgePoundSterling, FilePlus, Home, LifeBuoy, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
 
 
 import { useAuth } from '../auth/useAuth';
@@ -37,6 +37,7 @@ export default function Navigation() {
         { key: 'formulary', label: 'Catalogue', shortLabel: 'Catalogue', icon: <Tags size={17} /> },
         { key: 'finance', label: 'Financials', shortLabel: 'Financials', icon: <BadgePoundSterling size={17} /> },
         { key: 'settings', label: 'Settings & Assets', icon: <Settings size={17} /> },
+        { key: 'contacts', label: 'Help', shortLabel: 'Help', icon: <LifeBuoy size={17} /> },
       ],
     },
   ];

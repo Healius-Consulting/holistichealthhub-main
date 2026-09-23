@@ -70,4 +70,27 @@ describe('email catalog', () => {
     assert.equal(closureVariantForReason('INCOMPLETE_INFORMATION'), 'incomplete');
     assert.equal(closureVariantForReason('NO_RESPONSE'), 'incomplete');
   });
+
+  it('cites the confirmed clinic, supplier and platform contacts', () => {
+    const refund = EMAILS.patient_refunded.render({ firstName: 'Avery', orderNumber: 'HHH-1' });
+    assert.match(refund.text, /patientsupport@curaleafclinic.com/);
+    assert.match(refund.text, /020 7459 4075/);
+    assert.match(refund.text, /Mon–Fri 08:00–17:00/);
+
+    const cancellation = EMAILS.pharmacy_order_cancelled.render({
+      orderNumber: 'HHH-9',
+      purchaseOrderId: 'PO-44',
+    });
+    assert.match(cancellation.text, /0191 743 1007/);
+    assert.match(cancellation.text, /purchase order PO-44/);
+    assert.match(cancellation.text, /before speaking to the patient/);
+    assert.match(cancellation.text, /patientsupport@curaleafclinic.com/);
+    assert.match(cancellation.html, /tel:\+441917431007/);
+    assert.match(cancellation.html, /mailto:patientsupport@curaleafclinic.com/);
+
+    for (const code of ['pharmacy_staff_invite', 'pharmacy_password_reset', 'pharmacy_2fa_enabled', 'pharmacy_2fa_disabled'] as const) {
+      assert.equal(replyToFor(code), 'IT@holistichealthhub.live');
+      assert.match(EMAILS[code].render({ pharmacyName: 'Eastwood Health' }).text, /IT@holistichealthhub.live/);
+    }
+  });
 });

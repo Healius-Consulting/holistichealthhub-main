@@ -33,10 +33,10 @@ Operational pharmacy emails go to the **owner** account only (the earliest staff
 
 ## Staff login emails
 
-- `pharmacy_staff_invite` (staff.invited): Sent when an HHH admin invites pharmacy staff or a platform admin.
-- `pharmacy_password_reset` (staff.password_reset): Sent from the staff login form, or when an HHH admin queues a reset.
-- `pharmacy_2fa_enabled` (staff.2fa_enabled): Sent after a staff member enrols an authenticator app.
-- `pharmacy_2fa_disabled` (staff.2fa_disabled): Sent after an HHH admin removes the authenticator app.
+- `pharmacy_staff_invite` (staff.invited): Sent when an HHH admin invites pharmacy staff or a platform admin. Reply-To: `IT@holistichealthhub.live`.
+- `pharmacy_password_reset` (staff.password_reset): Sent from the staff login form, or when an HHH admin queues a reset. Reply-To: `IT@holistichealthhub.live`.
+- `pharmacy_2fa_enabled` (staff.2fa_enabled): Sent after a staff member enrols an authenticator app. Reply-To: `IT@holistichealthhub.live`.
+- `pharmacy_2fa_disabled` (staff.2fa_disabled): Sent after an HHH admin removes the authenticator app. Reply-To: `IT@holistichealthhub.live`.
 
 ## Admin emails
 

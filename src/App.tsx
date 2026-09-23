@@ -11,6 +11,7 @@ import Patients from './pages/Patients';
 import AdminPortal from './pages/AdminPortal';
 import PharmacySettings from './pages/PharmacySettings';
 import PharmacyFinance from './pages/PharmacyFinance';
+import KeyContacts from './pages/KeyContacts';
 
 import { tenantThemeVariables } from './utils/tenantTheme';
 import { AuthProvider } from './auth/AuthProvider';
@@ -83,7 +84,7 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
   };
 }
 
-const pharmacyScreens = new Set<Screen>(['home', 'create', 'orders', 'patients', 'formulary', 'finance', 'settings']);
+const pharmacyScreens = new Set<Screen>(['home', 'create', 'orders', 'patients', 'formulary', 'finance', 'settings', 'contacts']);
 
 function pharmacyScreenFromPath(): Screen {
   const segment = surfaceRelativePath(window.location.pathname, appPathPrefix)?.split('/').filter(Boolean)[0];
@@ -287,6 +288,7 @@ function StaffWorkspace() {
         );
       case 'finance': return <PharmacyFinance />;
       case 'settings': return <PharmacySettings />;
+      case 'contacts': return <KeyContacts />;
       default: return <PharmacyOverview />;
     }
   };

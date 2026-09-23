@@ -13,6 +13,10 @@ test('admin routes are explicit and pharmacy details are identifier-scoped', () 
   assert.equal(isSupportedPortalRelativePath('admin', '/platform'), true);
 });
 
+test('pharmacy help contacts is a supported workspace path', () => {
+  assert.equal(isSupportedPortalRelativePath('pharmacy', '/contacts'), true);
+});
+
 test('unknown, malformed, and cross-surface routes fail closed', () => {
   for (const path of ['/settings', '/orders', '/pharmacy', '/pharmacy/branch/extra', '/pharmacy/%2e%2e', '/anything']) {
     assert.equal(isSupportedPortalRelativePath('admin', path), false, `admin path ${path}`);

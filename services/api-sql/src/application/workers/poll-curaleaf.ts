@@ -175,6 +175,7 @@ async function persistSupplierCancellation(
     payload: {
       orderNumber: order.orderNumber,
       summary: input.summary,
+      ...(input.purchaseOrderId ? { purchaseOrderId: input.purchaseOrderId } : {}),
     },
     keyParts: ['pharmacy-order-cancelled', order.id, input.entityId, input.source],
   });

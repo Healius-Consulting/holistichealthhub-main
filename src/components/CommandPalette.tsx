@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Building2, CircleUserRound, FilePlus, Home, Package, ReceiptText, Search, Settings, Tags, UserSearch, Users, X } from 'lucide-react';
+import { Building2, CircleUserRound, FilePlus, Home, LifeBuoy, Package, ReceiptText, Search, Settings, Tags, UserSearch, Users, X } from 'lucide-react';
 import { useApp, type Screen } from '../context/AppContext';
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteEvents';
 
@@ -45,6 +45,7 @@ export default function CommandPalette({ commands: suppliedCommands, contextLabe
     { label: 'Orders', detail: 'Payments, Curaleaf progress, delivery and collection', group: 'Navigate', keywords: 'billing track supplier provider prescription fulfilment', icon: <Package size={16} />, run: () => navigate('orders') },
     { label: 'Curaleaf catalogue', detail: 'Products, pack sizes and patient prices', group: 'Navigate', icon: <Tags size={16} />, run: () => navigate('formulary') },
     { label: 'Organisation settings', detail: 'Setup, payment routes, forms, QR assets and pharmacy identity', group: 'Navigate', keywords: 'resources eligibility content pack', icon: <Settings size={16} />, run: () => navigate('settings') },
+    { label: 'Key contacts', detail: 'Who to phone or email for the clinic, supply and support', group: 'Navigate', keywords: 'help phone email curaleaf clinic labs healius', icon: <LifeBuoy size={16} />, run: () => navigate('contacts') },
     { label: 'Start a prescription', detail: 'Create a new draft session', group: 'Actions', icon: <FilePlus size={16} />, run: () => { dispatch({ type: 'NEW_ORDER' }); navigate('create'); } },
     { label: 'Open patient records', detail: 'See patients activated for this pharmacy by HHH', group: 'Actions', icon: <Users size={16} />, run: () => navigate('patients') },
   ];

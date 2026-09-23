@@ -1,5 +1,6 @@
 import { brandedEmail, escapeHtml, resolveEmailHeader, safeHttpUrl } from './email-layout.js';
 import { enquiryDisplayFields } from './email-mask.js';
+import { keyContact, telHref, type KeyContact } from './key-contacts.js';
 
 export const EMAIL_EVENT_NAMES = [
   'enquiry.submitted',
@@ -69,7 +70,7 @@ export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
  * Copy must never invite a reply unless the template names an alias here, or the
  * patient is writing to a mailbox nobody reads.
  */
-export type EmailAlias = 'referrals';
+export type EmailAlias = 'referrals' | 'IT';
 
 export function emailAliasDomain() {
   return process.env.EMAIL_ALIAS_DOMAIN?.trim() || 'holistichealthhub.live';
@@ -124,6 +125,20 @@ function paymentBreakdown(payload: unknown) {
 
 function paymentReceiptUrl(receiptHash: string) {
   return `https://holistichealthhub.live/receipt/${encodeURIComponent(receiptHash)}`;
+}
+
+function primaryAddress(contact: KeyContact) {
+  const address = contact.emails[0]?.address;
+  if (!address) throw new Error(`Key contact ${contact.key} has no email.`);
+  return address;
+}
+
+function mailLink(address: string) {
+  return `<a href="mailto:${escapeHtml(address)}">${escapeHtml(address)}</a>`;
+}
+
+function phoneLink(phone: string) {
+  return `<a href="${escapeHtml(telHref(phone))}">${escapeHtml(phone)}</a>`;
 }
 
 /** A stored date (YYYY-MM-DD) as "14/03/1988": how a date of birth is read against a record. */
@@ -487,16 +502,21 @@ export const EMAILS = {
     summary: 'Sent when pharmacy confirms a completed refund.',
     render: (payload) => {
       const { firstName, orderNumber, amount, receiptHash, pharmacyDetails } = fields(payload);
+      const clinic = keyContact('clinic');
+      const clinicEmail = primaryAddress(clinic);
+      const clinicPhone = clinic.phone ?? '';
+      const rePrescribe = `If you need a new prescription because an item was unavailable or your prescription has expired, contact ${clinic.org} at ${clinicEmail} or ${clinicPhone}, ${clinic.hours}. Your pharmacy can contact the clinic instead.`;
       return render({
         kind: 'patient_refunded',
         payload,
         subject: 'Your payment has been refunded',
         preheader: 'A refund has been completed for your order.',
         title: 'Payment refunded',
-        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nA refund${amount ? ` of ${amount}` : ''} has been completed${orderNumber ? ` for order ${value(payload, 'orderNumber')}` : ''}. It can take a few working days to appear on the original payment method.\n${receiptHash ? `Receipt: ${paymentReceiptUrl(receiptHash)}\n` : ''}`,
+        text: `Hi ${value(payload, 'firstName') || 'there'},\n\nA refund${amount ? ` of ${amount}` : ''} has been completed${orderNumber ? ` for order ${value(payload, 'orderNumber')}` : ''}. It can take a few working days to appear on the original payment method.\n\n${rePrescribe}\n${receiptHash ? `Receipt: ${paymentReceiptUrl(receiptHash)}\n` : ''}`,
         paragraphs: [
           `Hi ${firstName},`,
           `A refund${amount ? ` of <strong>${escapeHtml(amount)}</strong>` : ''} has been completed${orderNumber ? ` for order <strong>${orderNumber}</strong>` : ''}. It can take a few working days to appear on the original payment method.`,
+          `If you need a new prescription because an item was unavailable or your prescription has expired, contact ${escapeHtml(clinic.org)} at ${mailLink(clinicEmail)} or ${phoneLink(clinicPhone)}, ${escapeHtml(clinic.hours ?? '')}. Your pharmacy can contact the clinic instead.`,
         ],
         highlight: amount ? { label: 'Refund', value: amount } : undefined,
         cta: receiptHash ? { label: 'View receipt', href: paymentReceiptUrl(receiptHash) } : undefined,
@@ -631,6 +651,7 @@ export const EMAILS = {
     events: ['staff.invited'],
     schedule: 'immediate',
     summary: 'Sent when an HHH admin invites pharmacy staff or a platform admin.',
+    replyTo: 'IT',
     render: (payload) => {
       const { pharmacyName, actionLink } = fields(payload);
       return render({
@@ -639,13 +660,13 @@ export const EMAILS = {
         subject: 'Set up your Holistic Health Hub account',
         preheader: 'You have been invited to the staff portal.',
         title: 'Sign up',
-        text: `You have been invited to access the Holistic Health Hub portal for ${value(payload, 'pharmacyName') || 'your pharmacy'}.\n\nSet your password:\n${actionLink}\n`,
+        text: `You have been invited to access the Holistic Health Hub portal for ${value(payload, 'pharmacyName') || 'your pharmacy'}.\n\nSet your password:\n${actionLink}\n\nFor help signing in, email ${primaryAddress(keyContact('hhhPlatform'))}.`,
         paragraphs: [
           `You have been invited to the Holistic Health Hub staff portal${value(payload, 'pharmacyName') ? ` for <strong>${pharmacyName}</strong>` : ''}.`,
           'Use the button below to set your password, then sign in and set up two-factor authentication.',
         ],
         cta: actionLink ? { label: 'Set your password', href: actionLink } : undefined,
-        footerNote: 'If you were not expecting this invitation, you can ignore this email.',
+        footerNote: `If you were not expecting this invitation, you can ignore this email. For help signing in, email ${mailLink(primaryAddress(keyContact('hhhPlatform')))}.`,
       });
     },
   },
@@ -654,6 +675,7 @@ export const EMAILS = {
     events: ['staff.password_reset'],
     schedule: 'immediate',
     summary: 'Sent from the staff login form, or when an HHH admin queues a reset.',
+    replyTo: 'IT',
     render: (payload) => {
       const { actionLink } = fields(payload);
       return render({
@@ -662,10 +684,10 @@ export const EMAILS = {
         subject: 'Reset your Holistic Health Hub password',
         preheader: 'Use this link to choose a new password.',
         title: 'Reset password',
-        text: `Use this link to reset your Holistic Health Hub password:\n${actionLink}\n`,
+        text: `Use this link to reset your Holistic Health Hub password:\n${actionLink}\n\nFor help signing in, email ${primaryAddress(keyContact('hhhPlatform'))}.`,
         paragraphs: ['Use the button below to choose a new password for the Holistic Health Hub staff portal.'],
         cta: actionLink ? { label: 'Reset password', href: actionLink } : undefined,
-        footerNote: 'If you did not request this, you can ignore this email. The link expires after a short time.',
+        footerNote: `If you did not request this, you can ignore this email. The link expires after a short time. For help signing in, email ${mailLink(primaryAddress(keyContact('hhhPlatform')))}.`,
       });
     },
   },
@@ -674,18 +696,19 @@ export const EMAILS = {
     events: ['staff.2fa_enabled'],
     schedule: 'immediate',
     summary: 'Sent after a staff member enrols an authenticator app.',
+    replyTo: 'IT',
     render: (payload) => render({
       kind: 'pharmacy_2fa_enabled',
       payload,
       subject: 'Authenticator app added to your account',
       preheader: 'Two-factor authentication is now switched on.',
       title: '2FA set up',
-      text: 'An authenticator app has been added to your Holistic Health Hub staff account. Sign-in now needs your password and a six-digit code.\n',
+      text: `An authenticator app has been added to your Holistic Health Hub staff account. Sign-in now needs your password and a six-digit code.\n\nIf you did not do this, email ${primaryAddress(keyContact('hhhPlatform'))} immediately.`,
       paragraphs: [
         'An authenticator app has been added to your Holistic Health Hub staff account.',
         'Sign-in now needs your password and a six-digit code from that app.',
       ],
-      footerNote: 'If you did not do this, contact an HHH administrator immediately.',
+      footerNote: `If you did not do this, email ${mailLink(primaryAddress(keyContact('hhhPlatform')))} immediately.`,
     }),
   },
   pharmacy_2fa_disabled: {
@@ -693,18 +716,19 @@ export const EMAILS = {
     events: ['staff.2fa_disabled'],
     schedule: 'immediate',
     summary: 'Sent after an HHH admin removes the authenticator app.',
+    replyTo: 'IT',
     render: (payload) => render({
       kind: 'pharmacy_2fa_disabled',
       payload,
       subject: 'Authenticator app removed from your account',
       preheader: 'Two-factor authentication has been turned off.',
       title: '2FA turned off',
-      text: 'The authenticator app on your Holistic Health Hub staff account has been removed. You will be asked to set it up again the next time you sign in.\n',
+      text: `The authenticator app on your Holistic Health Hub staff account has been removed. You will be asked to set it up again the next time you sign in.\n\nIf you did not expect this, email ${primaryAddress(keyContact('hhhPlatform'))} immediately.`,
       paragraphs: [
         'The authenticator app on your Holistic Health Hub staff account has been removed.',
         'You will be asked to set it up again the next time you sign in.',
       ],
-      footerNote: 'If you did not expect this, contact an HHH administrator immediately.',
+      footerNote: `If you did not expect this, email ${mailLink(primaryAddress(keyContact('hhhPlatform')))} immediately.`,
     }),
   },
   /**
@@ -794,16 +818,32 @@ export const EMAILS = {
     summary: 'Sent when Curaleaf reports a cancellation that needs pharmacy action.',
     render: (payload) => {
       const { orderNumber, summary } = fields(payload);
+      const labs = keyContact('curaleafLabs');
+      const clinic = keyContact('clinic');
+      const labsPhone = labs.phone ?? '';
+      const clinicPhone = clinic.phone ?? '';
+      const clinicEmail = primaryAddress(clinic);
+      const purchaseOrderId = value(payload, 'purchaseOrderId');
+      const quote = purchaseOrderId
+        ? `purchase order ${purchaseOrderId}`
+        : (value(payload, 'orderNumber') ? `order ${value(payload, 'orderNumber')}` : 'the order reference');
+      const quoteHtml = purchaseOrderId
+        ? `purchase order <strong>${escapeHtml(purchaseOrderId)}</strong>`
+        : (orderNumber ? `order <strong>${orderNumber}</strong>` : 'the order reference');
+      const callLabs = `Phone ${labs.org} on ${labsPhone} before speaking to the patient, and quote ${quote}. Lines are open ${labs.hours}.`;
+      const rePrescribe = `If a line needs a new prescription because the item is unavailable or the prescription has expired, you or the patient can contact ${clinic.org} at ${clinicEmail} or ${clinicPhone}. The clinic is open ${clinic.hours}. You decide which of you makes that call.`;
       return render({
         kind: 'pharmacy_order_cancelled',
         payload,
         subject: 'Supplier cancellation',
-        preheader: 'Review the affected prescription for refund or replacement.',
+        preheader: 'Phone Curaleaf Labs and quote the purchase order.',
         title: 'Supplier cancellation',
-        text: `Curaleaf has reported a cancellation for order${orderNumber ? `: ${value(payload, 'orderNumber')}` : ''}.${value(payload, 'summary') ? `\n\n${value(payload, 'summary')}` : ''}`,
+        text: `Curaleaf has reported a cancellation for order${orderNumber ? `: ${value(payload, 'orderNumber')}` : ''}.${value(payload, 'summary') ? `\n\n${value(payload, 'summary')}` : ''}\n\n${callLabs}\n\n${rePrescribe}`,
         paragraphs: [
           `Curaleaf has reported a cancellation for order${orderNumber ? `: <strong>${orderNumber}</strong>` : ''}.`,
           ...(summary ? [summary] : []),
+          `Phone ${escapeHtml(labs.org)} on ${phoneLink(labsPhone)} before speaking to the patient, and quote ${quoteHtml}. Lines are open ${escapeHtml(labs.hours ?? '')}.`,
+          `If a line needs a new prescription because the item is unavailable or the prescription has expired, you or the patient can contact ${escapeHtml(clinic.org)} at ${mailLink(clinicEmail)} or ${phoneLink(clinicPhone)}. The clinic is open ${escapeHtml(clinic.hours ?? '')}. You decide which of you makes that call.`,
         ],
       });
     },

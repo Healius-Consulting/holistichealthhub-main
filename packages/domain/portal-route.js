@@ -13,6 +13,7 @@ export const PHARMACY_VIEW_PATHS = Object.freeze([
   '/patients',
   '/finance',
   '/settings',
+  '/contacts',
 ]);
 
 const adminPaths = new Map(Object.entries(ADMIN_VIEW_PATHS).map(([view, path]) => [path, view]));

@@ -414,7 +414,7 @@ export interface PlatformIntegration {
   status: 'connected' | 'pending' | 'attention';
 }
 
-export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | 'finance' | 'settings';
+export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | 'finance' | 'settings' | 'contacts';
 
 /**
  * Which record a board should open. Opening an order from a patient — or a patient
