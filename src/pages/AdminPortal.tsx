@@ -41,7 +41,7 @@ import {
 import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources';
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
-import { attributedCountForOrganisation, attributedPatientCounts, portfolioAttributedCount } from '../utils/attributedPatients';
+import { attributedCareLabel, attributedClosedNote, attributedCountForOrganisation, attributedInCare, attributedPatientCounts, attributedStagesForOrganisation, portfolioAttributedCount, splitAttributedRecords } from '../utils/attributedPatients';
 import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
 import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
@@ -1743,6 +1743,9 @@ export default function AdminPortal() {
     const selectedPatients = isLocalPortalPreview
       ? previewAttributed
       : attributedCountForOrganisation(overviewAttribution, selectedPharmacy?.id ?? '');
+    const selectedStages = isLocalPortalPreview
+      ? (selectedPharmacy ? splitAttributedRecords(allPatients.filter(patient => patient.organisationId === selectedPharmacy.id)) : null)
+      : attributedStagesForOrganisation(overviewAttribution, selectedPharmacy?.id ?? '');
     const patientReach = isLocalPortalPreview
       ? allPatients.length
       : overviewAttribution
@@ -2001,7 +2004,23 @@ export default function AdminPortal() {
                       <div className="admin-overview-crm__facts">
                         <article>
                           <small>Attributed patients</small>
-                          <strong>{selectedPatients == null ? (overviewAttributionStatus === 'error' ? '—' : 'Loading') : selectedPatients}</strong>
+                          {selectedStages && selectedPatients != null ? (
+                            <>
+                              <div className="admin-overview-crm__split">
+                                <span>
+                                  <strong>{attributedInCare(selectedStages)}</strong>
+                                  <em>{attributedCareLabel(selectedStages)}</em>
+                                </span>
+                                <span>
+                                  <strong>{selectedStages.declined}</strong>
+                                  <em>Declined</em>
+                                </span>
+                              </div>
+                              {attributedClosedNote(selectedStages) ? <em>{attributedClosedNote(selectedStages)}</em> : null}
+                            </>
+                          ) : (
+                            <strong>{selectedPatients == null ? (overviewAttributionStatus === 'error' ? '—' : 'Loading') : selectedPatients}</strong>
+                          )}
                         </article>
                         <article>
                           <small>Workspace</small>

@@ -12701,6 +12701,27 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-style: normal;
 }
 
+.admin-overview-crm__split{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.admin-overview-crm__split > span{
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-overview-crm__split > span:first-child strong{
+  color: var(--color-success);
+}
+
+.admin-overview-crm__split > span:last-child strong{
+  color: var(--color-danger);
+}
+
 .admin-overview-crm__note{
   margin: 0;
   color: var(--text-secondary);
