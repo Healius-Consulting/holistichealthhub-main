@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { sameUuid } from '../../domain/common/uuid.js';
 import { formConditionRecords, primaryConditionCode } from '../../domain/eligibility/form-conditions.js';
 import { applicationStage, isClosedApplicationStage, patientStage } from '../../domain/eligibility/record-stage.js';
 import type { PlatformSubmissionRecord } from '../../repositories/ports/intake.port.js';
@@ -134,7 +135,7 @@ export function buildPatientRegister(
   // stage filter narrows the rows within it, but the scope counts are reported
   // for every stage so the stage buttons can say what each one would show.
   const scope = rows.filter(row => {
-    if (filters.organisationId !== 'all' && row.organisationId !== filters.organisationId) return false;
+    if (filters.organisationId !== 'all' && !sameUuid(row.organisationId, filters.organisationId)) return false;
     const date = londonDateKey(row.date);
     if (filters.from && (!date || date < filters.from)) return false;
     if (filters.to && (!date || date > filters.to)) return false;

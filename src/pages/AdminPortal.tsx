@@ -41,9 +41,10 @@ import {
 import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources';
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
+import { attributedCountForOrganisation, attributedPatientCounts, portfolioAttributedCount } from '../utils/attributedPatients';
 import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
-import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminPatientRegister, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
+import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
@@ -1027,6 +1028,10 @@ export default function AdminPortal() {
   const [patientExportError, setPatientExportError] = useState<string | null>(null);
   const [serverPatientRegister, setServerPatientRegister] = useState<PatientRegisterExportResult | null>(null);
   const [patientRegisterLoading, setPatientRegisterLoading] = useState(false);
+  const [overviewAttribution, setOverviewAttribution] = useState<ReturnType<typeof attributedPatientCounts> | null>(null);
+  const [overviewAttributionStatus, setOverviewAttributionStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [openIntakeCount, setOpenIntakeCount] = useState<number | null>(null);
+  const [openIntakeStatus, setOpenIntakeStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [selectedRegisterPatient, setSelectedRegisterPatient] = useState<PatientRegisterExportRow | null>(null);
   const [editingAdminConditions, setEditingAdminConditions] = useState(false);
   const [savingAdminConditions, setSavingAdminConditions] = useState(false);
@@ -1489,6 +1494,36 @@ export default function AdminPortal() {
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [patientFrom, patientOrganisationId, patientStatus, patientTo, query, view]);
 
+  useEffect(() => {
+    if (isLocalPortalPreview || view !== 'overview') return;
+    let cancelled = false;
+    setOverviewAttributionStatus('loading');
+    setOpenIntakeStatus('loading');
+    void getAdminPatientRegister({ query: '', organisationId: 'all', status: 'all', from: null, to: null })
+      .then(result => {
+        if (cancelled) return;
+        setOverviewAttribution(attributedPatientCounts(result.scopeCounts, result.resultCount));
+        setOverviewAttributionStatus('ready');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOverviewAttribution(null);
+        setOverviewAttributionStatus('error');
+      });
+    void Promise.all([getAdminGeneralIntake(), getAdminPharmacyReferralIntake()])
+      .then(([general, referrals]) => {
+        if (cancelled) return;
+        setOpenIntakeCount(general.records.length + referrals.records.length);
+        setOpenIntakeStatus('ready');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOpenIntakeCount(null);
+        setOpenIntakeStatus('error');
+      });
+    return () => { cancelled = true; };
+  }, [view]);
+
   // A test patient is one whose pharmacy is a platform test account or a
   // training workspace — the same rule the rest of the admin surface uses.
   const isTestPatientRow = useCallback((row: { organisationId: string }) => {
@@ -1701,10 +1736,23 @@ export default function AdminPortal() {
     const financeReady = isLocalPortalPreview || Boolean(adminFinanceReport) || !adminFinanceLoading;
     const selectedPharmacy = overviewPharmacy;
     const selectedFees = selectedPharmacy ? feesByOrganisation.get(selectedPharmacy.id) : null;
-    const selectedPatients = selectedPharmacy ? new Set([
+    const previewAttributed = selectedPharmacy ? new Set([
       ...(crmByOrganisation.get(selectedPharmacy.id) ?? []).map(patient => patient.email),
       ...(submissionsByOrganisation.get(selectedPharmacy.id) ?? []).map(submission => submission.email),
     ]).size : 0;
+    const selectedPatients = isLocalPortalPreview
+      ? previewAttributed
+      : attributedCountForOrganisation(overviewAttribution, selectedPharmacy?.id ?? '');
+    const patientReach = isLocalPortalPreview
+      ? allPatients.length
+      : overviewAttribution
+        ? portfolioAttributedCount(
+          overviewAttribution,
+          state.organisations,
+          organisation => isPlatformTestPharmacy(organisation) || Boolean(organisation.testAccount),
+        )
+        : null;
+    const intakeWaiting = isLocalPortalPreview ? pendingAdminDecisions : openIntakeCount;
     const workspaceLabel = selectedPharmacy?.status === 'paused'
       ? 'Paused'
       : isPlatformTestPharmacy(selectedPharmacy)
@@ -1759,7 +1807,11 @@ export default function AdminPortal() {
             </article>
             <article className="order-crm-metric">
               <span className="order-crm-metric__icon"><Users size={16} /></span>
-              <span><small>Patient reach</small><strong>{allPatients.length}</strong><em>Attributed records across the portfolio</em></span>
+              <span>
+                <small>Patient reach</small>
+                <strong>{patientReach == null ? (overviewAttributionStatus === 'error' ? '—' : 'Loading') : patientReach}</strong>
+                <em>{overviewAttributionStatus === 'error' ? 'Register unavailable' : 'Attributed records across the portfolio'}</em>
+              </span>
             </article>
             <article className="order-crm-metric">
               <span className="order-crm-metric__icon"><PoundSterling size={16} /></span>
@@ -1771,7 +1823,17 @@ export default function AdminPortal() {
             </article>
             <article className="order-crm-metric">
               <span className="order-crm-metric__icon"><UserCheck size={16} /></span>
-              <span><small>Intake queue</small><strong>{pendingAdminDecisions}</strong><em>{pendingAdminDecisions ? 'Decisions waiting on HHH' : 'No pending decisions'}</em></span>
+              <span>
+                <small>Intake queue</small>
+                <strong>{intakeWaiting == null ? (openIntakeStatus === 'error' ? '—' : 'Loading') : intakeWaiting}</strong>
+                <em>{
+                  intakeWaiting == null
+                    ? (openIntakeStatus === 'error' ? 'Queue unavailable' : 'Open website and QR submissions')
+                    : intakeWaiting
+                      ? 'Decisions waiting on HHH'
+                      : 'No pending decisions'
+                }</em>
+              </span>
             </article>
           </div>
         </section>
@@ -1939,7 +2001,7 @@ export default function AdminPortal() {
                       <div className="admin-overview-crm__facts">
                         <article>
                           <small>Attributed patients</small>
-                          <strong>{selectedPatients}</strong>
+                          <strong>{selectedPatients == null ? (overviewAttributionStatus === 'error' ? '—' : 'Loading') : selectedPatients}</strong>
                         </article>
                         <article>
                           <small>Workspace</small>

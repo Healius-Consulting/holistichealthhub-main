@@ -33,6 +33,13 @@ describe('SQL admin patient register', () => {
     });
     assert.equal(result.resultCount, 0);
   });
+
+  it('matches a pharmacy whether the id is hyphenated', () => {
+    const result = buildPatientRegister([patient], [], [organisation], {
+      query: '', organisationId: '70913a30-71c3-4a41-952e-d532927af58c', status: 'all', from: null, to: null,
+    });
+    assert.equal(result.resultCount, 1);
+  });
 });
 
 describe('register rows carry conditions', () => {
