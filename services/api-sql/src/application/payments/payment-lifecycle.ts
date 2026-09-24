@@ -1,6 +1,6 @@
 import type { PaymentRecord } from '../../repositories/ports/payment.port.js';
 
-export const PAYMENT_REMINDER_HOURS = [24, 48] as const;
+export const PAYMENT_REMINDER_HOURS = [72] as const;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -38,7 +38,7 @@ export function orderPayableTotal(order: { dispensingFeePence?: number; pharmacy
 
 export type PaymentLifecycleAction =
   | { action: 'none' }
-  | { action: 'remind'; hour: 24 | 48 }
+  | { action: 'remind'; hour: 72 }
   | { action: 'void_expired' }
   | { action: 'reduce_expired'; amountPence: number; current: Array<Record<string, unknown>> };
 
@@ -69,7 +69,6 @@ export function evaluatePendingPaymentLifecycle(input: {
   if (!Number.isFinite(sentAt)) return { action: 'none' };
   const elapsedHours = (now.getTime() - sentAt) / 3_600_000;
   const payload = asRecord(input.payment.providerPayload);
-  if (elapsedHours >= 48 && !payload.reminder48At) return { action: 'remind', hour: 48 };
-  if (elapsedHours >= 24 && !payload.reminder24At) return { action: 'remind', hour: 24 };
+  if (elapsedHours >= 72 && !payload.reminder72At) return { action: 'remind', hour: 72 };
   return { action: 'none' };
 }

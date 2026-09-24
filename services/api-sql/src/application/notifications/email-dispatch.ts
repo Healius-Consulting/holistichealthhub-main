@@ -1,6 +1,7 @@
 import { collectionEmailDelayUntil } from './collection-email-schedule.js';
 import {
   EMAILS,
+  RETIRED_EMAIL_TEMPLATES,
   templatesForEvent,
   type EmailAudience,
   type EmailEventName,
@@ -73,7 +74,7 @@ export async function dispatchEmailEvent(event: EmailEventName, input: DispatchE
   let suppressed = 0;
   for (const code of templatesForEvent(event)) {
     const override = input.mails?.[code];
-    if (override?.skip) continue;
+    if (override?.skip || RETIRED_EMAIL_TEMPLATES.has(code)) continue;
     const payload = override?.payload ?? input.payload ?? {};
     const keyParts = override?.keyParts ?? input.keyParts ?? [event, code];
     const to = override && 'to' in override ? override.to : input.to;

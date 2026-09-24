@@ -1,5 +1,4 @@
 import { sha256 } from '../../security/session-utils.js';
-import { resolveOwnerUid } from '../../domain/identity/pharmacy-owner.js';
 import type { EmailTemplateCode } from './message-kinds.js';
 import { messageIdempotencyKey } from './message-kinds.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
@@ -135,13 +134,9 @@ export async function listPlatformAdminRecipients(identityRepo: IdentityReposito
   })));
 }
 
-function ownerRecipient(staff: StaffUserRecord[], organisation: OrganisationRecord | null | undefined) {
-  const ownerUid = resolveOwnerUid(staff, organisation?.primaryContactUid);
-  const owner = staff.find(member => member.uid === ownerUid);
-  if (owner && owner.status !== 'REMOVED' && !owner.disabled) {
-    return [{ email: owner.email, displayName: owner.displayName }];
-  }
-  // Without a named owner, notifications go to the pharmacy's inbox before the superintendent's.
+function ownerRecipient(_staff: StaffUserRecord[], organisation: OrganisationRecord | null | undefined) {
+  // Pharmacy operational mail goes to the pharmacy inbox. The superintendent is
+  // the fallback when that inbox has not been entered. Patient mail never uses this.
   if (organisation?.pharmacyEmail) {
     return [{ email: organisation.pharmacyEmail, displayName: organisation.name }];
   }
@@ -149,28 +144,6 @@ function ownerRecipient(staff: StaffUserRecord[], organisation: OrganisationReco
     return [{ email: organisation.mainContactEmail, displayName: organisation.mainContactName }];
   }
   return [];
-}
-
-/**
- * Hidden copies of a patient's reply to the referral email. The pharmacy inbox
- * is included only when one is on file; the superintendent contact is always
- * included when it is on file. The patient is never copied.
- */
-export function referralReplyBcc(
-  organisation: Pick<OrganisationRecord, 'pharmacyEmail' | 'mainContactEmail'> | null | undefined,
-  patientEmail?: string | null,
-) {
-  const patient = normaliseEmail(patientEmail);
-  const candidates = [organisation?.pharmacyEmail, organisation?.mainContactEmail];
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const candidate of candidates) {
-    const email = normaliseEmail(candidate);
-    if (!email || email === patient || seen.has(email)) continue;
-    seen.add(email);
-    result.push(email);
-  }
-  return result;
 }
 
 export function pharmacyOwnerRecipients(

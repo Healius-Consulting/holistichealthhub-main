@@ -250,7 +250,21 @@ describe('paid order maintenance', () => {
 });
 
 describe('payment lifecycle', () => {
-  it('queues a 24 hour reminder for a pending Worldpay link', () => {
+  it('queues a 72 hour reminder for a pending Worldpay link', () => {
+    const decision = evaluatePendingPaymentLifecycle({
+      payment: {
+        status: 'PENDING',
+        route: 'WORLDPAY',
+        createdAt: '2026-08-17T07:00:00.000Z',
+        providerPayload: {},
+      },
+      quoteSnapshot: { prescriptions: [{ expiryDate: '2026-12-01', items: [] }] },
+      now: new Date('2026-08-20T08:00:00.000Z'),
+    });
+    assert.deepEqual(decision, { action: 'remind', hour: 72 });
+  });
+
+  it('stays quiet before 72 hours', () => {
     const decision = evaluatePendingPaymentLifecycle({
       payment: {
         status: 'PENDING',
@@ -261,7 +275,7 @@ describe('payment lifecycle', () => {
       quoteSnapshot: { prescriptions: [{ expiryDate: '2026-12-01', items: [] }] },
       now: new Date('2026-08-18T08:00:00.000Z'),
     });
-    assert.deepEqual(decision, { action: 'remind', hour: 24 });
+    assert.deepEqual(decision, { action: 'none' });
   });
 
   it('voids a pending payment when every prescription has expired', () => {

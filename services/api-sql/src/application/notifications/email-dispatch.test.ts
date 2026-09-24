@@ -84,13 +84,10 @@ describe('dispatchEmailEvent', () => {
         },
       },
     });
-    assert.equal(result.queued, 2);
-    assert.equal(enqueued.length, 2);
+    assert.equal(result.queued, 1);
+    assert.equal(enqueued.length, 1);
     assert.equal(enqueued[0]?.templateCode, 'admin_new_enquiry_received');
     assert.equal(enqueued[0]?.encryptedRecipient, 'admin@hhh.test');
-    assert.equal(enqueued[1]?.templateCode, 'pharmacy_new_enquiry_assigned');
-    assert.equal(enqueued[1]?.encryptedRecipient, 'owner@eastwood.test');
-    assert.equal((enqueued[1]?.payload as { email?: string }).email, undefined);
   });
 
   it('queues only admin mail when no pharmacy is assigned', async () => {
@@ -130,9 +127,8 @@ describe('dispatchEmailEvent', () => {
         },
       },
     });
-    assert.equal(result.queued, 2);
-    const codes = enqueued.map(row => row.templateCode).sort();
-    assert.deepEqual(codes, ['patient_referred', 'pharmacy_new_patient_referred']);
+    assert.equal(result.queued, 1);
+    assert.deepEqual(enqueued.map(row => row.templateCode), ['patient_referred']);
   });
 
   it('holds collection mail after 15:00 Europe/London', async () => {

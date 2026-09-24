@@ -42,6 +42,7 @@ describe('email template renderer', () => {
     assert.match(rendered.html, /Eastwood Health/);
     assert.match(rendered.html, /01522 000 000/);
     assert.match(rendered.html, /GPhC 9010203/);
+    assert.doesNotMatch(rendered.html, /contact@eastwoodhealthpharmacy.co.uk/);
     assert.doesNotMatch(rendered.html, /Avery Patel/);
   });
 
@@ -136,7 +137,7 @@ describe('email template renderer', () => {
     assert.match(rendered.html, /cid:email-header-logo/);
     assert.match(rendered.html, /cid:email-curaleaf-logo/);
     assert.match(rendered.html, /Powered by/);
-    assert.match(rendered.html, /View receipt/);
+    assert.match(rendered.html, /Here is your receipt/);
     assert.match(rendered.html, /holistichealthhub\.live\/receipt\/a{64}/);
   });
 
@@ -240,7 +241,7 @@ describe('email template renderer', () => {
     });
     assert.match(invite.subject, /Set up your Holistic Health Hub account/);
     assert.match(invite.html, /Set your password/);
-    assert.match(invite.html, /This mailbox is not monitored/);
+    assert.match(invite.html, /Replies to this email go to IT@holistichealthhub.live/);
 
     const reset = renderEmailTemplate('pharmacy_password_reset', {
       actionLink: 'https://portal.holistichealthhub.cc/reset-password?oobCode=reset',
@@ -280,9 +281,9 @@ describe('email template renderer', () => {
       sourceType: 'PHARMACY_QR',
     });
     assert.match(rendered.subject, /New enquiry received/);
-    assert.match(rendered.html, /Avery Patel/);
-    assert.match(rendered.html, /07700900000/);
-    assert.match(rendered.html, /avery@example.com/);
+    assert.doesNotMatch(rendered.html, /Avery Patel/);
+    assert.doesNotMatch(rendered.html, /07700900000/);
+    assert.doesNotMatch(rendered.html, /avery@example.com/);
     assert.match(rendered.html, /HHH-20260819-ABCDEF12/);
     assert.doesNotMatch(rendered.html, /A\*{4}/);
     assert.doesNotMatch(rendered.text, /masked/i);

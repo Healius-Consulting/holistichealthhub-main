@@ -81,6 +81,46 @@ export function replyToFor(kind: EmailTemplateCode): string | null {
   return definition.replyTo ? `${definition.replyTo}@${emailAliasDomain()}` : null;
 }
 
+export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 'enquiries';
+
+const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
+  patient_enquiry_declined: 'referrals',
+  patient_referred: 'referrals',
+  patient_payment_request: 'payments',
+  patient_payment_confirmation: 'payments',
+  patient_refunded: 'payments',
+  patient_ready_for_collection: 'orders',
+  admin_new_enquiry_received: 'enquiries',
+  pharmacy_new_enquiry_assigned: 'orders',
+  pharmacy_enquiry_declined: 'orders',
+  pharmacy_staff_invite: 'accounts',
+  pharmacy_password_reset: 'accounts',
+  pharmacy_2fa_enabled: 'accounts',
+  pharmacy_2fa_disabled: 'accounts',
+  pharmacy_new_patient_referred: 'orders',
+  pharmacy_payment_received: 'payments',
+  pharmacy_order_accepted: 'orders',
+  pharmacy_order_cancelled: 'orders',
+  pharmacy_delivery_issue: 'orders',
+  pharmacy_order_dispatched: 'orders',
+  pharmacy_prescription_close_to_expiry: 'orders',
+  pharmacy_collection_completed: 'orders',
+};
+
+/** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
+export const RETIRED_EMAIL_TEMPLATES = new Set<EmailTemplateCode>([
+  'pharmacy_new_enquiry_assigned',
+  'pharmacy_enquiry_declined',
+  'pharmacy_new_patient_referred',
+  'pharmacy_payment_received',
+  'pharmacy_order_accepted',
+  'pharmacy_collection_completed',
+]);
+
+export function fromAddressFor(kind: EmailTemplateCode): string {
+  return `${FROM_ALIAS[kind]}@${emailAliasDomain()}`;
+}
+
 export type RenderedEmail = {
   subject: string;
   text: string;
@@ -253,7 +293,6 @@ function fields(payload: unknown) {
   const pharmacyDetails = [
     { label: 'Pharmacy', value: value(payload, 'pharmacyName') },
     { label: 'Phone', value: value(payload, 'pharmacyPhone') },
-    { label: 'Email', value: value(payload, 'pharmacyEmail') },
     { label: 'Address', value: value(payload, 'pharmacyAddress') },
   ];
   return {
@@ -378,17 +417,17 @@ export const EMAILS = {
     audience: 'patient',
     events: ['referral.activated'],
     schedule: 'immediate',
-    replyTo: 'support',
-    summary: 'Sent when HHH admin completes a referral and activates the pharmacy patient record. The pharmacy inbox, when one is on file, and the superintendent are blind-copied.',
+    replyTo: 'referrals',
+    summary: 'Sent when HHH admin completes a referral and activates the pharmacy patient record.',
     render: (payload) => {
       const { firstName } = fields(payload);
-      const closing = 'If anything is unclear, pop into the pharmacy and ask at the counter, call us, or email support@holistichealthhub.live. We are happy to help.';
+      const closing = 'If anything is unclear, pop into the pharmacy and ask at the counter, call us, or reply to this email. We are happy to help.';
       const ongoingBody = 'Once you start treatment, we work with Curaleaf Clinic to keep your repeat prescriptions coming without gaps. For questions about your treatment, contact the clinic; for questions about your order or collection, contact us.';
       const ongoing = `Ongoing care. ${ongoingBody}`;
       const steps = [
         {
           title: 'The clinic will email you',
-          body: 'Within two working days you will get an email from Curaleaf Clinic asking you to register. Check your junk or spam folder if you cannot see it. If nothing arrives, call us or email support@holistichealthhub.live and we will chase it for you.',
+          body: 'Within two working days you will get an email from Curaleaf Clinic asking you to register. Check your junk or spam folder if you cannot see it. If nothing arrives, call us or reply to this email and we will chase it for you.',
         },
         {
           title: 'Register and confirm who you are',
@@ -435,7 +474,7 @@ export const EMAILS = {
     audience: 'patient',
     events: ['payment.link_created', 'payment.reminder'],
     schedule: 'payment_reminder',
-    summary: 'Sent when a Worldpay payment link is created or resent, and again as 24h/48h reminders.',
+    summary: 'Sent when a Worldpay payment link is created or resent, and once more 72 hours later if it is still unpaid.',
     render: (payload) => {
       const { firstName, orderNumber, amount, paymentUrl, pharmacyDetails } = fields(payload);
       return render({
@@ -485,7 +524,7 @@ export const EMAILS = {
           'We have received your payment and the pharmacy can now continue processing your order.',
         ],
         highlight: amount ? { label: 'Receipt', value: amount } : undefined,
-        cta: receiptHash ? { label: 'View receipt', href: paymentReceiptUrl(receiptHash) } : undefined,
+        cta: receiptHash ? { label: 'Here is your receipt', href: paymentReceiptUrl(receiptHash) } : undefined,
         detailsTitle: 'Order details',
         details: [
           { label: 'Order reference', value: value(payload, 'orderNumber') },
@@ -565,7 +604,6 @@ export const EMAILS = {
     schedule: 'immediate',
     summary: 'Sent to platform admins when a patient submits an eligibility enquiry.',
     render: (payload) => {
-      const { enquiry } = fields(payload);
       return render({
         kind: 'admin_new_enquiry_received',
         payload,
@@ -574,19 +612,15 @@ export const EMAILS = {
         title: 'New enquiry received',
         text: [
           'A new eligibility enquiry has been received.',
-          enquiry.name ? `Name: ${enquiry.name}` : '',
-          enquiry.phone ? `Phone: ${enquiry.phone}` : '',
-          enquiry.email ? `Email: ${enquiry.email}` : '',
+          value(payload, 'caseReference') ? `Reference: ${value(payload, 'caseReference')}` : '',
+          value(payload, 'provisionalPharmacyName') ? `Provisional pharmacy: ${value(payload, 'provisionalPharmacyName')}` : '',
         ].filter(Boolean).join('\n'),
         paragraphs: [
-          'A patient has submitted an eligibility enquiry.',
+          'A patient has submitted an eligibility enquiry. Open the case in the portal. Name, phone and email stay there.',
         ],
         cta: { label: 'Open portal', href: 'https://portal.holistichealthhub.live' },
-        detailsTitle: 'Patient details',
+        detailsTitle: 'Enquiry',
         details: [
-          { label: 'Name', value: enquiry.name },
-          { label: 'Phone', value: enquiry.phone },
-          { label: 'Email', value: enquiry.email },
           { label: 'Reference', value: value(payload, 'caseReference') },
           { label: 'Provisional pharmacy', value: value(payload, 'provisionalPharmacyName') },
           { label: 'Source', value: enquirySourceLabel(value(payload, 'sourceType')) },
@@ -986,7 +1020,7 @@ export function formatEmailRoster(): string {
     '',
     `Templates marked with a Reply-To below send one, pointing at a monitored alias on \`${emailAliasDomain()}\`. Every other template sends none. Do not write copy that invites a reply without setting \`replyTo\` on the template.`,
     '',
-    'Operational pharmacy emails go to the **owner** account only (the earliest staff user for that pharmacy). Other staff do not receive them. Account emails (invite, password reset, 2FA) still go to the individual staff member.',
+    'Operational pharmacy emails go to the pharmacy email, or the superintendent when that inbox is blank. Account emails (invite, password reset, 2FA) still go to the individual staff member. Patient emails never include those addresses.',
     '',
   ];
   const order: EmailAudience[] = ['patient', 'pharmacy_owner', 'staff', 'admin'];

@@ -3,7 +3,7 @@ import { config } from '../../bootstrap/config.js';
 import { emailInlineImages } from '../notifications/email-assets.js';
 import { resolveEmailHeader } from '../notifications/email-layout.js';
 import { isEmailTemplateCode } from '../notifications/message-kinds.js';
-import { BRAND_LOGO_PAYLOAD_KEY, replyToFor } from '../notifications/email-catalog.js';
+import { BRAND_LOGO_PAYLOAD_KEY, fromAddressFor, replyToFor } from '../notifications/email-catalog.js';
 import { renderEmailTemplate } from '../notifications/email-renderer.js';
 import { readOrganisationLogoBytes } from '../organisation/brand-logo.js';
 import type { StorageProvider } from '../../providers/storage/storage.provider.js';
@@ -104,22 +104,6 @@ function payloadRecord(payload: unknown): Record<string, unknown> {
   return payload as Record<string, unknown>;
 }
 
-/** Hidden copies stored on the referral send. Never rendered into the patient copy. */
-function blindCopies(payload: unknown, recipient: string | null) {
-  const found = payloadRecord(payload).bcc;
-  if (!Array.isArray(found)) return [];
-  const patient = String(recipient || '').trim().toLowerCase();
-  const seen = new Set<string>();
-  const copies: string[] = [];
-  for (const item of found) {
-    const email = String(item || '').trim().toLowerCase();
-    if (!email.includes('@') || email === patient || seen.has(email)) continue;
-    seen.add(email);
-    copies.push(email);
-  }
-  return copies;
-}
-
 function headerFor(record: NotificationOutboxRecord, hasBrandLogo: boolean) {
   const admin = record.templateCode === 'admin_new_enquiry_received'
     || payloadValue(record.payload, 'pharmacyName') === 'HHH admin workspace';
@@ -151,13 +135,13 @@ async function deliverOne(
         ? { ...visible, [BRAND_LOGO_PAYLOAD_KEY]: 'true' }
         : visible;
       const rendered = renderEmailTemplate(record.templateCode, payload);
-      const from = provider.from.includes('<') ? provider.from : `Holistic Health Hub <${provider.from}>`;
+      const fromAddress = isEmailTemplateCode(record.templateCode)
+        ? fromAddressFor(record.templateCode)
+        : provider.from;
+      const from = `Holistic Health Hub <${fromAddress}>`;
       // Only templates whose copy invites a reply carry one, so a patient never
       // writes into the unmonitored From address.
       const replyTo = replyToFor(record.templateCode);
-      const bcc = record.templateCode === 'patient_referred'
-        ? blindCopies(record.payload, record.encryptedRecipient)
-        : [];
       return fetchImpl('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -170,7 +154,6 @@ async function deliverOne(
         body: JSON.stringify({
           from,
           ...(replyTo ? { reply_to: replyTo } : {}),
-          ...(bcc.length ? { bcc } : {}),
           to: [record.encryptedRecipient],
           subject: rendered.subject,
           html: rendered.html,

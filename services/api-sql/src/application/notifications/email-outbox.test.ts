@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
-import { pharmacyOwnerRecipients, referralReplyBcc } from './email-outbox.js';
+import { pharmacyOwnerRecipients } from './email-outbox.js';
 
 const organisationId = '70913a30-71c3-4a41-952e-d532927af58c';
 
@@ -36,41 +36,18 @@ const organisation = {
 } as OrganisationRecord;
 
 describe('pharmacy operational email recipients', () => {
-  it('uses an assigned owner instead of invite order', () => {
+  it('uses the pharmacy inbox ahead of any staff login', () => {
     assert.deepEqual(pharmacyOwnerRecipients([staffMember, owner], {
       ...organisation,
+      pharmacyEmail: 'pharmacy@eastwood.test',
       primaryContactUid: staffMember.uid,
     }), [
-      { email: 'staff@example.test', displayName: 'Sam Staff' },
+      { email: 'pharmacy@eastwood.test', displayName: null },
     ]);
   });
 
-  it('falls back to the pharmacy contact when there is no owner account', () => {
-    assert.deepEqual(pharmacyOwnerRecipients([], organisation), [
-      { email: 'desk@example.test', displayName: 'Pharmacy desk' },
-    ]);
-  });
-
-  it('blind-copies the pharmacy inbox only when one is on file, plus the superintendent', () => {
-    assert.deepEqual(referralReplyBcc({
-      pharmacyEmail: 'pharmacy@eastwood.test',
-      mainContactEmail: 'superintendent@eastwood.test',
-    }, 'patient@example.test'), ['pharmacy@eastwood.test', 'superintendent@eastwood.test']);
-    assert.deepEqual(referralReplyBcc({
-      pharmacyEmail: null,
-      mainContactEmail: 'superintendent@eastwood.test',
-    }, 'patient@example.test'), ['superintendent@eastwood.test']);
-    assert.deepEqual(referralReplyBcc({
-      pharmacyEmail: 'shared@eastwood.test',
-      mainContactEmail: 'Shared@eastwood.test',
-    }), ['shared@eastwood.test']);
-  });
-
-  it('skips a removed owner instead of emailing other staff', () => {
-    assert.deepEqual(pharmacyOwnerRecipients([
-      { ...owner, status: 'REMOVED', disabled: true },
-      staffMember,
-    ], organisation), [
+  it('uses the superintendent when the pharmacy inbox is blank', () => {
+    assert.deepEqual(pharmacyOwnerRecipients([owner], organisation), [
       { email: 'desk@example.test', displayName: 'Pharmacy desk' },
     ]);
   });

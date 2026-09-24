@@ -9,7 +9,7 @@ import { SqlIntakeRepository } from '../../repositories/sql/intake.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
-import { pharmacyEmailContext, referralReplyBcc } from '../../application/notifications/email-outbox.js';
+import { pharmacyEmailContext } from '../../application/notifications/email-outbox.js';
 import { canActivateReferredPatient, canReceiveReferral, pharmacyIntakeDirectoryAccess } from '../../domain/organisation/access.js';
 import { closureVariantForReason } from '../../application/notifications/email-catalog.js';
 import { queuePatientEnquiryClosureEmail } from '../../application/notifications/patient-enquiry-closure-email.js';
@@ -546,7 +546,6 @@ export function createPortalIntakeV2Router(): Router {
                 payload: {
                   firstName: record.firstName || 'there',
                   ...pharmacyContext,
-                  bcc: referralReplyBcc(destination, record.email),
                 },
                 keyParts: ['patient-referred', record.id, record.assignedOrganisationId],
               }

@@ -86,8 +86,8 @@ describe('pharmacy enquiry email', () => {
       caseReference: 'HHH-20260902-ABCDEF12',
       event: 'assigned',
     });
-    assert.equal(result.queued, 1);
-    assert.equal(enqueued.length, 1);
+    assert.equal(result.queued, 0);
+    assert.equal(enqueued.length, 0);
   });
 
   it('queues an assigned enquiry to the pharmacy owner without patient contact details', async () => {
@@ -102,12 +102,8 @@ describe('pharmacy enquiry email', () => {
       assignmentVersion: 2,
       event: 'assigned',
     });
-    assert.equal(result.queued, 1);
-    assert.equal(enqueued[0]?.templateCode, 'pharmacy_new_enquiry_assigned');
-    assert.equal(enqueued[0]?.payload.caseReference, 'HHH-20260902-ABCDEF12');
-    assert.equal(enqueued[0]?.payload.firstName, undefined);
-    assert.equal(enqueued[0]?.payload.email, undefined);
-    assert.match(enqueued[0]?.idempotencyKey ?? '', /pharmacy-enquiry-assigned:case-1/);
+    assert.equal(result.queued, 0);
+    assert.equal(enqueued.length, 0);
   });
 
   it('queues a decline notice to the assigned pharmacy', async () => {
@@ -121,7 +117,7 @@ describe('pharmacy enquiry email', () => {
       caseReference: 'HHH-20260902-ABCDEF12',
       event: 'declined',
     });
-    assert.equal(result.queued, 1);
-    assert.equal(enqueued[0]?.templateCode, 'pharmacy_enquiry_declined');
+    assert.equal(result.queued, 0);
+    assert.equal(enqueued.length, 0);
   });
 });

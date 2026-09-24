@@ -7,13 +7,13 @@ Sender is one Holistic Health Hub address (`noreply@holistichealthhub.live` when
 
 Templates marked with a Reply-To below send one, pointing at a monitored alias on `holistichealthhub.live`. Every other template sends none. Do not write copy that invites a reply without setting `replyTo` on the template.
 
-Operational pharmacy emails go to the **owner** account only (the earliest staff user for that pharmacy). Other staff do not receive them. Account emails (invite, password reset, 2FA) still go to the individual staff member.
+Operational pharmacy emails go to the pharmacy email, or the superintendent when that inbox is blank. Account emails (invite, password reset, 2FA) still go to the individual staff member. Patient emails never include those addresses.
 
 ## Patient emails
 
 - `patient_enquiry_declined` (enquiry.declined, enquiry.withdrawn): Sent to the patient when HHH admin declines or closes their enquiry. Three variants; the recorded reason is never quoted. Reply-To: `referrals@holistichealthhub.live`.
-- `patient_referred` (referral.activated): Sent when HHH admin completes a referral and activates the pharmacy patient record. The pharmacy inbox, when one is on file, and the superintendent are blind-copied. Reply-To: `support@holistichealthhub.live`.
-- `patient_payment_request` (payment.link_created, payment.reminder): Sent when a Worldpay payment link is created or resent, and again as 24h/48h reminders.
+- `patient_referred` (referral.activated): Sent when HHH admin completes a referral and activates the pharmacy patient record. Reply-To: `referrals@holistichealthhub.live`.
+- `patient_payment_request` (payment.link_created, payment.reminder): Sent when a Worldpay payment link is created or resent, and once more 72 hours later if it is still unpaid.
 - `patient_payment_confirmation` (payment.settled): Sent once payment has been received (Worldpay settlement or manual pay), with a receipt link when available.
 - `patient_refunded` (payment.refunded): Sent when pharmacy confirms a completed refund.
 - `patient_ready_for_collection` (collection.ready): Sent when the order is marked ready to collect. Held until 09:00 on the next working day if after 15:00 Europe/London.

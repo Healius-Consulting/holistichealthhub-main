@@ -114,7 +114,7 @@ export async function processPendingPaymentLifecycle(deps: PaymentLifecycleDeps,
         receiptHash: payment.receiptHash,
         providerPayload: {
           ...payloadObject(payment.providerPayload),
-          [decision.hour === 48 ? 'reminder48At' : 'reminder24At']: now.toISOString(),
+          reminder72At: now.toISOString(),
         },
       });
       summary.reminders += 1;
