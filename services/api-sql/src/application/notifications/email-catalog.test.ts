@@ -58,7 +58,7 @@ describe('email catalog', () => {
         assert.ok(replyToFor(code), `${code} invites a reply but sets no Reply-To`);
       }
     }
-    assert.equal(replyToFor('patient_referred'), 'referrals@holistichealthhub.live');
+    assert.equal(replyToFor('patient_referred'), 'support@holistichealthhub.live');
     assert.equal(replyToFor('patient_payment_request'), null);
   });
 

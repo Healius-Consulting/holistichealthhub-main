@@ -70,7 +70,7 @@ export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
  * Copy must never invite a reply unless the template names an alias here, or the
  * patient is writing to a mailbox nobody reads.
  */
-export type EmailAlias = 'referrals' | 'IT';
+export type EmailAlias = 'referrals' | 'IT' | 'support';
 
 export function emailAliasDomain() {
   return process.env.EMAIL_ALIAS_DOMAIN?.trim() || 'holistichealthhub.live';
@@ -378,17 +378,17 @@ export const EMAILS = {
     audience: 'patient',
     events: ['referral.activated'],
     schedule: 'immediate',
-    replyTo: 'referrals',
-    summary: 'Sent when HHH admin completes a referral and activates the pharmacy patient record.',
+    replyTo: 'support',
+    summary: 'Sent when HHH admin completes a referral and activates the pharmacy patient record. The pharmacy inbox, when one is on file, and the superintendent are blind-copied.',
     render: (payload) => {
       const { firstName } = fields(payload);
-      const closing = 'If anything is unclear, pop into the pharmacy and ask at the counter, call us, or reply to this email. We are happy to help.';
+      const closing = 'If anything is unclear, pop into the pharmacy and ask at the counter, call us, or email support@holistichealthhub.live. We are happy to help.';
       const ongoingBody = 'Once you start treatment, we work with Curaleaf Clinic to keep your repeat prescriptions coming without gaps. For questions about your treatment, contact the clinic; for questions about your order or collection, contact us.';
       const ongoing = `Ongoing care. ${ongoingBody}`;
       const steps = [
         {
           title: 'The clinic will email you',
-          body: 'Within two working days you will get an email from Curaleaf Clinic asking you to register. Check your junk or spam folder if you cannot see it. If nothing arrives, call us or reply to this email and we will chase it for you.',
+          body: 'Within two working days you will get an email from Curaleaf Clinic asking you to register. Check your junk or spam folder if you cannot see it. If nothing arrives, call us or email support@holistichealthhub.live and we will chase it for you.',
         },
         {
           title: 'Register and confirm who you are',

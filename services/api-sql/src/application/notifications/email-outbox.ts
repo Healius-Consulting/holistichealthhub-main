@@ -151,6 +151,28 @@ function ownerRecipient(staff: StaffUserRecord[], organisation: OrganisationReco
   return [];
 }
 
+/**
+ * Hidden copies of a patient's reply to the referral email. The pharmacy inbox
+ * is included only when one is on file; the superintendent contact is always
+ * included when it is on file. The patient is never copied.
+ */
+export function referralReplyBcc(
+  organisation: Pick<OrganisationRecord, 'pharmacyEmail' | 'mainContactEmail'> | null | undefined,
+  patientEmail?: string | null,
+) {
+  const patient = normaliseEmail(patientEmail);
+  const candidates = [organisation?.pharmacyEmail, organisation?.mainContactEmail];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const candidate of candidates) {
+    const email = normaliseEmail(candidate);
+    if (!email || email === patient || seen.has(email)) continue;
+    seen.add(email);
+    result.push(email);
+  }
+  return result;
+}
+
 export function pharmacyOwnerRecipients(
   staff: StaffUserRecord[],
   organisation: OrganisationRecord | null | undefined,

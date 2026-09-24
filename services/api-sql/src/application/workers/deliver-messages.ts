@@ -99,6 +99,27 @@ function payloadValue(payload: unknown, key: string) {
   return found == null ? '' : String(found);
 }
 
+function payloadRecord(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return {};
+  return payload as Record<string, unknown>;
+}
+
+/** Hidden copies stored on the referral send. Never rendered into the patient copy. */
+function blindCopies(payload: unknown, recipient: string | null) {
+  const found = payloadRecord(payload).bcc;
+  if (!Array.isArray(found)) return [];
+  const patient = String(recipient || '').trim().toLowerCase();
+  const seen = new Set<string>();
+  const copies: string[] = [];
+  for (const item of found) {
+    const email = String(item || '').trim().toLowerCase();
+    if (!email.includes('@') || email === patient || seen.has(email)) continue;
+    seen.add(email);
+    copies.push(email);
+  }
+  return copies;
+}
+
 function headerFor(record: NotificationOutboxRecord, hasBrandLogo: boolean) {
   const admin = record.templateCode === 'admin_new_enquiry_received'
     || payloadValue(record.payload, 'pharmacyName') === 'HHH admin workspace';
@@ -123,14 +144,20 @@ async function deliverOne(
   const brandLogo = await loadBrandLogo(payloadValue(record.payload, 'organisationId'));
   const response = provider.kind === 'resend'
     ? await (() => {
-      const payload = brandLogo && record.payload && typeof record.payload === 'object'
-        ? { ...record.payload as Record<string, unknown>, [BRAND_LOGO_PAYLOAD_KEY]: 'true' }
-        : record.payload;
+      const source = payloadRecord(record.payload);
+      const visible = { ...source };
+      delete visible.bcc;
+      const payload = brandLogo
+        ? { ...visible, [BRAND_LOGO_PAYLOAD_KEY]: 'true' }
+        : visible;
       const rendered = renderEmailTemplate(record.templateCode, payload);
       const from = provider.from.includes('<') ? provider.from : `Holistic Health Hub <${provider.from}>`;
       // Only templates whose copy invites a reply carry one, so a patient never
       // writes into the unmonitored From address.
       const replyTo = replyToFor(record.templateCode);
+      const bcc = record.templateCode === 'patient_referred'
+        ? blindCopies(record.payload, record.encryptedRecipient)
+        : [];
       return fetchImpl('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -143,6 +170,7 @@ async function deliverOne(
         body: JSON.stringify({
           from,
           ...(replyTo ? { reply_to: replyTo } : {}),
+          ...(bcc.length ? { bcc } : {}),
           to: [record.encryptedRecipient],
           subject: rendered.subject,
           html: rendered.html,

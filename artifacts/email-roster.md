@@ -12,7 +12,7 @@ Operational pharmacy emails go to the **owner** account only (the earliest staff
 ## Patient emails
 
 - `patient_enquiry_declined` (enquiry.declined, enquiry.withdrawn): Sent to the patient when HHH admin declines or closes their enquiry. Three variants; the recorded reason is never quoted. Reply-To: `referrals@holistichealthhub.live`.
-- `patient_referred` (referral.activated): Sent when HHH admin completes a referral and activates the pharmacy patient record. Reply-To: `referrals@holistichealthhub.live`.
+- `patient_referred` (referral.activated): Sent when HHH admin completes a referral and activates the pharmacy patient record. The pharmacy inbox, when one is on file, and the superintendent are blind-copied. Reply-To: `support@holistichealthhub.live`.
 - `patient_payment_request` (payment.link_created, payment.reminder): Sent when a Worldpay payment link is created or resent, and again as 24h/48h reminders.
 - `patient_payment_confirmation` (payment.settled): Sent once payment has been received (Worldpay settlement or manual pay), with a receipt link when available.
 - `patient_refunded` (payment.refunded): Sent when pharmacy confirms a completed refund.

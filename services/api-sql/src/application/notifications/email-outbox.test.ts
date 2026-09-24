@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
-import { pharmacyOwnerRecipients } from './email-outbox.js';
+import { pharmacyOwnerRecipients, referralReplyBcc } from './email-outbox.js';
 
 const organisationId = '70913a30-71c3-4a41-952e-d532927af58c';
 
@@ -49,6 +49,21 @@ describe('pharmacy operational email recipients', () => {
     assert.deepEqual(pharmacyOwnerRecipients([], organisation), [
       { email: 'desk@example.test', displayName: 'Pharmacy desk' },
     ]);
+  });
+
+  it('blind-copies the pharmacy inbox only when one is on file, plus the superintendent', () => {
+    assert.deepEqual(referralReplyBcc({
+      pharmacyEmail: 'pharmacy@eastwood.test',
+      mainContactEmail: 'superintendent@eastwood.test',
+    }, 'patient@example.test'), ['pharmacy@eastwood.test', 'superintendent@eastwood.test']);
+    assert.deepEqual(referralReplyBcc({
+      pharmacyEmail: null,
+      mainContactEmail: 'superintendent@eastwood.test',
+    }, 'patient@example.test'), ['superintendent@eastwood.test']);
+    assert.deepEqual(referralReplyBcc({
+      pharmacyEmail: 'shared@eastwood.test',
+      mainContactEmail: 'Shared@eastwood.test',
+    }), ['shared@eastwood.test']);
   });
 
   it('skips a removed owner instead of emailing other staff', () => {

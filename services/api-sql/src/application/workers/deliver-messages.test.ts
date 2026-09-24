@@ -85,7 +85,30 @@ test('inlines the pharmacy uploaded logo rather than any bundled image', async t
   assert.ok(headerImage, 'the uploaded logo was not attached');
   assert.equal(headerImage.content, Buffer.from('logo-bytes').toString('base64'));
   assert.match(body.html, /cid:email-header-logo/);
-  assert.equal(body.reply_to, 'referrals@holistichealthhub.live');
+  assert.equal(body.reply_to, 'support@holistichealthhub.live');
+  assert.equal(body.bcc, undefined);
+});
+
+test('blind-copies the pharmacy and superintendent on the referral email, and keeps those addresses out of the patient copy', async t => {
+  process.env.RESEND_API_KEY = 'test-key';
+  t.after(() => { delete process.env.RESEND_API_KEY; });
+
+  const { repo } = notificationRepoStub([pendingRecord({
+    payload: {
+      firstName: 'Avery',
+      pharmacyName: 'Eastwood Health',
+      organisationId: ORGANISATION_ID,
+      bcc: ['pharmacy@eastwood.test', 'superintendent@eastwood.test', 'patient@example.test'],
+    },
+  })]);
+  const { bodies, fetchImpl } = resendCapture();
+
+  const summary = await deliverPatientMessages({ notificationRepo: repo, fetchImpl });
+
+  assert.equal(summary.sent, 1);
+  assert.deepEqual(bodies[0]!.bcc, ['pharmacy@eastwood.test', 'superintendent@eastwood.test']);
+  assert.doesNotMatch(bodies[0]!.html, /superintendent@eastwood.test/);
+  assert.doesNotMatch(bodies[0]!.text, /pharmacy@eastwood.test/);
 });
 
 test('sends without a header logo when the pharmacy has not uploaded one', async t => {
