@@ -4,6 +4,8 @@ import { shouldDispatchSessionEnded } from '../src/shared/sessionEnded.ts';
 
 test('App Check failures and login bootstrap 401s do not end a staff session', () => {
   assert.equal(shouldDispatchSessionEnded(401, 'APP_CHECK_REQUIRED', '/pharmacy'), false);
+  assert.equal(shouldDispatchSessionEnded(401, 'WORLDPAY_CREDENTIALS_REJECTED', '/pharmacy'), false);
+  assert.equal(shouldDispatchSessionEnded(401, 'CURALEAF_CREDENTIALS_REJECTED', '/pharmacy'), false);
   assert.equal(shouldDispatchSessionEnded(401, 'UNAUTHENTICATED', '/login'), false);
   assert.equal(shouldDispatchSessionEnded(401, 'UNAUTHENTICATED', '/reset-password'), false);
 });

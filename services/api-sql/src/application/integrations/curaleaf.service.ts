@@ -209,7 +209,8 @@ async function probeCuraleafApiKey(apiKey: string, expectedCustomerId: string, b
       headers: { Accept: 'application/json', 'X-API-Key': apiKey },
     });
     if (response.status === 401 || response.status === 403) {
-      throw new HttpError(401, 'Curaleaf rejected these API keys.', 'CURALEAF_CREDENTIALS_REJECTED');
+      // Not 401. The portal treats every 401 as "the staff session ended" and signs the user out.
+      throw new HttpError(422, 'Curaleaf rejected these API keys.', 'CURALEAF_CREDENTIALS_REJECTED');
     }
     if (!response.ok) {
       throw new HttpError(response.status === 429 ? 429 : 502, `Curaleaf could not validate the connection (${response.status}).`, 'CURALEAF_VALIDATION_FAILED');

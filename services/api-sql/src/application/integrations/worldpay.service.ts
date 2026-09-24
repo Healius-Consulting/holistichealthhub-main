@@ -152,7 +152,8 @@ export async function validateWorldpayCredentials(credential: WorldpayCredential
     lastStatus = response.status;
     if (response.status === 401 || response.status === 403) {
       if (index < candidates.length - 1) continue;
-      throw new HttpError(401, 'Worldpay rejected these API credentials.', 'WORLDPAY_CREDENTIALS_REJECTED');
+      // Not 401. The portal treats every 401 as "the staff session ended" and signs the user out.
+      throw new HttpError(422, 'Worldpay rejected these API credentials.', 'WORLDPAY_CREDENTIALS_REJECTED');
     }
     if (!response.ok) {
       throw new HttpError(502, `Worldpay could not validate the connection (${response.status}).`, 'WORLDPAY_VALIDATION_FAILED');
