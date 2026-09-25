@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck, Unplug } from 'lucide-react';
 import {
+  ApiRequestError,
   connectWorldpayPharmacy,
   describeApiError,
   getWorldpayConnectionStatus,
@@ -12,7 +13,10 @@ import './WorldpayConnectionPanel.css';
 
 const EMPTY_FORM = { username: '', password: '', entityId: '' };
 
+const WORLDPAY_REJECTED = 'Worldpay did not authorise this username and password. In Worldpay Developer tools, copy the live username and password issued for Payment Queries, and the merchant entity (PO…). A single API key, or the normal Worldpay login, will be refused.';
+
 function worldpayErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiRequestError && error.code === 'WORLDPAY_CREDENTIALS_REJECTED') return WORLDPAY_REJECTED;
   const message = describeApiError(error, fallback).trim();
   return message && !/^request failed with status \d+/i.test(message) ? message : fallback;
 }
