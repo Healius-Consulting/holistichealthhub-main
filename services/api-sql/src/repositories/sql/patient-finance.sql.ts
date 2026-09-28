@@ -30,6 +30,18 @@ const LIST_RECENT_DISPENSE_EVENTS_GQL = `
   }
 `;
 
+const LATEST_PAID_AT_GQL = `
+  query LatestPatientPayment($patientId: UUID!) {
+    orders(
+      where: { patientId: { eq: $patientId }, paidAt: { isNull: false } }
+      orderBy: { paidAt: DESC }
+      limit: 1
+    ) {
+      paidAt
+    }
+  }
+`;
+
 const HAS_NEW_REFERRAL_FEE_GQL = `
   query HasNewReferralFee($patientId: UUID!) {
     referralFeeEvents(
@@ -120,6 +132,14 @@ export class SqlPatientFinanceRepository implements PatientFinanceRepositoryPort
         dispensedAt: data.dispensedAt,
       },
     });
+  }
+
+  async latestPaidAt(patientId: string) {
+    const result = await dataConnect.executeGraphql<
+      { orders: Array<{ paidAt?: string | null }> },
+      { patientId: string }
+    >(LATEST_PAID_AT_GQL, { variables: { patientId } });
+    return result.data.orders?.[0]?.paidAt ?? null;
   }
 
   async hasNewReferralFee(patientId: string) {

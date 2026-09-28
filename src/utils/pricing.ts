@@ -26,13 +26,13 @@ export const PATIENT_PRICE_LABEL = 'Patient price';
 
 /** Quiet section heading above wholesale + delivery (Curaleaf cost to the pharmacy). */
 export const PHARMACY_COST_LABEL = 'Pharmacy cost';
-export const PHARMACY_TOTAL_LABEL = 'Pharmacy Total';
-export const PATIENT_TOTAL_LABEL = 'Patient Total';
-export const WHOLESALE_COST_LABEL = 'Wholesale Cost (excl. VAT)';
-export const CURALEAF_DELIVERY_LABEL = 'Curaleaf Delivery';
-export const PHARMACY_DELIVERY_LABEL = 'Delivery Charge';
-export const MEDICINE_COST_LABEL = 'Medicine Cost';
-export const DISPENSING_COST_LABEL = 'Dispensing Cost';
+export const PHARMACY_TOTAL_LABEL = 'Pharmacy total';
+export const PATIENT_TOTAL_LABEL = 'Patient total';
+export const WHOLESALE_COST_LABEL = 'Wholesale cost (excl. VAT)';
+export const CURALEAF_DELIVERY_LABEL = 'Curaleaf delivery';
+export const PHARMACY_DELIVERY_LABEL = 'Delivery charge';
+export const MEDICINE_COST_LABEL = 'Medicine cost';
+export const DISPENSING_COST_LABEL = 'Dispensing charge';
 
 export type OrderPricingPence = {
   medicinePence: number;

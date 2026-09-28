@@ -1,3 +1,5 @@
+import { proportionalDiscountShare } from '../../domain/commercial/rules.js';
+
 export const REFUND_CHARGE_PERCENTS = [100, 75, 50, 25, 0] as const;
 export type RefundChargePercent = (typeof REFUND_CHARGE_PERCENTS)[number];
 export type RefundScope = 'full' | 'partial';
@@ -13,6 +15,8 @@ export type RefundCatalog = {
   dispensingFeePence: number;
   deliveryFeePence: number;
   paidPence: number;
+  /** Order discount, split back across refunded lines in proportion to price. */
+  orderDiscountPence?: number;
 };
 
 export type RefundDraft = {
@@ -24,7 +28,7 @@ export type RefundDraft = {
 
 export type RefundBreakdownLine = {
   key: string;
-  kind: 'medicine' | 'dispensing' | 'delivery';
+  kind: 'medicine' | 'dispensing' | 'delivery' | 'discount';
   label: string;
   amountPence: number;
   percent?: RefundChargePercent;
@@ -85,9 +89,18 @@ export function composeRefund(catalog: RefundCatalog, draft: RefundDraft) {
       percent: deliveryPercent,
     });
   }
+  const orderDiscountPence = Math.max(0, Math.round(catalog.orderDiscountPence || 0));
+  if (orderDiscountPence > 0) {
+    const subtotal = catalog.medicines.reduce((sum, line) => sum + line.amountPence, 0);
+    const refundedMedicine = lines.filter(line => line.kind === 'medicine').reduce((sum, line) => sum + line.amountPence, 0);
+    const share = proportionalDiscountShare(refundedMedicine, subtotal, orderDiscountPence);
+    if (share > 0) {
+      lines.push({ key: 'discount', kind: 'discount', label: 'Less discount', amountPence: share });
+    }
+  }
   return {
     scope: draft.scope,
-    amountPence: lines.reduce((sum, line) => sum + line.amountPence, 0),
+    amountPence: lines.reduce((sum, line) => sum + (line.kind === 'discount' ? -line.amountPence : line.amountPence), 0),
     lines,
   };
 }

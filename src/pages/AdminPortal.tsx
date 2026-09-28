@@ -38,6 +38,7 @@ import {
   useApp,
   type PharmacyTenant,
 } from '../context/AppContext';
+import { DEFAULT_RETENTION_WINDOWS, inferRetention, type RetentionWindowSettings } from '../utils/commercial';
 import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources';
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
@@ -164,6 +165,24 @@ function registerRowKey(row: { organisationId: string; id: string }) {
   return `${row.organisationId}:${row.id}`;
 }
 
+function worldpayStateLabel(state: PharmacyTenant['worldpayState']) {
+  if (state === 'live') return 'Live';
+  if (state === 'test') return 'Test';
+  return 'Unconnected';
+}
+
+function worldpayStateDetail(state: PharmacyTenant['worldpayState']) {
+  if (state === 'live') return 'Live merchant credentials are stored';
+  if (state === 'test') return 'Sandbox merchant credentials are stored';
+  return 'No Worldpay merchant is connected';
+}
+
+function worldpayStateTone(state: PharmacyTenant['worldpayState']) {
+  if (state === 'live') return 'order-tone--paid';
+  if (state === 'test') return 'order-tone--warning';
+  return 'order-tone--neutral';
+}
+
 function stageTone(status: string) {
   if (status === 'Approved' || status === 'HHH approved') return 'paid';
   if (status === 'Declined' || status === 'Rejected' || status === 'Suspended') return 'danger';
@@ -188,6 +207,22 @@ function patientInitials(name: string) {
 
 function londonDayLabel(value: Date) {
   return value.toLocaleDateString('en-GB', { timeZone: 'Europe/London' });
+}
+
+function clinicRetention(
+  orders: { organisationId: string; patientId: string | null; date: Date | string; payment: { status: string } }[],
+  organisationId: string,
+  patientId: string | null | undefined,
+  settings: RetentionWindowSettings,
+) {
+  if (!patientId) return null;
+  const dates = orders
+    .filter(order => order.organisationId === organisationId && order.patientId === patientId && order.payment.status !== 'none' && order.payment.status !== 'cancelled')
+    .map(order => (order.date instanceof Date ? order.date : new Date(order.date)).toISOString())
+    .filter(value => Number.isFinite(Date.parse(value)))
+    .sort();
+  if (!dates[0]) return null;
+  return inferRetention({ periodStart: dates[0], prescriptionDates: dates, asOf: new Date().toISOString(), settings });
 }
 
 function patientOrderActivity(
@@ -1019,6 +1054,14 @@ export default function AdminPortal() {
   const [query, setQuery] = useState('');
   const [patientOrganisationId, setPatientOrganisationId] = useState('all');
   const [patientStatus, setPatientStatus] = useState('all');
+  const [retentionWindows, setRetentionWindows] = useState<RetentionWindowSettings>(() => {
+    try {
+      const stored = localStorage.getItem('hhh.retention.windows');
+      return stored ? { ...DEFAULT_RETENTION_WINDOWS, ...JSON.parse(stored) } : DEFAULT_RETENTION_WINDOWS;
+    } catch {
+      return DEFAULT_RETENTION_WINDOWS;
+    }
+  });
   const [patientFrom, setPatientFrom] = useState('');
   // Hidden by default: day to day the register is about real patients, and
   // showing the test accounts' records is the explicit choice.
@@ -1777,7 +1820,7 @@ export default function AdminPortal() {
           key={organisation.id}
           className={`order-crm-row order-crm-row--${tone}${overviewPharmacyId === organisation.id ? ' selected' : ''}`}
           aria-pressed={overviewPharmacyId === organisation.id}
-          aria-label={`${organisation.name}, ${statusLabel(organisation.status)}`}
+          aria-label={`${organisation.name}, ${statusLabel(organisation.status)}, Worldpay ${worldpayStateLabel(organisation.worldpayState)}`}
           onClick={() => {
             if (organisation.id !== overviewPharmacyId) {
               setOverviewManagePanel('summary');
@@ -1791,6 +1834,7 @@ export default function AdminPortal() {
           <span className="order-crm-row__identity">
             <strong title={organisation.name}>{organisation.name}</strong>
             <span className={`order-stage-pill order-tone--${tone}`}>{statusLabel(organisation.status)}</span>
+            <span className={`order-stage-pill ${worldpayStateTone(organisation.worldpayState)}`}>Worldpay {worldpayStateLabel(organisation.worldpayState)}</span>
           </span>
           <span className="order-crm-row__position">
             <strong>{financeReady ? referralFeeFormatter.format(fees?.total ?? 0) : '—'}</strong>
@@ -2021,6 +2065,11 @@ export default function AdminPortal() {
                           ) : (
                             <strong>{selectedPatients == null ? (overviewAttributionStatus === 'error' ? '—' : 'Loading') : selectedPatients}</strong>
                           )}
+                        </article>
+                        <article>
+                          <small>Worldpay</small>
+                          <strong>{worldpayStateLabel(selectedPharmacy.worldpayState)}</strong>
+                          <em>{worldpayStateDetail(selectedPharmacy.worldpayState)}</em>
                         </article>
                         <article>
                           <small>Workspace</small>
@@ -2423,6 +2472,10 @@ export default function AdminPortal() {
                       <span className="order-crm-row__identity">
                         <strong title={row.name}>{compactPatientName(row.name)}</strong>
                         <span className={`order-stage-pill order-tone--${tone}`}>{onboardingStatusLabel(row.stage)}</span>
+                      {(() => {
+                        const retention = clinicRetention(state.orders, row.organisationId, row.id.startsWith('sub-') ? null : row.id, retentionWindows);
+                        return retention ? <small>Inferred from prescriptions · {retention.status}</small> : null;
+                      })()}
                       </span>
                       <span className="order-crm-row__position">
                         <strong>{row.pharmacyName}</strong>
@@ -2455,6 +2508,24 @@ export default function AdminPortal() {
                       </div>
                     </div>
                     <span className={`order-stage-pill order-tone--${selectedTone}`}>{onboardingStatusLabel(selectedRegisterPatient.stage)}</span>
+                    {(() => {
+                      const retention = clinicRetention(state.orders, selectedRegisterPatient.organisationId, orderPatientId, retentionWindows);
+                      if (!retention) return null;
+                      return (
+                        <section className="patient-chart-card" aria-label="Retention status">
+                          <p className="section-label">Inferred from prescriptions</p>
+                          <strong>{retention.status}</strong>
+                          <p>Reconcile this with the clinic’s own appointment records before anything is invoiced. Windows met: {retention.met.join(', ') || 'none yet'}.</p>
+                          <label>One-month window ends on day
+                            <input type="number" min="21" value={retentionWindows.w2EndDay} onChange={event => {
+                              const next = { ...retentionWindows, w2EndDay: Number(event.target.value) };
+                              setRetentionWindows(next);
+                              localStorage.setItem('hhh.retention.windows', JSON.stringify(next));
+                            }} />
+                          </label>
+                        </section>
+                      );
+                    })()}
                   </div>
                   <div className="order-crm-record__toolbar">
                     <div className="order-crm-record__value">

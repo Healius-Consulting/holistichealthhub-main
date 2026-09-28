@@ -132,8 +132,8 @@ describe('email template renderer', () => {
     assert.match(rendered.text, /Avery/);
     assert.match(rendered.html, /ORD-123/);
     assert.match(rendered.html, /Medicine/);
-    assert.match(rendered.html, /Dispensing Cost/);
-    assert.match(rendered.html, /Pharmacy Delivery/);
+    assert.match(rendered.html, /Dispensing charge/);
+    assert.match(rendered.html, /Delivery charge/);
     assert.match(rendered.html, /cid:email-header-logo/);
     assert.match(rendered.html, /cid:email-curaleaf-logo/);
     assert.match(rendered.html, /Powered by/);

@@ -4,9 +4,7 @@ import { dataConnect } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { assertPlatformScope, assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
-import { buildPharmacyLedgerRows, isAwaitingPaymentRow } from '../../application/finance/pharmacy-ledger.js';
-import { SqlCuraleafQuoteBankRepository } from '../../repositories/sql/curaleaf-quote-bank.sql.js';
-import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
+import { buildPharmacyLedgerRows, isAwaitingPaymentRow, londonDateRangeBounds, settlementFinanceSnapshot } from '../../application/finance/pharmacy-ledger.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
@@ -71,25 +69,6 @@ export function createPortalFinanceRouter(): Router {
   const orderRepo = new SqlOrderRepository();
   const patientRepo = new SqlPatientRepository();
   const paymentRepo = new SqlPaymentRepository();
-  const integrationRepo = new SqlIntegrationRepository();
-  const quoteBankRepo = new SqlCuraleafQuoteBankRepository();
-
-  /**
-   * Wholesale pack prices from the shared Curaleaf quote bank, used only to estimate
-   * orders that never had a paid quote frozen. Never fatal: a bank outage just means
-   * those rows stay honestly "awaiting quote".
-   */
-  const quoteBankWholesaleByPack = async (organisationId: string) => {
-    try {
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection) return new Map<string, number>();
-      const entries = await quoteBankRepo.listEntries(connection.environment);
-      return new Map(entries.map(entry => [entry.packId, entry.wholesalePackPricePence]));
-    } catch (error) {
-      console.warn('[Finance] Curaleaf quote bank unavailable for cost estimates:', error);
-      return new Map<string, number>();
-    }
-  };
 
   router.get('/portal/finance/prescriptions', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -101,11 +80,10 @@ export function createPortalFinanceRouter(): Router {
         to: req.query.to,
       });
 
-      const [rawOrders, rawPatients, rawAllocations, bankWholesalePenceByPackId] = await Promise.all([
+      const [rawOrders, rawPatients, rawAllocations] = await Promise.all([
         orderRepo.listTenantOrders(organisationId, 2000),
         patientRepo.listTenantPatients(organisationId, 2000),
         paymentRepo.listTenantPaymentAllocations(organisationId, 4000),
-        quoteBankWholesaleByPack(organisationId),
       ]);
 
       const patientMap = new Map(rawPatients.map(p => [p.id, `${p.firstName} ${p.surname}`.trim() || p.email]));
@@ -119,12 +97,14 @@ export function createPortalFinanceRouter(): Router {
         orders: rawOrders,
         patientNameById: patientMap,
         activeAllocationByOrder,
-        bankWholesalePenceByPackId,
+        bankWholesalePenceByPackId: new Map(),
       });
 
+      const bounds = londonDateRangeBounds(filters.from, filters.to);
+      const headline = settlementFinanceSnapshot(datedRows, bounds.startMs, bounds.endMs);
       const rangedRows = datedRows
-        .filter(row => inDateRange(row.financialEventAt, filters.from, filters.to))
-        .sort((left, right) => right.financialEventAt.localeCompare(left.financialEventAt));
+        .filter(row => row.paidAt && Date.parse(row.paidAt) >= bounds.startMs && Date.parse(row.paidAt) <= bounds.endMs)
+        .sort((left, right) => String(right.paidAt).localeCompare(String(left.paidAt)));
 
       const realisedRows = rangedRows.filter(r => r.realised);
       const pendingCollectionRows = rangedRows.filter(r => r.pendingCollection);
@@ -143,7 +123,19 @@ export function createPortalFinanceRouter(): Router {
         refundedPatientPence: refundedRows.reduce((sum, r) => sum + r.refundAmountPence, 0),
         refundPendingCount: refundPendingRows.length,
         refundPendingPatientPence: refundPendingRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
-        patientRevenuePence: realisedRows.reduce((sum, r) => sum + r.patientRevenuePence, 0),
+        patientRevenuePence: headline.revenuePence,
+        revenuePence: headline.revenuePence,
+        grossProfitPence: headline.grossProfitPence,
+        marginPercent: headline.marginPercent,
+        averageRevenuePerPatientPence: headline.averageRevenuePerPatientPence,
+        averageGrossProfitPerPatientPence: headline.averageGrossProfitPerPatientPence,
+        averageItemPricePence: headline.averageItemPricePence,
+        averageGrossProfitPerItemPence: headline.averageGrossProfitPerItemPence,
+        packCount: headline.packCount,
+        medicineRevenuePence: headline.medicineRevenuePence,
+        awaitingPaymentCount: headline.awaitingPaymentCount,
+        awaitingPaymentValuePence: headline.awaitingPaymentValuePence,
+        refundsIssuedPence: headline.refundPence,
         productRevenuePence: realisedRows.reduce((sum, r) => sum + r.productRevenuePence, 0),
         dispensingFeesPence: realisedRows.reduce((sum, r) => sum + r.dispensingFeePence, 0),
         pharmacyDeliveryFeesPence: realisedRows.reduce((sum, r) => sum + r.pharmacyDeliveryPence, 0),

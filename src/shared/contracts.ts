@@ -538,6 +538,7 @@ export interface PortalOrderInput {
   paymentRoute?: 'manual' | 'worldpay';
   patientId: string;
   medicineTotalPence?: number;
+  discountPence?: number;
   dispensingFeePence: number;
   pharmacyDeliveryPence: number;
   totalPence?: number;
@@ -1319,7 +1320,22 @@ export interface PharmacyOverview {
     payingPatientCount: number;
     awaitingPaymentCount: number;
     awaitingPaymentValuePence: number;
+    medicineRevenuePence?: number;
+    marginPercent?: number | null;
+    averageRevenuePerPatientPence?: number;
+    comparison?: {
+      revenuePercent: number | null;
+      grossProfitPercent: number | null;
+      averageRevenuePercent: number | null;
+    };
+    recordRevenueMonth?: boolean;
   } | null;
+  patientCensus?: {
+    referredThisMonth: number;
+    referredAllTime: number;
+    activeThisMonth: number;
+    activeAllTime: number;
+  };
   priorityItems: Array<{
     id: string;
     kind: 'payment' | 'supplier' | 'collection' | 'repeat' | 'cancellation';
@@ -1371,6 +1387,18 @@ export interface PharmacyPrescriptionFinanceReport {
     refundPendingCount: number;
     refundPendingPatientPence: number;
     patientRevenuePence: number;
+    revenuePence?: number;
+    grossProfitPence?: number;
+    marginPercent?: number | null;
+    averageRevenuePerPatientPence?: number;
+    averageGrossProfitPerPatientPence?: number;
+    averageItemPricePence?: number;
+    averageGrossProfitPerItemPence?: number;
+    packCount?: number;
+    medicineRevenuePence?: number;
+    awaitingPaymentCount?: number;
+    awaitingPaymentValuePence?: number;
+    refundsIssuedPence?: number;
     productRevenuePence: number;
     dispensingFeesPence: number;
     pharmacyDeliveryFeesPence: number;
@@ -1391,6 +1419,7 @@ export interface PharmacyPrescriptionFinanceReport {
     createdAt: string;
     updatedAt: string;
     recognisedAt: string | null;
+    paidAt?: string | null;
     refundedAt: string | null;
     financialEventAt: string;
     paymentStatus: string;
@@ -1401,6 +1430,8 @@ export interface PharmacyPrescriptionFinanceReport {
     refunded: boolean;
     refundPending: boolean;
     productRevenuePence: number;
+    grossPatientRevenuePence?: number;
+    grossProductRevenuePence?: number;
     dispensingFeePence: number;
     pharmacyDeliveryPence: number;
     patientRevenuePence: number;
@@ -1561,6 +1592,8 @@ export interface PortalOrganisation {
   referralToken?: string;
   portalName?: string;
   worldpayEnabled?: boolean;
+  /** Stored merchant estate. Absent on older API responses means unconnected. */
+  worldpayState?: 'unconnected' | 'test' | 'live';
   defaultPaymentRoute?: 'manual' | 'worldpay';
   pharmacyDeliveryEnabled?: boolean;
   autoPlacementEnabled?: boolean;

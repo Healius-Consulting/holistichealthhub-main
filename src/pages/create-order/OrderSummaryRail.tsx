@@ -3,16 +3,15 @@ import MedicineLabel from '../../components/MedicineLabel';
 import {
   WHOLESALE_LABEL,
   WHOLESALE_LABEL_SHORT,
-  formatMargin,
   lineContribution,
   lineCost,
   lineRevenue,
   marginPercent,
-  marginToneClass,
   money,
   type CRMPatient,
 } from '../../context/AppContext';
-import { CURALEAF_DELIVERY_LABEL, MEDICINE_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
+import { basketMarginTone, formatGlanceMargin, linePriceError } from '../../utils/commercial';
+import { PATIENT_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
 import type { WizardProgress, WizardStep } from './types';
 import { WIZARD_STEP_LABELS } from './types';
 
@@ -30,10 +29,12 @@ type OrderSummaryRailProps = {
   patient: CRMPatient | null;
   focusedStep: number;
   draftBasketCount: number;
-  quotedPatientTotals: { medicine: number; total: number } | null;
+  quotedPatientTotals: { medicine: number; discount: number; total: number } | null;
+  pricesLocked: boolean;
+  rrpFor: (productId: string) => number | null;
+  onSetLinePrice: (rxId: number, productId: string, retail: number) => void;
   /** Null until a current Curaleaf quote supplies wholesale cost and delivery. */
   draftBasketCosts: { wholesale: number; delivery: number } | null;
-  dispensingFee: number;
   pharmacyDelivery: number;
   draftBasketItems: BasketItem[];
   draftBasketIssues: Array<{ tone: 'blocked' | 'warning'; label: string } | null>;
@@ -69,7 +70,8 @@ export default function OrderSummaryRail({
   draftBasketCount,
   quotedPatientTotals,
   draftBasketCosts,
-  dispensingFee,
+  pricesLocked,
+  rrpFor,
   pharmacyDelivery,
   draftBasketItems,
   draftBasketIssues,
@@ -82,13 +84,15 @@ export default function OrderSummaryRail({
   continueDisabled,
   onEditQuantity,
   onRemoveItem,
+  onSetLinePrice,
 }: OrderSummaryRailProps) {
   const showContinue = focusedStep < 4;
   const pendingQuote = 'Quote pending';
   const patientPrice = quotedPatientTotals?.medicine ?? null;
+  const discount = quotedPatientTotals?.discount ?? 0;
   const patientTotal = quotedPatientTotals?.total ?? null;
-  const pharmacyTotal = draftBasketCosts ? draftBasketCosts.wholesale + draftBasketCosts.delivery : null;
-  const grossMargin = pharmacyTotal == null || patientTotal == null ? null : patientTotal - pharmacyTotal;
+  const medicineAfterDiscount = patientPrice == null ? null : patientPrice - discount;
+  const grossMargin = draftBasketCosts == null || medicineAfterDiscount == null ? null : medicineAfterDiscount - draftBasketCosts.wholesale;
 
   return (
     <aside className="rx-order-summary-rail" aria-label="Order summary">
@@ -169,8 +173,32 @@ export default function OrderSummaryRail({
                     </div>
                     <div className="rx-order-summary-rail__headline">
                       {editable ? null : <span>{packLabel}</span>}
-                      <strong>{quotedPatientTotals ? money(lineRevenue(item)) : pendingQuote}</strong>
+                      {pricesLocked || !quotedPatientTotals ? (
+                        <strong>{quotedPatientTotals ? money(lineRevenue(item)) : pendingQuote}</strong>
+                      ) : (
+                        <label className="rx-line-price">
+                          <span className="sr-only">Patient price for {item.name}</span>
+                          <span>£</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.retail}
+                            onChange={event => onSetLinePrice(item.rxId, item.productId, Number(event.target.value))}
+                          />
+                        </label>
+                      )}
                     </div>
+                    {(() => {
+                      const rrp = rrpFor(item.productId);
+                      if (rrp == null || Math.abs(rrp - item.retail) < 0.005) return null;
+                      return <p className="rx-line-price__rrp">RRP {money(rrp)}</p>;
+                    })()}
+                    {(() => {
+                      if (item.cost == null) return null;
+                      const message = linePriceError(Math.round(item.retail * 100), Math.round((rrpFor(item.productId) ?? item.retail) * 100), Math.round(item.cost * 100));
+                      return message ? <p className="rx-order-summary-rail__issue" role="alert">{message}</p> : null;
+                    })()}
                     {issue ? (
                       <p className="rx-order-summary-rail__issue">
                         <AlertTriangle size={12} aria-hidden="true" />
@@ -184,7 +212,7 @@ export default function OrderSummaryRail({
                       </div>
                       <div>
                         <dt>Margin</dt>
-                        <dd>{quotedPatientTotals ? formatMargin(lineContribution(item), lineRevenue(item)) : 'Pending'}</dd>
+                        <dd className={basketMarginTone(marginPercent(lineContribution(item), lineRevenue(item)))}>{quotedPatientTotals && lineContribution(item) != null ? formatGlanceMargin(lineContribution(item) ?? 0, lineRevenue(item)) : 'Pending'}</dd>
                       </div>
                     </dl>
                     {editable ? (
@@ -210,37 +238,24 @@ export default function OrderSummaryRail({
             ) : null}
 
             <dl className="rx-order-summary-rail__totals">
-              <div className="rx-order-summary-rail__totals-heading">
-                <dt>Pharmacy Cost</dt>
-                <dd />
-              </div>
               <div>
                 <dt>{WHOLESALE_COST_LABEL}</dt>
                 <dd>{draftBasketCosts ? money(draftBasketCosts.wholesale) : 'Quote pending'}</dd>
               </div>
-              {draftBasketCosts?.delivery ? <div><dt>{CURALEAF_DELIVERY_LABEL}</dt><dd>{money(draftBasketCosts.delivery)}</dd></div> : null}
-              <div className="is-total">
-                <dt>{PHARMACY_TOTAL_LABEL}</dt>
-                <dd>{pharmacyTotal == null ? 'Quote pending' : money(pharmacyTotal)}</dd>
-              </div>
-              <div className="rx-order-summary-rail__totals-heading is-ruled">
-                <dt>Patient Cost</dt>
-                <dd />
-              </div>
               <div>
-                <dt>{MEDICINE_COST_LABEL}</dt>
+                <dt>Medicines subtotal</dt>
                 <dd>{patientPrice == null ? pendingQuote : money(patientPrice)}</dd>
               </div>
-              {dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(dispensingFee)}</dd></div> : null}
-              {pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(pharmacyDelivery)}</dd></div> : null}
+              {discount > 0 ? <div><dt>Discount</dt><dd>−{money(discount)}</dd></div> : null}
+              {pharmacyDelivery > 0 ? <div><dt>Delivery charge</dt><dd>{money(pharmacyDelivery)}</dd></div> : null}
               <div className="is-total">
                 <dt>{PATIENT_TOTAL_LABEL}</dt>
                 <dd>{patientTotal == null ? pendingQuote : money(patientTotal)}</dd>
               </div>
               <div className="rx-order-summary-rail__margin">
-                <dt>Gross Margin</dt>
-                <dd className={marginToneClass(marginPercent(grossMargin, patientTotal ?? 0))}>
-                  {formatMargin(grossMargin, patientTotal ?? 0)}
+                <dt>Gross profit</dt>
+                <dd className={basketMarginTone(marginPercent(grossMargin, medicineAfterDiscount ?? 0))}>
+                  {grossMargin == null || medicineAfterDiscount == null ? 'Pending' : formatGlanceMargin(grossMargin, medicineAfterDiscount)}
                 </dd>
               </div>
             </dl>

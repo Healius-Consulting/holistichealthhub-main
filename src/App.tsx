@@ -71,6 +71,7 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
     intakeEnabled: record.intakeEnabled,
     staffCount: 0,
     defaultPaymentRoute: record.defaultPaymentRoute ?? 'manual',
+    worldpayState: record.worldpayState ?? 'unconnected',
     pharmacyDeliveryEnabled: Boolean(record.pharmacyDeliveryEnabled),
     brand: { primary: record.primaryColour, portalName: record.portalName ?? record.name },
     worldpay: {
@@ -313,7 +314,7 @@ function StaffWorkspace() {
         {state.workspaceMode === 'test' && !paused && (
           <div className="test-mode-banner" role="status">
             <strong>Test</strong>
-            <span>This pharmacy is using Curaleaf and Worldpay sandbox keys. Patients, orders and payments are real for this workspace, against those sandboxes only. Live credentials under Manage → Curaleaf move it to Live.</span>
+            <span>This pharmacy is using Curaleaf and Worldpay sandbox keys. Patients, orders and payments are real for this workspace, against those sandboxes only. Live credentials under Settings & Assets → Curaleaf move it to Live.</span>
           </div>
         )}
         {paused && (

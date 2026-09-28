@@ -173,6 +173,33 @@ describe('the Overview this-month cash snapshot', () => {
     assert.equal(snapshot.awaitingPaymentValuePence, 8_000);
   });
 
+  it('keeps delivery out of gross profit and weights margin across orders', () => {
+    const snapshot = overviewFinanceSnapshot([
+      row({
+        grossPatientRevenuePence: 10_500,
+        grossProductRevenuePence: 10_000,
+        wholesaleProductPence: 8_000,
+        wholesalePence: 8_500,
+        wholesaleComplete: true,
+        packCount: 1,
+      }),
+      row({
+        orderId: 'ord-2',
+        patientId: 'patient-b',
+        grossPatientRevenuePence: 30_000,
+        grossProductRevenuePence: 30_000,
+        wholesaleProductPence: 21_000,
+        wholesalePence: 21_000,
+        wholesaleComplete: true,
+        packCount: 2,
+      }),
+    ], NOW);
+    assert.equal(snapshot.revenuePence, 40_500);
+    assert.equal(snapshot.grossProfitPence, 11_000);
+    assert.equal(snapshot.marginPercent, 27.5);
+    assert.equal(snapshot.averageItemPricePence, Math.round(40_000 / 3));
+  });
+
   it('ignores payments and refunds with blank dates instead of dating them today', () => {
     const snapshot = overviewFinanceSnapshot([
       row({ paidAt: '', grossPatientRevenuePence: 6_000, wholesaleComplete: true, wholesalePence: 1 }),

@@ -519,6 +519,12 @@ export default function Orders() {
 
   useEffect(() => {
     const target = state.navigationTarget;
+    if (target?.kind === 'order-filter') {
+      setActiveFilter(target.filter);
+      setQuery('');
+      dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
+      return;
+    }
     if (target?.kind !== 'order') return;
     const orderId = Number(target.key.split('-')[0]);
     const targetRecord = records.find(record => record.order.id === orderId);

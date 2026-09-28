@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
-import { maskWorldpayIdentifier, safeWorldpayActionUrl, worldpayBaseUrl, worldpaySecretPayload, worldpayStatusPayload, WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
+import { maskWorldpayIdentifier, safeWorldpayActionUrl, worldpayAdminState, worldpayBaseUrl, worldpaySecretPayload, worldpayStatusPayload, WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
 
 describe('Worldpay credential helpers', () => {
   // Hosted-page customisation was removed: the stored secret is now exactly the
@@ -121,5 +121,15 @@ describe('Worldpay status payload', () => {
     assert.equal(payload.configured, false);
     assert.equal(payload.connected, false);
     assert.equal(payload.checkedAt, null);
+  });
+});
+
+describe('Worldpay state for HHH admin', () => {
+  it('reads unconnected, test, or live from the stored connection', () => {
+    assert.equal(worldpayAdminState(null), 'unconnected');
+    assert.equal(worldpayAdminState(worldpayConnection({ status: 'DISCONNECTED' })), 'unconnected');
+    assert.equal(worldpayAdminState(worldpayConnection({ secretResourceName: null })), 'unconnected');
+    assert.equal(worldpayAdminState(worldpayConnection({ environment: 'TEST' })), 'test');
+    assert.equal(worldpayAdminState(worldpayConnection({ environment: 'PRODUCTION' })), 'live');
   });
 });

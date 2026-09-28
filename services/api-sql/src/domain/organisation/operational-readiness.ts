@@ -262,7 +262,7 @@ export function goLiveBlockedMessage(operational: PharmacyOperationalStatus): st
 }
 
 export const GO_LIVE_CURALEAF_TEST_ACK =
-  'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Manage → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
+  'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Settings & Assets → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
 
 export function goLiveRequiresCuraleafTestAcknowledgement(operational: PharmacyOperationalStatus): boolean {
   return !operational.curaleaf.production;

@@ -24,6 +24,8 @@ import type { OrganisationRecord, SetupTaskRecord } from '../../repositories/por
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { SqlDirectoryRepository } from '../../repositories/sql/directory.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
+import { worldpayAdminState } from '../../application/integrations/worldpay.service.js';
+import { preferIntegrationConnection } from '../../repositories/sql/connection-restore.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { requireCsrf } from '../../security/csrf.js';
@@ -160,8 +162,10 @@ export function createPortalSetupRouter(): Router {
       organisationRepo.listOrganisationDomains(organisation.id),
       resolveOrganisationLogo(storage, organisation.id),
     ]);
+    const worldpay = await integrationRepo.findConnection(organisation.id, 'WORLDPAY').catch(() => null);
     return toPortalOrganisation(organisation, {
       websiteDomains: domains.map(domain => domain.hostname),
+      worldpayState: worldpayAdminState(worldpay),
       ...logo,
     });
   }
@@ -372,8 +376,24 @@ export function createPortalSetupRouter(): Router {
   router.get('/portal/admin/organisations', requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       assertPlatformScope(req.context!);
-      const organisations = await organisationRepo.listOrganisations();
-      const domains = await organisationRepo.listAllOrganisationDomains();
+      const [organisations, domains, connections] = await Promise.all([
+        organisationRepo.listOrganisations(),
+        organisationRepo.listAllOrganisationDomains(),
+        integrationRepo.listConnections().catch(() => []),
+      ]);
+      const worldpayByOrganisation = new Map<string, (typeof connections)[number]>();
+      const worldpayRows = new Map<string, Array<(typeof connections)[number]>>();
+      for (const connection of connections) {
+        if (connection.integration !== 'WORLDPAY') continue;
+        const key = connection.organisationId.toLowerCase();
+        const rows = worldpayRows.get(key) ?? [];
+        rows.push(connection);
+        worldpayRows.set(key, rows);
+      }
+      for (const [key, rows] of worldpayRows) {
+        const preferred = preferIntegrationConnection(rows);
+        if (preferred) worldpayByOrganisation.set(key, preferred);
+      }
       const logos = await resolveOrganisationLogos(storage, organisations.map(organisation => organisation.id)).catch(() => new Map());
       const domainsByOrganisation = new Map<string, string[]>();
       for (const domain of domains) {
@@ -385,6 +405,7 @@ export function createPortalSetupRouter(): Router {
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(organisations.map(organisation => toPortalOrganisation(organisation, {
         websiteDomains: domainsByOrganisation.get(organisation.id.toLowerCase()) ?? [],
+        worldpayState: worldpayAdminState(worldpayByOrganisation.get(organisation.id.toLowerCase()) ?? null),
         ...logos.get(organisation.id),
       })));
     } catch (error) {

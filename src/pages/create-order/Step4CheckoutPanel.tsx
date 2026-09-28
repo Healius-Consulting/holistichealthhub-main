@@ -1,16 +1,14 @@
 import { AlertTriangle, Banknote, CheckCircle, CreditCard, RefreshCw, Send, ShieldCheck, X } from 'lucide-react';
 import ProviderStatusNotice from '../../components/ProviderStatusNotice';
 import {
-  formatMargin,
-  marginToneClass,
   money,
-  orderCost,
   orderReference,
   rxRevenue,
   type PatientOrder,
 } from '../../context/AppContext';
 import { rxRouteLabel, rxTabStatus, rxTabStatusLabel } from './rxTabStatus';
-import { CURALEAF_DELIVERY_LABEL, MEDICINE_COST_LABEL, PATIENT_TOTAL_LABEL, PHARMACY_DELIVERY_LABEL, PHARMACY_TOTAL_LABEL, WHOLESALE_COST_LABEL, marginPercent } from '../../utils/pricing';
+import { patientTotalBreakdown } from '../../utils/commercial';
+import { PHARMACY_DELIVERY_LABEL } from '../../utils/pricing';
 
 type Step4CheckoutPanelProps = {
   activeOrder: PatientOrder;
@@ -32,7 +30,10 @@ type Step4CheckoutPanelProps = {
   quoteError: { title: string; detail: string } | null;
   quoteCheckedAt: string | null;
   quoteSummary: { shippingPrice: number } | null;
-  quotedPatientTotals: { medicine: number; total: number } | null;
+  quotedPatientTotals: { medicine: number; discount: number; total: number } | null;
+  discountError: string | null;
+  pricesLocked: boolean;
+  onSetDiscount: (discount: { mode: 'amount' | 'percent'; amount: number } | null) => void;
   currentQuoteItemsCount: number;
   draftBasketBlockedCount: number;
   draftBasketWarningCount: number;
@@ -43,7 +44,6 @@ type Step4CheckoutPanelProps = {
   outstandingPaymentGates: Array<{ label: string; complete: boolean }>;
   checkoutBusy: boolean;
   onRefreshQuote: () => void;
-  onSetDispensingFee: (amount: number) => void;
   onSetPharmacyDelivery: (amount: number) => void;
   onChooseAbsorbDifference: () => void;
   onCancelReplacement: () => void;
@@ -109,6 +109,8 @@ export default function Step4CheckoutPanel({
   quoteCheckedAt,
   quoteSummary,
   quotedPatientTotals,
+  discountError,
+  pricesLocked,
   currentQuoteItemsCount,
   draftBasketBlockedCount,
   draftBasketWarningCount,
@@ -119,18 +121,17 @@ export default function Step4CheckoutPanel({
   outstandingPaymentGates,
   checkoutBusy,
   onRefreshQuote,
-  onSetDispensingFee,
+  onSetDiscount,
   onSetPharmacyDelivery,
   onChooseAbsorbDifference,
   onCancelReplacement,
   onSetPaymentRoute,
   onSubmit,
 }: Step4CheckoutPanelProps) {
+  void wholesaleKnown;
   const productSubtotal = quotedPatientTotals?.medicine ?? null;
+  const discount = quotedPatientTotals?.discount ?? 0;
   const patientTotal = quotedPatientTotals?.total ?? null;
-  const curaleafDelivery = quoteSummary?.shippingPrice ?? 0;
-  const pharmacyTotal = wholesaleKnown && quoteSummary ? orderCost(activeOrder) + curaleafDelivery : null;
-  const grossMargin = pharmacyTotal == null || patientTotal == null ? null : patientTotal - pharmacyTotal;
   const quoteStatus = quoteStatusLine({
     workspaceMode,
     paymentPreview,
@@ -218,41 +219,31 @@ export default function Step4CheckoutPanel({
           </ul>
         ) : null}
 
-        <dl className="rx-step4-ledger" aria-label="Order commercial summary">
-          <div className="rx-step4-ledger__section">
-            <dt>Pharmacy Cost</dt>
-            <dd />
+        <div className="rx-step4-discount">
+          <p className="section-label">Discount</p>
+          <div className="rx-dispensing-presets" role="group" aria-label="Discount type">
+            <button type="button" aria-pressed={(activeOrder.discount?.mode ?? 'amount') === 'amount'} disabled={pricesLocked} onClick={() => onSetDiscount(activeOrder.discount ? { ...activeOrder.discount, mode: 'amount' } : null)}>£</button>
+            <button type="button" aria-pressed={activeOrder.discount?.mode === 'percent'} disabled={pricesLocked} onClick={() => onSetDiscount({ mode: 'percent', amount: activeOrder.discount?.amount ?? 0 })}>%</button>
           </div>
-          <div>
-            <dt>{WHOLESALE_COST_LABEL}</dt>
-            <dd>{wholesaleKnown ? money(orderCost(activeOrder)) : workspaceMode === 'training' ? 'Not supplied' : 'Quote required'}</dd>
-          </div>
-          {curaleafDelivery > 0 ? <div><dt>{CURALEAF_DELIVERY_LABEL}</dt><dd>{money(curaleafDelivery)}</dd></div> : null}
-          <div className="is-total">
-            <dt>{PHARMACY_TOTAL_LABEL}</dt>
-            <dd>{pharmacyTotal == null ? 'Quote required' : money(pharmacyTotal)}</dd>
-          </div>
-          <div className="rx-step4-ledger__section is-ruled">
-            <dt>Patient Cost</dt>
-            <dd />
-          </div>
-          <div>
-            <dt>{MEDICINE_COST_LABEL}</dt>
-            <dd>{productSubtotal == null ? 'Quote pending' : money(productSubtotal)}</dd>
-          </div>
-          {activeOrder.dispensingFee > 0 ? <div><dt>Dispensing Charge</dt><dd>{money(activeOrder.dispensingFee)}</dd></div> : null}
-          {activeOrder.pharmacyDelivery > 0 ? <div><dt>Delivery Charge</dt><dd>{money(activeOrder.pharmacyDelivery)}</dd></div> : null}
-          <div className="is-total">
-            <dt>{PATIENT_TOTAL_LABEL}</dt>
-            <dd>{patientTotal == null ? 'Quote pending' : money(patientTotal)}</dd>
-          </div>
-          <div className="rx-step4-ledger__margin">
-            <dt>Gross Margin</dt>
-            <dd className={marginToneClass(marginPercent(grossMargin, patientTotal ?? 0))}>
-              {formatMargin(grossMargin, patientTotal ?? 0)}
-            </dd>
-          </div>
-        </dl>
+          <label className="rx-dispensing-custom">
+            <span className="money-input">
+              <span>{activeOrder.discount?.mode === 'percent' ? '%' : '£'}</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                disabled={pricesLocked}
+                value={activeOrder.discount?.amount || ''}
+                aria-label="Order discount"
+                onChange={event => {
+                  const amount = Number(event.target.value);
+                  onSetDiscount(event.target.value === '' || amount <= 0 ? null : { mode: activeOrder.discount?.mode ?? 'amount', amount });
+                }}
+              />
+            </span>
+          </label>
+          {discountError ? <p className="rx-dispensing-hint" role="alert">{discountError}</p> : <p className="rx-dispensing-hint">Applies to medicines only. Delivery is not discounted.</p>}
+        </div>
 
         {issueCount > 0 ? (
           <p className={`rx-step4-basket-alert${draftBasketBlockedCount ? ' is-blocked' : ' is-warning'}`} role="status">
@@ -267,54 +258,6 @@ export default function Step4CheckoutPanel({
         ) : null}
 
         <div className={`rx-step4-decide${activeOrder.pharmacyDeliveryAllowed ? ' rx-step4-decide--with-delivery' : ''}`}>
-          <div className="rx-step4-decide__fee">
-            <p className="section-label">Dispensing charge</p>
-            <div className="rx-dispensing-presets" role="group" aria-label="Set dispensing charge">
-              {[5, 10, 15].map(amount => (
-                <button
-                  type="button"
-                  key={amount}
-                  aria-pressed={activeOrder.dispensingFee === amount}
-                  disabled={paidRedo}
-                  onClick={() => onSetDispensingFee(amount)}
-                >
-                  {money(amount)}
-                </button>
-              ))}
-              <button type="button" aria-pressed={activeOrder.dispensingFee === 0} disabled={paidRedo} onClick={() => onSetDispensingFee(0)}>
-                None
-              </button>
-            </div>
-            <label className="rx-dispensing-custom">
-              <span className="money-input">
-                <span>£</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="15"
-                  step="0.01"
-                  value={activeOrder.dispensingFee || ''}
-                  disabled={paidRedo}
-                  onFocus={event => event.currentTarget.select()}
-                  onChange={event => {
-                    const amount = Number(event.target.value);
-                    onSetDispensingFee(event.target.value === '' ? 0 : Math.max(0, Math.min(15, amount)));
-                  }}
-                  aria-label="Custom dispensing charge"
-                  aria-describedby="rx-dispensing-custom-hint"
-                />
-              </span>
-            </label>
-            {paidRedo ? (
-              <p className="rx-dispensing-hint" role="status">
-                {replacementPreview?.carriesCharges
-                  ? 'Carried over from the original order: it was the last prescription to leave, so its paid charges move with it.'
-                  : 'Already paid on the original order and still covering its other prescription. Not charged again.'}
-              </p>
-            ) : null}
-            <p className="rx-dispensing-hint" id="rx-dispensing-custom-hint">Any amount from £0 to £15. Presets above are shortcuts.</p>
-          </div>
-
           {activeOrder.pharmacyDeliveryAllowed ? (
             <div className="rx-step4-decide__fee">
               <p className="section-label">{PHARMACY_DELIVERY_LABEL}</p>
@@ -458,6 +401,14 @@ export default function Step4CheckoutPanel({
           </div>
         ) : null}
 
+        <details className="rx-mobile-summary">
+          <summary>Order summary</summary>
+          <ul>
+            {activeOrder.prescriptions.flatMap(rx => rx.items).map(item => (
+              <li key={item.productId}><span>{item.name}</span><strong>{money(item.retail * item.qty)}</strong></li>
+            ))}
+          </ul>
+        </details>
         <div className="rx-step4-commit">
           {paymentPreview ? (
             <p id="rx-checkout-lock-tip" className="rx-step4-commit__lock" role="status">
@@ -484,8 +435,8 @@ export default function Step4CheckoutPanel({
               <strong>{patientTotal == null ? 'Quote pending' : money(patientTotal)}</strong>
               <em>
                 {productSubtotal == null
-                  ? 'Waiting for a Curaleaf quote'
-                  : `${money(productSubtotal)} medicine${activeOrder.dispensingFee ? ` + ${money(activeOrder.dispensingFee)} dispensing` : ''}${activeOrder.pharmacyDelivery ? ` + ${money(activeOrder.pharmacyDelivery)} delivery` : ''}`}
+                  ? 'Add a medicine to price this order'
+                  : patientTotalBreakdown(productSubtotal, discount, activeOrder.pharmacyDelivery || 0)}
               </em>
             </div>
             <button

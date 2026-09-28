@@ -38,11 +38,8 @@ function patient(overrides: Partial<PatientRecord> = {}): PatientRecord {
 }
 
 describe('patient finance', () => {
-  it('rejects inactive patients for new orders', () => {
-    assert.throws(
-      () => assertPatientEligibleForOrder(patient({ status: 'INACTIVE' })),
-      /not eligible/i,
-    );
+  it('lets an inactive patient start another order so a new Curaleaf submission can restore them', () => {
+    assert.doesNotThrow(() => assertPatientEligibleForOrder(patient({ status: 'INACTIVE' })));
   });
 
   it('allows referred and active patients for new orders', () => {
@@ -68,6 +65,7 @@ describe('patient finance', () => {
       listRecentDispenseEvents: async () => [],
       insertDispenseEvent: async () => undefined,
       hasNewReferralFee: async () => false,
+      latestPaidAt: async () => null,
       insertReferralFeeEvent: async () => true,
     };
 
@@ -101,6 +99,7 @@ describe('patient finance', () => {
       listRecentDispenseEvents: async () => [],
       insertDispenseEvent: async data => { dispenses.push(data.dispenseKey); },
       hasNewReferralFee: async () => hasFee,
+      latestPaidAt: async () => null,
       insertReferralFeeEvent: async data => {
         hasFee = true;
         fees.push({ amountPence: data.amountPence, kind: data.kind });

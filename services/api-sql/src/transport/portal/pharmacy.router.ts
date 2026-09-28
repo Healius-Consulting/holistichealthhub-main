@@ -11,7 +11,6 @@ import { SqlIntakeRepository } from '../../repositories/sql/intake.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
-import { SqlCuraleafQuoteBankRepository } from '../../repositories/sql/curaleaf-quote-bank.sql.js';
 import { buildPharmacyLedgerRows } from '../../application/finance/pharmacy-ledger.js';
 import { rewritePatientConditions } from '../../application/eligibility/rewrite-patient-conditions.js';
 import { requireCsrf } from '../../security/csrf.js';
@@ -61,24 +60,6 @@ export function createPortalPharmacyRouter(): Router {
   const identityRepo = new SqlIdentityRepository();
   const integrationRepo = new SqlIntegrationRepository();
   const paymentRepo = new SqlPaymentRepository();
-  const quoteBankRepo = new SqlCuraleafQuoteBankRepository();
-
-  /**
-   * Wholesale pack prices used to cost orders that never froze a paid quote.
-   * Never fatal — a bank outage just leaves those orders uncosted, which the
-   * snapshot reports honestly rather than counting as zero-cost profit.
-   */
-  async function quoteBankWholesaleByPack(organisationId: string) {
-    try {
-      const connection = await integrationRepo.findConnection(organisationId, 'CURALEAF');
-      if (!connection) return new Map<string, number>();
-      const entries = await quoteBankRepo.listEntries(connection.environment);
-      return new Map(entries.map(entry => [entry.packId, entry.wholesalePackPricePence]));
-    } catch (error) {
-      console.warn('[Overview] Curaleaf quote bank unavailable for cost estimates:', error);
-      return new Map<string, number>();
-    }
-  }
 
   async function operationalRecords(organisationId: string) {
     const organisation = await organisationRepo.findOrganisationById(organisationId);
@@ -146,10 +127,7 @@ export function createPortalPharmacyRouter(): Router {
        */
       let financeRows: ReturnType<typeof buildPharmacyLedgerRows> | undefined;
       try {
-        const [allocations, bankWholesalePenceByPackId] = await Promise.all([
-          paymentRepo.listTenantPaymentAllocations(scope.organisationId, 4000),
-          quoteBankWholesaleByPack(scope.organisationId),
-        ]);
+        const allocations = await paymentRepo.listTenantPaymentAllocations(scope.organisationId, 4000);
         const activeAllocationByOrder = new Map<string, number>();
         for (const allocation of allocations) {
           if (allocation.status !== 'ACTIVE') continue;
@@ -162,7 +140,7 @@ export function createPortalPharmacyRouter(): Router {
           orders,
           patientNameById: new Map(),
           activeAllocationByOrder,
-          bankWholesalePenceByPackId,
+          bankWholesalePenceByPackId: new Map(),
         });
       } catch (error) {
         console.warn('[Overview] Finance snapshot unavailable:', error);

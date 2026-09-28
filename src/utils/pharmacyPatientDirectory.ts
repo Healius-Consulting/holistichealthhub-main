@@ -19,6 +19,8 @@ export interface PharmacyDirectoryPatient {
   psychiatricExclusion?: boolean | null;
   heardAbout?: string | null;
   status: PharmacyCrmStatus;
+  commercialStatus?: 'Referred' | 'Active' | 'Inactive';
+  referredAt?: string;
 }
 
 export interface PharmacyTrainingSubmission {
@@ -63,7 +65,9 @@ export function mapPortalPatientRecord(record: PortalPatientRecord): PharmacyDir
     triedTwoTreatments: record.triedTwoTreatments ?? null,
     psychiatricExclusion: record.psychiatricExclusion ?? null,
     heardAbout: record.heardAbout ?? null,
-    status: record.status === 'active' ? 'HHH approved' : record.status === 'referred' ? 'Referred' : 'Suspended',
+    status: record.status === 'active' ? 'HHH approved' : record.status === 'referred' ? 'Referred' : record.status === 'inactive' ? 'Suspended' : 'Suspended',
+    commercialStatus: record.status === 'inactive' ? 'Inactive' : record.status === 'active' ? 'Active' : 'Referred',
+    referredAt: record.createdAt,
   };
 }
 

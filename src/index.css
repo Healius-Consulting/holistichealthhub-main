@@ -587,8 +587,17 @@
 }
 
 .overview-finance__hero dd {
-  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  color: var(--color-primary, #0f6e56);
+  font-size: clamp(2rem, 4.5vw, 2.75rem);
 }
+.overview-compare.is-up { color: var(--color-success, #1f7a4d); }
+.overview-compare.is-down { color: var(--text-tertiary, #66756c); }
+.overview-census { display: flex; gap: 12px; margin: 12px 0; }
+.overview-census button { flex: 1; min-height: 44px; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: transparent; }
+.overview-milestone { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.order-stage-pill.is-referred { background: #f3e2c2; color: #6d4b12; }
+.patient-directory-row { display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr); gap: 12px; width: 100%; min-height: 44px; align-items: center; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; }
+@media (max-width: 640px) { .patient-directory-row { grid-template-columns: 1fr; } }
 
 .overview-finance__figures small { color: var(--text-muted, #526157); font-size: 0.75rem; }
 
@@ -1114,11 +1123,9 @@ html{
   gap: 4px;
   padding: 20px 12px;
   overflow-y: auto;
-  scrollbar-width: none;
+  scrollbar-width: thin;
   -webkit-overflow-scrolling: touch;
 }
-
-.sidebar-menu::-webkit-scrollbar{ display: none; }
 
 .sidebar-footer{
   flex: 0 0 auto;
@@ -3206,9 +3213,8 @@ td.font-semibold{
     flex-direction: row;
     overflow-x: auto;
     overflow-y: hidden;
-    scrollbar-width: none;
+    scrollbar-width: thin;
   }
-.app-shell .sidebar-menu::-webkit-scrollbar{ display: none; }
 .app-shell .sidebar-item{ width: auto; flex: 0 0 auto; padding: 7px 9px; font-size: 10px; white-space: nowrap; }
 .app-shell .sidebar-item-content{ gap: 6px; }
 .app-shell .sidebar-item.active{ box-shadow: inset 0 -2px 0 var(--tenant-primary); }
@@ -18936,6 +18942,19 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-weight: 400;
 }
 
+.rx-line-price{ display: inline-flex; align-items: center; gap: 4px; }
+.rx-line-price input{ width: 88px; min-height: 44px; }
+.rx-line-price__rrp{ margin: 0; color: var(--text-tertiary); font-size: 12px; }
+.rx-order-summary-rail__margin dd.is-amber,
+.rx-order-summary-rail__economics dd.is-amber{ color: var(--color-warning); }
+.rx-order-summary-rail__margin dd.is-muted,
+.rx-order-summary-rail__economics dd.is-muted{ color: var(--text-tertiary); }
+.rx-mobile-summary{ display: none; }
+@media (max-width: 480px){
+  .rx-mobile-summary{ display: block; margin: 0 0 12px; }
+  .rx-mobile-summary summary{ min-height: 44px; cursor: pointer; }
+  .rx-mobile-summary li{ display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; }
+}
 .rx-order-summary-rail__margin dd.is-good{
   color: var(--tenant-primary-strong);
 }

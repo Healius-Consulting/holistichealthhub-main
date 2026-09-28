@@ -21,7 +21,7 @@ import type { TenantPendingEnquiryRecord } from '../../repositories/ports/intake
 import { formConditionRecords, primaryConditionCode } from '../../domain/eligibility/form-conditions.js';
 import { sqlIntakeCaseReference } from './intake-contracts.js';
 import { pendingEnquiryDisplayStatus, portalSourceType } from './intake-source.js';
-import { overviewFinanceSnapshot } from '../../application/finance/pharmacy-ledger.js';
+import { overviewFinanceSnapshot, thisMonthBounds } from '../../application/finance/pharmacy-ledger.js';
 import { serialReuseUntilDate } from '../../application/prescriptions/serial-reuse.js';
 import {
   curaleafSubOrders,
@@ -161,6 +161,7 @@ export function toPortalOrganisation(
     emailLogoHeight?: number | null;
     emailLogoUpdatedAt?: string | null;
     curaleafPharmacyCode?: string | null;
+    worldpayState?: 'unconnected' | 'test' | 'live';
   },
 ) {
   return {
@@ -194,6 +195,7 @@ export function toPortalOrganisation(
     status: portalAccountStatus(organisation.status),
     portalName: organisation.portalName,
     worldpayEnabled: organisation.worldpayEnabled,
+    worldpayState: extras?.worldpayState ?? 'unconnected',
     defaultPaymentRoute: lower(organisation.defaultPaymentRoute),
     pharmacyDeliveryEnabled: organisation.pharmacyDeliveryEnabled,
     autoPlacementEnabled: organisation.autoPlacementEnabled,
@@ -998,6 +1000,22 @@ const REPEAT_GAP_DAYS = 30;
 const FIRST_START_LIMIT = 12;
 const REPEAT_START_LIMIT = 8;
 
+function patientCensus(patients: PatientRecord[], now: number) {
+  const bounds = thisMonthBounds(now);
+  const inMonth = (value: string | null | undefined) => {
+    const time = Date.parse(String(value || ''));
+    return Number.isFinite(time) && time >= bounds.startMs && time <= bounds.endMs;
+  };
+  const referred = patients.filter(patient => patient.status === 'REFERRED');
+  const active = patients.filter(patient => patient.status === 'ACTIVE');
+  return {
+    referredThisMonth: referred.filter(patient => inMonth(patient.createdAt)).length,
+    referredAllTime: referred.length,
+    activeThisMonth: active.filter(patient => inMonth(patient.activatedAt)).length,
+    activeAllTime: active.length,
+  };
+}
+
 function isLiveOrder(order: OrderRecord) {
   return order.status !== 'CANCELLED' && order.paymentStatus !== 'CANCELLED';
 }
@@ -1106,6 +1124,7 @@ export function buildSqlPharmacyOverview(params: {
       agedCollections: priorityItems.filter(item => item.kind === 'collection').length,
     },
     finance: params.financeRows ? overviewFinanceSnapshot(params.financeRows, now) : null,
+    patientCensus: patientCensus(params.patients, now),
     integrations: overviewIntegrationHealth(params.connections),
   };
 }

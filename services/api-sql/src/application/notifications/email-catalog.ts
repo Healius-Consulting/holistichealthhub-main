@@ -153,11 +153,14 @@ function paymentBreakdown(payload: unknown) {
   const currency = value(payload, 'currency') || 'GBP';
   const medicine = Number(value(payload, 'medicineTotalPence') || 0);
   const amount = Number(value(payload, 'amountPence') || 0);
-  const lines = [{ label: 'Medicine', value: money(medicine, currency) }];
+  const discount = Number(value(payload, 'discountPence') || 0);
+  const medicineSubtotal = discount > 0 ? medicine + discount : medicine;
+  const lines = [{ label: discount > 0 ? 'Medicines subtotal' : 'Medicine', value: money(medicineSubtotal, currency) }];
+  if (discount > 0) lines.push({ label: 'Discount', value: `−${money(discount, currency)}` });
   const dispensing = Number(value(payload, 'dispensingFeePence') || 0);
   const delivery = Number(value(payload, 'pharmacyDeliveryPence') || 0);
-  if (dispensing > 0) lines.push({ label: 'Dispensing Cost', value: money(dispensing, currency) });
-  if (delivery > 0) lines.push({ label: 'Pharmacy Delivery', value: money(delivery, currency) });
+  if (dispensing > 0) lines.push({ label: 'Dispensing charge', value: money(dispensing, currency) });
+  if (delivery > 0) lines.push({ label: 'Delivery charge', value: money(delivery, currency) });
   const remainder = amount - medicine - dispensing - delivery;
   if (remainder > 0) lines.push({ label: 'Delivery', value: money(remainder, currency) });
   return lines;

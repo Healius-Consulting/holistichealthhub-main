@@ -161,6 +161,7 @@ describe('portal order handout', () => {
       listRecentDispenseEvents: async () => [],
       insertDispenseEvent: async data => { dispenseCalls.push({ orderId: data.orderId, dispenseKey: data.dispenseKey }); },
       hasNewReferralFee: async () => true,
+      latestPaidAt: async () => null,
       insertReferralFeeEvent: async () => true,
     };
     const orderRepo: HandoutOrderRepo = {
@@ -214,6 +215,7 @@ describe('portal order handout', () => {
       listRecentDispenseEvents: async () => [],
       insertDispenseEvent: async () => undefined,
       hasNewReferralFee: async () => true,
+      latestPaidAt: async () => null,
       insertReferralFeeEvent: async () => true,
     };
     const orderRepo: HandoutOrderRepo = {

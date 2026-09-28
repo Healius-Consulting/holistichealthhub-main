@@ -17,6 +17,8 @@ export interface PatientFinanceRepositoryPort {
     dispensedAt: string;
   }): Promise<void>;
   hasNewReferralFee(patientId: string): Promise<boolean>;
+  /** Latest payment timestamp, kept even when that order is later refunded. */
+  latestPaidAt(patientId: string): Promise<string | null>;
   insertReferralFeeEvent(data: {
     organisationId: string;
     patientId: string;

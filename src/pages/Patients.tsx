@@ -1,6 +1,6 @@
 import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, LayoutGrid, List, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, getUnresolvedReason, marginPercent, marginToneClass, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
@@ -32,15 +32,10 @@ import {
   type PatientDirectoryFilter,
 } from '../utils/patientDirectoryNavigation';
 import {
-  PATIENT_CRM_CLOSED_LANE,
-  PATIENT_CRM_LANES,
   patientCrmGroup,
-  patientCrmLane,
   patientCrmRecordKey,
   patientCrmStatusMeta,
-  recordMatchesPatientFilter,
   type PatientCrmIcon,
-  type PatientCrmLane,
 } from '../utils/patientCrm';
 
 /** Placeholders keep every row present so a gap reads as "we do not hold this". */
@@ -269,7 +264,7 @@ function recordMatchesQuery(record: CrmRecord, query: string) {
   ].some(value => value.toLowerCase().includes(q));
 }
 
-function emptyCopy(filter: PatientDirectoryFilter, hasSearch: boolean) {
+export function emptyCopy(filter: PatientDirectoryFilter, hasSearch: boolean) {
   if (hasSearch) return { title: 'No matching records', detail: 'Try a different name, contact detail, condition, or case reference.' };
   switch (filter) {
     case 'enquiries':
@@ -292,15 +287,16 @@ function emptyCopy(filter: PatientDirectoryFilter, hasSearch: boolean) {
 export default function Patients() {
   const { state, dispatch } = useApp();
   const [search, setSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState<PatientDirectoryFilter>('all');
+  const [, setActiveFilter] = useState<PatientDirectoryFilter>('all');
   const [openPatients, setOpenPatients] = useState<Array<{ key: string; layer: number }>>(() => {
     const initial = selectedCrmKeyFromSearch(window.location.search);
     return initial ? [{ key: initial, layer: allocateRecordLayer() }] : [];
   });
-  const [showClosed, setShowClosed] = useState(false);
-  // Board is the triage view; List is the same records with the contact detail the
-  // narrow lane cards have no room for. Both read the same search and declined filters.
-  const [view, setView] = useState<'board' | 'list'>('board');
+  const [statusChip, setStatusChip] = useState<'all' | 'Referred' | 'Active' | 'Inactive' | 'Declined'>('all');
+  const [referredPeriod, setReferredPeriod] = useState<'this-month' | 'last-month' | 'last-3' | 'all-time' | 'custom'>('all-time');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'referral' | 'payment'>('name');
 
   const patients = useMemo(() => {
     const map = new Map<string, UnifiedPatient>();
@@ -386,22 +382,51 @@ export default function Patients() {
     });
   }, [enquiries, patients]);
 
-  const filtered = useMemo(() => (
-    records.filter(record => recordMatchesPatientFilter(record, activeFilter) && recordMatchesQuery(record, search))
-  ), [activeFilter, records, search]);
+  const filtered = useMemo(() => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const year = Number(today.slice(0, 4));
+    const month = Number(today.slice(5, 7));
+    const pad = (value: number) => String(value).padStart(2, '0');
+    const startOf = (y: number, m: number) => `${y}-${pad(m)}-01`;
+    const matchesPeriod = (record: CrmRecord) => {
+      if (referredPeriod === 'all-time') return true;
+      const raw = record.patient?.crmPatient?.referredAt;
+      if (!raw) return false;
+      const day = raw.slice(0, 10);
+      if (referredPeriod === 'custom') return (!customFrom || day >= customFrom) && (!customTo || day <= customTo);
+      if (referredPeriod === 'this-month') return day >= startOf(year, month) && day <= today;
+      if (referredPeriod === 'last-month') {
+        const previous = new Date(Date.UTC(year, month - 2, 1));
+        const lastDay = new Date(Date.UTC(previous.getUTCFullYear(), previous.getUTCMonth() + 1, 0)).getUTCDate();
+        const from = `${previous.getUTCFullYear()}-${pad(previous.getUTCMonth() + 1)}-01`;
+        const to = `${previous.getUTCFullYear()}-${pad(previous.getUTCMonth() + 1)}-${pad(lastDay)}`;
+        return day >= from && day <= to;
+      }
+      const start = new Date(Date.UTC(year, month - 3, 1));
+      return day >= `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-01` && day <= today;
+    };
+    const statusOf = (record: CrmRecord): 'Referred' | 'Active' | 'Inactive' | 'Declined' | null => {
+      if (record.kind === 'enquiry') return record.journey === 'declined' ? 'Declined' : null;
+      if (record.patient?.crmPatient?.commercialStatus) return record.patient.crmPatient.commercialStatus;
+      if (record.journey === 'declined' || record.journey === 'suspended') return 'Declined';
+      if (record.journey === 'referred') return 'Referred';
+      if (record.journey === 'active') return 'Active';
+      return null;
+    };
+    return records
+      .map(record => ({ record, status: statusOf(record) }))
+      .filter(item => item.status && (statusChip === 'all' || item.status === statusChip) && matchesPeriod(item.record) && recordMatchesQuery(item.record, search))
+      .sort((left, right) => {
+        if (sortBy === 'referral') return String(right.record.patient?.crmPatient?.referredAt || '').localeCompare(String(left.record.patient?.crmPatient?.referredAt || ''));
+        if (sortBy === 'payment') {
+          const paid = (record: CrmRecord) => record.patient?.orders.find(order => order.payment.paidAt)?.payment.paidAt ?? '';
+          return String(paid(right.record)).localeCompare(String(paid(left.record)));
+        }
+        return left.record.name.localeCompare(right.record.name, 'en', { sensitivity: 'base' });
+      });
+  }, [customFrom, customTo, records, referredPeriod, search, sortBy, statusChip]);
 
-  const lanes = useMemo(() => {
-    const buckets = new Map<PatientCrmLane, CrmRecord[]>();
-    for (const record of filtered) {
-      const lane = patientCrmLane(record);
-      const list = buckets.get(lane) ?? [];
-      list.push(record);
-      buckets.set(lane, list);
-    }
-    return buckets;
-  }, [filtered]);
-
-  // Nothing is auto-selected any more: the board is the view, the dialog is opt-in.
+  // Nothing is auto-selected any more: the list is the view, the dialog is opt-in.
   const topOpenPatient = openPatients.reduce<(typeof openPatients)[number] | null>((top, entry) => !top || entry.layer > top.layer ? entry : top, null);
   const selectedKey = topOpenPatient?.key ?? null;
   const selected = records.find(record => record.key === selectedKey) ?? null;
@@ -445,10 +470,16 @@ export default function Patients() {
   useEffect(() => {
     const target = state.navigationTarget;
     if (target?.kind === 'patient-lane') {
-      setActiveFilter('all');
-      setView('board');
+      setStatusChip('all');
       setSearch('');
       setOpenPatients([]);
+      dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
+      return;
+    }
+    if (target?.kind === 'patient-list') {
+      setStatusChip(target.status === 'referred' ? 'Referred' : target.status === 'active' ? 'Active' : target.status === 'inactive' ? 'Inactive' : 'Declined');
+      setReferredPeriod(target.period === 'this-month' ? 'this-month' : 'all-time');
+      setSearch('');
       dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
       return;
     }
@@ -491,10 +522,14 @@ export default function Patients() {
     dispatch({ type: 'SET_SCREEN', screen: 'create' });
   };
 
-  const empty = emptyCopy(activeFilter, Boolean(search.trim()));
-  const closedCount = records.filter(record => patientCrmLane(record) === 'declined').length;
-  const visibleLanes = showClosed ? [...PATIENT_CRM_LANES, PATIENT_CRM_CLOSED_LANE] : PATIENT_CRM_LANES;
-  const populatedLanes = visibleLanes.filter(lane => (lanes.get(lane.key) ?? []).length > 0);
+  const clearFilters = () => {
+    setStatusChip('all');
+    setReferredPeriod('all-time');
+    setCustomFrom('');
+    setCustomTo('');
+    setSearch('');
+    setSortBy('name');
+  };
 
   return (
     <div className="page-body order-crm patient-crm">
@@ -506,87 +541,67 @@ export default function Patients() {
             value={search}
             onChange={event => setSearch(event.target.value)}
             placeholder="Search name, condition, DOB, email, mobile or case reference"
-            aria-label="Search patient CRM"
+            aria-label="Search patients"
           />
         </div>
-        <button
-          type="button"
-          className={`crm-lane-toggle${showClosed ? ' is-on' : ''}`}
-          aria-pressed={showClosed}
-          onClick={() => setShowClosed(value => !value)}
-        >
-          {showClosed ? 'Hide' : 'Show'} declined <strong>{closedCount}</strong>
-        </button>
-        <div className="crm-view-switch" role="group" aria-label="Patient directory view">
-          <button
-            type="button"
-            aria-pressed={view === 'board'}
-            className={view === 'board' ? 'is-on' : ''}
-            onClick={() => setView('board')}
-          >
-            <LayoutGrid size={14} aria-hidden="true" />
-            <span>Board</span>
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === 'list'}
-            className={view === 'list' ? 'is-on' : ''}
-            onClick={() => setView('list')}
-          >
-            <List size={14} aria-hidden="true" />
-            <span>List</span>
-          </button>
+        <div className="crm-view-switch" role="group" aria-label="Patient status">
+          {(['all', 'Referred', 'Active', 'Inactive', 'Declined'] as const).map(chip => (
+            <button
+              key={chip}
+              type="button"
+              aria-pressed={statusChip === chip}
+              className={statusChip === chip ? 'is-on' : ''}
+              onClick={() => {
+                setStatusChip(chip);
+                if (chip === 'Referred') setReferredPeriod('this-month');
+              }}
+            >
+              {chip === 'all' ? 'All' : chip}
+            </button>
+          ))}
         </div>
+        <label>
+          Referred:
+          <select aria-label="Referral date" value={referredPeriod} onChange={event => setReferredPeriod(event.target.value as typeof referredPeriod)}>
+            <option value="this-month">This month</option>
+            <option value="last-month">Last month</option>
+            <option value="last-3">Last 3 months</option>
+            <option value="all-time">All time</option>
+            <option value="custom">Custom range</option>
+          </select>
+        </label>
+        {referredPeriod === 'custom' ? (
+          <>
+            <input type="date" aria-label="Referral from" value={customFrom} onChange={event => setCustomFrom(event.target.value)} />
+            <input type="date" aria-label="Referral to" value={customTo} onChange={event => setCustomTo(event.target.value)} />
+          </>
+        ) : null}
+        <label>
+          Sort
+          <select aria-label="Sort patients" value={sortBy} onChange={event => setSortBy(event.target.value as typeof sortBy)}>
+            <option value="name">Name</option>
+            <option value="referral">Referral date</option>
+            <option value="payment">Last payment date</option>
+          </select>
+        </label>
       </section>
 
-      {populatedLanes.length ? (
-        view === 'board' ? (
-          <div className={`crm-lane-board crm-lane-board--count-${populatedLanes.length}`}>
-            {populatedLanes.map(lane => {
-              const laneRecords = lanes.get(lane.key) ?? [];
-              return (
-                <section className={`crm-lane crm-lane--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`} data-tour={lane.key === 'enquiries' ? 'patients-enquiries' : lane.key === 'care' ? 'patients-referred' : undefined}>
-                  <header className="crm-lane__header" title={lane.detail} data-tour={lane.key === 'care' ? 'patients-active' : undefined}>
-                    <span><strong>{lane.label}</strong></span>
-                    <b>{laneRecords.length}</b>
-                  </header>
-                  <div className="crm-lane__rows">
-                    {laneRecords.map(record => (
-                      <CrmListRow key={record.key} record={record} selected={selectedKey === record.key} onSelect={() => openPatientFromBoard(record.key)} />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        ) : (
-          /* One scrollable list rather than column-split lanes, but still ordered by
-             lane priority under quiet headings: a flat A–Z list buries the records
-             that need action today, which is the whole job of this screen. */
-          <div className="crm-directory-list">
-            {populatedLanes.map(lane => {
-              const laneRecords = lanes.get(lane.key) ?? [];
-              return (
-                <section className={`crm-directory-list__group crm-directory-list__group--${lane.key}`} key={lane.key} aria-label={`${lane.label}, ${laneRecords.length} record${laneRecords.length === 1 ? '' : 's'}`}>
-                  <header>
-                    <span>
-                      <strong>{lane.label}</strong>
-                      <small>{lane.detail}</small>
-                    </span>
-                    <b>{laneRecords.length}</b>
-                  </header>
-                  <div className="crm-directory-list__rows">
-                    {laneRecords.map(record => (
-                      <PatientDirectoryRow key={record.key} record={record} onSelect={() => openPatientFromBoard(record.key)} />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-        )
+      {filtered.length ? (
+        <div className="crm-directory-list">
+          {filtered.map(({ record, status }) => (
+            <button key={record.key} type="button" className="patient-directory-row" onClick={() => openPatientFromBoard(record.key)}>
+              <strong>{record.name}</strong>
+              <span className={`order-stage-pill${status === 'Referred' ? ' is-referred' : ''}`}>{status}</span>
+              <span>Date of birth {record.dob || 'not recorded'}</span>
+            </button>
+          ))}
+        </div>
       ) : (
-        <div className="order-crm-empty"><Users size={26} /><strong>{empty.title}</strong><span>{empty.detail}</span></div>
+        <div className="order-crm-empty">
+          <Users size={26} />
+          <strong>No patients match these filters.</strong>
+          <button type="button" onClick={clearFilters}>Clear filters</button>
+        </div>
       )}
 
       {openPatients.map(entry => {
@@ -647,7 +662,7 @@ function crmTourTarget(record: { kind: string; id: string }): string | undefined
   return undefined;
 }
 
-function CrmListRow({ record, selected, onSelect }: { record: CrmRecord; selected: boolean; onSelect: () => void }) {
+export function CrmListRow({ record, selected, onSelect }: { record: CrmRecord; selected: boolean; onSelect: () => void }) {
   const meta = crmMeta(record);
   const Icon = CRM_ICONS[meta.icon];
   const stamp = record.kind === 'enquiry' && record.enquiry ? fmtDate(record.enquiry.submittedAt) : formatPatientDob(record.dob);
@@ -677,7 +692,7 @@ function CrmListRow({ record, selected, onSelect }: { record: CrmRecord; selecte
  * the difference is that the full width has room for the contact fields the operator
  * would otherwise have to open the record to read.
  */
-function PatientDirectoryRow({ record, onSelect }: { record: CrmRecord; onSelect: () => void }) {
+export function PatientDirectoryRow({ record, onSelect }: { record: CrmRecord; onSelect: () => void }) {
   const meta = crmMeta(record);
   const Icon = CRM_ICONS[meta.icon];
   const address = patientAddressLines(record.address, record.postcode);
@@ -768,7 +783,8 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
   const clinical = patientClinicalProfile({ crmPatient: patient.crmPatient, submission: patient.submission });
   const conditions = clinical.conditions;
   const primaryCondition = clinical.primaryCondition;
-  const canOrder = (workspaceLive || trainingDraft) && canCreateOrderForPatient(patient.crmPatient);
+  const referredOnly = patient.crmPatient?.commercialStatus === 'Referred' || record.journey === 'referred';
+  const canOrder = !referredOnly && (workspaceLive || trainingDraft) && canCreateOrderForPatient(patient.crmPatient);
   const orderGate = newOrderGateMessage(workspaceLive, patient, trainingDraft);
   const foundService = clinical.heardAbout || portalSourceLabel(clinical.referralSource) || null;
   const treatmentCheck = clinical.triedTwoTreatments === true ? 'Yes' : clinical.triedTwoTreatments === false ? 'No' : null;
@@ -782,7 +798,7 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
   const [conditionError, setConditionError] = useState<string | null>(null);
   // Only a patient with a server record can have their conditions rewritten;
   // a training-sandbox row has no submission to rewrite.
-  const canEditConditions = Boolean(patient.crmPatient?.id) && workspaceLive;
+  const canEditConditions = !referredOnly && Boolean(patient.crmPatient?.id) && workspaceLive;
 
   const saveConditions = async (conditionCodes: string[], primaryConditionCode: string) => {
     const patientId = patient.crmPatient?.id;
@@ -819,7 +835,7 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
             <strong>{patient.orders.length}</strong>
             <span className="order-crm-record__opened">{journeyLabel(record.journey)}</span>
           </div>
-          <div className="order-crm-record__actions" role="group" aria-label="Patient actions">
+          {referredOnly ? null : <div className="order-crm-record__actions" role="group" aria-label="Patient actions">
             <button
               className="btn btn-primary btn-sm"
               type="button"
@@ -830,9 +846,9 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
               {!canOrder ? <Lock size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />}
               New order
             </button>
-          </div>
+          </div>}
         </div>
-        {!canOrder && orderGate ? <span id="patient-order-gate-tip" className="patient-crm-gate">{orderGate}</span> : null}
+        {!referredOnly && !canOrder && orderGate ? <span id="patient-order-gate-tip" className="patient-crm-gate">{orderGate}</span> : null}
       </header>
 
       <PatientJourneyRail stage={record.journey} />

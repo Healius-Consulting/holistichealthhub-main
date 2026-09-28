@@ -82,6 +82,88 @@ function integrationChipCaption(item: PharmacyOverviewContract['integrations'][n
   return 'Never confirmed';
 }
 
+function comparisonText(percent: number | null | undefined) {
+  if (percent == null) return null;
+  const up = percent >= 0;
+  return <small className={up ? 'overview-compare is-up' : 'overview-compare is-down'}>{up ? '▲' : '▼'} {Math.abs(percent)}% on this time last month</small>;
+}
+
+function MonthGlance({
+  finance,
+  census,
+  onOpenPatients,
+  onOpenFinance,
+}: {
+  finance: NonNullable<PharmacyOverviewContract['finance']>;
+  census: PharmacyOverviewContract['patientCensus'];
+  onOpenPatients: (status: 'referred' | 'active') => void;
+  onOpenFinance: () => void;
+}) {
+  const monthKey = finance.periodStart.slice(0, 7);
+  const [dismissed, setDismissed] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('hhh.milestone.dismissed') || '[]'); } catch { return []; }
+  });
+  const dismiss = (id: string) => {
+    const next = [...dismissed, `${monthKey}:${id}`];
+    setDismissed(next);
+    localStorage.setItem('hhh.milestone.dismissed', JSON.stringify(next));
+  };
+  const activeAll = census?.activeAllTime ?? 0;
+  const milestone = [10, 25, 50, 100].includes(activeAll) ? `${activeAll} active patients` : null;
+  const record = finance.recordRevenueMonth ? 'Record revenue month' : null;
+  const notes = [milestone, record].filter((note): note is string => Boolean(note) && !dismissed.includes(`${monthKey}:${note}`));
+  return (
+    <section className="card overview-finance" aria-labelledby="overview-finance-title">
+      <div className="section-heading">
+        <div><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> This month at a glance</h2></div>
+        <span>{finance.payingPatientCount === 1 ? '1 paying patient' : `${finance.payingPatientCount} paying patients`}</span>
+      </div>
+      {notes.map(note => (
+        <p key={note} className="overview-milestone" role="status">
+          <span>{note}</span>
+          <button type="button" onClick={() => dismiss(note)}>Dismiss</button>
+        </p>
+      ))}
+      <dl className="overview-finance__figures">
+        <div className="overview-finance__hero">
+          <dt>Revenue</dt>
+          <dd>{pounds(finance.revenuePence)}</dd>
+          {comparisonText(finance.comparison?.revenuePercent)}
+        </div>
+        <div>
+          <dt>Gross profit</dt>
+          <dd>{pounds(finance.grossProfitPence)}{finance.marginPercent != null ? <small> · {finance.marginPercent}% margin</small> : null}</dd>
+          {comparisonText(finance.comparison?.grossProfitPercent)}
+          {!finance.grossProfitComplete ? <small>Incomplete cost data</small> : null}
+        </div>
+        <div>
+          <dt>Average revenue per patient</dt>
+          <dd>{finance.payingPatientCount === 0 ? pounds(0) : pounds(finance.averageRevenuePerPatientPence ?? finance.averageSpendPence)}</dd>
+          {comparisonText(finance.comparison?.averageRevenuePercent)}
+        </div>
+        <div>
+          <dt>Awaiting payment</dt>
+          <dd>{pounds(finance.awaitingPaymentValuePence)}</dd>
+          <small>{finance.awaitingPaymentCount} order{finance.awaitingPaymentCount === 1 ? '' : 's'}</small>
+        </div>
+      </dl>
+      <div className="overview-census">
+        <button type="button" onClick={() => onOpenPatients('referred')}>
+          <span>Referred</span>
+          <strong>{census?.referredThisMonth ?? 0} this month</strong>
+          <small>{census?.referredAllTime ?? 0} all time</small>
+        </button>
+        <button type="button" onClick={() => onOpenPatients('active')}>
+          <span>Active</span>
+          <strong>{census?.activeThisMonth ?? 0} this month</strong>
+          <small>{census?.activeAllTime ?? 0} all time</small>
+        </button>
+      </div>
+      <button type="button" className="overview-finance__link" onClick={onOpenFinance}>View finance <ArrowRight size={13} aria-hidden="true" /></button>
+    </section>
+  );
+}
+
 export default function PharmacyOverview() {
   const { state, dispatch } = useApp();
   const [overview, setOverview] = useState<PharmacyOverviewContract | null>(null);
@@ -111,6 +193,11 @@ export default function PharmacyOverview() {
   }, [organisation, sandboxOverview]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const openPatientList = (status: 'referred' | 'active') => {
+    dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient-list', status, period: 'this-month' } });
+    dispatch({ type: 'SET_SCREEN', screen: 'patients' });
+  };
 
   const openPatientsHub = () => {
     dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient-lane', lane: 'enquiries' } });
@@ -220,49 +307,10 @@ export default function PharmacyOverview() {
       )}
 
       {overview.finance ? (
-        <section className="card overview-finance" aria-labelledby="overview-finance-title">
-          <div className="section-heading">
-            <div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> This month</h2></div>
-            <span>{overview.finance.payingPatientCount === 1 ? '1 paying patient' : `${overview.finance.payingPatientCount} paying patients`}</span>
-          </div>
-          <dl className="overview-finance__figures">
-            <div className="overview-finance__hero">
-              <dt>Gross profit</dt>
-              <dd>{pounds(overview.finance.grossProfitPence)}</dd>
-              <small>
-                {overview.finance.grossProfitComplete
-                  ? 'Patient payments less matching wholesale'
-                  : overview.finance.revenueOrderCount > 0
-                    ? `Incomplete cost data · ${overview.finance.costedOrderCount} of ${overview.finance.revenueOrderCount} orders costed`
-                    : 'Incomplete cost data'}
-              </small>
-            </div>
-            <div>
-              <dt>Revenue</dt>
-              <dd>{pounds(overview.finance.revenuePence)}</dd>
-              <small>Settled payments this month</small>
-            </div>
-            <div>
-              <dt>Average spend</dt>
-              <dd>{overview.finance.payingPatientCount === 0 ? pounds(0) : pounds(overview.finance.averageSpendPence)}</dd>
-              <small>
-                {overview.finance.payingPatientCount === 0
-                  ? 'No paying patients'
-                  : `Based on ${overview.finance.payingPatientCount} paying patient${overview.finance.payingPatientCount === 1 ? '' : 's'}`}
-              </small>
-            </div>
-            <div className="overview-finance__outstanding">
-              <dt>Awaiting payment</dt>
-              <dd>{pounds(overview.finance.awaitingPaymentValuePence)}</dd>
-              <small>Outstanding · {overview.finance.awaitingPaymentCount} order{overview.finance.awaitingPaymentCount === 1 ? '' : 's'}</small>
-            </div>
-          </dl>
-          <p className="overview-finance__note">Settled cash this month. Finance is the collected-order ledger.</p>
-          <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>View finance <ArrowRight size={13} aria-hidden="true" /></button>
-        </section>
+        <MonthGlance finance={overview.finance} census={overview.patientCensus} onOpenPatients={openPatientList} onOpenFinance={() => openScreen('finance')} />
       ) : (
         <section className="card overview-finance" aria-labelledby="overview-finance-title">
-          <div className="section-heading"><div><p className="section-label">Finance</p><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> This month</h2></div></div>
+          <div className="section-heading"><div><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> This month at a glance</h2></div></div>
           <p className="overview-muted">Figures could not be worked out just now. Refresh, or open Finance for the full ledger.</p>
           <button type="button" className="overview-finance__link" onClick={() => openScreen('finance')}>View finance <ArrowRight size={13} aria-hidden="true" /></button>
         </section>

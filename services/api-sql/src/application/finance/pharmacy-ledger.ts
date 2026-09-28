@@ -1,3 +1,4 @@
+import { weightedMarginPercent } from '../../domain/commercial/rules.js';
 import { quotedCostFromSnapshot } from '../orders/finance-costing.js';
 import { financeRevenueBasis, pharmacyFinanceRecognition } from '../../transport/portal/finance-recognition.js';
 
@@ -153,10 +154,12 @@ export function buildPharmacyLedgerRows(input: {
       refundAmountPence: completedRefundPence,
       refundPending: flags.refundPending,
       grossPatientRevenuePence,
+      grossProductRevenuePence,
       productRevenuePence,
       pharmacyDeliveryPence,
       dispensingFeePence,
       patientRevenuePence,
+      packCount: lines.reduce((sum, line) => sum + Math.max(0, Number(line.quantity) || 0), 0),
       wholesaleProductPence,
       shippingPence,
       wholesalePence,
@@ -220,6 +223,23 @@ function londonWallClockToInstant(year: number, month: number, day: number, hour
  * through now. A completed month would run through the last millisecond of its
  * final day; Overview always asks for the live month.
  */
+function parseLondonDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+}
+
+/** Inclusive London calendar dates. `to` runs through the end of that day. */
+export function londonDateRangeBounds(from?: string, to?: string, now: number = Date.now()) {
+  const clock = londonClock(new Date(now));
+  const startDate = (from && parseLondonDate(from)) || { year: clock.year, month: clock.month, day: 1 };
+  const endDate = (to && parseLondonDate(to)) || { year: clock.year, month: clock.month, day: clock.day };
+  const start = londonWallClockToInstant(startDate.year, startDate.month, startDate.day);
+  const following = new Date(Date.UTC(endDate.year, endDate.month - 1, endDate.day + 1));
+  const endExclusive = londonWallClockToInstant(following.getUTCFullYear(), following.getUTCMonth() + 1, following.getUTCDate());
+  return { startMs: start.getTime(), endMs: endExclusive.getTime() - 1 };
+}
+
 export function thisMonthBounds(now: number = Date.now()) {
   const clock = londonClock(new Date(now));
   const periodStart = londonWallClockToInstant(clock.year, clock.month, 1);
@@ -251,33 +271,47 @@ function hasSettledPayment(row: { paidAt?: string | null; paymentStatus: string 
 type OverviewFinanceRow = Pick<PharmacyLedgerRow,
   'orderId' | 'patientId' | 'createdAt' | 'paidAt' | 'refundedAt' | 'paymentStatus'
   | 'grossPatientRevenuePence' | 'refundAmountPence' | 'patientRevenuePence'
-  | 'wholesalePence' | 'wholesaleComplete'>;
+  | 'wholesalePence' | 'wholesaleComplete'> & {
+  grossProductRevenuePence?: number;
+  wholesaleProductPence?: number | null;
+  packCount?: number;
+};
+
+function medicineBasis(row: { grossProductRevenuePence?: number; grossPatientRevenuePence?: number }) {
+  if (typeof row.grossProductRevenuePence === 'number') return row.grossProductRevenuePence;
+  return Number(row.grossPatientRevenuePence || 0);
+}
+
+function productWholesale(row: { wholesaleComplete?: boolean; wholesaleProductPence?: number | null; wholesalePence?: number | null }) {
+  if (!row.wholesaleComplete) return null;
+  if (typeof row.wholesaleProductPence === 'number') return row.wholesaleProductPence;
+  return row.wholesalePence == null ? null : Number(row.wholesalePence);
+}
 
 /**
- * Overview money headline: settled cash this calendar month.
- *
- * Payments count on paidAt, refunds on refundedAt, unpaid links stay outstanding.
- * Collection is not a gate. Wholesale is taken only for orders whose payment
- * landed in the window, and missing cost never counts as £0.
+ * Settled-cash headline for any window. Payments count on paidAt, refunds on
+ * refundedAt, and a refund never restates the month it was earned in.
+ * Gross profit is medicines after discount, less wholesale excluding VAT.
+ * Delivery is in revenue and out of gross profit.
  */
-export function overviewFinanceSnapshot(
-  rows: OverviewFinanceRow[],
-  now: number = Date.now(),
-) {
-  const bounds = thisMonthBounds(now);
-  const payments = rows.filter(row => hasSettledPayment(row) && instantInWindow(row.paidAt, bounds.startMs, bounds.endMs));
-  const refunds = rows.filter(row => Number(row.refundAmountPence || 0) > 0 && instantInWindow(row.refundedAt, bounds.startMs, bounds.endMs));
+export function settlementFinanceSnapshot(rows: OverviewFinanceRow[], startMs: number, endMs: number) {
+  const payments = rows.filter(row => hasSettledPayment(row) && instantInWindow(row.paidAt, startMs, endMs));
+  const refunds = rows.filter(row => Number(row.refundAmountPence || 0) > 0 && instantInWindow(row.refundedAt, startMs, endMs));
   const awaitingPayment = rows.filter(row => (
-    isAwaitingPaymentRow(row) && instantInWindow(row.createdAt, bounds.startMs, bounds.endMs)
+    isAwaitingPaymentRow(row) && instantInWindow(row.createdAt, startMs, endMs)
   ));
 
   const paymentPence = payments.reduce((sum, row) => sum + Number(row.grossPatientRevenuePence || 0), 0);
   const refundPence = refunds.reduce((sum, row) => sum + Number(row.refundAmountPence || 0), 0);
   const revenuePence = paymentPence - refundPence;
 
-  const costedPayments = payments.filter(row => row.wholesaleComplete && row.wholesalePence != null);
-  const wholesalePence = costedPayments.reduce((sum, row) => sum + Number(row.wholesalePence || 0), 0);
-  const grossProfitPence = revenuePence - wholesalePence;
+  const paymentMedicine = payments.reduce((sum, row) => sum + medicineBasis(row), 0);
+  const refundMedicine = refunds.reduce((sum, row) => sum + Math.min(Number(row.refundAmountPence || 0), medicineBasis(row)), 0);
+  const medicineRevenuePence = paymentMedicine - refundMedicine;
+  const costedPayments = payments.filter(row => productWholesale(row) != null);
+  const wholesaleProductPence = costedPayments.reduce((sum, row) => sum + Number(productWholesale(row) || 0), 0);
+  const grossProfitPence = medicineRevenuePence - wholesaleProductPence;
+  const packCount = payments.reduce((sum, row) => sum + Math.max(0, Number(row.packCount) || 0), 0);
 
   const netByPatient = new Map<string, number>();
   for (const row of payments) {
@@ -292,20 +326,91 @@ export function overviewFinanceSnapshot(
   const payingPatientCount = payingNets.length;
   const payingSpendPence = payingNets.reduce((sum, net) => sum + net, 0);
   const averageSpendPence = payingPatientCount === 0 ? 0 : Math.round(payingSpendPence / payingPatientCount);
+  const averageGrossProfitPerPatientPence = payingPatientCount === 0 ? 0 : Math.round(grossProfitPence / payingPatientCount);
+
+  return {
+    revenuePence,
+    revenueOrderCount: payments.length,
+    medicineRevenuePence,
+    grossProfitPence,
+    marginPercent: weightedMarginPercent(grossProfitPence, medicineRevenuePence),
+    grossProfitComplete: costedPayments.length === payments.length,
+    costedOrderCount: costedPayments.length,
+    averageSpendPence,
+    averageRevenuePerPatientPence: averageSpendPence,
+    averageGrossProfitPerPatientPence,
+    packCount,
+    averageItemPricePence: packCount === 0 ? 0 : Math.round(medicineRevenuePence / packCount),
+    averageGrossProfitPerItemPence: packCount === 0 ? 0 : Math.round(grossProfitPence / packCount),
+    payingPatientCount,
+    awaitingPaymentCount: awaitingPayment.length,
+    awaitingPaymentValuePence: awaitingPayment.reduce((sum, row) => sum + Number(row.patientRevenuePence || row.grossPatientRevenuePence || 0), 0),
+    refundPence,
+  };
+}
+
+function percentChange(current: number, previous: number) {
+  if (!(previous > 0)) return null;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+/** Days 1–N of the previous calendar month, matching the clock time of `now`. */
+export function previousMonthLikeForLikeBounds(now: number = Date.now()) {
+  const clock = londonClock(new Date(now));
+  const prevMonth = clock.month === 1 ? 12 : clock.month - 1;
+  const prevYear = clock.month === 1 ? clock.year - 1 : clock.year;
+  const lastDay = new Date(Date.UTC(prevYear, prevMonth, 0)).getUTCDate();
+  const day = Math.min(clock.day, lastDay);
+  const start = londonWallClockToInstant(prevYear, prevMonth, 1);
+  const end = londonWallClockToInstant(prevYear, prevMonth, day, clock.hour, clock.minute);
+  return { startMs: start.getTime(), endMs: end.getTime() };
+}
+
+function monthKey(instantMs: number) {
+  const clock = londonClock(new Date(instantMs));
+  return `${clock.year}-${String(clock.month).padStart(2, '0')}`;
+}
+
+/**
+ * Overview money headline: settled cash this calendar month.
+ *
+ * Payments count on paidAt, refunds on refundedAt, unpaid links stay outstanding.
+ * Collection is not a gate. Wholesale is taken only for orders whose payment
+ * landed in the window, and missing cost never counts as £0.
+ */
+export function overviewFinanceSnapshot(
+  rows: OverviewFinanceRow[],
+  now: number = Date.now(),
+) {
+  const bounds = thisMonthBounds(now);
+  const current = settlementFinanceSnapshot(rows, bounds.startMs, bounds.endMs);
+  const priorBounds = previousMonthLikeForLikeBounds(now);
+  const prior = settlementFinanceSnapshot(rows, priorBounds.startMs, priorBounds.endMs);
+  const thisKey = monthKey(now);
+  const byMonth = new Map<string, number>();
+  for (const row of rows) {
+    if (!hasSettledPayment(row) || !row.paidAt) continue;
+    const paid = Date.parse(row.paidAt);
+    if (!Number.isFinite(paid)) continue;
+    const key = monthKey(paid);
+    byMonth.set(key, (byMonth.get(key) ?? 0) + Number(row.grossPatientRevenuePence || 0));
+  }
+  const bestPrior = [...byMonth.entries()]
+    .filter(([key]) => key < thisKey)
+    .reduce((best, [, value]) => Math.max(best, value), 0);
+  const hadPriorMonth = [...byMonth.keys()].some(key => key < thisKey);
 
   return {
     period: 'this_month' as const,
     timezone: bounds.timezone,
     periodStart: bounds.periodStart,
     periodEnd: bounds.periodEnd,
-    revenuePence,
-    revenueOrderCount: payments.length,
-    grossProfitPence,
-    grossProfitComplete: costedPayments.length === payments.length,
-    costedOrderCount: costedPayments.length,
-    averageSpendPence,
-    payingPatientCount,
-    awaitingPaymentCount: awaitingPayment.length,
-    awaitingPaymentValuePence: awaitingPayment.reduce((sum, row) => sum + Number(row.patientRevenuePence || row.grossPatientRevenuePence || 0), 0),
+    ...current,
+    comparison: {
+      revenuePercent: percentChange(current.revenuePence, prior.revenuePence),
+      grossProfitPercent: percentChange(current.grossProfitPence, prior.grossProfitPence),
+      averageRevenuePercent: percentChange(current.averageRevenuePerPatientPence, prior.averageRevenuePerPatientPence),
+    },
+    recordRevenueMonth: hadPriorMonth && current.revenuePence > bestPrior,
   };
 }

@@ -52,6 +52,7 @@ import {
   mapPortalOrderFromSql,
 } from './order-sql-overlay.js';
 import { stampPackFieldsOnSnapshot } from '../../application/orders/prescription-units.js';
+import { applyStaffLinePrices } from '../../domain/commercial/rules.js';
 import { CURRENT_PRICING_POLICY_VERSION, authoritativeQuoteLineItems, authoritativeQuotePricing, evaluateQuoteGate, quoteCheckInput } from '../../application/orders/quote-gate.js';
 import { replacementPrescriptionPolicy } from '../../application/orders/replacement-resolution.js';
 import { generateOrderNumber, pharmacyDeliveryChargeAllowed, pharmacyDeliveryPermitted } from '../../application/orders/order-policy.js';
@@ -213,6 +214,7 @@ const createOrderInputSchema = z.object({
     })).default([]),
   })).default([]),
   dispensingFeePence: z.number().int().nonnegative().default(0),
+  discountPence: z.number().int().nonnegative().optional(),
   pharmacyDeliveryPence: pharmacyDeliveryPenceSchema.default(0),
   medicineTotalPence: z.number().int().nonnegative().optional(),
   deliveryPence: z.number().int().nonnegative().optional(),
@@ -409,6 +411,9 @@ export function createPortalOrderRouter(): Router {
 
       let medicineTotalPence = 0;
       let dispensingFeePence = input.dispensingFeePence ?? 0;
+      if (!input.redoContext?.isPaidRedo && dispensingFeePence > 0) {
+        throw new HttpError(400, 'New orders do not include a dispensing charge.', 'DISPENSING_CHARGE_RETIRED');
+      }
       let deliveryPence = 0;
       let taxPence = 0;
       let totalPence = 0;
@@ -565,7 +570,25 @@ export function createPortalOrderRouter(): Router {
       }
       const orderNumber = generateOrderNumber();
 
-      const authoritativeLineItems = authoritativeQuoteLineItems(input.lineItems, liveQuoteEvaluation);
+      let authoritativeLineItems = authoritativeQuoteLineItems(input.lineItems, liveQuoteEvaluation);
+      let orderDiscountPence = 0;
+      if (!replacement) {
+        const requestedPrice = new Map(input.lineItems.map(line => [line.packId, line.unitPricePence]));
+        const staffPrices = applyStaffLinePrices({
+          lines: authoritativeLineItems.map(line => ({
+            ...line,
+            unitPricePence: requestedPrice.get(line.packId) || line.unitPricePence,
+          })),
+          quoteItems: liveQuoteEvaluation.quote.items,
+          discountPence: input.discountPence ?? 0,
+          pharmacyDeliveryPence,
+        });
+        if ('error' in staffPrices) throw new HttpError(400, staffPrices.error, 'LINE_PRICE_REJECTED');
+        authoritativeLineItems = staffPrices.lines;
+        medicineTotalPence = staffPrices.medicineTotalPence;
+        totalPence = staffPrices.totalPence;
+        orderDiscountPence = staffPrices.discountPence;
+      }
 
       let quoteSnapshot = stampPackFieldsOnSnapshot({
         ...(input.quoteSnapshot ?? {}),
@@ -574,6 +597,7 @@ export function createPortalOrderRouter(): Router {
         pricingQuote: authoritativeRawQuote,
         quote: authoritativeRawQuote,
         medicineTotalPence,
+        orderDiscountPence,
         dispensingFeePence,
         pharmacyDeliveryPence,
         deliveryPence,

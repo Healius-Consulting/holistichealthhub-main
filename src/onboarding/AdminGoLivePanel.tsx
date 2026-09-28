@@ -16,7 +16,7 @@ interface AdminGoLivePanelProps {
 
 const INTAKE_EVIDENCE = 'HHH logged the intake call.';
 export const GO_LIVE_CURALEAF_TEST_ACK =
-  'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Manage → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
+  'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Settings & Assets → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
 
 export function AdminGoLivePanel({
   organisation,
@@ -103,7 +103,7 @@ export function AdminGoLivePanel({
         <div>
           <p className="section-label">Go live</p>
           <h2>Pharmacy workspace</h2>
-          <p>Log the intake call, then open the pharmacy workspace. Test uses this pharmacy's Curaleaf and Worldpay sandbox keys so staff can run the full order path. Live starts when production Curaleaf credentials are saved under Manage → Curaleaf. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
+          <p>Log the intake call, then open the pharmacy workspace. Test uses this pharmacy's Curaleaf and Worldpay sandbox keys so staff can run the full order path. Live starts when production Curaleaf credentials are saved under Settings & Assets → Curaleaf. Intake stays on independently. Worldpay stays optional until they connect a merchant in Settings.</p>
         </div>
         {liveWorkspace ? (
           <button type="button" className="btn btn-secondary btn-sm" disabled={goLiveBusy || reverting} onClick={() => void revertLive()}>
@@ -167,7 +167,7 @@ export function AdminGoLivePanel({
           <li>
             <div>
               <strong>Curaleaf</strong>
-              <span>Enter new credentials, or replace the test key with live ones, under Manage → Curaleaf. A test connection does not block go-live.</span>
+              <span>Enter new credentials, or replace the test key with live ones, under Settings & Assets → Curaleaf. A test connection does not block go-live.</span>
             </div>
             <div className="admin-golive-actions__aside">
               <span className={`pill ${curaleafProduction ? 'pill-green' : 'pill-amber'}`}>{curaleafLabel}</span>

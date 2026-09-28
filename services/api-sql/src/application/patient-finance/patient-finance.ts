@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { inactiveFromLastPayment } from '../../domain/commercial/rules.js';
 import { HttpError } from '../../domain/common/errors.js';
 import type { PatientFinanceRepositoryPort } from '../../repositories/ports/patient-finance.port.js';
 import type { PatientRepositoryPort } from '../../repositories/ports/patient.port.js';
@@ -88,14 +89,9 @@ export function estimateNextAppointmentFromDispenses(
   return addMonthsClamped(collectionDate, dispenses.length === 1 ? 1 : 3);
 }
 
-const RETENTION_GRACE_MS = 28 * 24 * 60 * 60 * 1_000;
-
 export function assertPatientEligibleForOrder(patient: { status: 'REFERRED' | 'ACTIVE' | 'INACTIVE' } | null) {
   if (!patient) {
     throw new HttpError(404, 'Patient not found.', 'NOT_FOUND');
-  }
-  if (patient.status === 'INACTIVE') {
-    throw new HttpError(409, 'This patient is not eligible for new orders.', 'PATIENT_NOT_ELIGIBLE');
   }
 }
 
@@ -104,7 +100,7 @@ export async function activatePatientForOrder(
   input: { organisationId: string; patientId: string; orderId: string; activatedAt?: string },
 ) {
   const patient = await deps.patientRepo.findPatientById(input.organisationId, input.patientId);
-  if (!patient || patient.status !== 'REFERRED') {
+  if (!patient || (patient.status !== 'REFERRED' && patient.status !== 'INACTIVE')) {
     return { patientId: input.patientId, activated: false };
   }
   const activatedAt = input.activatedAt ?? new Date().toISOString();
@@ -208,18 +204,19 @@ export async function accrueAnnualPatientFees(deps: PatientFinanceDeps, asOf = n
   return { asOf: today, activePatientsChecked: patients.length, created, skipped };
 }
 
+/**
+ * Inactive means the patient has not paid for 56 days. It is not clinic retention.
+ * The clock starts at the payment and does not restart if that order is refunded.
+ */
 export async function updatePatientRetentionStates(deps: PatientFinanceDeps, asOf = new Date()) {
   const patients = await deps.patientRepo.listActivePatients(2_000);
   const summary = { checked: patients.length, skipped: 0, inactive: 0 };
   for (const patient of patients) {
-    const dispenses = await deps.patientFinanceRepo.listRecentDispenseEvents(patient.id, 2);
-    const nextApptEst = estimateNextAppointmentFromDispenses(dispenses);
-    if (!nextApptEst) {
+    const lastPaidAt = await deps.patientFinanceRepo.latestPaidAt(patient.id);
+    if (!inactiveFromLastPayment(lastPaidAt, asOf)) {
       summary.skipped += 1;
       continue;
     }
-    if (asOf.getTime() <= nextApptEst.getTime()) continue;
-    if (asOf.getTime() < nextApptEst.getTime() + RETENTION_GRACE_MS) continue;
     await deps.patientRepo.updatePatientStatus({
       id: patient.id,
       organisationId: patient.organisationId,

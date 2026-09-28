@@ -10,6 +10,7 @@ import { parseCatalogueCache, serialiseCatalogueCache, shouldDiscardCatalogueCac
 import { curaleafCatalogueEstate, type CuraleafCatalogueEstate } from '../utils/catalogueEstate';
 import { CATALOGUE_TTL_MS, catalogueIsStale } from '../utils/catalogueFreshness';
 import { mapCuraleafCatalogue } from '../utils/mapCuraleafCatalogue';
+import { discountPence, prefillPatientPricePence } from '../utils/commercial';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { portalPrescriptionStatus } from '../utils/portalPrescriptionStatus';
 import {
@@ -67,6 +68,8 @@ export interface CRMPatient {
   psychiatricExclusion?: boolean | null;
   heardAbout?: string | null;
   status: 'Referred' | 'HHH approved' | 'Suspended';
+  commercialStatus?: 'Referred' | 'Active' | 'Inactive';
+  referredAt?: string;
   interactions?: { ts: Date | string; type: string; detail: string }[];
 }
 
@@ -78,6 +81,8 @@ export interface LineItem {
   unitsNeededCount?: number;
   cost: number | null;
   retail: number;
+  /** Staff set this price. A later quote must not replace it. */
+  priceOverridden?: boolean;
 }
 
 export type RxStatus =
@@ -217,6 +222,8 @@ export interface PatientOrder {
   patientId: string | null;
   date: Date;
   dispensingFee: number;
+  /** Medicines-only discount. Absent means no discount. Locked once payment is requested. */
+  discount?: { mode: 'amount' | 'percent'; amount: number } | null;
   pharmacyDelivery: number;
   pharmacyDeliveryAllowed: boolean;
   paymentRoute?: 'manual' | 'worldpay';
@@ -365,6 +372,8 @@ export interface PharmacyTenant {
   intakeEnabled?: boolean;
   staffCount: number;
   defaultPaymentRoute: 'manual' | 'worldpay';
+  /** Admin view of the stored Worldpay merchant: no credentials, sandbox, or live. */
+  worldpayState?: 'unconnected' | 'test' | 'live';
   pharmacyDeliveryEnabled: boolean;
   brand: {
     primary: string;
@@ -425,7 +434,9 @@ export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | '
 export type NavigationTarget =
   | { kind: 'patient'; id: string }
   | { kind: 'patient-lane'; lane: 'enquiries' }
+  | { kind: 'patient-list'; status: 'referred' | 'active' | 'inactive' | 'declined'; period: 'this-month' | 'all-time' }
   | { kind: 'order'; key: string }
+  | { kind: 'order-filter'; filter: 'awaiting-payment' }
   | { kind: 'catalogue'; query: string }
   | null;
 
@@ -531,7 +542,12 @@ function prescriptionIsPaymentReady(prescription: Prescription) {
 
 export const rxRevenue = (rx: Prescription) => rx.items.reduce((t, i) => t + lineRevenue(i), 0);
 export const rxCost = (rx: Prescription) => rx.items.reduce((t, i) => t + lineCost(i), 0);
-export const orderRevenue = (o: PatientOrder) => (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled' ? 0 : o.prescriptions.reduce((t, r) => t + rxRevenue(r), 0) + (o.dispensingFee || 0) + (o.pharmacyDelivery || 0));
+export const orderRevenue = (o: PatientOrder) => {
+  if (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled') return 0;
+  const medicines = o.prescriptions.reduce((total, prescription) => total + rxRevenue(prescription), 0);
+  const discount = discountPence(Math.round(medicines * 100), o.discount) / 100;
+  return medicines - discount + (o.dispensingFee || 0) + (o.pharmacyDelivery || 0);
+};
 export const orderCost = (o: PatientOrder) => (o.refund?.status === 'completed' || o.payment.status === 'refunded' || o.lifecycleStatus === 'cancelled' ? 0 : o.prescriptions.reduce((t, r) => t + rxCost(r), 0));
 /**
  * An order's gross margin is every line's contribution plus the dispensing
@@ -650,6 +666,8 @@ export type Action =
   | { type: 'SET_ACTIVE_ORDER'; orderId: number }
   | { type: 'SET_ORDER_PATIENT'; orderId: number; patientId: string }
   | { type: 'SET_ORDER_DISPENSING_FEE'; orderId: number; amount: number }
+  | { type: 'SET_ORDER_DISCOUNT'; orderId: number; discount: { mode: 'amount' | 'percent'; amount: number } | null }
+  | { type: 'SET_LINE_PRICE'; orderId: number; rxId: number; productId: string; retail: number }
   | { type: 'SET_ORDER_PHARMACY_DELIVERY'; orderId: number; amount: number }
   | { type: 'SET_ORDER_PAYMENT_ROUTE'; orderId: number; paymentRoute: 'manual' | 'worldpay' }
   | { type: 'ADD_RX'; orderId: number }
@@ -1314,6 +1332,18 @@ function reducer(state: AppState, action: Action): AppState {
       };
     case 'APPLY_CURALEAF_QUOTE': {
       const quoted = new Map(action.items.map(item => [item.productId, item]));
+      const savedRetail = (organisationId: string, productId: string, exceptOrderId: number) => {
+        const recent = state.orders
+          .filter(order => order.organisationId === organisationId && order.id !== exceptOrderId && order.payment.status !== 'none' && order.payment.status !== 'cancelled')
+          .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+        for (const order of recent) {
+          for (const prescription of order.prescriptions) {
+            const line = prescription.items.find(item => item.productId === productId && item.retail > 0);
+            if (line) return Math.round(line.retail * 100);
+          }
+        }
+        return null;
+      };
       // The quote is the only source of wholesale cost, so bank it on the catalogue
       // too: the medicine picker needs cost and margin before a line is ever added.
       let catalogueChanged = false;
@@ -1345,9 +1375,12 @@ function reducer(state: AppState, action: Action): AppState {
           const items = rx.items.map(line => {
             const item = quoted.get(line.productId);
             if (!item) return line;
-            if (line.cost === item.wholesalePrice && line.retail === item.patientPrice) return line;
+            const retail = line.priceOverridden
+              ? line.retail
+              : prefillPatientPricePence(savedRetail(order.organisationId, line.productId, order.id), Math.round(item.patientPrice * 100), Math.round(item.wholesalePrice * 100)) / 100;
+            if (line.cost === item.wholesalePrice && line.retail === retail) return line;
             itemsChanged = true;
-            return { ...line, cost: item.wholesalePrice, retail: item.patientPrice };
+            return { ...line, cost: item.wholesalePrice, retail };
           });
           if (!itemsChanged) return rx;
           prescriptionsChanged = true;
@@ -1731,7 +1764,16 @@ function reducer(state: AppState, action: Action): AppState {
       })) : state;
     }
     case 'SET_ORDER_DISPENSING_FEE':
-      return mapOrder(state, action.orderId, order => ({ ...order, dispensingFee: Math.max(0, action.amount) }));
+      return mapOrder(state, action.orderId, order => ({ ...order, dispensingFee: order.payment.status === 'none' ? 0 : Math.max(0, action.amount) }));
+    case 'SET_ORDER_DISCOUNT':
+      return mapOrder(state, action.orderId, order => order.payment.status === 'none' ? { ...order, discount: action.discount } : order);
+    case 'SET_LINE_PRICE':
+      return mapOrder(state, action.orderId, order => order.payment.status === 'none' ? mapRx(order, action.rxId, prescription => ({
+        ...prescription,
+        items: prescription.items.map(item => item.productId === action.productId
+          ? { ...item, retail: Math.max(0, action.retail), priceOverridden: true }
+          : item),
+      })) : order);
     case 'SET_ORDER_PHARMACY_DELIVERY':
       return mapOrder(state, action.orderId, order => ({ ...order, pharmacyDelivery: order.pharmacyDeliveryAllowed ? Math.max(0, action.amount) : 0 }));
     case 'SET_ORDER_PAYMENT_ROUTE':

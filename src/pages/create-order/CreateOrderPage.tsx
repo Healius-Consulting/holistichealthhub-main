@@ -35,7 +35,7 @@ import { ApiRequestError, checkPrescriptionSerialAvailability, createOrderDraft,
 import { curaleafPlacementUnlocked, snapshotQuoteFromCatalogue } from '../../utils/curaleafPlacement';
 import { formatPatientDob } from '../../utils/patientDob';
 import { canCreateOrderForPatient, canLinkPatientOnOrderDraft } from '../../utils/patientOrderEligibility';
-import { quoteMedicineTotalPence } from '../../utils/pricing';
+import { discountFloorError, discountPence } from '../../utils/commercial';
 import { MAX_PRESCRIPTION_FILE_BYTES, isPersistedPrescriptionFileId, resolvePrescriptionContentType } from '../../utils/prescriptionFile';
 import { draftAllowsAdditionalPrescriptions } from '../../utils/replacementPrescriptionCopy';
 import { draftPrescriptionClientKey, flattenPrescriptionLines } from './prescriptionLineOwnership';
@@ -373,8 +373,23 @@ export default function CreateOrderPage() {
   const currentUnavailableProductIds = quotedSignature === currentQuoteSignature ? quotedUnavailableProductIds : [];
   const snapshotQuoteReady = !placementUnlocked && quotedSignature === currentQuoteSignature;
   const quoteAvailable = (quoteCurrent || snapshotQuoteReady) && currentUnavailableProductIds.length === 0;
-  const dispensingFeeValid = !activeOrder
-    || (activeOrder.dispensingFee >= 0 && activeOrder.dispensingFee <= 15);
+  const draftBasketItems = activeOrder
+    ? activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({ ...item, rxId: rx.id })))
+    : [];
+  const draftBasketCount = draftBasketItems.length;
+  const medicinePounds = draftBasketItems.reduce((sum, item) => sum + item.retail * item.qty, 0);
+  const discountPounds = activeOrder ? discountPence(Math.round(medicinePounds * 100), activeOrder.discount) / 100 : 0;
+  const wholesalePounds = draftBasketItems.reduce((sum, item) => sum + (item.cost ?? 0) * item.qty, 0);
+  const discountError = activeOrder && wholesaleKnown && discountPounds > 0
+    ? discountFloorError(Math.round(medicinePounds * 100), Math.round(discountPounds * 100), Math.round(wholesalePounds * 100))
+    : null;
+  const quotedPatientTotals = !activeOrder || draftBasketCount === 0
+    ? null
+    : {
+      medicine: medicinePounds,
+      discount: discountPounds,
+      total: medicinePounds - discountPounds + (activeOrder.pharmacyDelivery || 0),
+    };
   const quoteGateComplete = !requiresLiveCuraleafEvidence || quoteAvailable;
   const paidRedo = Boolean(activeOrder?.redoContext?.isPaidRedo);
   const paymentRouteReady = paidRedo || selectedPaymentRoute === 'manual' || canUseWorldpay;
@@ -385,7 +400,7 @@ export default function CreateOrderPage() {
   const paidRedoAmountMatches = !activeOrder?.redoContext?.isPaidRedo || Math.abs(paidRedoAmountDifference) < 0.005;
   const redoPriceResolutionReady = paidRedoAmountMatches
     || activeOrder?.redoContext?.priceResolution === 'absorb';
-  const readyForPayment = prescriptionReady && quoteGateComplete && paymentRouteReady && redoPriceResolutionReady && dispensingFeeValid;
+  const readyForPayment = prescriptionReady && quoteGateComplete && paymentRouteReady && redoPriceResolutionReady && !discountError;
   const incompletePrescriptionGates = activeOrder
     ? incompletePrescriptionPaymentGates(activeOrder.prescriptions)
     : [];
@@ -393,7 +408,7 @@ export default function CreateOrderPage() {
     ...incompletePrescriptionGates,
     ...readiness,
     { label: requiresLiveCuraleafEvidence ? 'Live Curaleaf price and stock quote verified' : 'Curaleaf quote optional in training', complete: quoteGateComplete },
-    { label: 'Dispensing charge is £0–£15', complete: dispensingFeeValid },
+    { label: 'Medicines stay at or above wholesale cost', complete: !discountError },
     { label: paidRedo ? 'Original verified payment route retained' : selectedPaymentRoute === 'worldpay' ? 'Worldpay merchant connection verified' : 'Pharmacy-managed payment route selected', complete: paymentRouteReady },
     ...(activeOrder.redoContext?.isPaidRedo ? [{ label: 'Replacement price decision recorded', complete: redoPriceResolutionReady }] : []),
   ] : [];
@@ -412,25 +427,12 @@ export default function CreateOrderPage() {
       && serialAvailability.allowed
       && !serialAvailability.pending,
     );
-  const draftBasketItems = activeOrder
-    ? activeOrder.prescriptions.flatMap(rx => rx.items.map(item => ({ ...item, rxId: rx.id })))
-    : [];
-  const draftBasketCount = draftBasketItems.length;
   const selectedBasketCount = selectedRx?.items.length ?? 0;
   // Curaleaf's own tax on the pharmacy's purchase is a supplier-side figure and is
   // deliberately not surfaced to staff, so only wholesale and delivery come through.
   const draftBasketCosts = activeOrder && wholesaleKnown && quoteCurrent && quoteSummary
     ? { wholesale: orderCost(activeOrder), delivery: quoteSummary.shippingPrice }
     : null;
-  const quotedMedicinePence = quotedSignature === currentQuoteSignature
-    ? quoteMedicineTotalPence(latestQuote, draftBasketItems)
-    : null;
-  const quotedPatientTotals = quotedMedicinePence == null || !activeOrder
-    ? null
-    : {
-      medicine: quotedMedicinePence / 100,
-      total: quotedMedicinePence / 100 + (activeOrder.dispensingFee || 0) + (activeOrder.pharmacyDelivery || 0),
-    };
   const draftBasketIssues = draftBasketItems.map(item => basketItemIssue({
     productId: item.productId,
     cost: item.cost,
@@ -697,16 +699,16 @@ export default function CreateOrderPage() {
             quantity: item.qty,
             packSize,
             unitsNeededCount: packSize ? packSize * item.qty : item.unitsNeededCount,
-            unitPricePence: quotedPatientPence > 0 ? quotedPatientPence : Math.round((item.retail || 0) * 100),
+            unitPricePence: Math.round((item.retail || 0) * 100) || quotedPatientPence,
             wholesalePackPrice: quoted?.wholesalePackPrice,
             wholesalePackPricePence,
           };
         }));
-        const dispensingFeePence = Math.round((activeOrder.dispensingFee || 0) * 100);
+        const dispensingFeePence = 0;
         const pharmacyDeliveryPence = Math.round((activeOrder.pharmacyDelivery || 0) * 100);
-        const medicineTotalPence = quoteMedicineTotalPence(pricingQuote, draftBasketItems)
-          ?? Math.max(0, Math.round(orderRevenue(activeOrder) * 100) - dispensingFeePence - pharmacyDeliveryPence);
-        const totalPence = medicineTotalPence + dispensingFeePence + pharmacyDeliveryPence;
+        const discountPenceAmount = Math.round(discountPounds * 100);
+        const medicineTotalPence = Math.max(0, Math.round(medicinePounds * 100) - discountPenceAmount);
+        const totalPence = medicineTotalPence + pharmacyDeliveryPence;
         const shippingPence = pricingQuote
           ? Math.round(Number(pricingQuote.shippingPrice || 0) * 100)
           : undefined;
@@ -718,6 +720,7 @@ export default function CreateOrderPage() {
           patientId: activeOrder.patientId!,
           paymentRoute: selectedPaymentRoute,
           medicineTotalPence,
+          discountPence: discountPenceAmount,
           dispensingFeePence,
           pharmacyDeliveryPence,
           totalPence,
@@ -1383,7 +1386,9 @@ export default function CreateOrderPage() {
                   outstandingPaymentGates={outstandingPaymentGates}
                   checkoutBusy={checkoutBusy}
                   onRefreshQuote={() => void refreshQuote()}
-                  onSetDispensingFee={amount => dispatch({ type: 'SET_ORDER_DISPENSING_FEE', orderId: activeOrder.id, amount })}
+                  discountError={discountError}
+                  pricesLocked={activeOrder.payment.status !== 'none'}
+                  onSetDiscount={discount => dispatch({ type: 'SET_ORDER_DISCOUNT', orderId: activeOrder.id, discount })}
                   onSetPharmacyDelivery={amount => dispatch({ type: 'SET_ORDER_PHARMACY_DELIVERY', orderId: activeOrder.id, amount })}
                   onChooseAbsorbDifference={chooseAbsorbDifference}
                   onCancelReplacement={() => setConfirmingDraftDeleteId(activeOrder.id)}
@@ -1401,7 +1406,8 @@ export default function CreateOrderPage() {
             draftBasketCount={draftBasketCount}
             quotedPatientTotals={quotedPatientTotals}
             draftBasketCosts={draftBasketCosts}
-            dispensingFee={activeOrder.dispensingFee}
+            pricesLocked={activeOrder.payment.status !== 'none'}
+            rrpFor={productId => state.catalogue.find(product => product.id === productId)?.retail ?? null}
             pharmacyDelivery={activeOrder.pharmacyDelivery}
             draftBasketItems={draftBasketItems}
             draftBasketIssues={draftBasketIssues}
@@ -1414,6 +1420,7 @@ export default function CreateOrderPage() {
             continueDisabled={wizard.focusedStep >= wizard.progress.furthestUnlocked}
             onEditQuantity={(rxId, productId, qty) => dispatch({ type: 'UPDATE_ITEM_QTY', orderId: activeOrder.id, rxId, productId, qty })}
             onRemoveItem={(rxId, productId) => dispatch({ type: 'REMOVE_ITEM_FROM_RX', orderId: activeOrder.id, rxId, productId })}
+            onSetLinePrice={(rxId, productId, retail) => dispatch({ type: 'SET_LINE_PRICE', orderId: activeOrder.id, rxId, productId, retail })}
           />
                     </div>
                   )}

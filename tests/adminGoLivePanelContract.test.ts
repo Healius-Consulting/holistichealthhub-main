@@ -6,7 +6,7 @@ const panel = readFileSync(new URL('../src/onboarding/AdminGoLivePanel.tsx', imp
 const readiness = readFileSync(new URL('../services/api-sql/src/domain/organisation/operational-readiness.ts', import.meta.url), 'utf8');
 const router = readFileSync(new URL('../services/api-sql/src/transport/portal/setup.router.ts', import.meta.url), 'utf8');
 
-const ACK = 'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Manage → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
+const ACK = 'This pharmacy will run as Test: Curaleaf and Worldpay stay on sandbox keys until live credentials are saved under Settings & Assets → Curaleaf. Orders and payments against those sandboxes are real for this workspace.';
 const curaleafPanel = readFileSync(new URL('../src/components/CuraleafConnectionPanel.tsx', import.meta.url), 'utf8');
 
 test('admin go-live requires the intake call, not Curaleaf production, and warns before a test flip', () => {

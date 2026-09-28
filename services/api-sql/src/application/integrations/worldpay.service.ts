@@ -189,6 +189,12 @@ export type WorldpayStatusPayload = {
  * Settings and Overview share this payload. `connected` is only true when the
  * vendor has answered — an ACTIVE row with a stored secret is not a check.
  */
+/** What HHH admin needs at a glance: no merchant, sandbox, or live. */
+export function worldpayAdminState(connection: Pick<IntegrationConnectionRecord, 'status' | 'environment' | 'secretResourceName'> | null | undefined): 'unconnected' | 'test' | 'live' {
+  if (!connection || connection.status === 'DISCONNECTED' || !connection.secretResourceName) return 'unconnected';
+  return connection.environment === 'PRODUCTION' ? 'live' : 'test';
+}
+
 export function worldpayStatusPayload(
   connection: IntegrationConnectionRecord | null,
   extras?: { checkedAt?: string | null; message?: string },

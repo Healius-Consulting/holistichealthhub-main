@@ -1,7 +1,7 @@
 import { formatUkDate } from '../utils/ukDates';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, RefreshCw } from 'lucide-react';
-import { PATIENT_PRICE_LABEL, PHARMACY_COST_LABEL, WHOLESALE_LABEL, money, useApp } from '../context/AppContext';
+import { money, useApp } from '../context/AppContext';
 import { getPharmacyPrescriptionFinance } from '../shared/api';
 import type { PharmacyPrescriptionFinanceReport } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
@@ -9,19 +9,43 @@ import { isOpenPharmacyWorkspace } from '../training/workspace';
 import { compactPatientName } from '../utils/patientName';
 import './PharmacyFinance.css';
 
-type Period = '30' | '90' | '365' | 'all';
+type Period = 'this-month' | 'last-month' | 'last-3' | 'this-year' | 'custom';
 type FinanceRow = PharmacyPrescriptionFinanceReport['rows'][number];
 
 const PERIOD_OPTIONS: Array<{ value: Period; short: string; label: string }> = [
-  { value: '30', short: '30d', label: 'Last 30 days' },
-  { value: '90', short: '90d', label: 'Last 90 days' },
-  { value: '365', short: '12m', label: 'Last 12 months' },
-  { value: 'all', short: 'All', label: 'All realised prescriptions' },
+  { value: 'this-month', short: 'This month', label: 'This month' },
+  { value: 'last-month', short: 'Last month', label: 'Last month' },
+  { value: 'last-3', short: 'Last 3 months', label: 'Last 3 months' },
+  { value: 'this-year', short: 'This year', label: 'This year' },
+  { value: 'custom', short: 'Custom range', label: 'Custom range' },
 ];
 
-function periodStart(period: Period) {
-  if (period === 'all') return undefined;
-  return new Date(Date.now() - Number(period) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+function londonToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+function shiftMonth(year: number, month: number, delta: number) {
+  const date = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1 };
+}
+
+function periodRange(period: Period, customFrom: string, customTo: string) {
+  const today = londonToday();
+  const year = Number(today.slice(0, 4));
+  const month = Number(today.slice(5, 7));
+  const pad = (value: number) => String(value).padStart(2, '0');
+  if (period === 'last-month') {
+    const previous = shiftMonth(year, month, -1);
+    const lastDay = new Date(Date.UTC(previous.year, previous.month, 0)).getUTCDate();
+    return { from: `${previous.year}-${pad(previous.month)}-01`, to: `${previous.year}-${pad(previous.month)}-${pad(lastDay)}` };
+  }
+  if (period === 'last-3') {
+    const start = shiftMonth(year, month, -2);
+    return { from: `${start.year}-${pad(start.month)}-01`, to: today };
+  }
+  if (period === 'this-year') return { from: `${year}-01-01`, to: today };
+  if (period === 'custom') return { from: customFrom || undefined, to: customTo || undefined };
+  return { from: `${year}-${pad(month)}-01`, to: today };
 }
 
 function emptyTotals(): PharmacyPrescriptionFinanceReport['totals'] {
@@ -50,10 +74,11 @@ function emptyTotals(): PharmacyPrescriptionFinanceReport['totals'] {
 }
 
 function emptyFinanceReport(period: Period, organisationId: string): PharmacyPrescriptionFinanceReport {
+  const range = periodRange(period, '', '');
   return {
     organisationId,
     currency: 'GBP',
-    range: { from: periodStart(period) ?? null, to: null },
+    range: { from: range.from ?? null, to: range.to ?? null },
     periodCounts: { '30': 0, '90': 0, '365': 0, all: 0 },
     totals: emptyTotals(),
     rows: [],
@@ -120,7 +145,7 @@ function localPreviewFinanceReport(period: Period): PharmacyPrescriptionFinanceR
   return {
     organisationId: 'local-preview-pharmacy',
     currency: 'GBP',
-    range: { from: periodStart(period) ?? null, to: null },
+    range: { from: periodRange(period, '', '').from ?? null, to: periodRange(period, '', '').to ?? null },
     periodCounts: { '30': 1, '90': 1, '365': 1, all: 1 },
     totals: {
       ...emptyTotals(),
@@ -207,9 +232,11 @@ function summariseRealisedRows(rows: FinanceRow[]) {
 type LedgerRow = FinanceRow & { realised: boolean; pendingCollection: boolean };
 
 export default function PharmacyFinance() {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const liveWorkspace = isOpenPharmacyWorkspace(state.workspaceMode);
-  const [period, setPeriod] = useState<Period>('90');
+  const [period, setPeriod] = useState<Period>('this-month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
   const [report, setReport] = useState<PharmacyPrescriptionFinanceReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -224,7 +251,7 @@ export default function PharmacyFinance() {
       const nextReport = isLocalPortalPreview
         ? localPreviewFinanceReport(period)
         : liveWorkspace
-          ? await getPharmacyPrescriptionFinance({ from: periodStart(period) })
+          ? await getPharmacyPrescriptionFinance(periodRange(period, customFrom, customTo))
           : emptyFinanceReport(period, state.currentOrganisationId);
       if (requestVersion.current === version) setReport(nextReport);
     } catch (loadError) {
@@ -234,7 +261,7 @@ export default function PharmacyFinance() {
     } finally {
       if (requestVersion.current === version) setLoading(false);
     }
-  }, [liveWorkspace, period, state.currentOrganisationId]);
+  }, [customFrom, customTo, liveWorkspace, period, state.currentOrganisationId]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -244,13 +271,8 @@ export default function PharmacyFinance() {
   })), [report]);
 
   const ledgerRows = useMemo(() => classifiedRows
-    .filter(row => row.realised || row.pendingCollection)
-    .sort((left, right) => {
-      if (left.pendingCollection !== right.pendingCollection) {
-        return left.pendingCollection ? 1 : -1;
-      }
-      return eventDate(right).getTime() - eventDate(left).getTime();
-    }), [classifiedRows]);
+    .slice()
+    .sort((left, right) => eventDate(right).getTime() - eventDate(left).getTime()), [classifiedRows]);
 
   const serverHasCollectionGate = Boolean(
     report
@@ -282,8 +304,8 @@ export default function PharmacyFinance() {
       <header className="pharmacy-finance__header">
         <div className="pharmacy-finance__intro">
           <p className="section-label">Finance</p>
-          <h2>Realised after patient collection</h2>
-          <p>Headline figures include paid orders only once they are fully collected.</p>
+          <h2>Prescription financials</h2>
+          <p>Figures follow the date the patient paid. A refund reduces the period in which it is issued.</p>
         </div>
         <div className="pharmacy-finance__period-wrap">
           <div className="pharmacy-finance__period" role="group" aria-label="Reporting period">
@@ -300,6 +322,12 @@ export default function PharmacyFinance() {
               </button>
             ))}
           </div>
+          {period === 'custom' ? (
+            <div className="pharmacy-finance__period" role="group" aria-label="Custom date range">
+              <label>From <input type="date" value={customFrom} onChange={event => setCustomFrom(event.target.value)} /></label>
+              <label>To <input type="date" value={customTo} onChange={event => setCustomTo(event.target.value)} /></label>
+            </div>
+          ) : null}
           <p className="pharmacy-finance__period-meta">
             {realisedCount} realised · {periodLabel}
           </p>
@@ -329,61 +357,44 @@ export default function PharmacyFinance() {
 
       {report && totals && (
         <>
-          <section className="pharmacy-finance__realised" aria-label={`${periodLabel} realised summary`} aria-live="polite">
-            <p className="section-label">Realised</p>
-            <div className="pharmacy-finance__hero">
-              <span className="pharmacy-finance__hero-label">Estimated contribution</span>
-              <strong className="pharmacy-finance__hero-value">{pounds(totals.totalContributionPence)}</strong>
-              <span className="pharmacy-finance__hero-note">
-                {totals.wholesalePendingForCount
-                  ? `${totals.wholesaleKnownForCount} of ${totals.paidPrescriptionCount} realised orders costed`
-                  : `Patient total − ${PHARMACY_COST_LABEL.toLowerCase()}`}
-                {totals.wholesaleEstimatedForCount
-                  ? ` · ${totals.wholesaleEstimatedForCount} estimated from the quote bank`
-                  : ''}
-              </span>
-            </div>
+          <section className="pharmacy-finance__realised" aria-label={`${periodLabel} summary`} aria-live="polite">
             <dl className="pharmacy-finance__metrics">
-              <div>
-                <dt>Patient revenue</dt>
-                <dd>{pounds(totals.patientRevenuePence)}</dd>
-                <small>
-                  incl. {pounds(totals.dispensingFeesPence)} dispensing
-                  {totals.pharmacyDeliveryFeesPence ? ` + ${pounds(totals.pharmacyDeliveryFeesPence)} Pharmacy Delivery` : ''}
-                </small>
+              <div className="pharmacy-finance__hero">
+                <dt>Revenue</dt>
+                <dd>{pounds(totals.revenuePence ?? totals.patientRevenuePence)}</dd>
               </div>
               <div>
-                <dt>{PHARMACY_COST_LABEL}</dt>
-                <dd>{pounds(totals.wholesalePence)}</dd>
-                <small>{WHOLESALE_LABEL} {pounds(totals.wholesaleProductPence)} + delivery {pounds(totals.shippingPence)}</small>
+                <dt>Gross profit</dt>
+                <dd>{pounds(totals.grossProfitPence ?? totals.productMarginPence)}</dd>
+                <small>{totals.marginPercent == null ? 'Margin unavailable' : `${totals.marginPercent}% margin`}</small>
               </div>
               <div>
-                <dt>Product margin</dt>
-                <dd>{pounds(totals.productMarginPence)}</dd>
-                <small>{PATIENT_PRICE_LABEL} less {WHOLESALE_LABEL}</small>
+                <dt>Average revenue per patient</dt>
+                <dd>{pounds(totals.averageRevenuePerPatientPence ?? 0)}</dd>
+                <small>Average gross profit per patient {pounds(totals.averageGrossProfitPerPatientPence ?? 0)}</small>
+              </div>
+              <div>
+                <dt>Average item price</dt>
+                <dd>{pounds(totals.averageItemPricePence ?? 0)}</dd>
+                <small>Average gross profit per item {pounds(totals.averageGrossProfitPerItemPence ?? 0)}</small>
               </div>
             </dl>
           </section>
 
-          <section
-            className={`pharmacy-finance__pending-band${totals.pendingCollectionCount ? '' : ' is-empty'}`}
-            aria-label="Pending collection"
+          <button
+            type="button"
+            className="pharmacy-finance__pending-band"
+            onClick={() => {
+              dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'order-filter', filter: 'awaiting-payment' } });
+              dispatch({ type: 'SET_SCREEN', screen: 'orders' });
+            }}
           >
-            {totals.pendingCollectionCount > 0 ? (
-              <>
-                <div>
-                  <p className="section-label">Pending collection</p>
-                  <p>
-                    <strong>{totals.pendingCollectionCount}</strong>
-                    {' '}paid order{totals.pendingCollectionCount === 1 ? '' : 's'} awaiting collection
-                  </p>
-                </div>
-                <strong className="pharmacy-finance__pending-total">{pounds(totals.pendingPatientRevenuePence)}</strong>
-              </>
-            ) : (
-              <p>No paid orders awaiting collection in this period.</p>
-            )}
-          </section>
+            <div>
+              <p className="section-label">Awaiting payment</p>
+              <p><strong>{totals.awaitingPaymentCount ?? 0}</strong> order{(totals.awaitingPaymentCount ?? 0) === 1 ? '' : 's'}</p>
+            </div>
+            <strong className="pharmacy-finance__pending-total">{pounds(totals.awaitingPaymentValuePence ?? 0)}</strong>
+          </button>
 
           <section className="card card-flush pharmacy-finance__ledger">
             <div className="section-heading section-heading--padded">
@@ -393,14 +404,14 @@ export default function PharmacyFinance() {
                   {ledgerRows.length} order{ledgerRows.length === 1 ? '' : 's'} · {periodLabel}
                 </h3>
               </div>
-              <span>Realised and awaiting collection</span>
+              <span>Paid in this period</span>
             </div>
 
             {ledgerRows.length === 0 ? (
               <div className="pharmacy-finance__state pharmacy-finance__state--empty">
-                <h3>{liveWorkspace ? 'No realised or pending orders in this period' : 'Training examples are not paid prescriptions'}</h3>
+                <h3>{liveWorkspace ? 'No settled orders in this period' : 'Training examples are not paid prescriptions'}</h3>
                 <p>{liveWorkspace
-                  ? 'Paid orders appear as pending until collection, then move into realised totals.'
+                  ? 'Orders appear here once the patient has paid, whether or not they have collected.'
                   : 'Live paid-order totals appear here after HHH flips this workspace live.'}</p>
               </div>
             ) : (
@@ -409,35 +420,27 @@ export default function PharmacyFinance() {
                   <thead>
                     <tr>
                       <th>Order</th>
-                      <th>Status</th>
-                      <th>Patient total</th>
-                      <th>{PHARMACY_COST_LABEL}</th>
-                      <th>Margin</th>
-                      <th>Contribution</th>
+                      <th>Revenue</th>
+                      <th>Wholesale cost</th>
+                      <th>Gross profit</th>
+                      <th>Margin %</th>
                     </tr>
                   </thead>
                   <tbody>
                     {ledgerRows.map(record => {
-                      const pending = record.pendingCollection;
+                      const revenue = record.grossPatientRevenuePence ?? record.patientRevenuePence;
+                      const medicine = record.grossProductRevenuePence ?? record.productRevenuePence;
+                      const grossProfit = record.wholesaleProductPence == null ? null : medicine - record.wholesaleProductPence;
                       return (
-                        <tr key={record.orderId} className={pending ? 'is-pending' : 'is-realised'}>
+                        <tr key={record.orderId}>
                           <td>
                             <strong title={record.patientName}>{compactPatientName(record.patientName)}</strong>
-                            <span>{formatDate(eventDate(record))} · {record.orderId}</span>
+                            <span>{formatDate(record.paidAt ? new Date(record.paidAt) : eventDate(record))} · {record.orderId}</span>
                           </td>
-                          <td data-label="Status">
-                            <span className={`pharmacy-finance__status${pending ? ' is-pending' : ' is-realised'}`}>
-                              {pending ? 'Awaiting collection' : 'Realised'}
-                            </span>
-                          </td>
-                          <td data-label="Patient total"><FinancialValue value={record.patientRevenuePence} /></td>
-                          <td data-label={PHARMACY_COST_LABEL}><FinancialValue value={record.wholesalePence} estimated={record.wholesaleEstimated} /></td>
-                          <td data-label="Margin"><FinancialValue value={record.productMarginPence} estimated={record.wholesaleEstimated} /></td>
-                          <td data-label="Contribution" className="pharmacy-finance__contribution">
-                            {pending
-                              ? <span className="pharmacy-finance__awaiting">—</span>
-                              : <FinancialValue value={record.totalContributionPence} estimated={record.wholesaleEstimated} />}
-                          </td>
+                          <td data-label="Revenue"><FinancialValue value={revenue} /></td>
+                          <td data-label="Wholesale cost"><FinancialValue value={record.wholesaleProductPence} /></td>
+                          <td data-label="Gross profit"><FinancialValue value={grossProfit} /></td>
+                          <td data-label="Margin %">{medicine > 0 && grossProfit != null ? `${Math.round((grossProfit / medicine) * 1000) / 10}%` : '—'}</td>
                         </tr>
                       );
                     })}
@@ -448,14 +451,8 @@ export default function PharmacyFinance() {
           </section>
 
           <p className="pharmacy-finance__footnote">
-            Operational estimate for this pharmacy only—not a Curaleaf settlement statement.
-            {totals.wholesaleEstimatedForCount
-              ? ` Rows marked “est.” are priced from the Curaleaf quote bank because no paid quote was frozen on the order, and exclude delivery cost.`
-              : ''}
-            {totals.refundedPrescriptionCount > 0 || totals.refundPendingCount > 0
-              ? ` Refunded and refund-pending orders are excluded (${totals.refundedPrescriptionCount} completed / ${totals.refundPendingCount} pending).`
-              : ' Refunded and refund-pending orders are excluded.'}
-            {' '}Realised patient total for the period: <strong>{pounds(totals.patientRevenuePence)}</strong>.
+            Revenue includes delivery. Gross profit is medicines after any discount, less wholesale cost excluding VAT.
+            {(totals.refundsIssuedPence ?? 0) > 0 ? ` Refunds issued in this period: ${pounds(totals.refundsIssuedPence ?? 0)}.` : ''}
           </p>
         </>
       )}
