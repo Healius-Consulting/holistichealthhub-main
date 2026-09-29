@@ -8,6 +8,7 @@ import { PRIVACY_NOTICE_VERSION } from '../../domain/legal/notice-version.js';
 import { isEligibleAge } from '../../domain/eligibility/age.js';
 import { screeningFlagFor } from '../../domain/eligibility/screening.js';
 import { TERMS_VERSION } from '../../domain/legal/notice-version.js';
+import { normaliseReferralToken } from '../../domain/referrals/referral-token.js';
 
 const submissionInputSchema = z.object({
   firstName: z.string().min(1).max(100),
@@ -57,7 +58,7 @@ export function createPublicEligibilityRouter(): Router {
 
       // If submitted via pharmacy QR token
       if (input.referralToken) {
-        const tokenHash = sha256(input.referralToken);
+        const tokenHash = sha256(normaliseReferralToken(input.referralToken) ?? input.referralToken);
         const resolved = await organisationRepo.findDirectoryByTokenHash(tokenHash);
         if (resolved) {
           sourceOrganisationId = resolved.pharmacy.id;

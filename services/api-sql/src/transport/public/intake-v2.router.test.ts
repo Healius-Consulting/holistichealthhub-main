@@ -33,6 +33,14 @@ describe('public SQL intake v2 validation', () => {
     assert.equal(referralTokenSchema.safeParse(`${token}.`).success, false);
   });
 
+  it('restores a PharmSmart base64 token after a query string turned + into a space', () => {
+    const legacy = `${'A'.repeat(116)}+/==`;
+    const parsed = referralTokenSchema.safeParse(legacy.replaceAll('+', ' '));
+    assert.equal(parsed.success, true);
+    if (parsed.success) assert.equal(parsed.data, legacy);
+    assert.equal(referralTokenSchema.safeParse(`${'A'.repeat(118)}==46`).success, false);
+  });
+
   it('accepts a consented fixed-pharmacy intake', () => {
     assert.equal(fixedPharmacyIntakeSchema.safeParse(validInput()).success, true);
   });

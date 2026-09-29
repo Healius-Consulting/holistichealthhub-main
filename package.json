@@ -29,6 +29,7 @@
     "build:vercel:public": "node scripts/build-vercel-surface.mjs public",
     "build:vercel:portal": "node scripts/build-vercel-surface.mjs portal",
     "repair:legacy-qr": "node scripts/register-legacy-referral-aliases.mjs",
+    "migrate:pharmsmart-referral-aliases": "tsx scripts/register-pharmsmart-referral-aliases.ts",
     "repair:curaleaf-false-rejection": "tsx scripts/repair-curaleaf-false-rejection.ts",
     "repair:multi-rx-placement": "tsx scripts/repair-multi-rx-placement.ts",
     "migrate:primary-allocation-holding": "node scripts/migrate-primary-allocation-holding.mjs",

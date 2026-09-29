@@ -21,6 +21,21 @@ test('printed stone URLs with mode=eligibility?token= still select the pharmacy 
   });
 });
 
+test('a PharmSmart base64 token is accepted, including when a query string turned + into a space', () => {
+  const token = `${'A'.repeat(116)}+/==`;
+  assert.equal(token.length % 4, 0);
+  assert.deepEqual(parseEligibilityReferralRoute(`?token=${encodeURIComponent(token)}`), {
+    kind: 'token',
+    token,
+  });
+  const search = `?token=${token.replaceAll('+', ' ')}`;
+  assert.deepEqual(parseEligibilityReferralRoute(search), { kind: 'token', token });
+});
+
+test('a damaged PharmSmart token is rejected', () => {
+  assert.deepEqual(parseEligibilityReferralRoute(`?token=${'A'.repeat(118)}==46`), { kind: 'invalid-token' });
+});
+
 test('present but empty, malformed, or ambiguous token parameters fail closed', () => {
   for (const search of ['?token=', '?token=%20', '?token=short', '?token=valid-token-value.', '?token=one-valid-token&token=another-valid-token']) {
     assert.deepEqual(parseEligibilityReferralRoute(search), { kind: 'invalid-token' });

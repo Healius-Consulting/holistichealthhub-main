@@ -23,8 +23,16 @@ import { attachPublicPharmacyLogo } from '../../application/organisation/public-
 import { attachPublicPharmacyContacts } from '../../application/organisation/public-pharmacy-contacts.js';
 import { SqlDirectoryRepository } from '../../repositories/sql/directory.sql.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
+import { normaliseReferralToken } from '../../domain/referrals/referral-token.js';
 
-export const referralTokenSchema = z.string().min(12).max(160).regex(/^[A-Za-z0-9_-]+$/);
+export const referralTokenSchema = z.string().min(12).max(160).transform((value, ctx) => {
+  const token = normaliseReferralToken(value);
+  if (!token) {
+    ctx.addIssue({ code: 'custom', message: 'Invalid referral token.' });
+    return z.NEVER;
+  }
+  return token;
+});
 const opaqueIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/);
 const conditionIdSchema = z.enum(ELIGIBILITY_CONDITION_IDS);
 
