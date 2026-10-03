@@ -10,7 +10,7 @@ import {
   money,
   type CRMPatient,
 } from '../../context/AppContext';
-import { basketMarginTone, formatGlanceMargin, linePriceError } from '../../utils/commercial';
+import { basketMarginTone, formatGlanceMargin, linePriceError, nudgePatientPricePence } from '../../utils/commercial';
 import { PATIENT_TOTAL_LABEL, WHOLESALE_COST_LABEL } from '../../utils/pricing';
 import type { WizardProgress, WizardStep } from './types';
 import { WIZARD_STEP_LABELS } from './types';
@@ -55,6 +55,19 @@ const STEP_ICONS = {
   3: Pill,
   4: Banknote,
 } as const;
+
+const PRICE_NUDGE_POUNDS = [-10, -5, -1, 1, 5, 10] as const;
+
+function nudgedPatientPrice(retail: number, deltaPounds: number, rrp: number, wholesale: number | null) {
+  const currentPence = Math.round(retail * 100);
+  const rrpPence = Math.round(rrp * 100);
+  const wholesalePence = wholesale == null ? 0 : Math.round(wholesale * 100);
+  const nextPence = nudgePatientPricePence(currentPence, deltaPounds, rrpPence, wholesalePence);
+  return {
+    pounds: nextPence / 100,
+    reason: nextPence === currentPence ? linePriceError(currentPence + deltaPounds * 100, rrpPence, wholesalePence) : null,
+  };
+}
 
 function continueLabel(focusedStep: number): string {
   if (focusedStep <= 1) return 'Continue to prescription';
@@ -176,17 +189,33 @@ export default function OrderSummaryRail({
                       {pricesLocked || !quotedPatientTotals ? (
                         <strong>{quotedPatientTotals ? money(lineRevenue(item)) : pendingQuote}</strong>
                       ) : (
-                        <label className="rx-line-price">
-                          <span className="sr-only">Patient price for {item.name}</span>
-                          <span>£</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.retail}
-                            onChange={event => onSetLinePrice(item.rxId, item.productId, Number(event.target.value))}
-                          />
-                        </label>
+                        <div className="rx-line-price-nudges" role="group" aria-label={`Adjust patient price for ${item.name}`}>
+                          {PRICE_NUDGE_POUNDS.filter(delta => delta < 0).map(delta => {
+                            const nudge = nudgedPatientPrice(item.retail, delta, rrpFor(item.productId) ?? item.retail, item.cost);
+                            const label = `Decrease patient price for ${item.name} by £${Math.abs(delta)}`;
+                            return (
+                              <button key={delta} type="button" className="rx-line-price-nudge" aria-label={label} title={nudge.reason ?? label} disabled={nudge.reason != null} onClick={() => onSetLinePrice(item.rxId, item.productId, nudge.pounds)}>−{Math.abs(delta)}</button>
+                            );
+                          })}
+                          <label className="rx-line-price">
+                            <span className="sr-only">Patient price for {item.name}</span>
+                            <span>£</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.retail}
+                              onChange={event => onSetLinePrice(item.rxId, item.productId, Number(event.target.value))}
+                            />
+                          </label>
+                          {PRICE_NUDGE_POUNDS.filter(delta => delta > 0).map(delta => {
+                            const nudge = nudgedPatientPrice(item.retail, delta, rrpFor(item.productId) ?? item.retail, item.cost);
+                            const label = `Increase patient price for ${item.name} by £${delta}`;
+                            return (
+                              <button key={delta} type="button" className="rx-line-price-nudge" aria-label={label} title={nudge.reason ?? label} disabled={nudge.reason != null} onClick={() => onSetLinePrice(item.rxId, item.productId, nudge.pounds)}>+{delta}</button>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                     {(() => {

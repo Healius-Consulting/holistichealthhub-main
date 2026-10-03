@@ -16,6 +16,20 @@ export function linePriceError(pricePence: number, rrpPence: number, wholesalePe
   return null;
 }
 
+/** Pound steps offered beside a patient price. The bounds stay linePriceError's. */
+export const PATIENT_PRICE_NUDGE_POUNDS = [1, 5, 10] as const;
+
+/**
+ * Move a patient price by whole pounds, then stop on the same floor and cap
+ * linePriceError already enforces. A step never invents a wider band.
+ */
+export function nudgePatientPricePence(currentPence: number, deltaPounds: number, rrpPence: number, wholesalePence: number) {
+  const next = Math.round(currentPence) + Math.round(deltaPounds) * 100;
+  const floor = Math.max(0, Math.round(wholesalePence));
+  const cap = maxPatientPricePence(rrpPence);
+  return Math.min(cap, Math.max(floor, next));
+}
+
 export function prefillPatientPricePence(savedPence: number | null, rrpPence: number, wholesalePence: number) {
   const cap = maxPatientPricePence(rrpPence);
   const floor = Math.max(0, Math.round(wholesalePence));

@@ -18284,7 +18284,7 @@ html[data-reduced-motion='true'] .rx-guided-reveal.is-in{
 /* Create order redesign layout */
 .rx-create-layout{
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 310px);
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 460px);
   gap: 16px;
   align-items: start;
 }
@@ -18914,8 +18914,8 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
 /* Wholesale and margin are labelled values, not a run-on sentence. */
 .rx-order-summary-rail__economics{
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px 10px;
+  grid-template-columns: minmax(7.5rem, 0.75fr) minmax(0, 1.25fr);
+  gap: 2px 16px;
   margin: 2px 0 0;
   padding-top: 7px;
   border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -18936,6 +18936,7 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-size: 12px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -19060,8 +19061,46 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-weight: 400;
 }
 
+.rx-line-price-nudges{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+}
+.rx-line-price-nudge{
+  min-width: 36px;
+  min-height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.rx-line-price-nudge:hover:not(:disabled){
+  border-color: var(--tenant-primary);
+  color: var(--tenant-primary-strong);
+  background: var(--tenant-primary-soft);
+}
+.rx-line-price-nudge:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+.rx-line-price-nudge:disabled{
+  opacity: 0.38;
+  cursor: not-allowed;
+}
 .rx-line-price{ display: inline-flex; align-items: center; gap: 4px; }
-.rx-line-price input{ width: 88px; min-height: 44px; }
+.rx-line-price input{ width: 72px; min-height: 32px; }
+@media (pointer: coarse){
+  .rx-line-price-nudge,
+  .rx-line-price input{ min-height: 44px; }
+}
 .rx-line-price__rrp{ margin: 0; color: var(--text-tertiary); font-size: 12px; }
 .rx-order-summary-rail__margin dd.is-amber,
 .rx-order-summary-rail__economics dd.is-amber{ color: var(--color-warning); }
@@ -19616,6 +19655,14 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
   color: var(--text-tertiary);
   font-size: 12px;
   font-style: normal;
+}
+
+/* The summary rail already shows patient total, medicines, delivery and margin.
+   Repeating that figure beside the pay button only crowds the payment step.
+   Below 1024px the rail is hidden, so the total stays with the button. */
+@media (min-width: 1024px){
+  .rx-step4-commit__total{ display: none; }
+  .rx-step4-commit__row{ grid-template-columns: minmax(0, 1fr); }
 }
 
 .rx-step4-panel .rx-create-payment{
