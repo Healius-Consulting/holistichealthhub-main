@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<title>Connect Worldpay — pharmacy go-live guide</title>
+<style>
+  @page {
+    size: A4;
+    margin: 16mm 15mm 18mm;
+    @bottom-left {
+      content: "Holistic Health Hub  ·  Worldpay go-live for pharmacy staff";
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 8.5pt;
+      color: #697586;
+    }
+    @bottom-right {
+      content: counter(page);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 8.5pt;
+      color: #697586;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    color: #172033;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    background: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h1, h2, h3 { font-family: "Iowan Old Style", Palatino, Georgia, serif; font-weight: 600; letter-spacing: -0.01em; }
+  h1 { font-size: 28pt; line-height: 1.05; margin: 0 0 8px; }
+  h2 { font-size: 16pt; margin: 16px 0 6px; color: #084c47; break-after: avoid; }
+  h3 { font-size: 12pt; margin: 0 0 4px; }
+  p { margin: 0 0 8px; }
+  strong { font-weight: 650; }
+  a { color: #0f766e; text-decoration: none; }
+
+  .cover {
+    break-after: page;
+    min-height: 250mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .kicker {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    color: #0f766e;
+    font-size: 9pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 650;
+  }
+  .rule { height: 3px; background: #0f766e; margin: 14px 0 22px; }
+  .lede { font-size: 13pt; line-height: 1.4; max-width: 42em; color: #243044; }
+  .cover-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 0.8fr;
+    gap: 14px;
+    margin-top: 28px;
+  }
+  .panel {
+    background: #f7f5f0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    break-inside: avoid;
+  }
+  .panel h3 { color: #084c47; }
+  .panel ol, .panel ul { margin: 6px 0 0; padding-left: 18px; }
+  .panel li { margin: 0 0 4px; }
+  .meta { color: #475569; font-size: 9.5pt; }
+
+  .steps { margin: 8px 0 0; padding: 0; list-style: none; }
+  .step {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 10px;
+    margin: 0 0 10px;
+    break-inside: avoid;
+  }
+  .num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #0f766e;
+    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 11pt;
+  }
+  .step p { margin: 0; }
+  .step .hint { color: #475569; margin-top: 2px; }
+
+  figure { margin: 10px 0 14px; break-inside: avoid; }
+  figure img {
+    width: 100%;
+    height: auto;
+    border: 1px solid #d7ddd8;
+    border-radius: 10px;
+    display: block;
+  }
+  figcaption { color: #475569; font-size: 9pt; margin-top: 6px; }
+
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 12px; break-inside: avoid; }
+  th, td { text-align: left; vertical-align: top; padding: 5px 10px; border-bottom: 1px solid #e4e0d8; }
+  th { font-size: 8.5pt; letter-spacing: 0.06em; text-transform: uppercase; color: #0f766e; font-weight: 700; }
+  td:first-child { width: 46%; }
+
+  .warn, .ok, .note {
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 10px 0;
+    break-inside: avoid;
+  }
+  .warn { background: #fbf6ee; border-left: 4px solid #b45309; }
+  .ok { background: #f1f8f7; border-left: 4px solid #0f766e; }
+  .note { background: #f4f7fb; border-left: 4px solid #315b7d; }
+  .warn > strong:first-child,
+  .ok > strong:first-child,
+  .note > strong:first-child { display: block; margin-bottom: 2px; }
+
+  .map {
+    display: grid;
+    grid-template-columns: 1fr 28px 1fr;
+    gap: 8px;
+    align-items: stretch;
+    margin: 8px 0 12px;
+    break-inside: avoid;
+  }
+  .map-col { display: flex; flex-direction: column; gap: 8px; }
+  .chip {
+    background: white;
+    border: 1px solid #d7ddd8;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .chip small { display: block; color: #697586; font-size: 8pt; letter-spacing: 0.04em; text-transform: uppercase; }
+  .arrow {
+    display: flex; align-items: center; justify-content: center;
+    color: #0f766e; font-size: 16pt; font-weight: 700;
+  }
+  .arrows { display: flex; flex-direction: column; justify-content: space-around; }
+
+  .success {
+    border: 1px solid #d7ddd8;
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: #faf8f6;
+    break-inside: avoid;
+    margin: 8px 0 12px;
+  }
+  .success header { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #ecfdf5; color: #047857;
+    border-radius: 999px; padding: 2px 8px; font-size: 8.5pt; font-weight: 700;
+  }
+  .pill.neutral { background: #eef2f6; color: #315b7d; }
+  .route-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .route {
+    border: 1px solid #d7ddd8; border-radius: 10px; padding: 8px 10px; background: white;
+  }
+  .route.on { border-color: #0f766e; background: #f1f8f7; }
+  .route small { display: block; color: #475569; }
+  .facts { display: flex; gap: 16px; margin-top: 8px; font-size: 9.5pt; }
+  .facts span { color: #697586; display: block; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.04em; }
+  .caption-label { font-size: 8pt; letter-spacing: 0.08em; text-transform: uppercase; color: #697586; margin-bottom: 6px; }
+
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 12px; break-inside: avoid; }
+  .flow div { background: #f7f5f0; border-radius: 10px; padding: 10px; }
+  .flow b { display: block; color: #0f766e; font-size: 8.5pt; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+
+  .url {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 8.4pt;
+    background: #172033;
+    color: #f7f5f0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    word-break: break-all;
+    margin: 6px 0 10px;
+  }
+  .events { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+  .events span {
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+    font-size: 8.5pt;
+    background: white;
+    border: 1px solid #c9e6e2;
+    color: #084c47;
+    border-radius: 6px;
+    padding: 3px 6px;
+  }
+  .check { list-style: none; padding: 0; margin: 8px 0 0; }
+  .check li {
+    break-inside: avoid;
+    padding: 4px 0 4px 26px;
+    border-bottom: 1px solid #eeeae3;
+    position: relative;
+  }
+  .check li::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 8px;
+    width: 12px; height: 12px;
+    border: 1.5px solid #0f766e;
+    border-radius: 3px;
+  }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; break-inside: avoid; }
+  .small { font-size: 9.5pt; color: #475569; }
+  .write {
+    font-size: 9.5pt;
+    color: #475569;
+    border-bottom: 1px solid #c5cdc8;
+    margin: 0 0 5px;
+    padding-bottom: 5px;
+  }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div>
+    <div class="kicker"><span>Holistic Health Hub</span><span>Pharmacy staff</span></div>
+    <div class="rule"></div>
+    <h1>Connect Worldpay and take a live card payment</h1>
+    <p class="lede">This guide connects your pharmacy’s own Worldpay merchant account, switches new orders onto hosted checkout, and proves the connection with one small live payment.</p>
+    <div class="cover-grid">
+      <div class="panel">
+        <h3>Have these ready</h3>
+        <ul>
+          <li>The Worldpay dashboard login for this pharmacy’s merchant account.</li>
+          <li>Someone who can open <strong>Settings &amp; Assets</strong> in Holistic Health Hub.</li>
+          <li>Your Worldpay Implementation Manager’s contact, for the payment-update address.</li>
+          <li>One small real order you are willing to pay and then refund.</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>You will copy three values</h3>
+        <ol>
+          <li>Entity, which starts with PO</li>
+          <li>Live API username</li>
+          <li>Live API password</li>
+        </ol>
+        <p class="small" style="margin-top:8px">Nothing else from the Worldpay dashboard is entered into Holistic Health Hub.</p>
+      </div>
+    </div>
+  </div>
+  <p class="meta">Card numbers are typed on Worldpay’s page, not into Holistic Health Hub. The money settles to this pharmacy’s Worldpay account. 3 October 2026.</p>
+</section>
+
+<h2>1. What you are setting up</h2>
+<p>Each pharmacy has its own Worldpay account. Holistic Health Hub uses that account to open a hosted payment page for an order. The patient pays Worldpay. Holistic Health Hub then checks the payment with Worldpay before the order can show as paid.</p>
+<p>Until this connection is verified, new orders stay on <strong>Pharmacy payment</strong>: EPOS, cash, or bank transfer. Worldpay hosted checkout stays locked.</p>
+
+<div class="warn">
+  <strong>Use the live API username and password. Not your dashboard login.</strong>
+  The username and password you type to open Worldpay will be refused. A single API key will be refused. The Checkout ID under Access Checkout is not used.
+</div>
+
+<h2>2. Copy these three values, and only these</h2>
+<div class="map">
+  <div class="map-col">
+    <div class="chip"><small>Worldpay · Developer Tools</small>Entity</div>
+    <div class="chip"><small>Worldpay · API Credentials · Live mode</small>User name</div>
+    <div class="chip"><small>Worldpay · API Credentials · Live mode</small>Password</div>
+  </div>
+  <div class="arrows"><div class="arrow">→</div><div class="arrow">→</div><div class="arrow">→</div></div>
+  <div class="map-col">
+    <div class="chip"><small>Settings · Payment route</small>Merchant entity ID</div>
+    <div class="chip"><small>Settings · Payment route</small>Worldpay username</div>
+    <div class="chip"><small>Settings · Payment route</small>Worldpay password</div>
+  </div>
+</div>
+<p>The entity starts with <strong>PO</strong>. The same entity is used for Try and Live. The username and password are not the same in Try and Live. For a pharmacy taking real card payments, generate the <strong>Live</strong> pair.</p>
+
+<h2>3. In the Worldpay dashboard</h2>
+<ol class="steps">
+  <li class="step"><span class="num">1</span><div><p>Sign in to the Worldpay dashboard for this pharmacy.</p><p class="hint">Use the merchant account that will receive the card payments. Do not use a personal login from another business.</p></div></li>
+  <li class="step"><span class="num">2</span><div><p>In the left menu, open <strong>Developer Tools</strong>.</p></div></li>
+  <li class="step"><span class="num">3</span><div><p>Copy the <strong>Entity</strong> at the top of the page. It starts with PO.</p><p class="hint">In this guide the real value is hidden. Yours will be a PO number with a copy button beside it.</p></div></li>
+  <li class="step"><span class="num">4</span><div><p>Open <strong>API Credentials</strong>.</p></div></li>
+  <li class="step"><span class="num">5</span><div><p>Select <strong>Live mode</strong>, then generate the credentials and copy the username and password immediately.</p><p class="hint">They are shown once. Generating another set does not switch off the previous set. If you miss them, generate again and use the new pair.</p></div></li>
+</ol>
+
+<figure>
+  <img src="worldpay-developer-tools.png" alt="Worldpay Developer Tools with API Credentials open on Try mode. The entity value is masked." />
+  <figcaption>Developer Tools. The red outlines are on the menu item and on API Credentials. This picture is still on <strong>Try mode</strong>. Click <strong>Live mode</strong> before you generate credentials for a pharmacy that will take real payments. Leave Access Checkout and HPP Designer closed.</figcaption>
+</figure>
+
+<div class="warn">
+  <strong>The picture above is the practice tab.</strong>
+  Try credentials connect, and Holistic Health Hub will label the connection <strong>Try</strong>. They cannot take a patient’s real card payment. Live mode uses a different username and password. The entity stays the same.
+</div>
+
+<h2>4. Paste them into Holistic Health Hub</h2>
+<ol class="steps">
+  <li class="step"><span class="num">6</span><div><p>In the pharmacy workspace, open <strong>Settings &amp; Assets</strong>.</p></div></li>
+  <li class="step"><span class="num">7</span><div><p>On <strong>Payment route</strong>, paste the three values into <strong>Connect this pharmacy’s merchant account</strong>.</p></div></li>
+  <li class="step"><span class="num">8</span><div><p>Press <strong>Show while entering</strong> and check the password was pasted in full. It needs at least 8 characters.</p></div></li>
+  <li class="step"><span class="num">9</span><div><p>Press <strong>Save and verify connection</strong>. Wait until it finishes. Do not paste the values a second time while it is checking.</p></div></li>
+</ol>
+
+<figure>
+  <img src="hhh-payment-route.png" alt="Payment route in pharmacy settings, before Worldpay is connected." />
+  <figcaption>Settings &amp; Assets, before a connection exists. <strong>Worldpay hosted checkout</strong> is locked until verification succeeds. Pharmacy payment stays selected, which is correct at this point.</figcaption>
+</figure>
+
+<div class="note">
+  <strong>The password is not shown again after a successful save.</strong>
+  To replace it later, use <strong>Rotate credentials</strong> on the same card. <strong>Remove connection</strong> stops new orders from using Worldpay. An order already sent for payment is not cancelled by removing the connection.
+</div>
+
+<h2>5. What a successful connection looks like</h2>
+<p class="caption-label">Illustration of the screen after verification. Your date and masked entity will differ.</p>
+<div class="success">
+  <header>
+    <div>
+      <h3 style="margin:0">Payment route</h3>
+      <p class="small" style="margin:2px 0 0">How new orders take payment.</p>
+    </div>
+    <span class="pill">Worldpay</span>
+  </header>
+  <div class="route-row">
+    <div class="route"><strong>Pharmacy payment</strong><small>EPOS, cash, bank transfer, or another pharmacy-controlled route.</small></div>
+    <div class="route on"><strong>Worldpay hosted checkout</strong><small>Verified merchant connection. Settlement goes directly to this pharmacy.</small></div>
+  </div>
+  <div class="facts">
+    <div><span>Environment</span><strong>Live</strong></div>
+    <div><span>Last verified</span><strong>Today, after you save</strong></div>
+    <div><span>Merchant entity</span><strong>PO••••</strong></div>
+  </div>
+  <p class="small" style="margin:10px 0 0">The card also shows <strong>Connected</strong>, plus <strong>Refresh status</strong>, <strong>Rotate credentials</strong>, and <strong>Remove connection</strong>.</p>
+</div>
+
+<ol class="steps">
+  <li class="step"><span class="num">10</span><div><p>Check <strong>Environment</strong> says <strong>Live</strong>.</p><p class="hint">If it says Try, you saved Try credentials. Generate the Live pair and use Rotate credentials.</p></div></li>
+  <li class="step"><span class="num">11</span><div><p>Select <strong>Worldpay hosted checkout</strong>.</p><p class="hint">That choice is the default for new orders. An order already created keeps the route it was given.</p></div></li>
+</ol>
+
+<h2>6. Ask Worldpay to send payment updates</h2>
+<p>Holistic Health Hub can check a payment itself, but the usual path is a webhook: Worldpay tells us a payment changed, and we then confirm the amount, currency, and entity with the username and password you saved. A webhook on its own never marks an order paid.</p>
+<p>Ask your Worldpay Implementation Manager to register this address for the pharmacy’s merchant account:</p>
+<div class="url">https://europe-west2-hhh26-4ebd2.cloudfunctions.net/apiLondon/v1/public/payments/worldpay/webhook</div>
+<p>Ask them to turn on these events. Then open <strong>Developer Tools → Webhooks</strong> and confirm the same events are enabled.</p>
+<div class="events">
+  <span>sentForSettlement</span>
+  <span>settlementFailed</span>
+  <span>sentForRefund</span>
+  <span>refunded</span>
+  <span>refundFailed</span>
+</div>
+<div class="note">
+  <strong>You do not put this address into Holistic Health Hub.</strong>
+  It is registered on the Worldpay side. If you cannot see Webhooks in the dashboard, the Implementation Manager still needs to register the address. Do not invent a different URL.
+</div>
+
+<h2>7. Prove it with one small live payment</h2>
+<p>Use a real order for a small amount you can refund afterwards. Do not type a card number into Holistic Health Hub.</p>
+<div class="flow">
+  <div><b>1 · Order</b>Create the order in the usual way. On the payment step, choose <strong>Worldpay</strong>.</div>
+  <div><b>2 · Link</b>Press <strong>Send payment link</strong>. The secure link is copied. The patient pays on Worldpay’s page.</div>
+  <div><b>3 · Pay</b>Complete that one payment. You should see Worldpay’s own card page, with no card fields inside Holistic Health Hub.</div>
+  <div><b>4 · Paid</b>Return to the order. It should show <strong>Paid</strong> once Worldpay has confirmed it. Then refund that test payment in the normal way.</div>
+</div>
+<div class="ok">
+  <strong>Stop if the order does not show Paid.</strong>
+  Do not send a second payment link for the same order until you know the first payment failed or was cancelled in Worldpay. Taking a second card payment can charge the patient twice.
+</div>
+<p>If the order stays waiting, open <strong>Settings &amp; Assets</strong> and press <strong>Refresh status</strong>. A successful connection can still be waiting on the webhook from section 6. The order is paid only after Holistic Health Hub has checked the payment with Worldpay.</p>
+
+<h2>8. If it does not verify</h2>
+<table>
+  <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+  <tbody>
+    <tr><td>Worldpay did not authorise this username and password.</td><td>You pasted the dashboard login, an API key, or a username from the wrong mode. Go back to Developer Tools, open <strong>Live mode</strong>, and copy the API username and password again, with the PO entity from the same page.</td></tr>
+    <tr><td>The password needs at least 8 characters.</td><td>The paste was cut short. Show the password while entering and paste it again.</td></tr>
+    <tr><td>Environment says Try.</td><td>Try credentials were saved. Generate Live credentials and use <strong>Rotate credentials</strong>.</td></tr>
+    <tr><td>Worldpay hosted checkout stays locked.</td><td>Verification has not succeeded yet. The form in section 4 is still the right place. Pharmacy payment remains the route until it does.</td></tr>
+    <tr><td>The connection verified, but the test order never shows Paid.</td><td>Confirm the webhook address and the five events in section 6. Refresh the order once. Do not create a second card payment for that order.</td></tr>
+  </tbody>
+</table>
+
+<h2>9. Tick this before you call it live</h2>
+<ul class="check">
+  <li>Entity, live username, and live password were copied from Developer Tools. The dashboard login was not used.</li>
+  <li>Save and verify connection succeeded.</li>
+  <li>Environment says Live, and the merchant entity is masked on screen.</li>
+  <li>Worldpay hosted checkout is selected on Payment route.</li>
+  <li>The Implementation Manager has registered the webhook address, and the five events are on.</li>
+  <li>One small live payment shows Paid on the order.</li>
+  <li>That test payment has been refunded.</li>
+</ul>
+
+<div class="two">
+  <div class="panel">
+    <h3>Record for this pharmacy</h3>
+    <p class="write">Date connected</p>
+    <p class="write">Connected by</p>
+    <p class="write">Environment confirmed Live</p>
+    <p class="write">Test order reference</p>
+    <p class="write">Test payment refunded</p>
+  </div>
+  <div class="panel">
+    <h3>Leave these alone</h3>
+    <ul>
+      <li>Access Checkout and its Checkout ID</li>
+      <li>HPP Designer, unless you are only changing how the payment page looks</li>
+      <li>Any API key that is not a username and password pair</li>
+      <li>Another pharmacy’s entity or credentials</li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>
