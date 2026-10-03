@@ -213,6 +213,23 @@ function hasOverdueCollection(orders: PatientOrder[]) {
   ));
 }
 
+function latestOrder(orders: PatientOrder[]) {
+  return orders.reduce<PatientOrder | null>((latest, order) => {
+    if (!latest || order.date.getTime() > latest.date.getTime()) return order;
+    return latest;
+  }, null);
+}
+
+function latestPaidAt(orders: PatientOrder[]) {
+  let latest: Date | null = null;
+  for (const order of orders) {
+    const paidAt = order.payment.paidAt;
+    if (!paidAt) continue;
+    if (!latest || paidAt.getTime() > latest.getTime()) latest = paidAt;
+  }
+  return latest;
+}
+
 function patientHasOpenOrder(patient: UnifiedPatient) {
   return patient.orders.some(order => orderExceptionReason(order) ? orderNeedsResolution(order) : order.payment.status === 'sent' || order.prescriptions.some(rx => rx.status !== 'collected'));
 }
@@ -587,14 +604,10 @@ export default function Patients() {
       </section>
 
       {filtered.length ? (
-        <div className="crm-directory-list">
-          {filtered.map(({ record, status }) => (
-            <button key={record.key} type="button" className="patient-directory-row" onClick={() => openPatientFromBoard(record.key)}>
-              <strong>{record.name}</strong>
-              <span className={`order-stage-pill${status === 'Referred' ? ' is-referred' : ''}`}>{status}</span>
-              <span>Date of birth {record.dob || 'not recorded'}</span>
-            </button>
-          ))}
+        <div className="patient-directory-cards">
+          {filtered.map(({ record, status }) => status ? (
+            <PatientDirectoryCard key={record.key} record={record} status={status} onSelect={() => openPatientFromBoard(record.key)} />
+          ) : null)}
         </div>
       ) : (
         <div className="order-crm-empty">
@@ -640,6 +653,62 @@ export default function Patients() {
         );
       })}
     </div>
+  );
+}
+
+const DIRECTORY_STATUS_CLASS = {
+  Referred: ' is-referred',
+  Active: ' is-active',
+  Inactive: ' is-inactive',
+  Declined: ' is-declined',
+} as const;
+
+function PatientDirectoryCard({ record, status, onSelect }: {
+  record: CrmRecord;
+  status: keyof typeof DIRECTORY_STATUS_CLASS;
+  onSelect: () => void;
+}) {
+  const orders = record.patient?.orders ?? [];
+  const lastOrder = latestOrder(orders);
+  const lastPayment = latestPaidAt(orders);
+  const referredAt = record.patient?.crmPatient?.referredAt;
+  const collectionOverdue = record.overdueCollection;
+  const reorderOverdue = status === 'Inactive';
+
+  return (
+    <button type="button" className="patient-directory-card" onClick={onSelect}>
+      <span className="patient-directory-card__head">
+        <strong>{record.name}</strong>
+        <span className={`order-stage-pill${DIRECTORY_STATUS_CLASS[status]}`}>{status}</span>
+      </span>
+      <dl className="patient-directory-card__facts">
+        <div><dt>Date of birth</dt><dd>{formatPatientDob(record.dob)}</dd></div>
+        <div><dt>Referred</dt><dd>{referredAt ? formatUkDate(referredAt, 'Not recorded') : 'Not recorded'}</dd></div>
+        <div><dt>Last order</dt><dd>{lastOrder ? formatUkDate(lastOrder.date) : 'No orders yet'}</dd></div>
+      </dl>
+      {collectionOverdue || reorderOverdue ? (
+        <span className="patient-directory-card__alerts">
+          {collectionOverdue ? (
+            <span className="patient-directory-card__alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>Collection follow-up overdue</strong>
+                <small>A prescription has remained uncollected for at least 10 days.</small>
+              </span>
+            </span>
+          ) : null}
+          {reorderOverdue ? (
+            <span className="patient-directory-card__alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>
+                <strong>Reorder overdue</strong>
+                <small>{lastPayment ? `Last payment ${formatUkDate(lastPayment)}` : 'Last payment not recorded'}</small>
+              </span>
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+    </button>
   );
 }
 

@@ -7591,6 +7591,124 @@ html.modal-open .page-container{ overflow: hidden; }
   .patient-directory-row > .order-stage-pill{ white-space: normal; text-align: right; }
 }
 
+.patient-directory-cards{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.patient-directory-card{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.patient-directory-card:hover{
+  border-color: color-mix(in srgb, var(--tenant-primary) 35%, var(--border));
+  background: var(--bg-elevated);
+}
+
+.patient-directory-card:focus-visible{
+  outline: 2px solid var(--tenant-primary);
+  outline-offset: 2px;
+}
+
+.patient-directory-card__head{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.patient-directory-card__head strong{
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 680;
+  line-height: 1.3;
+}
+
+.patient-directory-card .order-stage-pill{ flex: 0 0 auto; }
+.patient-directory-card .order-stage-pill.is-referred{ color: #6d4b12; background: #f3e2c2; border-color: #e6d0a4; }
+.patient-directory-card .order-stage-pill.is-active{ color: #166534; background: #dcfce7; border-color: #bbf7d0; }
+.patient-directory-card .order-stage-pill.is-inactive{ color: #9a3412; background: #ffedd5; border-color: #fed7aa; }
+.patient-directory-card .order-stage-pill.is-declined{ color: #991b1b; background: #fee2e2; border-color: #fecaca; }
+
+.patient-directory-card__facts{
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.patient-directory-card__facts > div{
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+
+.patient-directory-card__facts dt{
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.patient-directory-card__facts dd{
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.patient-directory-card__alerts{
+  display: grid;
+  gap: 8px;
+}
+
+.patient-directory-card__alert{
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 35%, var(--border));
+  border-radius: 8px;
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, var(--bg-surface));
+}
+
+.patient-directory-card__alert strong,
+.patient-directory-card__alert small{ display: block; }
+
+.patient-directory-card__alert strong{ font-size: 12px; line-height: 1.3; }
+
+.patient-directory-card__alert small{
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px){
+  .patient-directory-cards{ grid-template-columns: 1fr; }
+}
+
 /*
  * Vertical lanes side by side in one row, so the whole pipeline is visible at a
  * glance. Lanes scroll internally rather than stretching the page: the tallest
