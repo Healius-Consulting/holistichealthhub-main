@@ -158,10 +158,7 @@ export default function Step4CheckoutPanel({
         <div className="section-heading" style={{ margin: 0 }}>
           <div>
             <p className="section-label">Step 4 · Payment · {activeOrderRef}</p>
-            <h3>
-              <Banknote size={17} />
-              {paidRedo ? 'Carry over payment' : 'Request payment'}
-            </h3>
+            {paidRedo ? <h3><Banknote size={17} /> Carry over payment</h3> : null}
           </div>
         </div>
       </header>
@@ -219,32 +216,6 @@ export default function Step4CheckoutPanel({
           </ul>
         ) : null}
 
-        <div className="rx-step4-discount">
-          <p className="section-label">Discount</p>
-          <div className="rx-dispensing-presets" role="group" aria-label="Discount type">
-            <button type="button" aria-pressed={(activeOrder.discount?.mode ?? 'amount') === 'amount'} disabled={pricesLocked} onClick={() => onSetDiscount(activeOrder.discount ? { ...activeOrder.discount, mode: 'amount' } : null)}>£</button>
-            <button type="button" aria-pressed={activeOrder.discount?.mode === 'percent'} disabled={pricesLocked} onClick={() => onSetDiscount({ mode: 'percent', amount: activeOrder.discount?.amount ?? 0 })}>%</button>
-          </div>
-          <label className="rx-dispensing-custom">
-            <span className="money-input">
-              <span>{activeOrder.discount?.mode === 'percent' ? '%' : '£'}</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                disabled={pricesLocked}
-                value={activeOrder.discount?.amount || ''}
-                aria-label="Order discount"
-                onChange={event => {
-                  const amount = Number(event.target.value);
-                  onSetDiscount(event.target.value === '' || amount <= 0 ? null : { mode: activeOrder.discount?.mode ?? 'amount', amount });
-                }}
-              />
-            </span>
-          </label>
-          {discountError ? <p className="rx-dispensing-hint" role="alert">{discountError}</p> : <p className="rx-dispensing-hint">Applies to medicines only. Delivery is not discounted.</p>}
-        </div>
-
         {issueCount > 0 ? (
           <p className={`rx-step4-basket-alert${draftBasketBlockedCount ? ' is-blocked' : ' is-warning'}`} role="status">
             <AlertTriangle size={14} aria-hidden="true" />
@@ -258,6 +229,31 @@ export default function Step4CheckoutPanel({
         ) : null}
 
         <div className={`rx-step4-decide${activeOrder.pharmacyDeliveryAllowed ? ' rx-step4-decide--with-delivery' : ''}`}>
+          <div className="rx-step4-discount">
+            <p className="section-label">Discount</p>
+            <div className="rx-dispensing-presets" role="group" aria-label="Discount type">
+              <button type="button" aria-pressed={(activeOrder.discount?.mode ?? 'amount') === 'amount'} disabled={pricesLocked} onClick={() => onSetDiscount(activeOrder.discount ? { ...activeOrder.discount, mode: 'amount' } : null)}>£</button>
+              <button type="button" aria-pressed={activeOrder.discount?.mode === 'percent'} disabled={pricesLocked} onClick={() => onSetDiscount({ mode: 'percent', amount: activeOrder.discount?.amount ?? 0 })}>%</button>
+            </div>
+            <label className="rx-dispensing-custom">
+              <span className="money-input">
+                <span>{activeOrder.discount?.mode === 'percent' ? '%' : '£'}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  disabled={pricesLocked}
+                  value={activeOrder.discount?.amount || ''}
+                  aria-label="Order discount"
+                  onChange={event => {
+                    const amount = Number(event.target.value);
+                    onSetDiscount(event.target.value === '' || amount <= 0 ? null : { mode: activeOrder.discount?.mode ?? 'amount', amount });
+                  }}
+                />
+              </span>
+            </label>
+            {discountError ? <p className="rx-dispensing-hint" role="alert">{discountError}</p> : <p className="rx-dispensing-hint">Applies to medicines only. Delivery is not discounted.</p>}
+          </div>
           {activeOrder.pharmacyDeliveryAllowed ? (
             <div className="rx-step4-decide__fee">
               <p className="section-label">{PHARMACY_DELIVERY_LABEL}</p>

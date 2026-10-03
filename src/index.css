@@ -19404,26 +19404,34 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
 
 .rx-step4-decide{
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 0;
   border-bottom: 1px solid var(--border);
 }
 
-.rx-step4-decide--with-delivery .rx-step4-decide__route{
-  grid-column: 1 / -1;
-  border-top: 1px solid var(--border);
+.rx-step4-decide--with-delivery{
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
+.rx-step4-decide--with-delivery .rx-step4-decide__route{
+  grid-column: 1 / -1;
+}
+
+.rx-step4-discount,
 .rx-step4-decide__fee,
 .rx-step4-decide__route{
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
-  padding: 18px;
+  padding: 16px 18px;
 }
 
-.rx-step4-decide__fee{
+.rx-step4-decide--with-delivery .rx-step4-discount{
   border-right: 1px solid var(--border);
+}
+
+.rx-step4-decide__route{
+  border-top: 1px solid var(--border);
 }
 
 .rx-step4-decide .section-label{
@@ -19434,6 +19442,10 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
+}
+
+.rx-step4-discount .rx-dispensing-presets{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .rx-step4-panel .rx-dispensing-presets button{
@@ -19462,21 +19474,28 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
 }
 
 .rx-step4-panel .rx-dispensing-custom{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: block;
+  margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 650;
 }
 
 .rx-step4-panel .rx-dispensing-custom .money-input{
-  width: 108px;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.rx-step4-panel .rx-dispensing-custom .money-input input{
+  flex: 1;
+  width: auto;
+  min-height: 44px;
 }
 
 .rx-step4-panel .rx-dispensing-hint{
-  margin: 6px 0 0;
+  margin: 0;
   color: var(--text-tertiary);
   font-size: 12px;
   font-weight: 500;
@@ -19746,7 +19765,7 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .rx-step4-decide__fee{
+  .rx-step4-decide--with-delivery .rx-step4-discount{
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
