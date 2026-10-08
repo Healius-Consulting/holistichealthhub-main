@@ -41,8 +41,8 @@ export class SessionService {
       throw new HttpError(401, 'Sign in again before starting a staff session.', 'RECENT_LOGIN_REQUIRED');
     }
 
-    // 3. Validate email verification. TOTP is required except for a PharmSmart
-    // redemption this server just minted for the pharmacy's existing account.
+    // 3. Validate email verification. Password sign-in still requires TOTP.
+    // A PharmSmart redemption does not: PharmSmart already completed its own second factor.
     const pharmsmartSso = isPharmsmartSsoSignIn(decoded);
     if (!decoded.email_verified) {
       throw new HttpError(403, 'Verify your email before using the staff portal.', 'EMAIL_NOT_VERIFIED');

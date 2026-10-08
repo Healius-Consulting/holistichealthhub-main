@@ -204,7 +204,7 @@ export function readPharmsmartSetupTicket(ticket: string, secret: string, now = 
 
 const PHARMSMART_SSO_MAX_AGE_MS = 5 * 60 * 1000;
 
-/** A session may skip TOTP only for a custom token this server just minted after a GPhC match. */
+/** PharmSmart already completed 2FA. A session from that redemption does not ask for TOTP again. */
 export function isPharmsmartSsoSignIn(decoded: {
   pharmsmartSso?: unknown;
   auth_time?: number;

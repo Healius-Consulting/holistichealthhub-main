@@ -439,12 +439,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const openPharmsmartSession = useCallback(async (customToken: string) => {
     const credential = await signInWithCustomToken(requireFirebaseAuth(), customToken);
-    if (serverSessionAuth) {
-      await establishServerSession(credential.user);
-      return;
-    }
-    await finishFirebaseSignIn(credential.user);
-  }, [establishServerSession, finishFirebaseSignIn]);
+    // Do not send this person through authenticator enrolment. PharmSmart already did 2FA.
+    await establishServerSession(credential.user);
+  }, [establishServerSession]);
 
   const signInWithPharmsmart = useCallback(async (token: string) => {
     setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Opening your pharmacy workspace from PharmSmart.', pharmsmartSetup: null }));

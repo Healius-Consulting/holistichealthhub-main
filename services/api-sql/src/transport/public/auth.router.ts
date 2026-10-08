@@ -69,7 +69,12 @@ export function createAuthRouter(): Router {
     email: string;
     displayName: string;
   }) => {
-    await auth.updateUser(input.uid, { emailVerified: true, displayName: input.displayName });
+    await auth.updateUser(input.uid, {
+      emailVerified: true,
+      displayName: input.displayName,
+      // PharmSmart already completed its own second factor. Do not ask again here.
+      multiFactor: { enrolledFactors: null },
+    });
     await auth.setCustomUserClaims(input.uid, {
       role: 'pharmacy_staff',
       organisationId: input.organisationId,
