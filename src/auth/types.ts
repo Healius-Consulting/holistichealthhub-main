@@ -23,10 +23,19 @@ export type AuthPhase =
   | 'authenticated'
   | 'error';
 
+export interface PharmsmartSetup {
+  ticket: string;
+  missing: Array<'email' | 'name'>;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}
+
 export interface AuthState {
   phase: AuthPhase;
   staff: AuthenticatedStaff | null;
   error: string | null;
   notice: string | null;
   sessionWarning?: boolean;
+  pharmsmartSetup?: PharmsmartSetup | null;
 }

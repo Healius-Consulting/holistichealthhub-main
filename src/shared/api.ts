@@ -280,6 +280,33 @@ export async function getAuthCsrf() {
   return result.csrfToken;
 }
 
+export type PharmsmartLoginResult =
+  | { status: 'ready'; customToken: string }
+  | {
+    status: 'setup';
+    ticket: string;
+    missing: Array<'email' | 'name'>;
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  };
+
+export async function redeemPharmsmartLogin(token: string) {
+  if (!csrfToken) await getAuthCsrf();
+  return performApiRequest<PharmsmartLoginResult>('/v1/auth/pharmsmart', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export async function completePharmsmartSetup(input: { ticket: string; email?: string; firstName?: string; lastName?: string }) {
+  if (!csrfToken) await getAuthCsrf();
+  return performApiRequest<PharmsmartLoginResult>('/v1/auth/pharmsmart/setup', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export async function createAuthenticatedSession(idToken: string) {
   if (!csrfToken) await getAuthCsrf();
   const session = await performApiRequest<AuthenticatedSession>('/v1/auth/session', { method: 'POST', body: JSON.stringify({ idToken }) });

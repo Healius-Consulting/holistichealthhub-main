@@ -9,6 +9,9 @@ export interface TotpEnrollmentDetails {
 export interface AuthContextValue {
   state: AuthState;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithPharmsmart: (token: string) => Promise<void>;
+  completePharmsmartSetup: (input: { email?: string; firstName?: string; lastName?: string }) => Promise<void>;
+  clearPharmsmartSetup: () => void;
   signOutStaff: (reason?: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   resendVerification: () => Promise<void>;

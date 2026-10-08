@@ -20,6 +20,7 @@ describe('isAppCheckExempt', () => {
   it('requires attestation for staff and public browser routes', () => {
     assert.equal(isAppCheckExempt('GET', '/v1/public/payments/status'), false);
     assert.equal(isAppCheckExempt('POST', '/v1/auth/session'), false);
+    assert.equal(isAppCheckExempt('POST', '/v1/auth/pharmsmart'), false);
     assert.equal(isAppCheckExempt('GET', '/v1/portal/orders'), false);
   });
 });

@@ -36,8 +36,9 @@ const organisation = {
 } as OrganisationRecord;
 
 describe('pharmacy operational email recipients', () => {
-  it('uses the pharmacy inbox ahead of any staff login', () => {
-    assert.deepEqual(pharmacyOwnerRecipients([staffMember, owner], {
+  it('uses the pharmacy inbox ahead of any staff login, including an SSO user', () => {
+    const ssoUser = { ...staffMember, uid: 'sso-uid', email: 'amina@pharmsmart.test', displayName: 'Amina Khan' };
+    assert.deepEqual(pharmacyOwnerRecipients([staffMember, owner, ssoUser], {
       ...organisation,
       pharmacyEmail: 'pharmacy@eastwood.test',
       primaryContactUid: staffMember.uid,

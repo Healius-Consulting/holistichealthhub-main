@@ -7,6 +7,7 @@ import {
   reload,
   sendEmailVerification,
   setPersistence,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
   signOut,
   TotpMultiFactorGenerator,
@@ -19,7 +20,10 @@ import { FirebaseError } from 'firebase/app';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   continueAuthenticatedSession,
+  ApiRequestError,
+  completePharmsmartSetup,
   createAuthenticatedSession,
+  redeemPharmsmartLogin,
   deleteAuthenticatedSession,
   getAuthenticatedSession,
   getStaffAccessibilityPreferences,
@@ -415,10 +419,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await requestStaffPasswordReset(email);
   }, []);
 
+  const pharmsmartFailure = (error: unknown) => {
+    const known = error instanceof ApiRequestError && [
+      'PHARMSMART_TOKEN_EXPIRED',
+      'PHARMSMART_TOKEN_REJECTED',
+      'PHARMSMART_UNAVAILABLE',
+      'PHARMACY_NOT_LINKED',
+      'PHARMACY_LOGIN_UNAVAILABLE',
+      'PHARMSMART_SETUP_INCOMPLETE',
+      'EMAIL_IN_USE',
+      'ACCOUNT_DISABLED',
+      'EMAIL_NOT_VERIFIED',
+      'ACCOUNT_INACTIVE',
+    ].includes(error.code);
+    return known && error instanceof ApiRequestError
+      ? error.message
+      : 'This PharmSmart link could not be used. Sign in with the pharmacy\'s Holistic Health Hub account.';
+  };
+
+  const openPharmsmartSession = useCallback(async (customToken: string) => {
+    const credential = await signInWithCustomToken(requireFirebaseAuth(), customToken);
+    if (serverSessionAuth) {
+      await establishServerSession(credential.user);
+      return;
+    }
+    await finishFirebaseSignIn(credential.user);
+  }, [establishServerSession, finishFirebaseSignIn]);
+
+  const signInWithPharmsmart = useCallback(async (token: string) => {
+    setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Opening your pharmacy workspace from PharmSmart.', pharmsmartSetup: null }));
+    try {
+      const result = await redeemPharmsmartLogin(token);
+      if (result.status === 'setup') {
+        setState({ phase: 'anonymous', staff: null, error: null, notice: null, pharmsmartSetup: result });
+        return;
+      }
+      await openPharmsmartSession(result.customToken);
+    } catch (error) {
+      await signOut(requireFirebaseAuth()).catch(() => undefined);
+      setState({ phase: 'anonymous', staff: null, error: pharmsmartFailure(error), notice: null, pharmsmartSetup: null });
+    }
+  }, [openPharmsmartSession]);
+
+  const finishPharmsmartSetup = useCallback(async (input: { email?: string; firstName?: string; lastName?: string }) => {
+    const ticket = state.pharmsmartSetup?.ticket;
+    if (!ticket) throw new Error('This PharmSmart sign-in has expired. Open the link from PharmSmart again.');
+    setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Opening your pharmacy workspace from PharmSmart.' }));
+    try {
+      const result = await completePharmsmartSetup({ ticket, ...input });
+      if (result.status !== 'ready') {
+        setState(current => ({ ...current, phase: 'anonymous', error: 'Add the missing sign-in details.', notice: null }));
+        return;
+      }
+      await openPharmsmartSession(result.customToken);
+    } catch (error) {
+      await signOut(requireFirebaseAuth()).catch(() => undefined);
+      setState(current => ({
+        ...current,
+        phase: 'anonymous',
+        staff: null,
+        error: pharmsmartFailure(error),
+        notice: null,
+      }));
+    }
+  }, [openPharmsmartSession, state.pharmsmartSetup?.ticket]);
+
+  const clearPharmsmartSetup = useCallback(() => {
+    setState(current => ({ ...current, pharmsmartSetup: null, error: null, notice: null }));
+  }, []);
+
   const value = useMemo<AuthContextValue>(() => ({
-    state, signIn: signInStaff, signOutStaff, continueSession, sendPasswordReset, resendVerification,
+    state, signIn: signInStaff, signInWithPharmsmart, completePharmsmartSetup: finishPharmsmartSetup, clearPharmsmartSetup, signOutStaff, continueSession, sendPasswordReset, resendVerification,
     refreshVerification, beginTotpEnrollment, completeTotpEnrollment, completeMfaChallenge,
-  }), [beginTotpEnrollment, completeMfaChallenge, completeTotpEnrollment, continueSession, refreshVerification, resendVerification, sendPasswordReset, signInStaff, signOutStaff, state]);
+  }), [beginTotpEnrollment, clearPharmsmartSetup, completeMfaChallenge, completeTotpEnrollment, continueSession, finishPharmsmartSetup, refreshVerification, resendVerification, sendPasswordReset, signInStaff, signInWithPharmsmart, signOutStaff, state]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

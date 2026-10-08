@@ -1,5 +1,6 @@
 import { auth } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
+import { isPharmsmartSsoSignIn } from '../../domain/identity/pharmsmart-sso.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import type { PlatformScope, ProtectedSurface, StaffRole, TenantScope } from '../../security/request-context.js';
 import {
@@ -40,29 +41,34 @@ export class SessionService {
       throw new HttpError(401, 'Sign in again before starting a staff session.', 'RECENT_LOGIN_REQUIRED');
     }
 
-    // 3. Validate email verification and TOTP MFA
+    // 3. Validate email verification. TOTP is required except for a PharmSmart
+    // redemption this server just minted for the pharmacy's existing account.
+    const pharmsmartSso = isPharmsmartSsoSignIn(decoded);
     if (!decoded.email_verified) {
       throw new HttpError(403, 'Verify your email before using the staff portal.', 'EMAIL_NOT_VERIFIED');
     }
-    const secondFactor = (decoded.firebase as Record<string, unknown> | undefined)?.sign_in_second_factor;
-    if (secondFactor !== 'totp') {
-      throw new HttpError(403, 'A TOTP second-factor sign-in is required.', 'MFA_TOTP_REQUIRED');
+    if (!pharmsmartSso) {
+      const secondFactor = (decoded.firebase as Record<string, unknown> | undefined)?.sign_in_second_factor;
+      if (secondFactor !== 'totp') {
+        throw new HttpError(403, 'A TOTP second-factor sign-in is required.', 'MFA_TOTP_REQUIRED');
+      }
     }
 
-    // 4. Resolve surface & role
-    const rawRole = (typeof decoded.role === 'string' ? decoded.role.toUpperCase() : '') as StaffRole;
-    if (rawRole !== 'HHH_ADMIN' && rawRole !== 'PHARMACY_STAFF') {
+    // 4. Resolve surface & role. A PharmSmart session always uses the SQL
+    // pharmacy account, never a role claim that could reach administration.
+    let rawRole = (typeof decoded.role === 'string' ? decoded.role.toUpperCase() : '') as StaffRole;
+    if (!pharmsmartSso && rawRole !== 'HHH_ADMIN' && rawRole !== 'PHARMACY_STAFF') {
       throw new HttpError(403, 'The account has no permitted staff role.', 'ROLE_REQUIRED');
     }
 
-    const surface: ProtectedSurface = requestedSurface === 'auto'
+    let surface: ProtectedSurface = requestedSurface === 'auto'
       ? (rawRole === 'HHH_ADMIN' ? 'admin' : 'pharmacy')
       : requestedSurface;
 
-    if (surface === 'admin' && rawRole !== 'HHH_ADMIN') {
+    if (!pharmsmartSso && surface === 'admin' && rawRole !== 'HHH_ADMIN') {
       throw new HttpError(403, 'This account cannot access HHH administration.', 'FORBIDDEN');
     }
-    if (surface === 'pharmacy' && rawRole !== 'PHARMACY_STAFF') {
+    if (!pharmsmartSso && surface === 'pharmacy' && rawRole !== 'PHARMACY_STAFF') {
       throw new HttpError(403, 'This account cannot access the pharmacy workspace.', 'FORBIDDEN');
     }
 
@@ -71,7 +77,10 @@ export class SessionService {
     if (!staff || staff.disabled || staff.status === 'DISABLED' || staff.status === 'REMOVED') {
       throw new HttpError(403, 'This staff account has been disabled.', 'ACCOUNT_DISABLED');
     }
-    if (staff.status === 'INVITED') {
+    if (pharmsmartSso && staff.status === 'INVITED') {
+      throw new HttpError(403, 'This pharmacy sign-in is not active yet. Finish the Holistic Health Hub invitation first.', 'ACCOUNT_INACTIVE');
+    }
+    if (!pharmsmartSso && staff.status === 'INVITED') {
       const activated = await this.identityRepo.activateInvitedStaffUser(decoded.uid);
       if (activated) {
         staff = { ...staff, status: 'ACTIVE' };
@@ -90,6 +99,14 @@ export class SessionService {
     }
     if (!staff || staff.status !== 'ACTIVE') {
       throw new HttpError(403, 'This staff account is not active.', 'ACCOUNT_INACTIVE');
+    }
+
+    if (pharmsmartSso) {
+      if (staff.role !== 'PHARMACY_STAFF' || !staff.organisationId || requestedSurface === 'admin') {
+        throw new HttpError(403, 'This account cannot be opened from a PharmSmart link.', 'FORBIDDEN');
+      }
+      rawRole = 'PHARMACY_STAFF';
+      surface = 'pharmacy';
     }
 
     const organisationId = staff.organisationId;
@@ -122,7 +139,7 @@ export class SessionService {
       organisationId,
       actorUid: decoded.uid,
       actorRole: rawRole,
-      event: 'auth.session_created',
+      event: pharmsmartSso ? 'auth.pharmsmart_sso' : 'auth.session_created',
       surface,
       sessionHashPrefix: sessionHash.slice(0, 12),
     });

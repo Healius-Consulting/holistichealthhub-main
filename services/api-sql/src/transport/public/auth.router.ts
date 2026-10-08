@@ -1,12 +1,17 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
+import { fetchPharmsmartPharmacyInfo } from '../../application/identity/pharmsmart-pharmacy-client.js';
+import { PharmsmartSsoService } from '../../application/identity/pharmsmart-sso.service.js';
 import { SessionService } from '../../application/identity/session.service.js';
 import { firstPartyPasswordResetLink, portalAppOrigin } from '../../application/identity/password-reset-link.js';
 import { hasEnrolledTotp } from '../../application/identity/staff-activation.js';
 import { dispatchEmailEvent } from '../../application/notifications/email-dispatch.js';
 import { auth } from '../../bootstrap/firebase.js';
+import { config } from '../../bootstrap/config.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { cookieOptions, csrfCookieName, issueCsrf, requireCsrf } from '../../security/csrf.js';
+import { publicPharmsmartLoginLimiter } from '../../security/public-limits.js';
+import { ipHash } from '../../security/session-utils.js';
 import type { ProtectedSurface } from '../../security/request-context.js';
 import { requireStaff, sessionCookieName } from '../../security/require-staff.js';
 import { assertTenantScope } from '../../security/request-context.js';
@@ -24,6 +29,27 @@ const passwordResetSchema = z.object({
   email: z.email().transform(value => value.toLowerCase()),
 }).strict();
 
+const pharmsmartLoginSchema = z.object({
+  token: z.string().trim().min(16).max(2048),
+}).strict();
+
+const pharmsmartSetupSchema = z.object({
+  ticket: z.string().trim().min(20).max(4_000),
+  email: z.string().trim().email().max(254).optional(),
+  firstName: z.string().trim().min(1).max(80).optional(),
+  lastName: z.string().trim().min(1).max(80).optional(),
+}).strict();
+
+function firebaseAuthErrorCode(error: unknown) {
+  if (!error || typeof error !== 'object') return null;
+  const candidate = error as { code?: unknown; errorInfo?: { code?: unknown } };
+  return typeof candidate.code === 'string'
+    ? candidate.code
+    : typeof candidate.errorInfo?.code === 'string'
+      ? candidate.errorInfo.code
+      : null;
+}
+
 function bearerToken(request: Request) {
   const header = request.get('authorization') || '';
   if (!header.toLowerCase().startsWith('bearer ')) return '';
@@ -37,11 +63,101 @@ export function createAuthRouter(): Router {
   const organisationRepo = new SqlOrganisationRepository();
   const integrationRepo = new SqlIntegrationRepository();
   const notificationRepo = new SqlNotificationRepository();
+  const markPharmsmartAccount = async (input: {
+    uid: string;
+    organisationId: string;
+    email: string;
+    displayName: string;
+  }) => {
+    await auth.updateUser(input.uid, { emailVerified: true, displayName: input.displayName });
+    await auth.setCustomUserClaims(input.uid, {
+      role: 'pharmacy_staff',
+      organisationId: input.organisationId,
+      pharmsmartSso: true,
+    });
+    await identityRepo.upsertStaffUser({
+      uid: input.uid,
+      organisationId: input.organisationId,
+      email: input.email,
+      displayName: input.displayName,
+      role: 'PHARMACY_STAFF',
+      status: 'ACTIVE',
+      disabled: false,
+    });
+  };
+  const pharmsmartSso = new PharmsmartSsoService({
+    fetchPharmacyInfo: fetchPharmsmartPharmacyInfo,
+    listOrganisations: () => organisationRepo.listOrganisations(),
+    listStaff: organisationId => identityRepo.listPharmacyStaffByOrganisationId(organisationId),
+    findEmailOwner: async email => {
+      try {
+        const user = await auth.getUserByEmail(email);
+        const profile = await identityRepo.findStaffUser(user.uid);
+        return profile ?? 'unlinked';
+      } catch (error) {
+        if (firebaseAuthErrorCode(error) === 'auth/user-not-found') return null;
+        throw error;
+      }
+    },
+    adoptAccount: async (staff, displayName) => {
+      if (!staff.organisationId) {
+        throw new HttpError(403, 'This pharmacy sign-in could not be opened.', 'PHARMACY_LOGIN_UNAVAILABLE');
+      }
+      await markPharmsmartAccount({
+        uid: staff.uid,
+        organisationId: staff.organisationId,
+        email: staff.email,
+        displayName: staff.displayName.trim() || displayName,
+      });
+    },
+    createAccount: async input => {
+      const user = await auth.createUser({
+        email: input.email,
+        displayName: input.displayName,
+        emailVerified: true,
+      });
+      await markPharmsmartAccount({ uid: user.uid, ...input });
+      return user.uid;
+    },
+    createCustomToken: (uid, claims) => auth.createCustomToken(uid, claims),
+    audit: input => identityRepo.appendAudit(input),
+    setupSecret: config.IP_HASH_SECRET ?? `${config.FIREBASE_PROJECT_ID}:pharmsmart-sso`,
+  });
 
   // GET /v1/auth/csrf - Issue or refresh CSRF token
   router.get('/auth/csrf', (req: Request, res: Response) => {
     const csrfToken = issueCsrf(req, res);
     res.json({ csrfToken });
+  });
+
+  // POST /v1/auth/pharmsmart - Redeem an opaque PharmSmart token.
+  // The body is only the token. The GPhC selects the pharmacy, and the person gets an SSO account.
+  router.post('/auth/pharmsmart', publicPharmsmartLoginLimiter, requireCsrf, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { token } = pharmsmartLoginSchema.parse(req.body);
+      const result = await pharmsmartSso.redeem(token, {
+        requestId: req.requestId ?? null,
+        ipHash: ipHash(req),
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/auth/pharmsmart/setup', publicPharmsmartLoginLimiter, requireCsrf, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = pharmsmartSetupSchema.parse(req.body);
+      const result = await pharmsmartSso.completeSetup(input, {
+        requestId: req.requestId ?? null,
+        ipHash: ipHash(req),
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
   });
 
   // POST /v1/auth/session - Exchange ID token for session cookie

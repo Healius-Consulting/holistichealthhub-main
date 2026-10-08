@@ -5,7 +5,7 @@ import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, LoaderCircle, LockKey
 import { firebaseConfiguration, mfaRequired } from './firebase';
 import { requireFirebaseAuth } from './firebase';
 import { totpQrDataUrl } from './totpQr';
-import { pharmsmartLoginQuery, rememberPharmsmartLogin } from './pharmsmart-login';
+import { pharmsmartLoginQuery } from './pharmsmart-login';
 import { useAuth } from './useAuth';
 import HhhBrandMark from '../components/HhhBrandMark';
 
@@ -63,20 +63,64 @@ export function ConfigurationRequired() {
   );
 }
 
+function PharmsmartSetupForm() {
+  const { state, completePharmsmartSetup, clearPharmsmartSetup } = useAuth();
+  const setup = state.pharmsmartSetup;
+  const [email, setEmail] = useState(setup?.email ?? '');
+  const [firstName, setFirstName] = useState(setup?.firstName ?? '');
+  const [lastName, setLastName] = useState(setup?.lastName ?? '');
+  const [saving, setSaving] = useState(false);
+  if (!setup) return null;
+  const needsEmail = setup.missing.includes('email');
+  const needsName = setup.missing.includes('name');
+  const knownName = [setup.firstName, setup.lastName].filter(Boolean).join(' ');
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await completePharmsmartSetup({
+        email: needsEmail ? email.trim() : undefined,
+        firstName: needsName ? firstName.trim() : undefined,
+        lastName: needsName ? lastName.trim() : undefined,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <AuthShell>
+      <form className="card staff-login-card" onSubmit={submit}>
+        <div className="staff-login-heading"><div className="resource-icon"><LockKeyhole size={20} aria-hidden="true" /></div><div><p className="staff-login-kicker">PharmSmart sign-in</p><h2>Finish your pharmacy account</h2></div></div>
+        <p className="staff-login-note">PharmSmart did not send every detail for this account. Add what's missing. Pharmacy messages still go to the pharmacy inbox, not this sign-in.</p>
+        {knownName && !needsName ? <p className="staff-login-note">{knownName}</p> : null}
+        {setup.email && !needsEmail ? <p className="staff-login-note">{setup.email}</p> : null}
+        {needsName && <label className="staff-login-field">First name<div className="staff-login-input"><input value={firstName} onChange={event => setFirstName(event.target.value)} autoComplete="given-name" required /></div></label>}
+        {needsName && <label className="staff-login-field">Last name<div className="staff-login-input"><input value={lastName} onChange={event => setLastName(event.target.value)} autoComplete="family-name" required /></div></label>}
+        {needsEmail && <label className="staff-login-field">Email address<div className="staff-login-input"><Mail size={16} /><input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" required placeholder="name@pharmacy.co.uk" /></div></label>}
+        {state.error && <div className="banner banner-red" role="alert"><AlertCircle size={15} /> {state.error}</div>}
+        <button className="btn btn-primary staff-login-submit" type="submit" disabled={saving || state.phase === 'loading'}>{saving || state.phase === 'loading' ? <LoaderCircle size={16} /> : <LogIn size={16} />} {saving || state.phase === 'loading' ? 'Opening…' : 'Continue'}</button>
+        <button className="btn btn-sm auth-link-button" type="button" onClick={clearPharmsmartSetup}>Use email and password instead</button>
+      </form>
+    </AuthShell>
+  );
+}
+
 export function StaffLogin() {
-  const { state, signIn, sendPasswordReset } = useAuth();
+  const { state, signIn, sendPasswordReset, signInWithPharmsmart } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [resetMode, setResetMode] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [pharmsmartLink] = useState(() => rememberPharmsmartLogin(window.location.search));
 
   useEffect(() => {
     const current = pharmsmartLoginQuery(window.location.search);
     if (!current.hasToken) return;
     window.history.replaceState(null, '', `${window.location.pathname}${current.searchWithoutToken}${window.location.hash}`);
-  }, []);
+    void signInWithPharmsmart(current.token);
+  }, [signInWithPharmsmart]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -93,11 +137,12 @@ export function StaffLogin() {
     await signIn(email, password);
   };
 
+  if (state.pharmsmartSetup) return <PharmsmartSetupForm />;
+
   return (
     <AuthShell>
       <form className="card staff-login-card" onSubmit={submit}>
         <div className="staff-login-heading"><div className="resource-icon"><LockKeyhole size={20} aria-hidden="true" /></div><div><p className="staff-login-kicker">Staff access</p><h2>{resetMode ? 'Reset your password' : 'Sign in to Holistic Health Hub'}</h2></div></div>
-        {pharmsmartLink && <div className="banner banner-amber" role="status"><AlertCircle size={15} aria-hidden="true" /> This sign-in link cannot be used. Sign in with the email and password from your Holistic Health Hub invitation.</div>}
         {state.notice && <div className="banner banner-blue" role="status"><CheckCircle2 size={15} /> {state.notice}</div>}
         <label className="staff-login-field">Email address<div className="staff-login-input"><Mail size={16} /><input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" required placeholder="name@pharmacy.co.uk" /></div></label>
         {!resetMode && <label className="staff-login-field">Password<div className="staff-login-input"><LockKeyhole size={16} /><input type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /><button className="auth-password-toggle" type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}
