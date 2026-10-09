@@ -17529,14 +17529,14 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 .pharmsmart-guide h1{
-  max-width: 16ch;
+  max-width: 12em;
   margin: 0 0 16px;
   color: var(--green);
   font-family: var(--serif);
-  font-size: clamp(36px, 5vw, 52px);
+  font-size: clamp(34px, 4vw, 46px);
   font-weight: 500;
   letter-spacing: -0.04em;
-  line-height: 1.05;
+  line-height: 1.08;
 }
 
 .pharmsmart-guide h2{
@@ -17583,11 +17583,17 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 .pharmsmart-guide__email{
+  min-height: 44px;
   padding: 0;
+  color: var(--ink-muted);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   border: 0;
   background: transparent;
   cursor: pointer;
-  font: inherit;
+  font-family: inherit;
 }
 
 .pharmsmart-guide__docs ul{
@@ -17600,7 +17606,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px 24px;
-  align-items: center;
+  align-items: start;
   padding: 18px 0;
   border-top: 1px solid color-mix(in srgb, var(--green) 16%, transparent);
 }
@@ -17611,25 +17617,242 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .pharmsmart-guide__docs strong{
   display: block;
-  margin-bottom: 4px;
   color: var(--ink);
   font-size: 17px;
   font-weight: 600;
 }
 
-.pharmsmart-guide__docs a{
+.pharmsmart-guide__file{
+  display: block;
+  margin: 2px 0 6px;
+  color: var(--ink-subtle);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pharmsmart-guide__actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.pharmsmart-guide__view,
+.pharmsmart-guide__download{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  color: var(--green);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pharmsmart-guide__view[aria-expanded='true'],
+.pharmsmart-guide__view:hover,
+.pharmsmart-guide__download:hover{
+  background: var(--mint-light);
+}
+
+.pharmsmart-guide__account{
+  margin-top: 28px;
+}
+
+.pharmsmart-guide__account h2{
+  margin-bottom: 4px;
+  font-size: 22px;
+}
+
+.pharmsmart-guide__account p{
+  max-width: 42ch;
+}
+
+.pharmsmart-guide__account a{
+  color: var(--green);
+  font-weight: 600;
+}
+
+.onboarding-dialog{
+  --green: #173f33;
+  --ink: #1e2a25;
+  --ink-muted: #506159;
+  --mint-light: #e9f1ed;
+  --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  font-family: var(--sans);
+}
+
+.onboarding-dialog__backdrop{
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 43, 35, 0.46);
+  cursor: pointer;
+}
+
+.onboarding-dialog__panel{
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  height: min(92vh, 100%);
+  overflow: hidden;
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 28px 70px rgba(15, 43, 35, 0.28);
+}
+
+.onboarding-dialog__panel header{
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.onboarding-dialog__panel h2{
+  margin: 0;
+  color: var(--green);
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.onboarding-dialog__panel header a,
+.onboarding-dialog__panel header button{
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 4px;
+  padding: 0 16px;
   color: var(--green);
+  font: inherit;
   font-weight: 600;
   text-decoration: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
 }
 
-.pharmsmart-guide__file{
-  color: var(--ink-subtle);
-  font-weight: 500;
+.onboarding-dialog__panel header a{
+  margin-left: auto;
+}
+
+.onboarding-dialog__panel header :is(a, button):hover{
+  background: var(--mint-light);
+}
+
+.onboarding-dialog__panel header :is(a, button):focus-visible{
+  outline: 3px solid color-mix(in srgb, #3d8d65 55%, transparent);
+  outline-offset: 3px;
+}
+
+.onboarding-pdf{
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  background: #f4f1ea;
+}
+
+.onboarding-pdf__toolbar{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.onboarding-pdf__toolbar button{
+  min-height: 44px;
+  padding: 0 14px;
+  color: var(--green);
+  font: inherit;
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.onboarding-pdf__toolbar button:disabled{
+  opacity: 0.4;
+  cursor: default;
+}
+
+.onboarding-pdf__toolbar span{
+  min-width: 8rem;
+  color: var(--ink);
+  font-weight: 600;
+  text-align: center;
+}
+
+.onboarding-pdf__stage{
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.onboarding-pdf__stage canvas{
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 43, 35, 0.12);
+}
+
+.pharmsmart-guide__sheet{
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  overflow: auto;
+  padding: 8px 20px 20px;
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+}
+
+.pharmsmart-guide__sheet div{
+  display: grid;
+  gap: 2px;
+  padding: 12px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.pharmsmart-guide__sheet strong{
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.pharmsmart-guide__sheet span{
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.pharmsmart-guide__preview-status{
+  margin: 0;
+  color: var(--ink-muted);
 }
 
 .pharmsmart-guide :is(a, button):focus-visible{
@@ -17638,10 +17861,24 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   border-radius: 8px;
 }
 
+.pharmsmart-guide__book{
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.pharmsmart-guide__book > a{
+  align-self: flex-start;
+  min-height: 36px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .pharmsmart-welcome-calendar{
   display: block;
   width: 100%;
-  height: 680px;
+  height: 70vh;
+  min-height: 560px;
   background: #fff;
   border: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
   border-radius: 16px;
@@ -17689,11 +17926,18 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
     grid-area: book;
     position: sticky;
     top: 28px;
+    height: calc(100dvh - 80px);
+  }
+
+  .pharmsmart-welcome-calendar{
+    flex: 1;
+    height: auto;
+    min-height: 0;
   }
 }
 
 @media (max-width: 899px){
-  .pharmsmart-welcome-calendar{ height: 620px; }
+  .pharmsmart-welcome-calendar{ height: 70vh; }
 }
 
 @media (prefers-reduced-motion: reduce){

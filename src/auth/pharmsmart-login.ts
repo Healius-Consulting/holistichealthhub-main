@@ -14,19 +14,22 @@ export const PHARMSMART_ONBOARDING_PACKETS = [
     href: '/onboarding/holistic-health-hub-brochure.pdf',
     title: 'Brochure',
     detail: 'PDF',
-    summary: 'What the service is, and how a pharmacy joins it.',
+    summary: 'Read this before the call.',
+    preview: 'pdf',
   },
   {
     href: '/onboarding/curaleaf-healius-new-account-form.pdf',
     title: 'Curaleaf account form',
     detail: 'PDF',
-    summary: 'Blank checklist. Attach a copy of the controlled drug licence.',
+    summary: 'Fill this in and attach your controlled drug licence.',
+    preview: 'pdf',
   },
   {
     href: '/onboarding/worldpay-contract-information.xlsx',
     title: 'Worldpay form',
     detail: 'Spreadsheet',
-    summary: 'The service answers are already filled in. Add the pharmacy and the bank account.',
+    summary: 'Most of it is done. Add your pharmacy and bank details.',
+    preview: 'sheet',
   },
 ] as const;
 
