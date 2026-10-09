@@ -22,7 +22,10 @@ function info(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function service(body = info()) {
+function service(
+  body = info(),
+  pharmacies?: Array<{ id: string; gphcNumber: string; primaryContactUid?: string | null }>,
+) {
   const audits: AppendAuditInput[] = [];
   const created: Array<{ email: string; displayName: string; organisationId: string }> = [];
   const adopted: string[] = [];
@@ -38,7 +41,7 @@ function service(body = info()) {
   }];
   const sso = new PharmsmartSsoService({
     fetchPharmacyInfo: async () => body,
-    listOrganisations: async () => [
+    listOrganisations: async () => pharmacies ?? [
       { id: '30', gphcNumber: '9999999', primaryContactUid: 'someone-else' },
       { id: organisationId, gphcNumber: '1234471', primaryContactUid: 'owner-uid' },
     ],
@@ -106,6 +109,44 @@ describe('PharmSmart redemption', () => {
     }, { requestId: null, ipHash: null });
     assert.equal(finished.status, 'ready');
     assert.equal(created[0]?.email, 'amina.khan@pharmacy.test');
+  });
+
+  it('returns the onboarding guide when no pharmacy account matches the GPhC', async () => {
+    const { sso, created, minted, audits } = service(info({ gphc: '5550001' }));
+    const result = await sso.redeem('opaque-token', { requestId: 'req-welcome', ipHash: 'ip' });
+    assert.deepEqual(result, {
+      status: 'welcome',
+      firstName: 'Amina',
+      lastName: 'Khan',
+      email: 'amina.khan@pharmacy.test',
+    });
+    assert.equal(created.length, 0);
+    assert.equal(minted.length, 0);
+    assert.equal(audits.at(-1)?.event, 'auth.pharmsmart_sso_refused');
+    assert.equal(audits.at(-1)?.organisationId, null);
+    assert.deepEqual(audits.at(-1)?.details, { reason: 'WELCOME' });
+    assert.equal(JSON.stringify(audits.at(-1)?.details).includes('amina.khan'), false);
+  });
+
+  it('still opens the workspace when the GPhC matches a pharmacy account', async () => {
+    const { sso, minted } = service();
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status, 'ready');
+    assert.equal(minted.length, 1);
+  });
+
+  it('refuses an ambiguous GPhC instead of showing the onboarding guide', async () => {
+    const { sso, created, minted, audits } = service(info(), [
+      { id: organisationId, gphcNumber: '1234471' },
+      { id: 'other-pharmacy', gphcNumber: '1234471' },
+    ]);
+    await assert.rejects(
+      () => sso.redeem('opaque-token', { requestId: null, ipHash: null }),
+      (error: unknown) => error instanceof HttpError && error.code === 'PHARMACY_NOT_LINKED',
+    );
+    assert.equal(created.length, 0);
+    assert.equal(minted.length, 0);
+    assert.deepEqual(audits.at(-1)?.details, { reason: 'AMBIGUOUS' });
   });
 
   it('refuses an expired token without creating an account', async () => {

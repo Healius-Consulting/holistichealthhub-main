@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
-import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, LoaderCircle, LockKeyhole, LogIn, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertCircle, Calendar, CheckCircle2, Download, Eye, EyeOff, KeyRound, LoaderCircle, LockKeyhole, LogIn, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
 import { firebaseConfiguration, mfaRequired } from './firebase';
 import { requireFirebaseAuth } from './firebase';
 import { totpQrDataUrl } from './totpQr';
-import { pharmsmartLoginQuery } from './pharmsmart-login';
+import { PHARMSMART_ONBOARDING_PACKETS, pharmsmartLoginQuery, pharmsmartOnboardingBookingUrl } from './pharmsmart-login';
+import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 import { useAuth } from './useAuth';
 import HhhBrandMark from '../components/HhhBrandMark';
 
@@ -107,8 +108,60 @@ function PharmsmartSetupForm() {
   );
 }
 
+function PharmsmartWelcome({ welcome, onUseEmail }: { welcome: PharmsmartWelcomeDetails; onUseEmail: () => void }) {
+  const hostname = typeof window === 'undefined' ? '' : window.location.hostname;
+  const bookingUrl = pharmsmartOnboardingBookingUrl(welcome);
+  const embeddedBookingUrl = pharmsmartOnboardingBookingUrl(welcome, { embed: true, hostname });
+  const knownName = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ');
+
+  return (
+    <AuthShell>
+      <section className="card staff-login-card staff-login-welcome" aria-labelledby="pharmsmart-welcome-title">
+        <a className="pharmsmart-welcome-skip" href="#onboarding-packets">Skip to information packets</a>
+        <div className="staff-login-heading">
+          <div className="resource-icon"><Calendar size={20} aria-hidden="true" /></div>
+          <div>
+            <p className="staff-login-kicker">PharmSmart sign-in</p>
+            <h2 id="pharmsmart-welcome-title">This pharmacy is not on Holistic Health Hub yet</h2>
+          </div>
+        </div>
+        {knownName ? <p className="pharmsmart-welcome-person">Signed in from PharmSmart as {knownName}.</p> : null}
+        <p>This PharmSmart sign-in worked. This pharmacy is not on Holistic Health Hub yet, so the workspace stays closed.</p>
+        <p>The same PharmSmart button opens the workspace after Healius creates the pharmacy account.</p>
+
+        <h3>Book a 30-minute onboarding call with Shaylen Patel</h3>
+        <p className="pharmsmart-welcome-lead">Shaylen Patel, Pharmacy Consultant at Healius, will walk through getting the pharmacy onto the platform.</p>
+        <iframe
+          className="pharmsmart-welcome-calendar"
+          title="Book a 30-minute onboarding call with Shaylen Patel"
+          src={embeddedBookingUrl}
+        />
+        <a className="btn btn-primary staff-login-submit pharmsmart-welcome-booking" href={bookingUrl} target="_blank" rel="noopener noreferrer">Open the booking page</a>
+
+        <h3 id="onboarding-packets">Information packets</h3>
+        <ul className="pharmsmart-welcome-packets">
+          {PHARMSMART_ONBOARDING_PACKETS.map(packet => (
+            <li key={packet.href}>
+              <a href={packet.href} download>
+                <Download size={16} aria-hidden="true" />
+                <span>{packet.title}</span>
+                <small>{packet.detail}</small>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="pharmsmart-welcome-contact">
+          <a href="tel:+447840407917">07840 407917</a>
+          <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a>
+        </p>
+        <button className="btn btn-sm auth-link-button" type="button" onClick={onUseEmail}>Sign in with email instead</button>
+      </section>
+    </AuthShell>
+  );
+}
+
 export function StaffLogin() {
-  const { state, signIn, sendPasswordReset, signInWithPharmsmart } = useAuth();
+  const { state, signIn, sendPasswordReset, signInWithPharmsmart, clearPharmsmartSetup } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -138,6 +191,7 @@ export function StaffLogin() {
   };
 
   if (state.pharmsmartSetup) return <PharmsmartSetupForm />;
+  if (state.pharmsmartWelcome) return <PharmsmartWelcome welcome={state.pharmsmartWelcome} onUseEmail={clearPharmsmartSetup} />;
 
   return (
     <AuthShell>
@@ -308,10 +362,11 @@ export function MfaEnrollmentGate() {
 }
 
 export function AuthLoading() {
+  const { state } = useAuth();
   return (
     <div className="auth-loading-page" role="status">
       <HhhBrandMark />
-      <p>Checking secure session…</p>
+      <p>{state.notice ?? 'Checking secure session…'}</p>
     </div>
   );
 }

@@ -62,5 +62,7 @@ test('the protected CSP permits the documented reCAPTCHA Enterprise browser endp
   assert.ok(directives.find(value => value.startsWith('connect-src '))?.includes('https://www.google.com/recaptcha/'));
   assert.ok(directives.find(value => value.startsWith('connect-src '))?.includes('https://content-firebaseappcheck.googleapis.com'));
   assert.ok(directives.find(value => value.startsWith('frame-src '))?.includes('https://recaptcha.google.com/recaptcha/'));
+  assert.ok(directives.find(value => value.startsWith('frame-src '))?.includes('https://calendly.com'));
+  assert.equal(directives.find(value => value.startsWith('script-src '))?.includes('calendly'), false);
   assert.ok(directives.find(value => value.startsWith('worker-src '))?.includes('blob:'));
 });

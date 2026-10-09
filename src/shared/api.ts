@@ -289,6 +289,12 @@ export type PharmsmartLoginResult =
     email: string | null;
     firstName: string | null;
     lastName: string | null;
+  }
+  | {
+    status: 'welcome';
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
   };
 
 export async function redeemPharmsmartLogin(token: string) {

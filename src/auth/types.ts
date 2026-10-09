@@ -31,6 +31,12 @@ export interface PharmsmartSetup {
   lastName: string | null;
 }
 
+export interface PharmsmartWelcome {
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}
+
 export interface AuthState {
   phase: AuthPhase;
   staff: AuthenticatedStaff | null;
@@ -38,4 +44,5 @@ export interface AuthState {
   notice: string | null;
   sessionWarning?: boolean;
   pharmsmartSetup?: PharmsmartSetup | null;
+  pharmsmartWelcome?: PharmsmartWelcome | null;
 }

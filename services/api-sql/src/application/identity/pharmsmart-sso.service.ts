@@ -32,6 +32,12 @@ export type PharmsmartLoginResult =
     email: string | null;
     firstName: string | null;
     lastName: string | null;
+  }
+  | {
+    status: 'welcome';
+    email: string | null;
+    firstName: string | null;
+    lastName: string | null;
   };
 
 type Person = { email: string | null; firstName: string | null; lastName: string | null };
@@ -39,6 +45,7 @@ type Person = { email: string | null; firstName: string | null; lastName: string
 /**
  * Redeem a PharmSmart `?token=` on our server.
  * The GPhC selects the pharmacy. The person gets their own SSO account there.
+ * A GPhC with no pharmacy account returns the onboarding guide and does not create a user.
  * Pharmacy operational mail stays on the pharmacy inbox.
  */
 export class PharmsmartSsoService {
@@ -76,6 +83,15 @@ export class PharmsmartSsoService {
     const pharmacies = await this.deps.listOrganisations();
     const matched = matchPharmacyByGphc(pharmacies, info.gphcNumber);
     if (matched.status !== 'matched') {
+      if (matched.reason === 'NOT_FOUND') {
+        await this.refuse(null, 'WELCOME', context);
+        return {
+          status: 'welcome',
+          email: info.email,
+          firstName: info.firstName,
+          lastName: info.lastName,
+        };
+      }
       await this.refuse(null, matched.reason, context);
       throw new HttpError(403, 'This pharmacy is not on Holistic Health Hub yet. Sign in with the pharmacy account if it has already been invited.', 'PHARMACY_NOT_LINKED');
     }

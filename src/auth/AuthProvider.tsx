@@ -40,6 +40,7 @@ import { firebaseConfiguration, mfaRequired, readAppCheckToken, requireFirebaseA
 import { AuthContext, type AuthContextValue } from './AuthContext';
 import type { AuthState, AuthenticatedStaff, StaffRole } from './types';
 import { isLocalPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
+import { pharmsmartRedeemNext } from './pharmsmart-login';
 import { appPathPrefix, isCurrentSurfacePath, surfacePath } from './surface-path';
 
 const IDLE_LIMIT_MS = 15 * 60 * 1000;
@@ -444,17 +445,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [establishServerSession]);
 
   const signInWithPharmsmart = useCallback(async (token: string) => {
-    setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Opening your pharmacy workspace from PharmSmart.', pharmsmartSetup: null }));
+    setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Checking your PharmSmart sign-in.', pharmsmartSetup: null, pharmsmartWelcome: null }));
     try {
       const result = await redeemPharmsmartLogin(token);
-      if (result.status === 'setup') {
-        setState({ phase: 'anonymous', staff: null, error: null, notice: null, pharmsmartSetup: result });
+      const next = pharmsmartRedeemNext(result);
+      if (next.action === 'welcome') {
+        await signOut(requireFirebaseAuth()).catch(() => undefined);
+        setState({ phase: 'anonymous', staff: null, error: null, notice: null, pharmsmartSetup: null, pharmsmartWelcome: next.welcome });
         return;
       }
-      await openPharmsmartSession(result.customToken);
+      if (next.action === 'setup') {
+        if (result.status !== 'setup') throw new Error('This PharmSmart link could not be used.');
+        setState({ phase: 'anonymous', staff: null, error: null, notice: null, pharmsmartSetup: result, pharmsmartWelcome: null });
+        return;
+      }
+      await openPharmsmartSession(next.customToken);
     } catch (error) {
       await signOut(requireFirebaseAuth()).catch(() => undefined);
-      setState({ phase: 'anonymous', staff: null, error: pharmsmartFailure(error), notice: null, pharmsmartSetup: null });
+      setState({ phase: 'anonymous', staff: null, error: pharmsmartFailure(error), notice: null, pharmsmartSetup: null, pharmsmartWelcome: null });
     }
   }, [openPharmsmartSession]);
 
@@ -482,7 +490,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [openPharmsmartSession, state.pharmsmartSetup?.ticket]);
 
   const clearPharmsmartSetup = useCallback(() => {
-    setState(current => ({ ...current, pharmsmartSetup: null, error: null, notice: null }));
+    setState(current => ({ ...current, pharmsmartSetup: null, pharmsmartWelcome: null, error: null, notice: null }));
   }, []);
 
   const value = useMemo<AuthContextValue>(() => ({
