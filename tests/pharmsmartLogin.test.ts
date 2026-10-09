@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { pharmsmartLoginQuery, pharmsmartOnboardingBookingUrl, pharmsmartRedeemNext, rememberPharmsmartLogin, resetPharmsmartLoginNotice } from '../src/auth/pharmsmart-login.ts';
+import { PHARMSMART_ONBOARDING_PACKETS, pharmsmartLoginQuery, pharmsmartOnboardingBookingUrl, pharmsmartRedeemNext, rememberPharmsmartLogin, resetPharmsmartLoginNotice } from '../src/auth/pharmsmart-login.ts';
 
 test('a Pharmsmart login keeps only the opaque token and removes it from the address', () => {
   const result = pharmsmartLoginQuery('?token=opaque-token&returnTo=%2Fpharmacy&email=person@pharmacy.test&name=Sylvia');
@@ -63,6 +63,20 @@ test('a ready redemption is the only path that carries a session token', () => {
     firstName: 'Amina',
     lastName: 'Khan',
   }), { action: 'setup' });
+});
+
+test('the onboarding packets name the brochure and both forms with the values already on them', () => {
+  assert.deepEqual(PHARMSMART_ONBOARDING_PACKETS.map(packet => packet.detail), ['Brochure', 'Form', 'Form']);
+  const curaleaf = PHARMSMART_ONBOARDING_PACKETS[1];
+  assert.match(curaleaf.summary, /ROK0001/);
+  assert.match(curaleaf.summary, /7 April 2025/);
+  assert.equal('entered' in curaleaf, false);
+  const worldpay = PHARMSMART_ONBOARDING_PACKETS[2];
+  assert.equal(worldpay.entered.find(item => item.label === 'Nature of business')?.value, '47730 — Dispensing chemist in specialised stores');
+  assert.equal(worldpay.entered.find(item => item.label === 'Annual card processing turnover')?.value, '£250,000');
+  assert.equal(worldpay.entered.find(item => item.label === 'Average transaction value')?.value, '£187');
+  assert.equal(worldpay.entered.find(item => item.label === 'American Express')?.value, 'No');
+  assert.equal(worldpay.entered.find(item => item.label === 'Card terminal')?.value, 'Not required');
 });
 
 test('the invitation notice survives after the token is removed from the address', () => {

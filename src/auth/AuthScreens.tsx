@@ -5,7 +5,7 @@ import { AlertCircle, Calendar, CheckCircle2, Download, Eye, EyeOff, KeyRound, L
 import { firebaseConfiguration, mfaRequired } from './firebase';
 import { requireFirebaseAuth } from './firebase';
 import { totpQrDataUrl } from './totpQr';
-import { PHARMSMART_ONBOARDING_PACKETS, pharmsmartLoginQuery, pharmsmartOnboardingBookingUrl } from './pharmsmart-login';
+import { PHARMSMART_ONBOARDING_PACKETS, PHARMSMART_ONBOARDING_STEPS, pharmsmartLoginQuery, pharmsmartOnboardingBookingUrl } from './pharmsmart-login';
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 import { useAuth } from './useAuth';
 import HhhBrandMark from '../components/HhhBrandMark';
@@ -117,7 +117,7 @@ function PharmsmartWelcome({ welcome, onUseEmail }: { welcome: PharmsmartWelcome
   return (
     <AuthShell>
       <section className="card staff-login-card staff-login-welcome" aria-labelledby="pharmsmart-welcome-title">
-        <a className="pharmsmart-welcome-skip" href="#onboarding-packets">Skip to information packets</a>
+        <a className="pharmsmart-welcome-skip" href="#onboarding-packets">Skip to the brochure and forms</a>
         <div className="staff-login-heading">
           <div className="resource-icon"><Calendar size={20} aria-hidden="true" /></div>
           <div>
@@ -126,30 +126,56 @@ function PharmsmartWelcome({ welcome, onUseEmail }: { welcome: PharmsmartWelcome
           </div>
         </div>
         {knownName ? <p className="pharmsmart-welcome-person">Signed in from PharmSmart as {knownName}.</p> : null}
-        <p>This PharmSmart sign-in worked. This pharmacy is not on Holistic Health Hub yet, so the workspace stays closed.</p>
-        <p>The same PharmSmart button opens the workspace after Healius creates the pharmacy account.</p>
+        <p>This PharmSmart sign-in worked. Healius still needs to create the pharmacy account before the workspace opens.</p>
 
-        <h3>Book a 30-minute onboarding call with Shaylen Patel</h3>
-        <p className="pharmsmart-welcome-lead">Shaylen Patel, Pharmacy Consultant at Healius, will walk through getting the pharmacy onto the platform.</p>
+        <h3>How to get onboarded</h3>
+        <ol className="pharmsmart-welcome-steps">
+          {PHARMSMART_ONBOARDING_STEPS.map(step => <li key={step}>{step}</li>)}
+        </ol>
+
+        <h3 id="onboarding-packets">The brochure and the two forms</h3>
+        <div className="pharmsmart-welcome-packets">
+          {PHARMSMART_ONBOARDING_PACKETS.map(packet => (
+            <article key={packet.href} className="pharmsmart-welcome-packet">
+              <a href={packet.href} download>
+                <Download size={16} aria-hidden="true" />
+                <span>{packet.title}</span>
+                <small>{packet.detail}</small>
+              </a>
+              <p>{packet.summary}</p>
+              {'entered' in packet ? (
+                <>
+                  <h4>Already entered</h4>
+                  <dl>
+                    {packet.entered.map(item => (
+                      <div key={item.label}>
+                        <dt>{item.label}</dt>
+                        <dd>{item.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              ) : null}
+              {'still' in packet ? (
+                <>
+                  <h4>Complete on the form</h4>
+                  <ul>
+                    {packet.still.map(item => <li key={item}>{item}</li>)}
+                  </ul>
+                </>
+              ) : null}
+            </article>
+          ))}
+        </div>
+
+        <h3>Book the 30-minute demo</h3>
+        <p className="pharmsmart-welcome-lead">Shaylen Patel MPharm, Pharmacy Consultant at Healius Pharmacy Consulting, sets the pharmacy up with the clinic, the supplier and the platform.</p>
         <iframe
           className="pharmsmart-welcome-calendar"
           title="Book a 30-minute onboarding call with Shaylen Patel"
           src={embeddedBookingUrl}
         />
         <a className="btn btn-primary staff-login-submit pharmsmart-welcome-booking" href={bookingUrl} target="_blank" rel="noopener noreferrer">Open the booking page</a>
-
-        <h3 id="onboarding-packets">Information packets</h3>
-        <ul className="pharmsmart-welcome-packets">
-          {PHARMSMART_ONBOARDING_PACKETS.map(packet => (
-            <li key={packet.href}>
-              <a href={packet.href} download>
-                <Download size={16} aria-hidden="true" />
-                <span>{packet.title}</span>
-                <small>{packet.detail}</small>
-              </a>
-            </li>
-          ))}
-        </ul>
         <p className="pharmsmart-welcome-contact">
           <a href="tel:+447840407917">07840 407917</a>
           <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a>
