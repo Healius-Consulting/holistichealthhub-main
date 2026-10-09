@@ -17507,9 +17507,34 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   box-shadow: 0 28px 64px rgba(21, 56, 44, 0.12) !important;
 }
 
+.staff-login-page.staff-login-page--guide{
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.staff-login-page.staff-login-page--guide .staff-login-panel{
+  align-items: stretch;
+  justify-content: flex-start;
+  width: min(100%, 1120px);
+  margin: 0 auto;
+}
+
 .staff-login-page .staff-login-card.staff-login-welcome{
   position: relative;
-  width: min(100%, 720px);
+  width: 100%;
+}
+
+.staff-login-page--guide .staff-login-welcome .staff-login-lockup{
+  margin-bottom: 28px;
+}
+
+@media (min-width: 900px){
+  .staff-login-page--guide .pharmsmart-welcome-packets{
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .staff-login-page--guide .pharmsmart-welcome-packet:first-child{
+    grid-column: 1 / -1;
+  }
 }
 
 .staff-login-page .pharmsmart-welcome-skip{

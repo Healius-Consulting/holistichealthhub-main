@@ -10,10 +10,10 @@ import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 import { useAuth } from './useAuth';
 import HhhBrandMark from '../components/HhhBrandMark';
 
-function AuthShell({ children }: { children: React.ReactNode }) {
+function AuthShell({ children, guide = false }: { children: React.ReactNode; guide?: boolean }) {
   return (
-    <div className="staff-login-page auth-page">
-      <section className="staff-login-brand">
+    <div className={`staff-login-page auth-page${guide ? ' staff-login-page--guide' : ''}`}>
+      {guide ? null : <section className="staff-login-brand">
         <div className="staff-login-lockup" aria-label="Holistic Health Hub">
           <HhhBrandMark />
           <span>
@@ -28,7 +28,7 @@ function AuthShell({ children }: { children: React.ReactNode }) {
           <span><ShieldCheck size={16} aria-hidden="true" /> Tenant isolation</span>
           <span><KeyRound size={16} aria-hidden="true" /> {mfaRequired ? 'Mandatory MFA' : 'Verified staff access'}</span>
         </div>
-      </section>
+      </section>}
       <section className="staff-login-panel">{children}</section>
     </div>
   );
@@ -108,16 +108,23 @@ function PharmsmartSetupForm() {
   );
 }
 
-function PharmsmartWelcome({ welcome, onUseEmail }: { welcome: PharmsmartWelcomeDetails; onUseEmail: () => void }) {
+export function PharmsmartWelcome({ welcome, onUseEmail }: { welcome: PharmsmartWelcomeDetails; onUseEmail: () => void }) {
   const hostname = typeof window === 'undefined' ? '' : window.location.hostname;
   const bookingUrl = pharmsmartOnboardingBookingUrl(welcome);
   const embeddedBookingUrl = pharmsmartOnboardingBookingUrl(welcome, { embed: true, hostname });
   const knownName = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ');
 
   return (
-    <AuthShell>
+    <AuthShell guide>
       <section className="card staff-login-card staff-login-welcome" aria-labelledby="pharmsmart-welcome-title">
         <a className="pharmsmart-welcome-skip" href="#onboarding-packets">Skip to the brochure and forms</a>
+        <div className="staff-login-lockup" aria-label="Holistic Health Hub">
+          <HhhBrandMark />
+          <span>
+            <strong>Holistic Health Hub</strong>
+            <small>Pharmacy onboarding</small>
+          </span>
+        </div>
         <div className="staff-login-heading">
           <div className="resource-icon"><Calendar size={20} aria-hidden="true" /></div>
           <div>
