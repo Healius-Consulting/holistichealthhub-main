@@ -250,6 +250,7 @@ export function PharmsmartWelcome({ welcome, onUseEmail }: { welcome: Pharmsmart
     <AuthShell guide>
       <div className="pharmsmart-guide">
         <a className="pharmsmart-welcome-skip" href="#onboarding-packets">Skip to the documents</a>
+        <div className="pharmsmart-guide__layout">
         <header className="pharmsmart-guide__intro">
           <div className="staff-login-lockup" aria-label="Holistic Health Hub">
             <HhhBrandMark />
@@ -260,47 +261,61 @@ export function PharmsmartWelcome({ welcome, onUseEmail }: { welcome: Pharmsmart
           </div>
           <h1 id="pharmsmart-welcome-title">This pharmacy is not on Holistic Health Hub yet</h1>
           {knownName ? <p className="pharmsmart-guide__person">Signed in from PharmSmart as {knownName}.</p> : null}
-          <p>Book 30 minutes with Shaylen Patel. Send him the two forms. This PharmSmart button opens the workspace after your pharmacy account exists.</p>
-          <p className="pharmsmart-guide__contact">
-            <a href="tel:+447840407917">07840 407917</a>
-            <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a>
-          </p>
-          <div className="pharmsmart-guide__account">
-            <h2>Already have an account</h2>
-            <button className="pharmsmart-guide__email" type="button" onClick={onUseEmail}>Use email and password</button>
-            <p>If this page should not have shown, email <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a> and we can look into it.</p>
-          </div>
+          <p>Send us the Curaleaf account form and the Worldpay form. You can do that without a call. After approval, you will get an email saying you can start using the platform.</p>
         </header>
-        <section className="pharmsmart-guide__book" aria-label="Book a 30-minute call with Shaylen Patel">
+        <section className="pharmsmart-guide__book" aria-labelledby="pharmsmart-welcome-book">
+          <h2 id="pharmsmart-welcome-book">Want more information?</h2>
+          <p>A call is optional. Book one if you would like to talk it through before you send the forms.</p>
           <iframe
             className="pharmsmart-welcome-calendar"
-            title="Book a 30-minute call with Shaylen Patel"
+            title="Optional 30-minute call with Shaylen Patel"
             src={embeddedBookingUrl}
           />
           <a href={bookingUrl} target="_blank" rel="noopener noreferrer">Open the booking page</a>
         </section>
-        <section id="onboarding-packets" className="pharmsmart-guide__docs" aria-labelledby="pharmsmart-welcome-docs">
-          <h2 id="pharmsmart-welcome-docs">Documents</h2>
-          <ul>
-            {PHARMSMART_ONBOARDING_PACKETS.map(packet => (
-              <li key={packet.href}>
-                <div>
-                  <strong>{packet.title}</strong>
-                  <span className="pharmsmart-guide__file">{packet.detail}</span>
-                  <p>{packet.summary}</p>
-                </div>
+        <div className="pharmsmart-guide__materials">
+          <section className="pharmsmart-guide__brochure" aria-labelledby="pharmsmart-welcome-brochure">
+            <h2 id="pharmsmart-welcome-brochure">Brochure</h2>
+            {PHARMSMART_ONBOARDING_PACKETS.filter(packet => packet.detail !== 'FORM').map(packet => (
+              <div key={packet.href}>
+                <p>{packet.summary}</p>
                 <div className="pharmsmart-guide__actions">
-                  <button
-                    className="pharmsmart-guide__view"
-                    type="button"
-                    aria-expanded={viewing === packet.href}
-                    onClick={() => setViewing(packet.href)}
-                  >View</button>
-                  <a className="pharmsmart-guide__download" href={packet.href} download>Download</a>
+                  <button className="pharmsmart-guide__view" type="button" aria-expanded={viewing === packet.href} aria-label={`View ${packet.title}`} onClick={() => setViewing(packet.href)}>View</button>
+                  <a className="pharmsmart-guide__download" href={packet.href} download aria-label={`Download ${packet.title}`}>Download</a>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </section>
+          <section id="onboarding-packets" className="pharmsmart-guide__docs" aria-labelledby="pharmsmart-welcome-docs">
+            <h2 id="pharmsmart-welcome-docs">Send us the forms</h2>
+            <ul>
+              {PHARMSMART_ONBOARDING_PACKETS.filter(packet => packet.detail === 'FORM').map(packet => (
+                <li key={packet.href}>
+                  <div>
+                    <span className="pharmsmart-guide__name">
+                      <strong>{packet.title}</strong>
+                      <span className="pharmsmart-guide__tag">FORM</span>
+                    </span>
+                    <p>{packet.summary}</p>
+                  </div>
+                  <div className="pharmsmart-guide__actions">
+                    <button className="pharmsmart-guide__view" type="button" aria-expanded={viewing === packet.href} onClick={() => setViewing(packet.href)}>View</button>
+                    <a className="pharmsmart-guide__download" href={packet.href} download>Download</a>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="pharmsmart-guide__send">Send us the forms here</p>
+            <div className="pharmsmart-guide__contact">
+              <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a>
+            </div>
+          </section>
+        </div>
+        </div>
+        <section className="pharmsmart-guide__account" aria-labelledby="pharmsmart-welcome-account">
+          <h2 id="pharmsmart-welcome-account">Already have an account</h2>
+          <button className="pharmsmart-guide__email" type="button" onClick={onUseEmail}>Use email and password</button>
+          <p>If this page should not have shown, email <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a> and we can look into it.</p>
         </section>
         {openPacket ? createPortal(
           <div className="onboarding-dialog" role="presentation">
