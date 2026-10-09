@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
 import { ORGANISATIONS, AppProvider, useApp, type PharmacyTenant, type Screen, type StaffSession } from './context/AppContext';
 import Header from './components/Header';
@@ -23,6 +23,7 @@ import {
   MfaChallenge,
   MfaEnrollmentGate,
   PasswordResetScreen,
+  PharmsmartWelcome,
   StaffLogin,
 } from './auth/AuthScreens';
 import { getAdminOrganisations, getPortalSession } from './shared/api';
@@ -335,6 +336,17 @@ function StaffWorkspace() {
 
 function AppContent() {
   const { state: authState } = useAuth();
+  const [showOnboardingPreview, setShowOnboardingPreview] = useState(
+    () => import.meta.env.DEV && new URLSearchParams(window.location.search).get('onboarding-preview') === '1',
+  );
+  if (showOnboardingPreview) {
+    return (
+      <PharmsmartWelcome
+        welcome={{ firstName: null, lastName: null, email: null }}
+        onUseEmail={() => setShowOnboardingPreview(false)}
+      />
+    );
+  }
   if (isCurrentSurfacePath('/reset-password')) return <PasswordResetScreen />;
 
   return (
