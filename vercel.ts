@@ -1,4 +1,4 @@
-import { CONTENT_SECURITY_POLICY, embeddableDocumentHeaders, PHARMACY_ONBOARDING_PATH } from './platform/vercel/security-headers.js';
+import { CONTENT_SECURITY_POLICY } from './platform/vercel/security-headers.js';
 
 type Surface = 'public' | 'portal';
 
@@ -128,11 +128,6 @@ export const config = {
     },
     { source: '/assets/(.*)', headers: [...securityHeaders, { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
     { source: '/(.*)', headers: [...securityHeaders, { key: 'Cache-Control', value: 'private, no-store' }] },
-    // Plain path only. A lookahead here failed both projects, because they share this file.
-    {
-      source: PHARMACY_ONBOARDING_PATH,
-      headers: [...embeddableDocumentHeaders, { key: 'Cache-Control', value: 'private, no-store' }],
-    },
   ],
 };
 
