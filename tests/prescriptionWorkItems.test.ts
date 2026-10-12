@@ -27,7 +27,7 @@ function order(prescriptions: Prescription[], overrides: Partial<PatientOrder> =
     id: 1,
     organisationId: 'org-1',
     patientId: 'patient-1',
-    date: new Date('2026-08-20T10:00:00Z'),
+    date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
     dispensingFee: 0,
     pharmacyDelivery: 0,
     pharmacyDeliveryAllowed: true,

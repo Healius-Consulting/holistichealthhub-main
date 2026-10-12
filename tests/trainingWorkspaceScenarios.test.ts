@@ -23,8 +23,9 @@ const byId = (id: number) => {
 };
 const laneFor = (id: number) => {
   const order = byId(id);
-  return orderBoardLane({ order, stage: orderStage(order).stage });
+  return orderBoardLane({ order, stage: orderStage(order, frozen).stage });
 };
+const stageFor = (id: number) => orderStage(byId(id), frozen).stage;
 
 test('sandbox pack matches the fill-list people and twelve orders', () => {
   assert.equal(workspace.orders.length, 12);
@@ -46,18 +47,18 @@ test('sandbox pack matches the fill-list people and twelve orders', () => {
 });
 
 test('fill-list orders sit in the live lanes the tour points at', () => {
-  assert.equal(orderStage(byId(101)).stage, 'awaiting-payment');
+  assert.equal(stageFor(101), 'awaiting-payment');
   assert.equal(laneFor(101), 'awaiting-payment');
-  assert.equal(orderStage(byId(102)).stage, 'curaleaf-pending');
+  assert.equal(stageFor(102), 'curaleaf-pending');
   assert.equal(laneFor(102), 'curaleaf');
-  assert.equal(orderStage(byId(103)).stage, 'dispatched');
+  assert.equal(stageFor(103), 'dispatched');
   assert.equal(laneFor(103), 'curaleaf');
   assert.equal(byId(104).prescriptions[0]?.status, 'received');
   assert.ok(byId(104).prescriptions[0]?.goodsInAt);
   assert.equal(laneFor(104), 'ready');
-  assert.equal(orderStage(byId(105)).stage, 'ready');
+  assert.equal(stageFor(105), 'ready');
   assert.equal(laneFor(105), 'ready');
-  assert.equal(orderStage(byId(106)).stage, 'curaleaf-approved');
+  assert.equal(stageFor(106), 'curaleaf-approved');
   assert.equal(laneFor(106), 'curaleaf');
   assert.equal(laneFor(108), 'needs-action');
   assert.equal(byId(108).quoteReview?.type, 'patient_price_changed');
@@ -68,7 +69,7 @@ test('fill-list orders sit in the live lanes the tour points at', () => {
   assert.equal(orderIsSplitFulfilment(byId(111)), true);
   assert.equal(laneFor(111), 'split');
   assert.equal(byId(111).prescriptions.length, 1);
-  assert.equal(orderStage(byId(112)).stage, 'paid');
+  assert.equal(stageFor(112), 'paid');
   assert.equal(laneFor(112), 'curaleaf');
   assert.ok(byId(112).prescriptions[0]?.items.length);
 });
