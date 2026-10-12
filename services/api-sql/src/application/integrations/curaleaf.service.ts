@@ -238,8 +238,8 @@ async function probeCuraleafApiKey(apiKey: string, expectedCustomerId: string, b
 /**
  * A Curaleaf key belongs to exactly one estate, so the estate is discovered by
  * asking rather than configured by hand: try each candidate host and keep the
- * one that accepts the key. `validateWorldpayCredentials` resolves its estate
- * the same way. A caller may pin the estate with `preferredEnvironment`.
+ * one that accepts the key. Worldpay credential entry does not: it is checked
+ * on the live host only. A caller may pin the Curaleaf estate with `preferredEnvironment`.
  */
 export async function validateCuraleafCredentials(
   credential: CuraleafCredential,

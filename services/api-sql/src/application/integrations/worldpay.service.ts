@@ -141,36 +141,47 @@ function worldpayEnvironment(url: string): 'try' | 'live' {
   }
 }
 
-export async function validateWorldpayCredentials(credential: WorldpayCredential): Promise<WorldpayConnectionValidation> {
-  const override = configuredWorldpayBaseUrl();
-  const candidates = override ? [override] : [WORLDPAY_TRY_BASE_URL, WORLDPAY_LIVE_BASE_URL];
-  let lastStatus = 0;
-  for (const [index, baseUrl] of candidates.entries()) {
-    const url = new URL('/paymentQueries/payments', baseUrl);
-    url.searchParams.set('transactionReference', `HHH-CONNECTION-CHECK-${randomUUID()}`);
-    const response = await worldpayFetch(url, {}, credential);
-    lastStatus = response.status;
-    if (response.status === 401 || response.status === 403) {
-      if (index < candidates.length - 1) continue;
-      // Not 401. The portal treats every 401 as "the staff session ended" and signs the user out.
-      throw new HttpError(422, 'Worldpay did not authorise this username and password. Use the live Payment Queries username and password from Worldpay Developer tools, plus the merchant entity. A single API key or the normal Worldpay login will be refused.', 'WORLDPAY_CREDENTIALS_REJECTED');
-    }
-    if (!response.ok) {
-      throw new HttpError(502, `Worldpay could not validate the connection (${response.status}).`, 'WORLDPAY_VALIDATION_FAILED');
-    }
-    try {
-      await response.json();
-    } catch {
-      throw new HttpError(502, 'Worldpay returned an invalid Payment Queries response.', 'WORLDPAY_VALIDATION_FAILED');
-    }
-    return {
-      passed: true,
-      checkedAt: new Date().toISOString(),
-      environment: worldpayEnvironment(baseUrl),
-      entityId: credential.entityId,
-    };
+/**
+ * New and rotated merchant credentials are checked on the live host only.
+ * A Try override must not become an acceptance path for sandbox keys.
+ */
+export function worldpayCredentialEntryBaseUrl(override: string | null = configuredWorldpayBaseUrl()) {
+  if (override && worldpayEnvironment(override) === 'live') return override;
+  return WORLDPAY_LIVE_BASE_URL;
+}
+
+export async function validateWorldpayCredentials(
+  credential: WorldpayCredential,
+  baseUrl = worldpayCredentialEntryBaseUrl(),
+): Promise<WorldpayConnectionValidation> {
+  const url = new URL('/paymentQueries/payments', baseUrl);
+  url.searchParams.set('transactionReference', `HHH-CONNECTION-CHECK-${randomUUID()}`);
+  const response = await worldpayFetch(url, {}, credential);
+  if (response.status === 401 || response.status === 403) {
+    // Not 401. The portal treats every 401 as "the staff session ended" and signs the user out.
+    const liveCheck = worldpayEnvironment(baseUrl) === 'live';
+    throw new HttpError(
+      422,
+      liveCheck
+        ? 'Worldpay did not authorise these credentials on the live service. Enter the live Payment Queries username and password from Worldpay Developer tools, plus the merchant entity. Try (sandbox) keys are not accepted.'
+        : 'Worldpay did not authorise this username and password.',
+      'WORLDPAY_CREDENTIALS_REJECTED',
+    );
   }
-  throw new HttpError(502, `Worldpay could not validate the connection (${lastStatus}).`, 'WORLDPAY_VALIDATION_FAILED');
+  if (!response.ok) {
+    throw new HttpError(502, `Worldpay could not validate the connection (${response.status}).`, 'WORLDPAY_VALIDATION_FAILED');
+  }
+  try {
+    await response.json();
+  } catch {
+    throw new HttpError(502, 'Worldpay returned an invalid Payment Queries response.', 'WORLDPAY_VALIDATION_FAILED');
+  }
+  return {
+    passed: true,
+    checkedAt: new Date().toISOString(),
+    environment: worldpayEnvironment(baseUrl),
+    entityId: credential.entityId,
+  };
 }
 
 export type WorldpayStatusPayload = {
@@ -220,7 +231,7 @@ export async function probeWorldpayConnection(connection: IntegrationConnectionR
   if (!credential) {
     throw new HttpError(503, 'Worldpay credentials could not be loaded for this pharmacy.', 'WORLDPAY_SECRET_UNAVAILABLE');
   }
-  const validation = await validateWorldpayCredentials(credential);
+  const validation = await validateWorldpayCredentials(credential, worldpayBaseUrl(connection.environment));
   return {
     passed: true as const,
     checkedAt: validation.checkedAt,

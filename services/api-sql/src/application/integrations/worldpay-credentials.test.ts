@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
-import { maskWorldpayIdentifier, safeWorldpayActionUrl, worldpayAdminState, worldpayBaseUrl, worldpaySecretPayload, worldpayStatusPayload, WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
+import { maskWorldpayIdentifier, safeWorldpayActionUrl, worldpayAdminState, worldpayBaseUrl, worldpayCredentialEntryBaseUrl, worldpaySecretPayload, worldpayStatusPayload, WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS, WORLDPAY_LIVE_BASE_URL, WORLDPAY_TRY_BASE_URL } from './worldpay.service.js';
 
 describe('Worldpay credential helpers', () => {
   // Hosted-page customisation was removed: the stored secret is now exactly the
@@ -34,6 +34,13 @@ describe('Worldpay credential helpers', () => {
 
   it('expires hosted payment links after 72 hours by default', () => {
     assert.equal(WORLDPAY_DEFAULT_LINK_EXPIRY_SECONDS, 72 * 60 * 60);
+  });
+
+  it('checks newly entered credentials on the live host only', () => {
+    assert.equal(worldpayCredentialEntryBaseUrl(null), WORLDPAY_LIVE_BASE_URL);
+    assert.equal(worldpayCredentialEntryBaseUrl(WORLDPAY_TRY_BASE_URL), WORLDPAY_LIVE_BASE_URL);
+    assert.equal(worldpayCredentialEntryBaseUrl('https://try.access.worldpay.com/'), WORLDPAY_LIVE_BASE_URL);
+    assert.equal(worldpayCredentialEntryBaseUrl(WORLDPAY_LIVE_BASE_URL), WORLDPAY_LIVE_BASE_URL);
   });
 
   it('uses try unless the stored connection is live', () => {
