@@ -107,8 +107,6 @@ export const config = {
     { source: '/robots.txt', destination: '/robots.txt' },
     { source: '/v1/(.*)', destination: `${apiOrigin}/v1/$1` },
     { source: '/v2/(.*)', destination: `${apiOrigin}/v2/$1` },
-    { source: PHARMACY_ONBOARDING_PATH, destination: '/index.html' },
-    { source: `${PHARMACY_ONBOARDING_PATH}/`, destination: '/index.html' },
     { source: '/((?!sitemap\\.xml|sitemaps\\.xml|robots\\.txt).*)', destination: '/index.html' },
   ],
   headers: [
@@ -130,15 +128,9 @@ export const config = {
     },
     { source: '/assets/(.*)', headers: [...securityHeaders, { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
     { source: '/(.*)', headers: [...securityHeaders, { key: 'Cache-Control', value: 'private, no-store' }] },
-    // Listed after the deny-all rule so this document can replace it. Pharmacy
-    // onboarding is the one public page other sites are allowed to embed.
-    // frame-ancestors takes precedence over X-Frame-Options in current browsers.
+    // Plain path only. A lookahead here failed both projects, because they share this file.
     {
       source: PHARMACY_ONBOARDING_PATH,
-      headers: [...embeddableDocumentHeaders, { key: 'Cache-Control', value: 'private, no-store' }],
-    },
-    {
-      source: `${PHARMACY_ONBOARDING_PATH}/`,
       headers: [...embeddableDocumentHeaders, { key: 'Cache-Control', value: 'private, no-store' }],
     },
   ],
