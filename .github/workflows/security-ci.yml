@@ -54,7 +54,9 @@ jobs:
           ! grep -R -q "Secure handover" dist-admin dist-public
           ! grep -R -q "Staff sign in" dist-public
           ! grep -R -q "devPortal" dist-public dist-portal
-          ! grep -R -q "mode=eligibility" dist-public dist-portal
+          # The public site must keep recognising printed ?mode=eligibility QR links.
+          # The portal bundle must not.
+          ! grep -R -q "mode=eligibility" dist-portal
           ! grep -R -q "FIREBASE_SERVICE_ACCOUNT_JSON" dist-public dist-portal
           ! grep -R -q "hpp-sandbox.worldpay.com" services/api-sql
           ! grep -R -q "Guaranteed Try" services/api-sql
@@ -108,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ${{ matrix.command }}
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: ${{ matrix.image }}
           format: sarif
@@ -126,4 +128,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@v2
+      # The hosted Gitleaks action requires a paid org license. The open-source
+      # scanner does not, and .gitleaks.toml still applies the default rules.
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+      - name: Scan for secrets
+        run: gitleaks detect --source . --redact --config .gitleaks.toml --verbose

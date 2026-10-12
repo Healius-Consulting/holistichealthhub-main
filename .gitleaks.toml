@@ -1,0 +1,22 @@
+[extend]
+useDefault = true
+
+# generic-api-key flags public pharmacy referral tokens and other low-entropy
+# identifiers. The allowlist applies only to that rule, and only on these paths.
+[[allowlists]]
+description = "Public referral tokens and low-entropy identifiers"
+rules = ["generic-api-key"]
+paths = [
+  '''tests/''',
+  '''config/protected-legacy-referral-tokens\.json''',
+  '''src/context/AppContext\.tsx''',
+  '''src/training/workspace\.ts''',
+  '''\.agents/skills/production-hosting/SKILL\.md''',
+  '''services/api/src/curaleaf\.ts''',
+  '''services/api-sql/src/application/notifications/email-catalog(\.test)?\.ts''',
+  '''services/api-sql/src/transport/portal/order-handout\.test\.ts''',
+  '''services/api-sql/src/application/integrations/worldpay\.service\.ts''',
+  '''services/api-sql/src/transport/public/intake-v2\.router\.test\.ts''',
+  '''scripts/register-legacy-referral-aliases\.mjs''',
+  '''specs/separate-form-deployment\.md''',
+]

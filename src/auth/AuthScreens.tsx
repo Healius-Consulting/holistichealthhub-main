@@ -6,10 +6,11 @@ import { firebaseConfiguration, mfaRequired } from './firebase';
 import { requireFirebaseAuth } from './firebase';
 import { totpQrDataUrl } from './totpQr';
 import { pharmsmartLoginQuery } from './pharmsmart-login';
+import { PharmsmartWelcome } from './PharmsmartOnboardingGuide';
 import { useAuth } from './useAuth';
 import HhhBrandMark from '../components/HhhBrandMark';
 
-export { PharmsmartWelcome } from './PharmsmartOnboardingGuide';
+export { PharmsmartWelcome };
 
 function AuthShell({ children, guide = false }: { children: React.ReactNode; guide?: boolean }) {
   return (
