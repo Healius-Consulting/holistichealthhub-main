@@ -107,6 +107,8 @@ export const config = {
     { source: '/robots.txt', destination: '/robots.txt' },
     { source: '/v1/(.*)', destination: `${apiOrigin}/v1/$1` },
     { source: '/v2/(.*)', destination: `${apiOrigin}/v2/$1` },
+    { source: PHARMACY_ONBOARDING_PATH, destination: '/index.html' },
+    { source: `${PHARMACY_ONBOARDING_PATH}/`, destination: '/index.html' },
     { source: '/((?!sitemap\\.xml|sitemaps\\.xml|robots\\.txt).*)', destination: '/index.html' },
   ],
   headers: [
@@ -127,8 +129,10 @@ export const config = {
       ],
     },
     { source: '/assets/(.*)', headers: [...securityHeaders, { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
-    // Every other document stays unframeable. Pharmacy onboarding is the public
-    // page other sites embed, so it is excluded from the deny rule below.
+    { source: '/(.*)', headers: [...securityHeaders, { key: 'Cache-Control', value: 'private, no-store' }] },
+    // Listed after the deny-all rule so this document can replace it. Pharmacy
+    // onboarding is the one public page other sites are allowed to embed.
+    // frame-ancestors takes precedence over X-Frame-Options in current browsers.
     {
       source: PHARMACY_ONBOARDING_PATH,
       headers: [...embeddableDocumentHeaders, { key: 'Cache-Control', value: 'private, no-store' }],
@@ -137,7 +141,6 @@ export const config = {
       source: `${PHARMACY_ONBOARDING_PATH}/`,
       headers: [...embeddableDocumentHeaders, { key: 'Cache-Control', value: 'private, no-store' }],
     },
-    { source: '/((?!pharmacy-onboarding/?$).*)', headers: [...securityHeaders, { key: 'Cache-Control', value: 'private, no-store' }] },
   ],
 };
 
