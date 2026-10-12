@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CONTENT_SECURITY_POLICY } from '../platform/vercel/security-headers.ts';
+import { CONTENT_SECURITY_POLICY, EMBEDDABLE_CONTENT_SECURITY_POLICY, embeddableDocumentHeaders } from '../platform/vercel/security-headers.ts';
 import {
   REQUIRED_FIREBASE_CLIENT_VARIABLES,
   assertSurfaceBuildEnvironment,
@@ -66,4 +66,15 @@ test('the protected CSP permits the documented reCAPTCHA Enterprise browser endp
   assert.ok(directives.find(value => value.startsWith('frame-src '))?.includes("'self'"));
   assert.equal(directives.find(value => value.startsWith('script-src '))?.includes('calendly'), false);
   assert.ok(directives.find(value => value.startsWith('worker-src '))?.includes('blob:'));
+  assert.equal(directives.find(value => value.startsWith('frame-ancestors '))?.includes("'none'"), true);
+});
+
+test('pharmacy onboarding may be framed and the rest of the site may not', () => {
+  assert.match(EMBEDDABLE_CONTENT_SECURITY_POLICY, /frame-ancestors \*/);
+  assert.equal(EMBEDDABLE_CONTENT_SECURITY_POLICY.includes("frame-ancestors 'none'"), false);
+  assert.equal(embeddableDocumentHeaders.some(header => header.key === 'X-Frame-Options'), false);
+  assert.equal(
+    embeddableDocumentHeaders.find(header => header.key === 'Cross-Origin-Resource-Policy')?.value,
+    'cross-origin',
+  );
 });

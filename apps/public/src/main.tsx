@@ -7,6 +7,7 @@ import PaymentReturn from '../../../src/pages/PaymentReturn';
 import { readPublicAppCheckToken } from '../../../src/auth/appCheck';
 import { setApiSecurityTokenProvider } from '../../../src/shared/api';
 import PublicSite from './PublicSite';
+import PharmacyOnboardingPage from './PharmacyOnboardingPage';
 import { usePublicLocation } from './publicLocation';
 import { canonicalEligibilityRedirect, resolvePublicView } from './publicRoute';
 import { applyPublicSurface } from './publicSurface';
@@ -23,6 +24,7 @@ export function PublicApp() {
   if (view === 'payment-complete') return <PaymentReturn status="complete" />;
   if (view === 'payment-cancelled') return <PaymentReturn status="cancelled" />;
   if (view === 'receipt') return <PaymentReceipt />;
+  if (view === 'pharmacy-onboarding') return <PharmacyOnboardingPage />;
   if (view === 'eligibility') return <EligibilityApp />;
   return <PublicSite />;
 }

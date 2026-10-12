@@ -1,7 +1,7 @@
 import { normaliseEligibilitySearch, parseEligibilityReferralRoute } from '../../eligibility/src/referralRoute.ts';
 import { parsePublicReceiptHash } from '../../../src/utils/publicReceiptHash.ts';
 
-export type PublicView = 'site' | 'eligibility' | 'payment-complete' | 'payment-cancelled' | 'receipt';
+export type PublicView = 'site' | 'eligibility' | 'payment-complete' | 'payment-cancelled' | 'receipt' | 'pharmacy-onboarding';
 
 export const CANONICAL_ELIGIBILITY_ORIGIN = 'https://holistichealthhub.live';
 export const LEGACY_PUBLIC_HOST = 'holistichealthhub.cc';
@@ -33,6 +33,7 @@ export function resolvePublicView(pathname: string, search: string): PublicView 
   // printed codes do not need to be recalled or replaced.
   if (path === '/' && query.get('mode') === 'eligibility') return 'eligibility';
   if (path === '/eligibility') return 'eligibility';
+  if (path === '/pharmacy-onboarding') return 'pharmacy-onboarding';
   if (
     path === '/payment/success' ||
     path === '/payments/complete' ||

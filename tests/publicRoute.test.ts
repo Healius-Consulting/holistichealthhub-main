@@ -34,6 +34,12 @@ test('unknown root modes remain on the public site', () => {
   assert.equal(resolvePublicView('/about', '?mode=eligibility'), 'site');
 });
 
+test('pharmacy onboarding is a public page, not the marketing site', () => {
+  assert.equal(resolvePublicView('/pharmacy-onboarding', ''), 'pharmacy-onboarding');
+  assert.equal(resolvePublicView('/pharmacy-onboarding/', ''), 'pharmacy-onboarding');
+  assert.equal(resolvePublicView('/pharmacy-onboarding/extra', ''), 'site');
+});
+
 test('retired .cc eligibility URLs canonicalise onto the brand domain without changing pharmacy tokens', () => {
   assert.equal(
     canonicalEligibilityRedirect(
