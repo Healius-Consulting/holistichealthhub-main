@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: ${{ matrix.command }}
-      - uses: aquasecurity/trivy-action@v0.33.1
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}
           format: sarif

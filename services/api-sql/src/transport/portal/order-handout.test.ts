@@ -137,10 +137,11 @@ async function runPortalHandout(input: {
 }
 
 describe('portal order handout', () => {
-  it('rejects inactive patients before order create', () => {
+  it('lets an inactive patient start an order and rejects a missing patient', () => {
+    assert.doesNotThrow(() => assertPatientEligibleForOrder(patient({ status: 'INACTIVE' })));
     assert.throws(
-      () => assertPatientEligibleForOrder(patient({ status: 'INACTIVE' })),
-      (error: unknown) => error instanceof HttpError && error.code === 'PATIENT_NOT_ELIGIBLE',
+      () => assertPatientEligibleForOrder(null),
+      (error: unknown) => error instanceof HttpError && error.code === 'NOT_FOUND',
     );
   });
 
