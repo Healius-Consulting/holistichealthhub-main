@@ -39,6 +39,7 @@ COPY packages/ui/package.json packages/ui/package.json
 RUN npm ci --omit=dev --workspace @hhh/web-gateway && npm cache clean --force \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
   && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+RUN apk upgrade --no-cache zlib
 COPY --from=build /workspace/services/web/dist ./gateway
 COPY --from=build /workspace/dist-${SURFACE} ./static
 COPY --from=build /workspace/.vercel-private ./private
