@@ -163,8 +163,8 @@ export async function validateWorldpayCredentials(
     throw new HttpError(
       422,
       liveCheck
-        ? 'Worldpay did not authorise these credentials on the live service. Enter the live Payment Queries username and password from Worldpay Developer tools, plus the merchant entity. Try (sandbox) keys are not accepted.'
-        : 'Worldpay did not authorise this username and password.',
+        ? 'Worldpay did not authorise this API Username and API Password on the live service. Enter the live API Username and API Password from Worldpay Developer tools, plus the merchant entity. Try (sandbox) keys are not accepted.'
+        : 'Worldpay did not authorise this API Username and API Password.',
       'WORLDPAY_CREDENTIALS_REJECTED',
     );
   }

@@ -260,7 +260,7 @@ export function createPortalIntegrationRouter(): Router {
       const existing = await integrationRepo.findConnection(organisationId, 'WORLDPAY');
       const validation = await validateWorldpayCredentials(credential);
       if (validation.environment !== 'live') {
-        throw new HttpError(422, 'Only live Worldpay credentials can be saved. Try (sandbox) keys are not accepted.', 'WORLDPAY_CREDENTIALS_REJECTED');
+        throw new HttpError(422, 'Only live Worldpay API Username and API Password can be saved. Try (sandbox) keys are not accepted.', 'WORLDPAY_CREDENTIALS_REJECTED');
       }
       const secretResourceName = await writeWorldpayCredential(organisationId, credential, existing?.secretResourceName);
       const restored = await integrationRepo.restoreConnection({

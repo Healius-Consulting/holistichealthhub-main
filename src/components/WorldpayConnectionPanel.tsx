@@ -13,7 +13,7 @@ import './WorldpayConnectionPanel.css';
 
 const EMPTY_FORM = { username: '', password: '', entityId: '' };
 
-const WORLDPAY_REJECTED = 'Worldpay did not authorise these credentials on the live service. In Worldpay Developer tools, copy the live Payment Queries username and password, and the merchant entity (PO…). Try (sandbox) keys are not accepted.';
+const WORLDPAY_REJECTED = 'Worldpay did not authorise this API Username and API Password on the live service. Copy the live API Username and API Password from Worldpay Developer tools, and the merchant entity (PO…). Try (sandbox) keys are not accepted.';
 
 function worldpayErrorMessage(error: unknown, fallback: string) {
   if (error instanceof ApiRequestError && error.code === 'WORLDPAY_CREDENTIALS_REJECTED') return WORLDPAY_REJECTED;
@@ -134,7 +134,7 @@ export default function WorldpayConnectionPanel({
       <header>
         <span className="worldpay-connect-panel__icon"><KeyRound size={17} /></span>
         <span>
-          <strong>{status?.connected ? 'Worldpay merchant connected' : status?.configured ? 'Worldpay verification required' : status === null ? 'Checking Worldpay connection…' : 'Connect this pharmacy’s merchant account'}</strong>
+          <strong>{status?.connected ? 'Worldpay merchant connected' : status?.configured ? 'Worldpay verification required' : status === null ? 'Checking Worldpay connection…' : 'Connect Worldpay Live Keys'}</strong>
           <small>{status === null ? 'Reading this pharmacy’s saved connection status.' : 'Live credentials only. Try (sandbox) keys are refused, and saved details are never shown again.'}</small>
         </span>
         {status?.connected ? <span className="pill pill-green"><CheckCircle2 size={11} /> Connected</span> : null}
@@ -144,8 +144,8 @@ export default function WorldpayConnectionPanel({
 
       {showCredentialForm && (
         <div className="worldpay-connect-panel__fields">
-          <label><span>Worldpay username</span><input className="input" autoComplete="off" value={form.username} onChange={event => setForm(current => ({ ...current, username: event.target.value }))} /></label>
-          <label><span>Worldpay password</span><input className="input" type={showSecrets ? 'text' : 'password'} autoComplete="new-password" value={form.password} onChange={event => setForm(current => ({ ...current, password: event.target.value }))} /></label>
+          <label><span>API Username</span><input className="input" autoComplete="off" value={form.username} onChange={event => setForm(current => ({ ...current, username: event.target.value }))} /></label>
+          <label><span>API Password</span><input className="input" type={showSecrets ? 'text' : 'password'} autoComplete="new-password" value={form.password} onChange={event => setForm(current => ({ ...current, password: event.target.value }))} /></label>
           <label><span>Merchant entity ID</span><input className="input" autoComplete="off" placeholder="PO…" value={form.entityId} onChange={event => setForm(current => ({ ...current, entityId: event.target.value }))} /></label>
           <button type="button" className="btn btn-sm worldpay-connect-panel__reveal" onClick={() => setShowSecrets(value => !value)}>{showSecrets ? <EyeOff size={13} /> : <Eye size={13} />}{showSecrets ? 'Hide secrets' : 'Show while entering'}</button>
           {passwordTooShort ? <small className="worldpay-connect-panel__error">The password needs at least 8 characters. Check the whole password was pasted.</small> : null}
