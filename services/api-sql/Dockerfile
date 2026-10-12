@@ -18,7 +18,9 @@ COPY services/api-sql/package.json services/api-sql/package.json
 COPY services/web/package.json services/web/package.json
 COPY packages/domain/package.json packages/domain/package.json
 COPY packages/ui/package.json packages/ui/package.json
-RUN npm ci --omit=dev --workspace @hhh/api-sql && npm cache clean --force
+RUN npm ci --omit=dev --workspace @hhh/api-sql && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 COPY --from=build /workspace/services/api-sql/dist ./services/api-sql/dist
 USER node
 CMD ["node", "services/api-sql/dist/index.js"]
