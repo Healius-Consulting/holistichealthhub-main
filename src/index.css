@@ -17516,7 +17516,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   justify-content: flex-start;
   width: min(100%, 1080px);
   margin: 0 auto;
-  padding: clamp(36px, 6vw, 72px) clamp(20px, 4vw, 40px) 64px;
+  padding: clamp(36px, 6vw, 72px) clamp(20px, 4vw, 40px) clamp(72px, 10vw, 112px);
 }
 
 .pharmsmart-guide{
@@ -17758,6 +17758,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   z-index: 1;
   margin-top: 8px;
   padding-top: 28px;
+  padding-bottom: clamp(56px, 8vw, 88px);
   background: var(--cream);
   border-top: 1px solid color-mix(in srgb, var(--green) 16%, transparent);
 }
