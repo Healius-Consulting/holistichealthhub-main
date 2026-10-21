@@ -37,6 +37,7 @@ export const apiLondon = onRequest({
   region: 'europe-west2',
   timeoutSeconds: 60,
   memory: '256MiB',
+  minInstances: 1,
   maxInstances: 10,
 }, app);
 
