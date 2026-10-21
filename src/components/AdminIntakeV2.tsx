@@ -100,6 +100,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
   const [agreementChannel, setAgreementChannel] = useState<PatientAgreementChannel | ''>('');
   const [onboardingNote, setOnboardingNote] = useState('');
   const [declineReason, setDeclineReason] = useState<DeclineReason | ''>('');
+  const [existingClinicAccount, setExistingClinicAccount] = useState(false);
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('not_started');
   const [queueQuery, setQueueQuery] = useState('');
   const [queueFilter, setQueueFilter] = useState<QueueFilter>('all');
@@ -160,6 +161,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
     setCandidateQuery('');
     setAllocationNote('');
     setOnboardingNote('');
+    setExistingClinicAccount(false);
     setMessage('');
     try {
       if (isLocalPortalPreview) {
@@ -275,13 +277,16 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
           decision,
           notes: onboardingNote.trim() || null,
           ...(decision === 'declined' ? { reason: declineReason as DeclineReason } : {}),
+          ...(decision === 'approved' && existingClinicAccount ? { existingClinicAccount: true } : {}),
         });
         setSelected(null);
         setDetail(null);
         await load();
       }
       setMessage(decision === 'approved'
-        ? 'Referral completed. The patient record is now visible only to the currently assigned pharmacy.'
+        ? existingClinicAccount
+          ? 'Referral completed for an existing Curaleaf Clinic account. The pharmacy still sees them as referred, and the existing-account email has been sent.'
+          : 'Referral completed. The patient record is now visible only to the currently assigned pharmacy.'
         : 'Application declined and removed from the active intake queue. The patient has been emailed.');
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : 'The onboarding decision could not be recorded.');
@@ -596,6 +601,10 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                         <small>{!destinationSaved ? 'Save the current pharmacy destination first.' : !reviewComplete ? 'Mark the HHH review as completed first.' : `The patient will be marked referred for ${destinationName}.`}</small>
                       </div>
                     </div>
+                    <label className="admin-v2-intake__existing-clinic">
+                      <input type="checkbox" checked={existingClinicAccount} onChange={event => setExistingClinicAccount(event.target.checked)} />
+                      <span><strong>Existing Curaleaf patient</strong><small>The clinic already has an account under this email. Admin only: the pharmacy still sees referred, and this patient receives the existing-account email. The £50 initial fee is not charged.</small></span>
+                    </label>
                     <label>Onboarding decision note<textarea className="input" rows={3} value={onboardingNote} onChange={event => setOnboardingNote(event.target.value)} /></label>
                     <label>Reason for declining<select className="input" value={declineReason} onChange={event => setDeclineReason(event.target.value as DeclineReason | '')}><option value="">Choose a reason…</option>{DECLINE_REASONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
                     <p className="admin-v2-intake__decision-hint">The reason and the note above stay internal. The reason chooses which email the patient is sent; neither is quoted to them.</p>

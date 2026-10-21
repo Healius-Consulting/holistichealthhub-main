@@ -9,6 +9,8 @@ export interface PatientSourceSubmissionRecord {
   psychiatricExclusion: boolean;
   heardAbout: string | null;
   marketingConsent: boolean;
+  /** Admin-only. Existing Curaleaf Clinic account: no £50 initial fee. */
+  existingClinicAccount?: boolean;
   conditionCodes?: string[] | null;
   primaryConditionCode?: string | null;
 }

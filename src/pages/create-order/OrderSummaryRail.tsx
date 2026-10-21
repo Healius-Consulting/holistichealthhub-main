@@ -56,16 +56,13 @@ const STEP_ICONS = {
   4: Banknote,
 } as const;
 
-const PRICE_NUDGE_POUNDS = [-10, -5, -1, 1, 5, 10] as const;
-
-function nudgedPatientPrice(retail: number, deltaPounds: number, rrp: number, wholesale: number | null) {
+function nudgedPatientPrice(retail: number, deltaPounds: number, wholesale: number | null) {
   const currentPence = Math.round(retail * 100);
-  const rrpPence = Math.round(rrp * 100);
   const wholesalePence = wholesale == null ? 0 : Math.round(wholesale * 100);
-  const nextPence = nudgePatientPricePence(currentPence, deltaPounds, rrpPence, wholesalePence);
+  const nextPence = nudgePatientPricePence(currentPence, deltaPounds, wholesalePence);
   return {
     pounds: nextPence / 100,
-    reason: nextPence === currentPence ? linePriceError(currentPence + deltaPounds * 100, rrpPence, wholesalePence) : null,
+    reason: nextPence === currentPence ? linePriceError(currentPence + deltaPounds * 100, wholesalePence) : null,
   };
 }
 
@@ -190,31 +187,25 @@ export default function OrderSummaryRail({
                         <strong>{quotedPatientTotals ? money(lineRevenue(item)) : pendingQuote}</strong>
                       ) : (
                         <div className="rx-line-price-nudges" role="group" aria-label={`Adjust patient price for ${item.name}`}>
-                          {PRICE_NUDGE_POUNDS.filter(delta => delta < 0).map(delta => {
-                            const nudge = nudgedPatientPrice(item.retail, delta, rrpFor(item.productId) ?? item.retail, item.cost);
-                            const label = `Decrease patient price for ${item.name} by £${Math.abs(delta)}`;
+                          {(() => {
+                            const nudge = nudgedPatientPrice(item.retail, -1, item.cost);
+                            const label = `Decrease patient price for ${item.name} by £1`;
                             return (
-                              <button key={delta} type="button" className="rx-line-price-nudge" aria-label={label} title={nudge.reason ?? label} disabled={nudge.reason != null} onClick={() => onSetLinePrice(item.rxId, item.productId, nudge.pounds)}>−{Math.abs(delta)}</button>
+                              <button type="button" className="rx-line-price-nudge" aria-label={label} title={nudge.reason ?? label} disabled={nudge.reason != null} onClick={() => onSetLinePrice(item.rxId, item.productId, nudge.pounds)}><Minus size={14} aria-hidden="true" /></button>
                             );
-                          })}
-                          <label className="rx-line-price">
+                          })()}
+                          <p className="rx-line-price">
                             <span className="sr-only">Patient price for {item.name}</span>
                             <span>£</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.retail}
-                              onChange={event => onSetLinePrice(item.rxId, item.productId, Number(event.target.value))}
-                            />
-                          </label>
-                          {PRICE_NUDGE_POUNDS.filter(delta => delta > 0).map(delta => {
-                            const nudge = nudgedPatientPrice(item.retail, delta, rrpFor(item.productId) ?? item.retail, item.cost);
-                            const label = `Increase patient price for ${item.name} by £${delta}`;
+                            <strong>{item.retail.toFixed(2)}</strong>
+                          </p>
+                          {(() => {
+                            const nudge = nudgedPatientPrice(item.retail, 1, item.cost);
+                            const label = `Increase patient price for ${item.name} by £1`;
                             return (
-                              <button key={delta} type="button" className="rx-line-price-nudge" aria-label={label} title={nudge.reason ?? label} disabled={nudge.reason != null} onClick={() => onSetLinePrice(item.rxId, item.productId, nudge.pounds)}>+{delta}</button>
+                              <button type="button" className="rx-line-price-nudge" aria-label={label} title={nudge.reason ?? label} disabled={nudge.reason != null} onClick={() => onSetLinePrice(item.rxId, item.productId, nudge.pounds)}><Plus size={14} aria-hidden="true" /></button>
                             );
-                          })}
+                          })()}
                         </div>
                       )}
                     </div>
@@ -225,7 +216,7 @@ export default function OrderSummaryRail({
                     })()}
                     {(() => {
                       if (item.cost == null) return null;
-                      const message = linePriceError(Math.round(item.retail * 100), Math.round((rrpFor(item.productId) ?? item.retail) * 100), Math.round(item.cost * 100));
+                      const message = linePriceError(Math.round(item.retail * 100), Math.round(item.cost * 100));
                       return message ? <p className="rx-order-summary-rail__issue" role="alert">{message}</p> : null;
                     })()}
                     {issue ? (

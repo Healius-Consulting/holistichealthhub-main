@@ -1,38 +1,39 @@
 /** Client copy of the commercial rules. Keep in step with services/api-sql/src/domain/commercial/rules.ts. */
 
-export const MAX_PRICE_UPLIFT_PCT = 0.1;
+/** Gross margin ceiling: (patient price − wholesale) / patient price. */
+export const MAX_GROSS_MARGIN = 0.35;
 export const INACTIVE_AFTER_MS = 56 * 24 * 60 * 60 * 1000;
 
-export function maxPatientPricePence(rrpPence: number) {
-  return Math.round(Math.max(0, Math.round(rrpPence)) * (1 + MAX_PRICE_UPLIFT_PCT));
+/** Highest whole-pence price whose gross margin is still within 35%. */
+export function maxPatientPricePence(wholesalePence: number) {
+  const wholesale = Math.max(0, Math.round(wholesalePence));
+  if (wholesale === 0) return 0;
+  return Math.floor(wholesale / (1 - MAX_GROSS_MARGIN));
 }
 
-export function linePriceError(pricePence: number, rrpPence: number, wholesalePence: number) {
+export function linePriceError(pricePence: number, wholesalePence: number) {
   const price = Math.round(pricePence);
   const floor = Math.max(0, Math.round(wholesalePence));
-  const cap = maxPatientPricePence(rrpPence);
-  if (price > cap) return 'Price cannot exceed the catalogue price by more than 10%.';
+  const cap = maxPatientPricePence(floor);
+  if (price > cap) return 'Price cannot take the margin above 35%.';
   if (price < floor) return 'Price cannot be below wholesale cost.';
   return null;
 }
 
-/** Pound steps offered beside a patient price. The bounds stay linePriceError's. */
-export const PATIENT_PRICE_NUDGE_POUNDS = [1, 5, 10] as const;
-
 /**
- * Move a patient price by whole pounds, then stop on the same floor and cap
- * linePriceError already enforces. A step never invents a wider band.
+ * Move a patient price by whole pounds, then stop on the wholesale floor and
+ * the 35% margin cap. A step never invents a wider band.
  */
-export function nudgePatientPricePence(currentPence: number, deltaPounds: number, rrpPence: number, wholesalePence: number) {
-  const next = Math.round(currentPence) + Math.round(deltaPounds) * 100;
+export function nudgePatientPricePence(currentPence: number, deltaPounds: number, wholesalePence: number) {
   const floor = Math.max(0, Math.round(wholesalePence));
-  const cap = maxPatientPricePence(rrpPence);
+  const next = Math.round(currentPence) + Math.round(deltaPounds) * 100;
+  const cap = maxPatientPricePence(floor);
   return Math.min(cap, Math.max(floor, next));
 }
 
 export function prefillPatientPricePence(savedPence: number | null, rrpPence: number, wholesalePence: number) {
-  const cap = maxPatientPricePence(rrpPence);
   const floor = Math.max(0, Math.round(wholesalePence));
+  const cap = maxPatientPricePence(floor);
   const base = savedPence == null ? Math.round(rrpPence) : Math.round(savedPence);
   return Math.min(cap, Math.max(floor, base));
 }

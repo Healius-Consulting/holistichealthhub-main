@@ -45,6 +45,7 @@ const GET_SUBMISSION_BY_ID_GQL = `
       pharmacyReviewStatus
       outcomeStatus
       onboardingDecision
+      existingClinicAccount
       assignmentReason
       privateAllocationNote
       privateOnboardingNote
@@ -121,6 +122,7 @@ const LIST_PLATFORM_SUBMISSIONS_GQL = `
       pharmacyReviewStatus
       outcomeStatus
       onboardingDecision
+      existingClinicAccount
       assignmentReason
       privateAllocationNote
       privateOnboardingNote
@@ -360,6 +362,7 @@ const ACTIVATE_SUBMISSION_GQL = `
     $mobile: String!
     $postcode: String!
     $onboardingNote: String
+    $existingClinicAccount: Boolean!
   ) @transaction {
     updated: eligibilitySubmission_updateMany(
       where: {
@@ -373,6 +376,7 @@ const ACTIVATE_SUBMISSION_GQL = `
         assignmentStatus: CONFIRMED
         pharmacyAccessStatus: ACTIVATED
         onboardingDecision: APPROVED
+        existingClinicAccount: $existingClinicAccount
         outcomeStatus: COMPLETED
         assignmentVersion: $newAssignmentVersion
         privateOnboardingNote: $onboardingNote

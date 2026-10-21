@@ -238,7 +238,7 @@ export const DECLINE_REASONS = [
 
 export type DeclineReason = (typeof DECLINE_REASONS)[number]['value'];
 
-export function decideV2ProgrammeOnboarding(caseId: string, input: { expectedVersion: number; decision: 'approved' | 'declined'; notes: string | null; reason?: DeclineReason }) {
+export function decideV2ProgrammeOnboarding(caseId: string, input: { expectedVersion: number; decision: 'approved' | 'declined'; notes: string | null; reason?: DeclineReason; existingClinicAccount?: boolean }) {
   return apiRequest<Record<string, unknown>>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/programme-onboarding`, { method: 'POST', body: JSON.stringify(input) });
 }
 

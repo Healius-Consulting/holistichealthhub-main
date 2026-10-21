@@ -30,6 +30,7 @@ const PATIENT_FIELDS = `
     psychiatricExclusion
     heardAbout
     marketingConsent
+    existingClinicAccount
     conditionCodes
     primaryConditionCode
     eligibilityConditions_on_submission {
@@ -106,6 +107,7 @@ function mapPatient(raw: RawPatient): PatientRecord {
         psychiatricExclusion: sourceSubmission.psychiatricExclusion,
         heardAbout: sourceSubmission.heardAbout,
         marketingConsent: sourceSubmission.marketingConsent,
+        existingClinicAccount: sourceSubmission.existingClinicAccount === true,
         conditionCodes: fromForm.map((record) => record.conditionCode),
         primaryConditionCode: primaryConditionCode(fromForm),
       }

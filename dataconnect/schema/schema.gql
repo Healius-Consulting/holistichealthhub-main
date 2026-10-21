@@ -556,6 +556,12 @@ type EligibilitySubmission @table {
   pharmacyReviewStatus: ReviewStatus! @default(value: NOT_OPENED)
   outcomeStatus: OutcomeStatus! @default(value: OPEN)
   onboardingDecision: OnboardingDecision! @default(value: PENDING)
+  """
+  Admin-only. The clinic already holds an account under the eligibility email, so
+  referral sends PT-01B and the £50 initial fee is not earned. Pharmacies still
+  see the patient as referred until a prescription is processed.
+  """
+  existingClinicAccount: Boolean! @default(value: false)
   assignmentReason: String
   privateAllocationNote: String
   privateOnboardingNote: String

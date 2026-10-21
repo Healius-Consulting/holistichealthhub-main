@@ -1,5 +1,5 @@
 import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
 import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, getUnresolvedReason, marginPercent, marginToneClass, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
@@ -577,34 +577,38 @@ export default function Patients() {
             </button>
           ))}
         </div>
-        <label>
-          Referred:
-          <select aria-label="Referral date" value={referredPeriod} onChange={event => setReferredPeriod(event.target.value as typeof referredPeriod)}>
-            <option value="this-month">This month</option>
-            <option value="last-month">Last month</option>
-            <option value="last-3">Last 3 months</option>
-            <option value="all-time">All time</option>
-            <option value="custom">Custom range</option>
-          </select>
-        </label>
+        <HubSelect
+          label="Referred"
+          value={referredPeriod}
+          options={[
+            { value: 'this-month', label: 'This month' },
+            { value: 'last-month', label: 'Last month' },
+            { value: 'last-3', label: 'Last 3 months' },
+            { value: 'all-time', label: 'All time' },
+            { value: 'custom', label: 'Custom range' },
+          ]}
+          onChange={setReferredPeriod}
+        />
         {referredPeriod === 'custom' ? (
           <>
             <input type="date" aria-label="Referral from" value={customFrom} onChange={event => setCustomFrom(event.target.value)} />
             <input type="date" aria-label="Referral to" value={customTo} onChange={event => setCustomTo(event.target.value)} />
           </>
         ) : null}
-        <label>
-          Sort
-          <select aria-label="Sort patients" value={sortBy} onChange={event => setSortBy(event.target.value as typeof sortBy)}>
-            <option value="name">Name</option>
-            <option value="referral">Referral date</option>
-            <option value="payment">Last payment date</option>
-          </select>
-        </label>
+        <HubSelect
+          label="Sort"
+          value={sortBy}
+          options={[
+            { value: 'name', label: 'Name' },
+            { value: 'referral', label: 'Referral date' },
+            { value: 'payment', label: 'Last payment date' },
+          ]}
+          onChange={setSortBy}
+        />
       </section>
 
       {filtered.length ? (
-        <div className="patient-directory-cards">
+        <div className="patient-hub-rows">
           {filtered.map(({ record, status }) => status ? (
             <PatientDirectoryCard key={record.key} record={record} status={status} onSelect={() => openPatientFromBoard(record.key)} />
           ) : null)}
@@ -663,6 +667,55 @@ const DIRECTORY_STATUS_CLASS = {
   Declined: ' is-declined',
 } as const;
 
+function HubSelect<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+  const current = options.find(option => option.value === value)?.label ?? value;
+  return (
+    <div className={`order-filter-menu patient-hub-select${open ? ' is-open' : ''}`} ref={rootRef}>
+      <button type="button" className="order-filter-trigger" aria-haspopup="listbox" aria-expanded={open} aria-label={label} onClick={() => setOpen(next => !next)}>
+        <span>{label}</span>
+        <strong>{current}</strong>
+        <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="patient-hub-select__menu" role="listbox" aria-label={label}>
+          {options.map(option => (
+            <button type="button" role="option" key={option.value} aria-selected={option.value === value} className={option.value === value ? 'active' : ''} onClick={() => { onChange(option.value); setOpen(false); }}>
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function PatientDirectoryCard({ record, status, onSelect }: {
   record: CrmRecord;
   status: keyof typeof DIRECTORY_STATUS_CLASS;
@@ -676,18 +729,14 @@ function PatientDirectoryCard({ record, status, onSelect }: {
   const reorderOverdue = status === 'Inactive';
 
   return (
-    <button type="button" className="patient-directory-card" onClick={onSelect}>
-      <span className="patient-directory-card__head">
-        <strong>{record.name}</strong>
-        <span className={`order-stage-pill${DIRECTORY_STATUS_CLASS[status]}`}>{status}</span>
-      </span>
-      <dl className="patient-directory-card__facts">
-        <div><dt>Date of birth</dt><dd>{formatPatientDob(record.dob)}</dd></div>
-        <div><dt>Referred</dt><dd>{referredAt ? formatUkDate(referredAt, 'Not recorded') : 'Not recorded'}</dd></div>
-        <div><dt>Last order</dt><dd>{lastOrder ? formatUkDate(lastOrder.date) : 'No orders yet'}</dd></div>
-      </dl>
+    <button type="button" className="patient-hub-row" onClick={onSelect}>
+      <strong>{record.name}</strong>
+      <span><em>Date of birth</em>{formatPatientDob(record.dob)}</span>
+      <span><em>Referred</em>{referredAt ? formatUkDate(referredAt, 'Not recorded') : 'Not recorded'}</span>
+      <span><em>Last order</em>{lastOrder ? formatUkDate(lastOrder.date) : 'No orders yet'}</span>
+      <span className={`order-stage-pill${DIRECTORY_STATUS_CLASS[status]}`}>{status}</span>
       {collectionOverdue || reorderOverdue ? (
-        <span className="patient-directory-card__alerts">
+        <span className="patient-hub-row__alerts">
           {collectionOverdue ? (
             <span className="patient-directory-card__alert">
               <AlertTriangle size={14} aria-hidden="true" />

@@ -82,6 +82,8 @@ const onboardingSchema = z.object({
   decision: z.enum(['approved', 'declined']),
   notes: z.string().trim().max(1500).nullable(),
   reason: declineReasonSchema.optional(),
+  /** Admin-only. Sends PT-01B and does not earn the £50 initial fee. */
+  existingClinicAccount: z.boolean().optional(),
 }).strict().refine(
   input => input.decision !== 'declined' || Boolean(input.reason),
   { path: ['reason'], message: 'Choose a reason for declining this application.' },
@@ -487,6 +489,7 @@ export function createPortalIntakeV2Router(): Router {
         throw new HttpError(409, 'The selected pharmacy cannot receive this referral.', 'DESTINATION_UNAVAILABLE');
       }
       const patientId = randomUUID();
+      const existingClinicAccount = input.existingClinicAccount === true;
       await intakeRepo.activateSubmission({
         id: caseId,
         patientId,
@@ -501,6 +504,7 @@ export function createPortalIntakeV2Router(): Router {
         mobile: record.mobile,
         postcode: record.postcode,
         onboardingNote: input.notes,
+        existingClinicAccount,
       });
       await intakeRepo.copySubmissionConditionsToPatient(patientId, caseId);
       await identityRepo.appendAudit({
@@ -513,7 +517,7 @@ export function createPortalIntakeV2Router(): Router {
         requestId: scope.requestId,
         sessionHashPrefix: scope.sessionHash.slice(0, 12),
         surface: 'admin',
-        details: { patientId, notePresent: Boolean(input.notes), sourceOrganisationId: record.sourceOrganisationId },
+        details: { patientId, notePresent: Boolean(input.notes), sourceOrganisationId: record.sourceOrganisationId, existingClinicAccount },
       });
       const pharmacyContext = pharmacyEmailContext(destination);
       await dispatchEmailEvent('referral.activated', {
@@ -540,7 +544,7 @@ export function createPortalIntakeV2Router(): Router {
             },
             keyParts: ['pharmacy-referred', record.id, record.assignedOrganisationId],
           },
-          patient_referred: record.email
+          patient_referred: !existingClinicAccount && record.email
             ? {
                 to: { email: record.email, displayName: record.firstName || null },
                 payload: {
@@ -548,6 +552,16 @@ export function createPortalIntakeV2Router(): Router {
                   ...pharmacyContext,
                 },
                 keyParts: ['patient-referred', record.id, record.assignedOrganisationId],
+              }
+            : { skip: true },
+          patient_existing_clinic: existingClinicAccount && record.email
+            ? {
+                to: { email: record.email, displayName: record.firstName || null },
+                payload: {
+                  firstName: record.firstName || 'there',
+                  ...pharmacyContext,
+                },
+                keyParts: ['patient-existing-clinic', record.id, record.assignedOrganisationId],
               }
             : { skip: true },
         },

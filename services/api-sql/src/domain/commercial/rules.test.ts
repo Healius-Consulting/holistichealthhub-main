@@ -14,15 +14,16 @@ import {
 } from './rules.js';
 
 describe('line prices', () => {
-  it('accepts RRP plus 10 percent and rejects a penny over, and rejects a price below wholesale', () => {
-    assert.equal(linePriceError(11_000, 10_000, 8_000), null);
-    assert.match(linePriceError(11_001, 10_000, 8_000) ?? '', /10%/);
-    assert.match(linePriceError(7_999, 10_000, 8_000) ?? '', /wholesale/);
+  it('accepts a price inside the 35% margin and rejects a penny over, and rejects a price below wholesale', () => {
+    const cap = Math.floor(8_000 / 0.65);
+    assert.equal(linePriceError(cap, 8_000), null);
+    assert.match(linePriceError(cap + 1, 8_000) ?? '', /35%/);
+    assert.match(linePriceError(7_999, 8_000) ?? '', /wholesale/);
   });
 
-  it('keeps a saved price below a risen RRP and caps it when RRP falls', () => {
-    assert.equal(prefillPatientPricePence({ savedPence: 18_700, rrpPence: 20_000, wholesalePence: 15_000 }), 18_700);
-    assert.equal(prefillPatientPricePence({ savedPence: 18_700, rrpPence: 16_000, wholesalePence: 15_000 }), 17_600);
+  it('keeps a saved price under the margin cap and pulls one above it down', () => {
+    assert.equal(prefillPatientPricePence({ savedPence: 18_700, rrpPence: 16_000, wholesalePence: 15_000 }), 18_700);
+    assert.equal(prefillPatientPricePence({ savedPence: 25_000, rrpPence: 20_000, wholesalePence: 15_000 }), Math.floor(15_000 / 0.65));
   });
 });
 

@@ -5,7 +5,7 @@ import { KEY_CONTACTS, keyContact, telHref } from '../packages/domain/key-contac
 
 const CONFIRMED = [
   ['healius', 'Healius Consulting', 'Partner success', 'spatel@healiusconsulting.com', '07840 407917'],
-  ['clinic', 'Curaleaf Clinic', 'Clinic', 'patientsupport@curaleafclinic.com', '020 7459 4075'],
+  ['clinic', 'Curaleaf Clinic', 'Clinic', 'enquiries@curaleafclinic.com', '020 7459 4075'],
   ['curaleafLabs', 'Curaleaf Labs', 'Supplier', 'orders@curaleaflaboratories.co.uk', '0191 743 1007'],
   ['hhhPlatform', 'Holistic Health Hub', 'Platform support', 'IT@holistichealthhub.live', null],
 ];
@@ -31,7 +31,8 @@ test('key contacts match the 4 Sep 2026 brief, in phone-first order', () => {
     'Orders, fulfilment and collection',
     'Payments and refunds',
   ]);
-  assert.equal(keyContact('clinic').hours, 'Mon–Fri 08:00–17:00');
+  assert.equal(keyContact('clinic').hours, 'Monday to Friday, 8am to 5pm');
+  assert.equal(keyContact('clinic').portalUrl, 'https://app.curaleafclinic.com/sign-in/');
   assert.equal(keyContact('curaleafLabs').hours, 'Mon–Fri 08:00–17:00');
   assert.equal(telHref('020 7459 4075'), 'tel:+442074594075');
   assert.equal(telHref('07840 407917'), 'tel:+447840407917');

@@ -15,6 +15,7 @@ export type KeyContact = {
   emails: readonly KeyContactEmail[];
   phone: string | null;
   hours: string | null;
+  portalUrl?: string | null;
 };
 
 export const KEY_CONTACTS: readonly KeyContact[];

@@ -4,38 +4,40 @@
  * so Overview, Financials and Create order cannot drift apart.
  */
 
-export const MAX_PRICE_UPLIFT_PCT = 0.10;
+/** Gross margin ceiling: (patient price − wholesale) / patient price. */
+export const MAX_GROSS_MARGIN = 0.35;
 export const INACTIVE_AFTER_MS = 56 * 24 * 60 * 60 * 1000;
 
 export type DiscountMode = 'amount' | 'percent';
 
-export function maxPatientPricePence(rrpPence: number, upliftPct = MAX_PRICE_UPLIFT_PCT) {
-  const rrp = Math.max(0, Math.round(rrpPence));
-  return Math.round(rrp * (1 + upliftPct));
+/** Highest whole-pence price whose gross margin is still within 35%. */
+export function maxPatientPricePence(wholesalePence: number) {
+  const wholesale = Math.max(0, Math.round(wholesalePence));
+  if (wholesale === 0) return 0;
+  return Math.floor(wholesale / (1 - MAX_GROSS_MARGIN));
 }
 
-/** Null when the price is inside the cap and the wholesale floor. */
-export function linePriceError(pricePence: number, rrpPence: number, wholesalePence: number, upliftPct = MAX_PRICE_UPLIFT_PCT) {
+/** Null when the price is inside the 35% margin cap and the wholesale floor. */
+export function linePriceError(pricePence: number, wholesalePence: number) {
   const price = Math.round(pricePence);
   const floor = Math.max(0, Math.round(wholesalePence));
-  const cap = maxPatientPricePence(rrpPence, upliftPct);
-  if (price > cap) return 'Price cannot exceed the catalogue price by more than 10%.';
+  const cap = maxPatientPricePence(floor);
+  if (price > cap) return 'Price cannot take the margin above 35%.';
   if (price < floor) return 'Price cannot be below wholesale cost.';
   return null;
 }
 
 /**
- * Last charged price, never above the current cap. A risen RRP does not lift
- * the saved price. A fallen RRP pulls a saved price down to the new cap.
+ * Last charged price, never above the 35% margin cap. A risen RRP does not
+ * lift the saved price. A price above the cap is pulled down to it.
  */
 export function prefillPatientPricePence(input: {
   savedPence: number | null;
   rrpPence: number;
   wholesalePence: number;
-  upliftPct?: number;
 }) {
-  const cap = maxPatientPricePence(input.rrpPence, input.upliftPct);
   const floor = Math.max(0, Math.round(input.wholesalePence));
+  const cap = maxPatientPricePence(floor);
   const base = input.savedPence == null ? Math.round(input.rrpPence) : Math.round(input.savedPence);
   return Math.min(cap, Math.max(floor, base));
 }
@@ -95,7 +97,7 @@ export function applyStaffLinePrices<T extends { packId: string; quantity: numbe
   for (const line of lines) {
     const quote = input.quoteItems.find(item => item.packId === line.packId);
     if (!quote || !line.unitPricePence) continue;
-    const error = linePriceError(line.unitPricePence, quote.patientPence, quote.wholesalePence);
+    const error = linePriceError(line.unitPricePence, quote.wholesalePence);
     if (error) return { error };
   }
   const discount = Math.max(0, Math.round(input.discountPence));

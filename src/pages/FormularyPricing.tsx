@@ -74,19 +74,19 @@ export default function FormularyPricing() {
           <span className="pricing-brief__icon"><ShieldCheck size={18} /></span>
           <span>
             <small>Curaleaf-managed catalogue</small>
-            <strong>Recommended patient prices are supplied by Curaleaf and are read-only.</strong>
+            <strong>RRP is supplied by Curaleaf and is read-only.</strong>
             <em>{WHOLESALE_LABEL} and stock availability come from the shared Curaleaf quote bank when available, and are confirmed for exact pack quantities at checkout.</em>
           </span>
         </div>
         <dl className="pricing-position" aria-label="Curaleaf catalogue position">
           <div><dt>Products</dt><dd>{state.catalogue.length}</dd></div>
           <div><dt>In stock</dt><dd>{inStockCount}</dd></div>
-          <div><dt>Recommended patient prices</dt><dd>{pricedCount}</dd></div>
+          <div><dt>RRP</dt><dd>{pricedCount}</dd></div>
         </dl>
       </section>
 
       {state.catalogueLoading ? (
-        <ProviderStatusNotice state="loading" title="Refreshing Curaleaf catalogue" detail="The latest products and recommended patient prices are being retrieved." />
+        <ProviderStatusNotice state="loading" title="Refreshing Curaleaf catalogue" detail="The latest products and RRP are being retrieved." />
       ) : state.catalogueError ? (
         <ProviderStatusNotice
           title="Curaleaf information is temporarily delayed"
@@ -138,12 +138,13 @@ export default function FormularyPricing() {
           ))}
         </div>
 
-        <div className="pricing-table pricing-table--readonly" role="table" aria-label="Curaleaf products and recommended patient prices">
+        <div className="pricing-table pricing-table--readonly" role="table" aria-label="Curaleaf products, RRP and wholesale">
           <div className="pricing-table__head" role="row">
             <span role="columnheader">Product</span>
             <span role="columnheader">Pack</span>
             <span role="columnheader">Stock Status</span>
-            <span role="columnheader">Recommended patient price</span>
+            <span role="columnheader">SKU</span>
+            <span role="columnheader">RRP</span>
             <span role="columnheader">{WHOLESALE_LABEL}</span>
           </div>
           {products.length === 0 ? (
@@ -166,6 +167,7 @@ export default function FormularyPricing() {
               <span className={`pricing-stock ${catalogueStockToneClass(stock)}`} role="cell">
                 <i aria-hidden="true" />{catalogueStockLabel(stock)}
               </span>
+              <span className="pricing-sku" role="cell">{product.sku?.trim() || '—'}</span>
               <span className="pricing-patient-price" role="cell">
                 <CircleDollarSign size={14} aria-hidden="true" />
                 <strong>{product.retail > 0 ? money(product.retail) : 'Not supplied'}</strong>

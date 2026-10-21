@@ -138,6 +138,50 @@ describe('patient finance', () => {
     assert.equal(fees[0]?.kind, 'NEW_REFERRAL');
   });
 
+  it('does not charge the initial fee when the clinic account already existed', async () => {
+    const fees: Array<{ kind: string }> = [];
+    const patientRepo: PatientRepositoryPort = {
+      listTenantPatients: async () => [],
+      listPlatformPatients: async () => [],
+      listActivePatients: async () => [],
+      findPatientById: async () => patient({
+        status: 'REFERRED',
+        sourceSubmission: {
+          sourceType: 'PHARMACY_QR',
+          triedTwoTreatments: true,
+          psychiatricExclusion: false,
+          heardAbout: null,
+          marketingConsent: false,
+          existingClinicAccount: true,
+        },
+      }),
+      updatePatientStatus: async () => undefined,
+    };
+    const patientFinanceRepo: PatientFinanceRepositoryPort = {
+      findDispenseEvent: async () => null,
+      listRecentDispenseEvents: async () => [],
+      insertDispenseEvent: async () => undefined,
+      hasNewReferralFee: async () => false,
+      latestPaidAt: async () => null,
+      insertReferralFeeEvent: async data => {
+        fees.push({ kind: data.kind });
+        return true;
+      },
+    };
+    const result = await recordCollectedDispense(
+      { patientRepo, patientFinanceRepo },
+      {
+        organisationId: 'org-1',
+        patientId: 'patient-1',
+        orderId: 'order-1',
+        actorUid: 'staff-1',
+        dispenseKey: 'shipment-1',
+      },
+    );
+    assert.equal(result.feeCreated, false);
+    assert.deepEqual(fees, []);
+  });
+
   it('computes anniversary dates with month-end clamping', () => {
     assert.equal(anniversaryDate('2024-02-29T10:00:00.000Z', 2025), '2025-02-28');
     assert.equal(anniversaryDate('2023-04-12', 2026), '2026-04-12');

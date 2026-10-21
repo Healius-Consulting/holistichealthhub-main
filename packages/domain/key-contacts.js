@@ -24,12 +24,13 @@ export const KEY_CONTACTS = Object.freeze([
     org: 'Curaleaf Clinic',
     role: 'Clinic',
     pill: 'neutral',
-    description: 'Clinical queries, prescriptions and re-prescribing. Mon–Fri 08:00–17:00.',
+    description: 'Clinical queries, prescriptions and re-prescribing. Monday to Friday, 8am to 5pm.',
     emails: Object.freeze([
-      Object.freeze({ label: null, address: 'patientsupport@curaleafclinic.com' }),
+      Object.freeze({ label: null, address: 'enquiries@curaleafclinic.com' }),
     ]),
     phone: '020 7459 4075',
-    hours: 'Mon–Fri 08:00–17:00',
+    hours: 'Monday to Friday, 8am to 5pm',
+    portalUrl: 'https://app.curaleafclinic.com/sign-in/',
   },
   {
     key: 'curaleafLabs',

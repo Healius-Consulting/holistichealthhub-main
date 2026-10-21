@@ -85,7 +85,7 @@ export const WORKSPACE_TOUR_STEPS: WorkspaceTourStep[] = [
     screen: 'formulary',
     targets: ['catalogue'],
     title: 'Curaleaf catalogue',
-    body: 'Recommended patient prices and stock come from Curaleaf. Staff do not edit the list here. Confirm exact pack prices when you quote an order.',
+    body: 'RRP and stock come from Curaleaf. Staff do not edit the list here. Confirm exact pack prices when you quote an order.',
   },
   {
     id: 'finance',

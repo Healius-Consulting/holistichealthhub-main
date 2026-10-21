@@ -156,7 +156,8 @@ export async function recordCollectedDispense(
   }
 
   let feeCreated = false;
-  const hasReferralFee = await deps.patientFinanceRepo.hasNewReferralFee(input.patientId);
+  const existingClinicAccount = patient.sourceSubmission?.existingClinicAccount === true;
+  const hasReferralFee = existingClinicAccount || await deps.patientFinanceRepo.hasNewReferralFee(input.patientId);
   if (!hasReferralFee) {
     await deps.patientFinanceRepo.insertReferralFeeEvent({
       organisationId: input.organisationId,

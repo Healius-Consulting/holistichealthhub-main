@@ -128,6 +128,8 @@ export interface PlatformSubmissionRecord extends SubmissionQueueItem {
   operationalStartedAt: string | null;
   reviewedAt: string | null;
   completedAt: string | null;
+  /** Admin-only. True when this referral is an existing Curaleaf Clinic account. */
+  existingClinicAccount?: boolean;
 }
 
 export interface SubmissionConditionRecord {
@@ -168,6 +170,7 @@ export interface ActivateSubmissionInput {
   mobile: string;
   postcode: string;
   onboardingNote: string | null;
+  existingClinicAccount: boolean;
 }
 
 /**

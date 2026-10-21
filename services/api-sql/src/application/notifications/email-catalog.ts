@@ -38,6 +38,7 @@ export type EmailSchedule = 'immediate' | 'collection_hours' | 'payment_reminder
 export const EMAIL_TEMPLATE_CODES = [
   'patient_enquiry_declined',
   'patient_referred',
+  'patient_existing_clinic',
   'patient_payment_request',
   'patient_payment_confirmation',
   'patient_refunded',
@@ -86,6 +87,7 @@ export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 
 const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   patient_enquiry_declined: 'referrals',
   patient_referred: 'referrals',
+  patient_existing_clinic: 'referrals',
   patient_payment_request: 'payments',
   patient_payment_confirmation: 'payments',
   patient_refunded: 'payments',
@@ -217,7 +219,7 @@ function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
     || kind === 'pharmacy_2fa_enabled'
     || kind === 'pharmacy_2fa_disabled'
   ) return 'Staff account';
-  if (kind === 'patient_referred') return 'Your pharmacy';
+  if (kind === 'patient_referred' || kind === 'patient_existing_clinic') return 'Your pharmacy';
   if (kind.startsWith('patient_')) return 'Patient order update';
   return 'Pharmacy update';
 }
@@ -467,6 +469,76 @@ export const EMAILS = {
         nextSteps: steps,
         footerNote: [
           `<p style="margin:0 0 14px; color:#4d5a56; font-size:15px; line-height:23px;"><strong style="color:#1f2725;">Ongoing care.</strong> ${escapeHtml(ongoingBody)}</p>`,
+          `<p style="margin:0 0 20px; color:#4d5a56; font-size:15px; line-height:23px;">${escapeHtml(closing)}</p>`,
+          `<p style="margin:0; color:#1f2725; font-size:15px; line-height:23px;">${signatureHtml(payload)}</p>`,
+        ].join(''),
+      });
+    },
+  },
+  /**
+   * PT-01B. Existing Curaleaf Clinic account under the eligibility email.
+   * Mutually exclusive with PT-01 for one enquiry. Pharmacy status stays referred.
+   */
+  patient_existing_clinic: {
+    audience: 'patient',
+    events: ['referral.activated'],
+    schedule: 'immediate',
+    replyTo: 'referrals',
+    summary: 'Sent when HHH admin refers a patient who already has a Curaleaf Clinic account.',
+    render: (payload) => {
+      const { firstName } = fields(payload);
+      const clinic = keyContact('clinic');
+      const clinicEmail = primaryAddress(clinic);
+      const clinicPhone = clinic.phone ?? '';
+      const clinicHours = clinic.hours ?? '';
+      const portalUrl = clinic.portalUrl ?? '';
+      const pharmacyName = value(payload, 'pharmacyName') || 'the pharmacy';
+      const pharmacyAddress = value(payload, 'pharmacyAddress');
+      const gphc = value(payload, 'pharmacyGphcNumber');
+      const destination = [
+        pharmacyName,
+        pharmacyAddress,
+        gphc ? `GPhC number ${gphc}` : '',
+      ].filter(Boolean).join('\n');
+      const opening = 'Thank you for your enquiry and for choosing us as your pharmacy. We have reviewed your information, and our partner clinic, Curaleaf Clinic, tells us you already have an account with them, registered to this email address. You do not need to register again.';
+      const steps = [
+        {
+          title: 'Sign in to your Curaleaf Clinic account',
+          body: `Go to ${portalUrl} and sign in with this email address. If you have forgotten your password, use the Forgotten password button on the sign-in page. If you still cannot get in, call Curaleaf Clinic on ${clinicPhone} (${clinicHours}) or email ${clinicEmail}.`,
+        },
+        {
+          title: 'Ask the clinic to send your prescriptions to us',
+          body: `When you sign in or speak to the clinic, ask for your prescriptions to be sent to:\n${destination}`,
+        },
+        {
+          title: 'Book an appointment if you need one',
+          body: 'If you have not seen a clinic doctor recently, book an appointment through the clinic’s website. The doctor will decide whether treatment is suitable for you. Medicine is charged separately by us.',
+        },
+        {
+          title: 'We take it from there',
+          body: 'When the clinic sends a prescription to us, we will email you to arrange payment, and again when your medicine is ready to collect. You do not need to do anything else.',
+        },
+      ];
+      const closing = 'For questions about your account, treatment or appointments, contact the clinic. For questions about your order or collection, contact us or reply to this email.';
+      return render({
+        kind: 'patient_existing_clinic',
+        payload,
+        subject: patientSubject(payload, 'Your referral — one step for you'),
+        preheader: 'You already have a Curaleaf Clinic account. Sign in and ask them to send prescriptions to us.',
+        title: 'Your referral — one step for you',
+        text: [
+          `Dear ${value(payload, 'firstName') || 'there'},`,
+          opening,
+          ...steps.map((step, index) => `${index + 1}. ${step.title}\n   ${step.body}`),
+          closing,
+          signatureText(payload),
+        ].join('\n\n'),
+        paragraphs: [
+          `Dear ${firstName},`,
+          `${escapeHtml('Thank you for your enquiry and for choosing us as your pharmacy. We have reviewed your information, and our partner clinic, Curaleaf Clinic, tells us ')}<strong>you already have an account with them, registered to this email address.</strong> You do not need to register again.`,
+        ],
+        nextSteps: steps.map(step => ({ title: step.title, body: step.body.replaceAll('\n', ' ') })),
+        footerNote: [
           `<p style="margin:0 0 20px; color:#4d5a56; font-size:15px; line-height:23px;">${escapeHtml(closing)}</p>`,
           `<p style="margin:0; color:#1f2725; font-size:15px; line-height:23px;">${signatureHtml(payload)}</p>`,
         ].join(''),

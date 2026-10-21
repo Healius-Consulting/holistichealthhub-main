@@ -7591,6 +7591,95 @@ html.modal-open .page-container{ overflow: hidden; }
   .patient-directory-row > .order-stage-pill{ white-space: normal; text-align: right; }
 }
 
+.patient-hub-rows{
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+.patient-hub-row{
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) repeat(3, minmax(110px, .8fr)) auto;
+  gap: 8px 14px;
+  align-items: center;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.patient-hub-row:last-child{ border-bottom: 0; }
+.patient-hub-row:hover{ background: var(--bg-elevated); }
+.patient-hub-row:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: -2px; }
+.patient-hub-row > strong{
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.patient-hub-row > span{ min-width: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.patient-hub-row > span em{
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.patient-hub-row .order-stage-pill{ justify-self: end; }
+.patient-hub-row .order-stage-pill.is-referred{ color: #6d4b12; background: #f3e2c2; border-color: #e6d0a4; }
+.patient-hub-row .order-stage-pill.is-active{ color: #166534; background: #dcfce7; border-color: #bbf7d0; }
+.patient-hub-row .order-stage-pill.is-inactive{ color: #9a3412; background: #ffedd5; border-color: #fed7aa; }
+.patient-hub-row .order-stage-pill.is-declined{ color: #991b1b; background: #fee2e2; border-color: #fecaca; }
+.patient-hub-row__alerts{ grid-column: 1 / -1; display: grid; gap: 8px; }
+.patient-crm .crm-view-switch button,
+.patient-crm .order-filter-trigger{ min-height: 40px; font-size: 13px; }
+.patient-hub-select{ position: relative; }
+.patient-hub-select__menu{
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  display: grid;
+  min-width: 180px;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow: 0 12px 30px rgba(18, 35, 30, .14);
+}
+.patient-hub-select__menu button{
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-primary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+.patient-hub-select__menu button:hover,
+.patient-hub-select__menu button.active{ background: var(--bg-elevated); }
+.patient-hub-select__menu button:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 2px; }
+@media (max-width: 760px){
+  .patient-hub-row{ grid-template-columns: minmax(0, 1fr) auto; }
+  .patient-hub-row > span:not(.order-stage-pill):not(.patient-hub-row__alerts){ grid-column: 1 / -1; }
+}
+
 .patient-directory-cards{
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -8836,8 +8925,10 @@ html.modal-open .page-container{ overflow: hidden; }
 .pricing-brief--readonly .pricing-brief__copy em{ max-width: 760px; font-size: 11px; }
 
 .pricing-table--readonly .pricing-table__head, .pricing-table--readonly .pricing-row{
-  grid-template-columns: minmax(280px, 1.65fr) minmax(130px, .7fr) minmax(120px, .55fr) minmax(145px, .65fr) minmax(150px, .7fr);
+  grid-template-columns: minmax(240px, 1.5fr) minmax(110px, .6fr) minmax(110px, .5fr) minmax(88px, .4fr) minmax(120px, .55fr) minmax(130px, .6fr);
 }
+.pricing-table--readonly .pricing-table__head{ font-size: 11px; letter-spacing: .04em; }
+.pricing-sku{ color: var(--text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
 
 .pricing-table--readonly .pricing-product > strong{ overflow: hidden; font-size: 13px; white-space: nowrap; }
 
@@ -8855,9 +8946,9 @@ html.modal-open .page-container{ overflow: hidden; }
 
 .pricing-pack small, .pricing-patient-price small{ margin-top: 2px; color: var(--text-tertiary); font-size: 10px; }
 
-.pricing-patient-price strong{ font-size: 14px; font-variant-numeric: tabular-nums; }
+.pricing-patient-price strong{ font-size: 13px; font-variant-numeric: tabular-nums; }
 
-.pricing-table--readonly .pricing-cost strong{ font-size: 11px; line-height: 1.35; }
+.pricing-table--readonly .pricing-cost strong{ font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; }
 
 .rx-price-flow--readonly{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
@@ -8875,7 +8966,7 @@ html.modal-open .page-container{ overflow: hidden; }
 
 @media (max-width: 1100px) {
 .pricing-table--readonly .pricing-table__head, .pricing-table--readonly .pricing-row{
-    grid-template-columns: minmax(230px, 1.5fr) minmax(120px, .7fr) minmax(110px, .55fr) minmax(135px, .65fr) minmax(145px, .7fr);
+    grid-template-columns: minmax(180px, 1.4fr) minmax(96px, .6fr) minmax(96px, .5fr) minmax(72px, .4fr) minmax(100px, .55fr) minmax(110px, .6fr);
   }
 .pricing-table--readonly .pricing-table__head > :nth-child(2), .pricing-table--readonly .pricing-row > :nth-child(2){ display: flex; }
 }
@@ -8902,7 +8993,7 @@ html.modal-open .page-container{ overflow: hidden; }
   }
 .pricing-table--readonly .pricing-product{ grid-column: 1 / -1; grid-row: auto; }
 .pricing-table--readonly .pricing-row > :nth-child(2){ display: flex; }
-.pricing-table--readonly .pricing-pack, .pricing-table--readonly .pricing-stock, .pricing-table--readonly .pricing-patient-price, .pricing-table--readonly .pricing-cost{ grid-column: auto; grid-row: auto; }
+.pricing-table--readonly .pricing-pack, .pricing-table--readonly .pricing-stock, .pricing-table--readonly .pricing-sku, .pricing-table--readonly .pricing-patient-price, .pricing-table--readonly .pricing-cost{ grid-column: auto; grid-row: auto; }
 .pricing-table--readonly .pricing-cost{ display: block; }
 .pricing-table--readonly .pricing-product > strong{ overflow: hidden; font-size: 13px; white-space: nowrap; }
 .rx-surface :is(small, label > span), .patient-record-drawer small{ font-size: 11px; line-height: 1.4; }
@@ -13302,6 +13393,9 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .admin-v2-intake__route strong, .admin-v2-intake__route p{ overflow-wrap: anywhere; }
 .admin-v2-intake__route p{ color: var(--text-tertiary); font-size: 10px; }
 .admin-v2-intake__decision-actions{ display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-v2-intake__existing-clinic{ display: flex; gap: 10px; align-items: flex-start; margin: 0 0 12px; }
+.admin-v2-intake__existing-clinic input{ margin-top: 4px; }
+.admin-v2-intake__existing-clinic small{ display: block; color: var(--text-tertiary); }
 .admin-v2-intake__rows button:focus-visible, .admin-v2-intake__detail button:focus-visible{ outline: 3px solid color-mix(in srgb, var(--tenant-primary) 32%, transparent); outline-offset: -3px; }
 .admin-v2-queue__rows{ display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .admin-v2-queue__rows > button{ display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(180px, 1fr) minmax(120px, .7fr); gap: 16px; min-height: 74px; align-items: center; padding: 12px 16px; color: var(--text-primary); text-align: left; background: var(--bg-surface); border: 0; cursor: pointer; }
@@ -19626,7 +19720,7 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
 
 .rx-line-price-nudges{
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(4.75rem, 1.35fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: 44px minmax(4.75rem, 1fr) 44px;
   align-items: stretch;
   gap: 4px;
   width: 100%;
@@ -19673,31 +19767,17 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   font-size: 12px;
   font-weight: 700;
 }
-.rx-line-price input{
-  width: 100%;
+.rx-line-price strong{
   min-width: 0;
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-  outline: 0;
   color: var(--text-primary);
-  background: transparent;
-  font: inherit;
   font-size: 14px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   text-align: center;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-.rx-line-price input::-webkit-outer-spin-button,
-.rx-line-price input::-webkit-inner-spin-button{
-  margin: 0;
-  -webkit-appearance: none;
 }
 @media (pointer: coarse){
   .rx-line-price-nudge,
-  .rx-line-price input{ min-height: 44px; }
+  .rx-line-price{ min-height: 44px; }
 }
 .rx-line-price__rrp{ margin: 2px 0 0; color: var(--text-tertiary); font-size: 12px; }
 .rx-order-summary-rail__margin dd.is-amber,

@@ -49,6 +49,8 @@ export interface CatalogueItem {
   source?: 'curaleaf' | 'training';
   supplierState?: string;
   rrpPence?: number;
+  /** Empty until a live Curaleaf catalogue supplies one. Not shown on create-order. */
+  sku?: string | null;
 }
 
 export interface CRMPatient {
