@@ -13,6 +13,7 @@ import type {
   ReassignSubmissionInput,
   RetentionCandidateRecord,
   SubmissionConditionRecord,
+  TenantClosedEnquiryRecord,
   TenantPendingEnquiryRecord,
   UpdateSubmissionFollowUpInput,
   WithdrawSubmissionInput,
@@ -93,6 +94,34 @@ const LIST_TENANT_PENDING_ENQUIRIES_GQL = `
       triedTwoTreatments
       psychiatricExclusion
       heardAbout
+    }
+  }
+`;
+
+const LIST_TENANT_CLOSED_ENQUIRIES_GQL = `
+  query ListTenantClosedEnquiries($organisationId: UUID!, $limit: Int!) {
+    eligibilitySubmissions(
+      where: {
+        _and: [
+          { outcomeStatus: { in: [DECLINED, WITHDRAWN] } }
+          { assignedOrganisationId: { eq: $organisationId } }
+          { minimalRecordSince: { isNull: true } }
+        ]
+      }
+      orderBy: [{ completedAt: DESC }]
+      limit: $limit
+    ) {
+      id
+      submittedAt
+      completedAt
+      outcomeStatus
+      sourceType
+      firstName
+      surname
+      dob
+      email
+      mobile
+      postcode
     }
   }
 `;
@@ -599,6 +628,16 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
     );
     return (result.data.eligibilitySubmissions ?? [])
       .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
+  }
+
+  async listTenantClosedEnquiries(organisationId: string, limit = 200): Promise<TenantClosedEnquiryRecord[]> {
+    const result = await dataConnect.executeGraphql<{
+      eligibilitySubmissions: TenantClosedEnquiryRecord[];
+    }, any>(
+      LIST_TENANT_CLOSED_ENQUIRIES_GQL,
+      { variables: { organisationId: asUuid(organisationId), limit } }
+    );
+    return result.data.eligibilitySubmissions ?? [];
   }
 
   async markReviewRequested(id: string, note?: string | null): Promise<void> {

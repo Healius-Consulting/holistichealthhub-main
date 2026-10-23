@@ -93,6 +93,21 @@ export interface TenantPendingEnquiryRecord {
   heardAbout?: string | null;
 }
 
+/** An enquiry HHH declined or the patient withdrew while it sat with this pharmacy. No clinical answers, no reason. */
+export interface TenantClosedEnquiryRecord {
+  id: string;
+  submittedAt: string;
+  completedAt: string | null;
+  outcomeStatus: 'DECLINED' | 'WITHDRAWN';
+  sourceType: 'GENERAL_HHH_WEBSITE' | 'PHARMACY_QR' | 'LEGACY_PHARMACY_QR';
+  firstName: string;
+  surname: string;
+  dob: string;
+  email: string;
+  mobile: string;
+  postcode: string;
+}
+
 export interface IdempotentSubmissionRecord {
   id: string;
   assignedOrganisationId: string | null;
@@ -215,6 +230,7 @@ export interface IntakeRepositoryPort {
   findSubmissionByIdempotencyHash(idempotencyKeyHash: string): Promise<IdempotentSubmissionRecord | null>;
   saveSubmissionConditions(submissionId: string, conditionCodes: string[], primaryConditionCode: string): Promise<void>;
   listTenantPendingEnquiries(organisationId: string, limit?: number): Promise<TenantPendingEnquiryRecord[]>;
+  listTenantClosedEnquiries(organisationId: string, limit?: number): Promise<TenantClosedEnquiryRecord[]>;
   listPlatformSubmissions(limit?: number): Promise<PlatformSubmissionRecord[]>;
   listDeclinedSubmissions(limit?: number): Promise<DeclinedSubmissionRecord[]>;
   listRetentionCandidates(limit?: number): Promise<RetentionCandidateRecord[]>;

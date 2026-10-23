@@ -7654,8 +7654,9 @@ html.modal-open .page-container{ overflow: hidden; }
 .patient-hub-row .order-stage-pill.is-active{ color: #166534; background: #dcfce7; border-color: #bbf7d0; }
 .patient-hub-row .order-stage-pill.is-inactive{ color: #9a3412; background: #ffedd5; border-color: #fed7aa; }
 .patient-hub-row .order-stage-pill.is-declined{ color: #991b1b; background: #fee2e2; border-color: #fecaca; }
-.patient-hub-row .order-stage-pill.is-awaiting{ color: #1e40af; background: #eff6ff; border-color: #bfdbfe; }
-.patient-hub-row .order-stage-pill.is-review{ color: #854d0e; background: #fef9c3; border-color: #fde68a; }
+.patient-hub-row .order-stage-pill.is-withdrawn{ color: #475569; background: #f1f5f9; border-color: #e2e8f0; }
+.patient-hub-row .order-stage-pill.is-new{ color: #1e40af; background: #eff6ff; border-color: #bfdbfe; }
+.patient-hub-row .order-stage-pill.is-progress{ color: #854d0e; background: #fef9c3; border-color: #fde68a; }
 .patient-hub-row__alerts{ grid-column: 1 / -1; display: grid; gap: 8px; }
 .patient-crm .crm-view-switch button,
 .patient-crm .order-filter-trigger{ min-height: 40px; font-size: 13px; }

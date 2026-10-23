@@ -81,9 +81,12 @@ export function createPortalPharmacyRouter(): Router {
   router.get('/portal/patient-directory', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
-      const { patients, pendingEnquiries } = await operationalRecords(scope.organisationId);
+      const { organisation, patients, pendingEnquiries } = await operationalRecords(scope.organisationId);
+      const closedEnquiries = pharmacyPortalRecordAccess(organisation).pendingEnquiries
+        ? await intakeRepo.listTenantClosedEnquiries(scope.organisationId)
+        : [];
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json(buildPharmacyPatientDirectory({ patients, pendingEnquiries }));
+      res.status(200).json(buildPharmacyPatientDirectory({ patients, pendingEnquiries, closedEnquiries }));
     } catch (error) {
       next(error);
     }

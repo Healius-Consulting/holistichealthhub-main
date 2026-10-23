@@ -70,28 +70,41 @@ test('grouped all-view ranks action, enquiries and care without overlap', () => 
 
 test('status copy stays textual for colour-independent reading', () => {
   const meta = patientCrmStatusMeta({ ...enquiry, statusLabel: 'New enquiry' });
-  assert.equal(meta.label, 'Enquiry');
+  assert.equal(meta.label, 'New enquiry');
   assert.match(meta.description, /HHH/);
   assert.equal(meta.tone, 'info');
   assert.equal(patientCrmRecordKey('patient', 'abc'), 'patient:abc');
 });
 
-test('assigned open enquiries are tagged by HHH progress and listed on All only', () => {
-  assert.equal(enquiryDirectoryStatus('New enquiry'), 'Awaiting referral');
-  assert.equal(enquiryDirectoryStatus('Under HHH review'), 'Under review');
-  for (const status of ['Awaiting referral', 'Under review'] as const) {
+test('open enquiries are New until HHH records progress, and sit on All and Enquiries', () => {
+  assert.equal(enquiryDirectoryStatus('New enquiry'), 'New enquiry');
+  assert.equal(enquiryDirectoryStatus('In progress'), 'In progress');
+  assert.equal(enquiryDirectoryStatus('Under HHH review'), 'In progress');
+  for (const status of ['New enquiry', 'In progress'] as const) {
     assert.equal(directoryStatusMatchesChip(status, 'all'), true);
+    assert.equal(directoryStatusMatchesChip(status, 'Enquiries'), true);
     assert.equal(directoryStatusMatchesChip(status, 'Referred'), false);
-    assert.equal(directoryStatusMatchesChip(status, 'Active'), false);
     assert.equal(directoryStatusMatchesChip(status, 'Declined'), false);
   }
   assert.equal(directoryStatusMatchesChip('Referred', 'Referred'), true);
-  assert.equal(directoryStatusMatchesChip('Active', 'Referred'), false);
+  assert.equal(directoryStatusMatchesChip('Referred', 'Enquiries'), false);
+});
+
+test('declined and withdrawn enquiries both sit under Declined', () => {
+  for (const status of ['Declined', 'Withdrawn'] as const) {
+    assert.equal(enquiryDirectoryStatus(status), status);
+    assert.equal(directoryStatusMatchesChip(status, 'Declined'), true);
+    assert.equal(directoryStatusMatchesChip(status, 'Enquiries'), false);
+  }
+  const closed = { ...enquiry, journey: 'declined' as const };
+  assert.equal(patientCrmGroup(closed), 'declined');
+  assert.equal(patientCrmStatusMeta({ ...closed, statusLabel: 'Withdrawn' }).label, 'Withdrawn');
+  assert.equal(patientCrmStatusMeta({ ...closed, statusLabel: 'Declined' }).label, 'Declined');
 });
 
 test('the referral period narrows the Referred tag and no other', () => {
   assert.equal(referralPeriodApplies('Referred'), true);
-  for (const chip of ['all', 'Active', 'Inactive', 'Declined'] as const) {
+  for (const chip of ['all', 'Enquiries', 'Active', 'Inactive', 'Declined'] as const) {
     assert.equal(referralPeriodApplies(chip), false);
   }
 });

@@ -55,7 +55,7 @@ export function recordMatchesPatientFilter(record: PatientCrmFilterInput, filter
 
 export function patientCrmGroup(record: PatientCrmFilterInput): PatientCrmGroup {
   if (record.needsAction) return 'needs-action';
-  if (record.kind === 'enquiry') return 'enquiries';
+  if (record.kind === 'enquiry') return record.journey === 'declined' ? 'declined' : 'enquiries';
   if (record.readyForCollection) return 'ready';
   if (record.hasOpenOrder) return 'on-order';
   if (record.journey === 'declined' || record.journey === 'suspended') return 'declined';
@@ -80,25 +80,36 @@ export const PATIENT_CRM_CLOSED_LANE: { key: PatientCrmLane; label: string; deta
 
 export function patientCrmLane(record: PatientCrmFilterInput): PatientCrmLane {
   if (record.needsAction) return 'needs-action';
-  if (record.kind === 'enquiry') return 'enquiries';
+  if (record.kind === 'enquiry') return record.journey === 'declined' ? 'declined' : 'enquiries';
   if (record.journey === 'declined' || record.journey === 'suspended') return 'declined';
   if (record.readyForCollection) return 'ready';
   if (record.hasOpenOrder) return 'on-order';
   return 'care';
 }
 
-export const PATIENT_DIRECTORY_CHIPS = ['all', 'Referred', 'Active', 'Inactive', 'Declined'] as const;
+export const PATIENT_DIRECTORY_CHIPS = ['all', 'Enquiries', 'Referred', 'Active', 'Inactive', 'Declined'] as const;
 export type PatientDirectoryChip = (typeof PATIENT_DIRECTORY_CHIPS)[number];
-export type PatientEnquiryDirectoryStatus = 'Awaiting referral' | 'Under review';
-export type PatientDirectoryStatus = Exclude<PatientDirectoryChip, 'all'> | PatientEnquiryDirectoryStatus;
+export type PatientEnquiryDirectoryStatus = 'New enquiry' | 'In progress' | 'Declined' | 'Withdrawn';
+export type PatientDirectoryStatus = Exclude<PatientDirectoryChip, 'all' | 'Enquiries'> | PatientEnquiryDirectoryStatus;
 
-/** Open enquiries assigned to this pharmacy, tagged by where HHH is with them. */
+/**
+ * Enquiries assigned to this pharmacy: New until HHH records a review status, then
+ * In progress until HHH refers (a patient record takes over), declines or the patient withdraws.
+ */
 export function enquiryDirectoryStatus(displayStatus: string): PatientEnquiryDirectoryStatus {
-  return displayStatus === 'Under HHH review' ? 'Under review' : 'Awaiting referral';
+  if (displayStatus === 'Declined' || displayStatus === 'Withdrawn' || displayStatus === 'In progress') return displayStatus;
+  return displayStatus === 'Under HHH review' ? 'In progress' : 'New enquiry';
+}
+
+export function isOpenEnquiryStatus(status: PatientDirectoryStatus) {
+  return status === 'New enquiry' || status === 'In progress';
 }
 
 export function directoryStatusMatchesChip(status: PatientDirectoryStatus, chip: PatientDirectoryChip) {
-  return chip === 'all' || status === chip;
+  if (chip === 'all') return true;
+  if (chip === 'Enquiries') return isOpenEnquiryStatus(status);
+  if (chip === 'Declined') return status === 'Declined' || status === 'Withdrawn';
+  return status === chip;
 }
 
 /** The referral period narrows the Referred tag only; other tags list every referral date. */
@@ -130,7 +141,15 @@ export function patientCrmStatusMeta(input: PatientCrmFilterInput & { statusLabe
     return { label: 'Needs action', description: 'A paid order or cancellation needs pharmacy follow-up.', tone: 'danger' as const, icon: 'alert' as const };
   }
   if (group === 'enquiries') {
-    return { label: 'Enquiry', description: 'Assigned to this pharmacy. HHH may still move them; orders stay locked until referral.', tone: 'info' as const, icon: 'inbox' as const };
+    if (label === 'in progress') {
+      return { label: 'In progress', description: 'HHH is reviewing this enquiry. HHH may still move them; orders stay locked until referral.', tone: 'warning' as const, icon: 'clock' as const };
+    }
+    return { label: 'New enquiry', description: 'Assigned to this pharmacy. HHH may still move them; orders stay locked until referral.', tone: 'info' as const, icon: 'inbox' as const };
+  }
+  if (group === 'declined' && input.kind === 'enquiry') {
+    return label === 'withdrawn'
+      ? { label: 'Withdrawn', description: 'The patient withdrew this enquiry. It will not be referred.', tone: 'neutral' as const, icon: 'lock' as const }
+      : { label: 'Declined', description: 'HHH declined this enquiry. It will not be referred.', tone: 'neutral' as const, icon: 'lock' as const };
   }
   if (group === 'ready') {
     return { label: 'Ready to collect', description: 'Medicine is checked in and waiting for patient collection.', tone: 'ready' as const, icon: 'package' as const };

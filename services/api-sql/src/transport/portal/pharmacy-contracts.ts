@@ -17,7 +17,7 @@ import type { OrderDraftRecord, OrderRecord } from '../../repositories/ports/ord
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
 import type { PatientRecord } from '../../repositories/ports/patient.port.js';
 import type { PaymentAllocationRecord, QuoteCheckRecord } from '../../repositories/ports/payment.port.js';
-import type { TenantPendingEnquiryRecord } from '../../repositories/ports/intake.port.js';
+import type { TenantClosedEnquiryRecord, TenantPendingEnquiryRecord } from '../../repositories/ports/intake.port.js';
 import { formConditionRecords, primaryConditionCode } from '../../domain/eligibility/form-conditions.js';
 import { sqlIntakeCaseReference } from './intake-contracts.js';
 import { pendingEnquiryDisplayStatus, portalSourceType } from './intake-source.js';
@@ -229,6 +229,30 @@ export function toPortalPendingEnquiry(record: TenantPendingEnquiryRecord) {
     triedTwoTreatments: record.triedTwoTreatments ?? null,
     psychiatricExclusion: record.psychiatricExclusion ?? null,
     heardAbout: record.heardAbout ?? null,
+    closedAt: null,
+  };
+}
+
+/** Same shape as an open enquiry so the list can hold both, minus the eligibility answers. */
+export function toPortalClosedEnquiry(record: TenantClosedEnquiryRecord) {
+  return {
+    id: record.id,
+    submittedAt: record.submittedAt,
+    caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
+    displayStatus: record.outcomeStatus === 'WITHDRAWN' ? 'Withdrawn' as const : 'Declined' as const,
+    sourceType: portalSourceType(record.sourceType) ?? 'legacy_pharmacy_qr' as const,
+    firstName: record.firstName,
+    surname: record.surname,
+    dob: record.dob,
+    email: record.email,
+    mobile: record.mobile,
+    postcode: record.postcode,
+    conditions: [] as string[],
+    primaryCondition: null,
+    triedTwoTreatments: null,
+    psychiatricExclusion: null,
+    heardAbout: null,
+    closedAt: record.completedAt,
   };
 }
 
@@ -267,10 +291,14 @@ export function toPortalPatient(patient: PatientRecord) {
 export function buildPharmacyPatientDirectory(input: {
   patients: PatientRecord[];
   pendingEnquiries: TenantPendingEnquiryRecord[];
+  closedEnquiries?: TenantClosedEnquiryRecord[];
 }) {
   return {
     patients: input.patients.map(toPortalPatient),
-    enquiries: input.pendingEnquiries.map(toPortalPendingEnquiry),
+    enquiries: [
+      ...input.pendingEnquiries.map(toPortalPendingEnquiry),
+      ...(input.closedEnquiries ?? []).map(toPortalClosedEnquiry),
+    ],
     counts: {
       patients: input.patients.length,
       pendingEnquiries: input.pendingEnquiries.length,

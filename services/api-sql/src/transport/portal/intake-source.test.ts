@@ -11,6 +11,8 @@ describe('intake-source helpers', () => {
 
   it('derives pending enquiry labels from follow-up status', () => {
     assert.equal(pendingEnquiryDisplayStatus('NOT_STARTED'), 'New enquiry');
-    assert.equal(pendingEnquiryDisplayStatus('IN_PROGRESS'), 'Under HHH review');
+    assert.equal(pendingEnquiryDisplayStatus('IN_PROGRESS'), 'In progress');
+    assert.equal(pendingEnquiryDisplayStatus('COMPLETED'), 'In progress');
+    assert.equal(pendingEnquiryDisplayStatus(null), 'New enquiry');
   });
 });

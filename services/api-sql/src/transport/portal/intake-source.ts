@@ -23,6 +23,7 @@ export function portalSourceLabel(sourceType: PortalSourceType | string | null |
   }
 }
 
+/** New until HHH records any review status, then In progress until referred, declined or withdrawn. */
 export function pendingEnquiryDisplayStatus(followUpStatus: string | null | undefined) {
-  return followUpStatus === 'NOT_STARTED' ? 'New enquiry' as const : 'Under HHH review' as const;
+  return !followUpStatus || followUpStatus === 'NOT_STARTED' ? 'New enquiry' as const : 'In progress' as const;
 }

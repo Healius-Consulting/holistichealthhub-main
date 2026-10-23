@@ -990,8 +990,46 @@ describe('SQL pharmacy compatibility contracts', () => {
       conditionCodes: ['anxiety'],
       primaryConditionCode: 'anxiety',
     });
-    assert.equal(mapped.displayStatus, 'Under HHH review');
+    assert.equal(mapped.displayStatus, 'In progress');
     assert.equal(mapped.sourceType, 'general_hhh_website');
+  });
+
+  it('lists declined and withdrawn enquiries after the open ones, without eligibility answers', () => {
+    const closed = {
+      submittedAt: '2026-08-10T09:15:00.000Z',
+      completedAt: '2026-08-12T11:00:00.000Z',
+      sourceType: 'PHARMACY_QR' as const,
+      firstName: 'Sam',
+      surname: 'Reid',
+      dob: '1980-05-05',
+      email: 'sam@example.test',
+      mobile: '07222222222',
+      postcode: 'LS1 1AA',
+    };
+    const directory = buildPharmacyPatientDirectory({
+      patients: [],
+      pendingEnquiries: [{
+        id: '12345678-1234-4123-8123-123456789012',
+        submittedAt: '2026-08-17T09:15:00.000Z',
+        followUpStatus: 'IN_PROGRESS',
+        sourceType: 'PHARMACY_QR',
+        firstName: 'Avery',
+        surname: 'Morgan',
+        dob: '1991-04-12',
+        email: 'avery@example.test',
+        mobile: '07000000000',
+        postcode: 'NG16 3AA',
+      }],
+      closedEnquiries: [
+        { ...closed, id: '22345678-1234-4123-8123-123456789012', outcomeStatus: 'DECLINED' },
+        { ...closed, id: '32345678-1234-4123-8123-123456789012', outcomeStatus: 'WITHDRAWN' },
+      ],
+    });
+    assert.deepEqual(directory.enquiries.map(enquiry => enquiry.displayStatus), ['In progress', 'Declined', 'Withdrawn']);
+    assert.equal(directory.counts.pendingEnquiries, 1);
+    assert.equal(directory.enquiries[1]?.closedAt, '2026-08-12T11:00:00.000Z');
+    assert.deepEqual(directory.enquiries[1]?.conditions, []);
+    assert.equal(directory.enquiries[1]?.psychiatricExclusion, null);
   });
 
   it('builds a combined pharmacy patient directory payload', () => {

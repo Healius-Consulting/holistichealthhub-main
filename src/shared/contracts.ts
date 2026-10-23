@@ -622,7 +622,8 @@ export interface PortalPendingEnquiryRecord {
   id: string;
   submittedAt: string;
   caseReference: string;
-  displayStatus: 'New enquiry' | 'Under HHH review';
+  /** Open: New enquiry, then In progress once HHH records a review status. Closed: Declined or Withdrawn. */
+  displayStatus: 'New enquiry' | 'In progress' | 'Declined' | 'Withdrawn';
   sourceType: 'general_hhh_website' | 'future_pharmacy_qr' | 'legacy_pharmacy_qr';
   firstName: string;
   surname: string;
@@ -635,6 +636,8 @@ export interface PortalPendingEnquiryRecord {
   triedTwoTreatments?: boolean | null;
   psychiatricExclusion?: boolean | null;
   heardAbout?: string | null;
+  /** When HHH declined it or the patient withdrew. Null while open. */
+  closedAt?: string | null;
 }
 
 export interface PortalPatientRecord {

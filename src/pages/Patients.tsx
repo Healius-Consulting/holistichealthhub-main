@@ -34,6 +34,7 @@ import {
 import {
   directoryStatusMatchesChip,
   enquiryDirectoryStatus,
+  isOpenEnquiryStatus,
   PATIENT_DIRECTORY_CHIPS,
   patientCrmGroup,
   patientCrmRecordKey,
@@ -42,6 +43,7 @@ import {
   type PatientCrmIcon,
   type PatientDirectoryChip,
   type PatientDirectoryStatus,
+  type PatientEnquiryDirectoryStatus,
 } from '../utils/patientCrm';
 
 /** Placeholders keep every row present so a gap reads as "we do not hold this". */
@@ -249,12 +251,24 @@ function enquiryDisplayName(enquiry: PendingEnquiry) {
   return `${enquiry.firstName} ${enquiry.surname}`.trim() || enquiry.caseReference;
 }
 
+const ENQUIRY_STATUS_PILL: Record<PatientEnquiryDirectoryStatus, string> = {
+  'New enquiry': 'pill-info',
+  'In progress': 'pill-amber',
+  Declined: 'pill-red',
+  Withdrawn: 'pill-neutral',
+};
+
 function enquiryStatus(enquiry: PendingEnquiry): ReturnType<typeof deriveStatus> {
+  const status = enquiryDirectoryStatus(enquiry.displayStatus);
   return {
-    label: enquiry.displayStatus,
-    compactLabel: enquiry.displayStatus === 'New enquiry' ? 'New' : 'Review',
-    pill: onboardingStatusPillClass(enquiry.displayStatus === 'New enquiry' ? 'New' : enquiry.displayStatus),
+    label: status,
+    compactLabel: status === 'New enquiry' ? 'New' : status,
+    pill: ENQUIRY_STATUS_PILL[status],
   };
+}
+
+function isClosedEnquiry(enquiry: PendingEnquiry) {
+  return !isOpenEnquiryStatus(enquiryDirectoryStatus(enquiry.displayStatus));
 }
 
 function newOrderGateMessage(workspaceLive: boolean, patient: UnifiedPatient, trainingDraft: boolean): string | null {
@@ -370,8 +384,10 @@ export default function Patients() {
         overdueCollection: hasOverdueCollection(patient.orders),
       };
     });
+    // An open enquiry always shows, even from someone already on file: it is a new
+    // request HHH has not decided. A closed one gives way to the patient record.
     const enquiryRecords: CrmRecord[] = enquiries
-      .filter(enquiry => !patientEmails.has(enquiry.email.toLowerCase()))
+      .filter(enquiry => !isClosedEnquiry(enquiry) || !patientEmails.has(enquiry.email.toLowerCase()))
       .map(enquiry => ({
         key: patientCrmRecordKey('enquiry', enquiry.id),
         kind: 'enquiry' as const,
@@ -391,7 +407,7 @@ export default function Patients() {
         enquiry,
         patient: null,
         status: enquiryStatus(enquiry),
-        journey: 'enquiry' as const,
+        journey: isClosedEnquiry(enquiry) ? 'declined' as const : 'enquiry' as const,
         hasCrmRecord: false,
         hasOpenOrder: false,
         needsAction: false,
@@ -493,7 +509,7 @@ export default function Patients() {
   useEffect(() => {
     const target = state.navigationTarget;
     if (target?.kind === 'patient-lane') {
-      setStatusChip('all');
+      setStatusChip('Enquiries');
       setSearch('');
       setOpenPatients([]);
       dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
@@ -668,8 +684,9 @@ const DIRECTORY_STATUS_CLASS: Record<PatientDirectoryStatus, string> = {
   Active: ' is-active',
   Inactive: ' is-inactive',
   Declined: ' is-declined',
-  'Awaiting referral': ' is-awaiting',
-  'Under review': ' is-review',
+  Withdrawn: ' is-withdrawn',
+  'New enquiry': ' is-new',
+  'In progress': ' is-progress',
 };
 
 function HubSelect<T extends string>({
@@ -737,7 +754,9 @@ function PatientDirectoryCard({ record, status, onSelect }: {
     <button type="button" className="patient-hub-row" onClick={onSelect}>
       <strong>{record.name}</strong>
       <span><em>Date of birth</em>{formatPatientDob(record.dob)}</span>
-      {record.enquiry ? (
+      {record.enquiry?.closedAt ? (
+        <span><em>{status}</em>{formatUkDate(record.enquiry.closedAt, 'Not recorded')}</span>
+      ) : record.enquiry ? (
         <span><em>Received</em>{formatUkDate(record.enquiry.submittedAt, 'Not recorded')}</span>
       ) : (
         <span><em>Referred</em>{referredAt ? formatUkDate(referredAt, 'Not recorded') : 'Not recorded'}</span>
@@ -1277,6 +1296,7 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
   const treatmentCheck = enquiry.triedTwoTreatments === true ? 'Yes' : enquiry.triedTwoTreatments === false ? 'No' : null;
   const psychosisCheck = enquiry.psychiatricExclusion === true ? 'Excluded' : enquiry.psychiatricExclusion === false ? 'Passed' : null;
   const heardAbout = enquiry.heardAbout?.trim() || null;
+  const closed = isClosedEnquiry(enquiry);
   return (
     <article className="order-crm-record">
       <header className="order-crm-record__header">
@@ -1292,8 +1312,8 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
         </div>
         <div className="order-crm-record__toolbar">
           <div className="order-crm-record__value">
-            <small>Received</small>
-            <strong>{fmtDate(enquiry.submittedAt)}</strong>
+            <small>{closed ? meta.label : 'Received'}</small>
+            <strong>{fmtDate(closed && enquiry.closedAt ? enquiry.closedAt : enquiry.submittedAt)}</strong>
           </div>
           <div className="order-crm-record__actions" role="group" aria-label="Enquiry actions">
             <button className="btn btn-primary btn-sm" type="button" disabled>
@@ -1301,9 +1321,13 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
             </button>
           </div>
         </div>
-        <span className="patient-crm-gate">HHH may still move this enquiry. Referral marks them referred; orders stay locked until the workspace is live.</span>
+        <span className="patient-crm-gate">
+          {closed
+            ? `${meta.description} Received ${fmtDate(enquiry.submittedAt)}.`
+            : 'HHH may still move this enquiry. Referral marks them referred; orders stay locked until the workspace is live.'}
+        </span>
       </header>
-      <PatientJourneyRail stage="enquiry" />
+      {closed ? null : <PatientJourneyRail stage="enquiry" />}
       <div className="patient-crm-detail__body">
         <div className="patient-chart__panels">
           <section className="patient-chart-card" aria-labelledby="enquiry-contact-title">
@@ -1315,7 +1339,7 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
               <div><dt>Postcode</dt><dd>{enquiry.postcode || NOT_RECORDED}</dd></div>
             </dl>
           </section>
-          <section className="patient-chart-card" aria-labelledby="enquiry-clinical-title">
+          {closed ? null : <section className="patient-chart-card" aria-labelledby="enquiry-clinical-title">
             <header><h3 id="enquiry-clinical-title">Eligibility Form Info</h3></header>
             {conditions.length > 0 ? (
               <div className="patient-chart-conditions">
@@ -1331,7 +1355,7 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
               <div><dt>Heard about</dt><dd>{heardAbout ?? EMPTY_FIELD}</dd></div>
               <div><dt>Referral source</dt><dd>{record.sourceLabel ?? EMPTY_FIELD}</dd></div>
             </dl>
-          </section>
+          </section>}
         </div>
       </div>
     </article>
