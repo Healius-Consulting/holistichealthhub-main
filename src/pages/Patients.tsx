@@ -1,6 +1,6 @@
 import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, Search, Users, XCircle, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ArrowDownWideNarrow, ArrowUpNarrowWide, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, RefreshCw, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, getUnresolvedReason, marginPercent, marginToneClass, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
@@ -32,8 +32,15 @@ import {
   type PatientDirectoryFilter,
 } from '../utils/patientDirectoryNavigation';
 import {
+  clampDateInput,
+  settleDateInput,
+  comparePatientSortValues,
   directoryStatusMatchesChip,
   enquiryDirectoryStatus,
+  PATIENT_SORT_DEFAULT_DIRECTION,
+  patientSortDirectionLabel,
+  type PatientSortDirection,
+  type PatientSortKey,
   isOpenEnquiryStatus,
   PATIENT_DIRECTORY_CHIPS,
   patientCrmGroup,
@@ -333,7 +340,12 @@ export default function Patients() {
   const [referredPeriod, setReferredPeriod] = useState<'this-month' | 'last-month' | 'last-3' | 'all-time' | 'custom'>('all-time');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [sortBy, setSortBy] = useState<'name' | 'referral' | 'payment'>('name');
+  const [sortBy, setSortBy] = useState<PatientSortKey>('name');
+  const [sortDirection, setSortDirection] = useState<PatientSortDirection>(PATIENT_SORT_DEFAULT_DIRECTION.name);
+  const changeSort = (key: PatientSortKey) => {
+    setSortBy(key);
+    setSortDirection(PATIENT_SORT_DEFAULT_DIRECTION[key]);
+  };
 
   const patients = useMemo(() => {
     const map = new Map<string, UnifiedPatient>();
@@ -456,14 +468,15 @@ export default function Patients() {
       .map(record => ({ record, status: statusOf(record) }))
       .filter(item => item.status && directoryStatusMatchesChip(item.status, statusChip) && matchesPeriod(item.record) && recordMatchesQuery(item.record, search))
       .sort((left, right) => {
-        if (sortBy === 'referral') return String(right.record.patient?.crmPatient?.referredAt || '').localeCompare(String(left.record.patient?.crmPatient?.referredAt || ''));
-        if (sortBy === 'payment') {
-          const paid = (record: CrmRecord) => record.patient?.orders.find(order => order.payment.paidAt)?.payment.paidAt ?? '';
-          return String(paid(right.record)).localeCompare(String(paid(left.record)));
-        }
-        return left.record.name.localeCompare(right.record.name, 'en', { sensitivity: 'base' });
+        const sortValue = (record: CrmRecord) => {
+          if (sortBy === 'referral') return String(record.patient?.crmPatient?.referredAt || '');
+          if (sortBy === 'payment') return latestPaidAt(record.patient?.orders ?? [])?.toISOString() ?? '';
+          return record.name;
+        };
+        return comparePatientSortValues(sortValue(left.record), sortValue(right.record), sortDirection)
+          || left.record.name.localeCompare(right.record.name, 'en', { sensitivity: 'base' });
       });
-  }, [customFrom, customTo, records, referredPeriod, search, sortBy, statusChip]);
+  }, [customFrom, customTo, records, referredPeriod, search, sortBy, sortDirection, statusChip]);
 
   // Nothing is auto-selected any more: the list is the view, the dialog is opt-in.
   const topOpenPatient = openPatients.reduce<(typeof openPatients)[number] | null>((top, entry) => !top || entry.layer > top.layer ? entry : top, null);
@@ -561,69 +574,131 @@ export default function Patients() {
     dispatch({ type: 'SET_SCREEN', screen: 'create' });
   };
 
+  const filtersSet = statusChip !== 'all' || referredPeriod !== 'all-time' || search.trim() !== '';
   const clearFilters = () => {
     setStatusChip('all');
     setReferredPeriod('all-time');
     setCustomFrom('');
     setCustomTo('');
     setSearch('');
-    setSortBy('name');
   };
+  const refreshing = state.patientDirectoryRefreshing;
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const SortIcon = sortDirection === 'asc' ? ArrowUpNarrowWide : ArrowDownWideNarrow;
+  const sortDirectionText = patientSortDirectionLabel(sortBy, sortDirection);
 
   return (
     <div className="page-body order-crm patient-crm pharmacy-patients">
-      <section className="order-crm-controls">
-        <div className="order-crm-search">
-          <Search size={15} />
-          <input
-            type="search"
-            value={search}
-            onChange={event => setSearch(event.target.value)}
-            placeholder="Search name, condition, DOB, email, mobile or case reference"
-            aria-label="Search patients"
+      <section className="order-crm-controls patient-hub-controls">
+        <div className="patient-hub-toolbar">
+          <HubSelect
+            label="Referred"
+            value={referredPeriod}
+            options={[
+              { value: 'this-month', label: 'This month' },
+              { value: 'last-month', label: 'Last month' },
+              { value: 'last-3', label: 'Last 3 months' },
+              { value: 'all-time', label: 'All time' },
+              { value: 'custom', label: 'Custom range' },
+            ]}
+            onChange={setReferredPeriod}
           />
-        </div>
-        <div className="crm-view-switch" role="group" aria-label="Patient status">
-          {PATIENT_DIRECTORY_CHIPS.map(chip => (
+          {referredPeriod === 'custom' ? (
+            <div className="patient-hub-range" role="group" aria-label="Referral date range">
+              <label className="patient-hub-date">
+                <span>From</span>
+                <input
+                  type="date"
+                  value={customFrom}
+                  min={REFERRAL_RANGE_START}
+                  max={customTo || today}
+                  onChange={event => {
+                    const next = clampDateInput(event.target.value, customTo || today);
+                    if (next !== null) setCustomFrom(next);
+                  }}
+                  onBlur={() => setCustomFrom(current => settleDateInput(current, REFERRAL_RANGE_START, customTo || today))}
+                />
+              </label>
+              <label className="patient-hub-date">
+                <span>To</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom || REFERRAL_RANGE_START}
+                  max={today}
+                  onChange={event => {
+                    const next = clampDateInput(event.target.value, today);
+                    if (next !== null) setCustomTo(next);
+                  }}
+                  onBlur={() => setCustomTo(current => settleDateInput(current, customFrom || REFERRAL_RANGE_START, today))}
+                />
+              </label>
+            </div>
+          ) : null}
+          <div className="patient-hub-sort">
+            <HubSelect
+              label="Sort"
+              value={sortBy}
+              options={[
+                { value: 'name', label: 'Name' },
+                { value: 'referral', label: 'Referral date' },
+                { value: 'payment', label: 'Last payment date' },
+              ]}
+              onChange={changeSort}
+            />
             <button
-              key={chip}
               type="button"
-              aria-pressed={statusChip === chip}
-              className={statusChip === chip ? 'is-on' : ''}
-              onClick={() => setStatusChip(chip)}
+              className="patient-hub-sort__direction"
+              onClick={() => setSortDirection(current => current === 'asc' ? 'desc' : 'asc')}
+              aria-label={`Sort order: ${sortDirectionText}. Switch to ${patientSortDirectionLabel(sortBy, sortDirection === 'asc' ? 'desc' : 'asc')}`}
+              title={sortDirectionText}
             >
-              {chip === 'all' ? 'All' : chip}
+              <SortIcon size={15} aria-hidden="true" />
+              <span>{sortDirectionText}</span>
             </button>
-          ))}
+          </div>
+          <div className="patient-hub-toolbar__actions">
+            {filtersSet ? (
+              <button type="button" className="patient-hub-action" onClick={clearFilters}>
+                <X size={14} aria-hidden="true" /> Clear filters
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="patient-hub-action"
+              onClick={() => dispatch({ type: 'REQUEST_PATIENT_DIRECTORY_REFRESH' })}
+              disabled={refreshing}
+              aria-label="Refresh patient list"
+            >
+              <RefreshCw size={14} aria-hidden="true" className={refreshing ? 'is-spinning' : undefined} /> {refreshing ? 'Refreshing' : 'Refresh'}
+            </button>
+          </div>
         </div>
-        <HubSelect
-          label="Referred"
-          value={referredPeriod}
-          options={[
-            { value: 'this-month', label: 'This month' },
-            { value: 'last-month', label: 'Last month' },
-            { value: 'last-3', label: 'Last 3 months' },
-            { value: 'all-time', label: 'All time' },
-            { value: 'custom', label: 'Custom range' },
-          ]}
-          onChange={setReferredPeriod}
-        />
-        {referredPeriod === 'custom' ? (
-          <>
-            <input type="date" aria-label="Referral from" value={customFrom} onChange={event => setCustomFrom(event.target.value)} />
-            <input type="date" aria-label="Referral to" value={customTo} onChange={event => setCustomTo(event.target.value)} />
-          </>
-        ) : null}
-        <HubSelect
-          label="Sort"
-          value={sortBy}
-          options={[
-            { value: 'name', label: 'Name' },
-            { value: 'referral', label: 'Referral date' },
-            { value: 'payment', label: 'Last payment date' },
-          ]}
-          onChange={setSortBy}
-        />
+        <div className="patient-hub-filterline">
+          <div className="order-crm-search">
+            <Search size={15} />
+            <input
+              type="search"
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Search name, condition, DOB, email, mobile or case reference"
+              aria-label="Search patients"
+            />
+          </div>
+          <div className="crm-view-switch" role="group" aria-label="Patient status">
+            {PATIENT_DIRECTORY_CHIPS.map(chip => (
+              <button
+                key={chip}
+                type="button"
+                aria-pressed={statusChip === chip}
+                className={statusChip === chip ? 'is-on' : ''}
+                onClick={() => setStatusChip(chip)}
+              >
+                {chip === 'all' ? 'All' : chip}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       {filtered.length ? (
@@ -678,6 +753,8 @@ export default function Patients() {
     </div>
   );
 }
+
+const REFERRAL_RANGE_START = '2020-01-01';
 
 const DIRECTORY_STATUS_CLASS: Record<PatientDirectoryStatus, string> = {
   Referred: ' is-referred',

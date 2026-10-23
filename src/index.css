@@ -7613,7 +7613,8 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 .patient-hub-row{
   display: grid;
-  grid-template-columns: minmax(140px, 1.4fr) repeat(3, minmax(110px, .8fr)) auto;
+  /* The tag column is fixed so a longer tag never pushes the middle columns out of line. */
+  grid-template-columns: minmax(140px, 1.4fr) repeat(3, minmax(110px, .8fr)) 120px;
   gap: 8px 14px;
   align-items: center;
   width: 100%;
@@ -7704,6 +7705,89 @@ html.modal-open .page-container{ overflow: hidden; }
 .patient-hub-select__menu button:hover,
 .patient-hub-select__menu button.active{ background: var(--bg-elevated); }
 .patient-hub-select__menu button:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 2px; }
+
+/* Period and sort sit above search and the status tabs; actions hold the right edge. */
+.order-crm-controls.patient-hub-controls{ display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.patient-hub-toolbar{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.patient-hub-toolbar__actions{ display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.patient-hub-sort{ display: inline-flex; align-items: center; gap: 4px; }
+.patient-hub-sort__direction,
+.patient-hub-action{
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.patient-hub-sort__direction:hover,
+.patient-hub-action:hover:not(:disabled){ color: var(--text-primary); background: var(--bg-elevated); }
+.patient-hub-sort__direction:focus-visible,
+.patient-hub-action:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 2px; }
+.patient-hub-action:disabled{ cursor: progress; opacity: .7; }
+.patient-hub-action .is-spinning{ animation: patientHubSpin .8s linear infinite; }
+@keyframes patientHubSpin{ to{ transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){ .patient-hub-action .is-spinning{ animation: none; } }
+
+/* Each date reads like the Referred and Sort triggers: grey label, bold value. */
+.patient-hub-range{ display: inline-flex; align-items: center; gap: 8px; }
+.patient-hub-date{
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-surface);
+  cursor: text;
+  font-size: 13px;
+}
+.patient-hub-date > span{ color: var(--text-secondary); font-weight: 500; }
+.patient-hub-date:focus-within{
+  border-color: var(--tenant-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tenant-primary) 12%, transparent);
+}
+.pharmacy-patients .patient-hub-date input{
+  width: 8.4em;
+  min-height: 0;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  color: var(--text-primary) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font: inherit;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pharmacy-patients .patient-hub-date input:not(:valid),
+.pharmacy-patients .patient-hub-date input[value='']{ color: var(--text-tertiary) !important; font-weight: 500; }
+.patient-hub-date input::-webkit-calendar-picker-indicator{ margin-left: 4px; cursor: pointer; opacity: .5; }
+.patient-hub-date input::-webkit-calendar-picker-indicator:hover{ opacity: .9; }
+@media (max-width: 640px){
+  .patient-hub-range{ width: 100%; }
+  .patient-hub-date{ flex: 1 1 0; min-width: 0; }
+  .pharmacy-patients .patient-hub-date input{ flex: 1; width: auto; min-width: 0; }
+  .patient-hub-toolbar__actions{ width: 100%; justify-content: flex-end; margin-left: 0; }
+}
+
+/* Search takes the spare width; the status tabs keep their natural size beside it. */
+.patient-hub-filterline{ display: flex; align-items: center; gap: 10px; }
+.patient-hub-filterline > .order-crm-search{ flex: 1 1 280px; min-width: 0; }
+.patient-hub-filterline > .crm-view-switch{ flex: 0 0 auto; }
+@media (max-width: 760px){
+  .patient-hub-filterline{ flex-wrap: wrap; }
+  .patient-hub-filterline > .crm-view-switch{ flex: 1 1 100%; }
+}
 @media (max-width: 760px){
   .patient-hub-row{ grid-template-columns: minmax(0, 1fr) auto; }
   .patient-hub-row > span:not(.order-stage-pill):not(.patient-hub-row__alerts){ grid-column: 1 / -1; }

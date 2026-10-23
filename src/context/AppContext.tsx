@@ -476,6 +476,9 @@ export interface AppState {
   catalogueUpdatedAt: string | null;
   /** Bumped by staff-triggered refreshes so the catalogue effect re-runs. */
   catalogueRefreshNonce: number;
+  /** Bumped by the Patients refresh button so the directory sync re-runs. */
+  patientDirectoryRefreshNonce: number;
+  patientDirectoryRefreshing: boolean;
   crm: CRMPatient[];
   submissions: EligibilitySubmission[];
   enquiries: PendingEnquiry[];
@@ -647,6 +650,8 @@ export type Action =
   | { type: 'SET_CATALOGUE_LOADING' }
   | { type: 'SET_CATALOGUE_IDLE' }
   | { type: 'REQUEST_CATALOGUE_REFRESH' }
+  | { type: 'REQUEST_PATIENT_DIRECTORY_REFRESH' }
+  | { type: 'PATIENT_DIRECTORY_REFRESH_SETTLED' }
   | { type: 'SET_CATALOGUE'; catalogue: CatalogueItem[]; updatedAt: string; environment: CuraleafCatalogueEstate }
   | { type: 'SET_CATALOGUE_ERROR'; message: string }
   | { type: 'APPLY_CURALEAF_QUOTE'; items: Array<{ productId: string; wholesalePrice: number; patientPrice: number; inStock: boolean; stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' }> }
@@ -1173,6 +1178,8 @@ const initialState: AppState = {
   catalogueError: null,
   catalogueUpdatedAt: initialCachedCatalogue.updatedAt,
   catalogueRefreshNonce: 0,
+  patientDirectoryRefreshNonce: 0,
+  patientDirectoryRefreshing: false,
   crm: previewTraining?.crm ?? [],
   submissions: [],
   enquiries: previewTraining?.enquiries ?? [],
@@ -1292,6 +1299,10 @@ function reducer(state: AppState, action: Action): AppState {
       return state.catalogueLoading ? { ...state, catalogueLoading: false } : state;
     case 'REQUEST_CATALOGUE_REFRESH':
       return { ...state, catalogueRefreshNonce: state.catalogueRefreshNonce + 1 };
+    case 'REQUEST_PATIENT_DIRECTORY_REFRESH':
+      return { ...state, patientDirectoryRefreshNonce: state.patientDirectoryRefreshNonce + 1, patientDirectoryRefreshing: true };
+    case 'PATIENT_DIRECTORY_REFRESH_SETTLED':
+      return { ...state, patientDirectoryRefreshing: false };
     case 'SET_CATALOGUE': {
       const catMap = new Map(action.catalogue.map(c => [c.id, c.name]));
       const formulaMap = new Map(action.catalogue.filter(c => c.formulaId).map(c => [c.formulaId!, c.name]));
@@ -1410,6 +1421,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         crm: [...byId.values()],
         enquiries: [...retainedEnquiries, ...action.enquiries],
+        patientDirectoryRefreshing: false,
       };
     }
     case 'SET_PATIENT_CONDITIONS':
@@ -2465,11 +2477,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [currentOrganisation?.worldpay.lastSyncedAt, livePharmacyWorkspace, state.currentOrganisationId, state.staffSession]);
 
+  const patientDirectoryRefreshNonce = state.patientDirectoryRefreshNonce;
   useEffect(() => {
-    if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !syncPatientDirectory) return;
+    if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !syncPatientDirectory) {
+      if (patientDirectoryRefreshNonce) dispatch({ type: 'PATIENT_DIRECTORY_REFRESH_SETTLED' });
+      return;
+    }
     let cancelled = false;
     const organisationId = state.currentOrganisationId;
-    getPortalPatientDirectory(organisationId).then(directory => {
+    getPortalPatientDirectory(organisationId, { fresh: patientDirectoryRefreshNonce > 0 }).then(directory => {
       if (cancelled) return;
       dispatch({
         type: 'SYNC_PATIENT_DIRECTORY',
@@ -2477,9 +2493,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         patients: directory.patients.map(mapPortalPatientRecord),
         enquiries: directory.enquiries.map(record => mapPortalEnquiryRecord(organisationId, record)),
       });
-    }).catch(error => console.warn('Patient directory sync unavailable:', error));
+    }).catch(error => {
+      console.warn('Patient directory sync unavailable:', error);
+      if (cancelled || !patientDirectoryRefreshNonce) return;
+      dispatch({ type: 'PATIENT_DIRECTORY_REFRESH_SETTLED' });
+      dispatch({ type: 'ADD_TOAST', message: 'The patient list could not be refreshed. Try again shortly.', toastType: 'warning', dedupeKey: 'patient-directory-refresh' });
+    });
     return () => { cancelled = true; };
-  }, [syncPatientDirectory, state.currentOrganisationId, state.staffSession]);
+  }, [syncPatientDirectory, state.currentOrganisationId, state.staffSession, patientDirectoryRefreshNonce]);
 
   useEffect(() => {
     if (isLocalPortalPreview || !isApiConfigured || !state.staffSession || !state.currentOrganisationId || !livePharmacyWorkspace) return;

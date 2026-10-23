@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  clampDateInput,
+  settleDateInput,
+  comparePatientSortValues,
+  PATIENT_SORT_DEFAULT_DIRECTION,
+  patientSortDirectionLabel,
   directoryStatusMatchesChip,
   enquiryDirectoryStatus,
   referralPeriodApplies,
@@ -100,6 +105,27 @@ test('declined and withdrawn enquiries both sit under Declined', () => {
   assert.equal(patientCrmGroup(closed), 'declined');
   assert.equal(patientCrmStatusMeta({ ...closed, statusLabel: 'Withdrawn' }).label, 'Withdrawn');
   assert.equal(patientCrmStatusMeta({ ...closed, statusLabel: 'Declined' }).label, 'Declined');
+});
+
+test('sorting flips direction and keeps blanks at the bottom either way', () => {
+  const values = ['2026-03-01', '', '2026-01-01', '2026-02-01'];
+  assert.deepEqual([...values].sort((a, b) => comparePatientSortValues(a, b, 'asc')), ['2026-01-01', '2026-02-01', '2026-03-01', '']);
+  assert.deepEqual([...values].sort((a, b) => comparePatientSortValues(a, b, 'desc')), ['2026-03-01', '2026-02-01', '2026-01-01', '']);
+  assert.equal(PATIENT_SORT_DEFAULT_DIRECTION.name, 'asc');
+  assert.equal(PATIENT_SORT_DEFAULT_DIRECTION.referral, 'desc');
+  assert.equal(patientSortDirectionLabel('name', 'desc'), 'Z to A');
+  assert.equal(patientSortDirectionLabel('payment', 'asc'), 'Oldest first');
+});
+
+test('custom range dates never run past today or before the start of records', () => {
+  const today = '2026-10-23';
+  assert.equal(clampDateInput('2026-10-01', today), '2026-10-01');
+  assert.equal(clampDateInput('4566-10-01', today), today);
+  assert.equal(clampDateInput('202610-10-23', today), null);
+  assert.equal(clampDateInput('', today), '');
+  assert.equal(settleDateInput('0202-10-01', '2020-01-01', today), '2020-01-01');
+  assert.equal(settleDateInput('2027-01-01', '2020-01-01', today), today);
+  assert.equal(settleDateInput('', '2020-01-01', today), '');
 });
 
 test('the referral period narrows the Referred tag and no other', () => {

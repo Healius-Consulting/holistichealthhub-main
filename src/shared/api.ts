@@ -453,8 +453,8 @@ export function getCuraleafQuote(organisationId: string, items: CuraleafQuoteReq
   });
 }
 
-export function getPortalPatientDirectory(organisationId: string) {
-  return apiRequest<PortalPatientDirectoryRecord>(`/v1/portal/patient-directory?organisationId=${encodeURIComponent(organisationId)}`);
+export function getPortalPatientDirectory(organisationId: string, options?: { fresh?: boolean }) {
+  return apiRequest<PortalPatientDirectoryRecord>(`/v1/portal/patient-directory?organisationId=${encodeURIComponent(organisationId)}`, { skipGetCache: options?.fresh });
 }
 
 export function getPortalOrders(organisationId: string, options?: { patientId?: string; unresolvedOnly?: boolean }) {

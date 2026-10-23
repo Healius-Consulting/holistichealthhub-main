@@ -112,6 +112,45 @@ export function directoryStatusMatchesChip(status: PatientDirectoryStatus, chip:
   return status === chip;
 }
 
+export type PatientSortKey = 'name' | 'referral' | 'payment';
+export type PatientSortDirection = 'asc' | 'desc';
+
+/** Names read A to Z; dates read newest first unless the operator flips them. */
+export const PATIENT_SORT_DEFAULT_DIRECTION: Record<PatientSortKey, PatientSortDirection> = {
+  name: 'asc',
+  referral: 'desc',
+  payment: 'desc',
+};
+
+export function patientSortDirectionLabel(key: PatientSortKey, direction: PatientSortDirection) {
+  if (key === 'name') return direction === 'asc' ? 'A to Z' : 'Z to A';
+  return direction === 'asc' ? 'Oldest first' : 'Newest first';
+}
+
+/** Records with nothing to sort on stay at the bottom whichever way the list runs. */
+export function comparePatientSortValues(left: string, right: string, direction: PatientSortDirection) {
+  if (!left || !right) return left ? -1 : right ? 1 : 0;
+  const order = left.localeCompare(right, 'en', { sensitivity: 'base' });
+  return direction === 'asc' ? order : -order;
+}
+
+/**
+ * While typing: a complete date, capped at `max`, so a year like 4566 snaps back to
+ * today straight away. Returns null for anything that is not a date yet.
+ */
+export function clampDateInput(value: string, max: string): string | null {
+  if (value === '') return '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  return value > max ? max : value;
+}
+
+/** On leaving the field: also lift a half-typed year (0202) up to `min`. */
+export function settleDateInput(value: string, min: string, max: string) {
+  if (!value) return value;
+  if (value < min) return min;
+  return value > max ? max : value;
+}
+
 /** The referral period narrows the Referred tag only; other tags list every referral date. */
 export function referralPeriodApplies(chip: PatientDirectoryChip) {
   return chip === 'Referred';
