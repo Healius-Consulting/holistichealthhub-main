@@ -41,11 +41,12 @@ import {
 import { DEFAULT_RETENTION_WINDOWS, inferRetention, type RetentionWindowSettings } from '../utils/commercial';
 import { downloadContentPack, eligibilityUrl } from '../utils/pharmacyResources';
 import { brandSwatchStyle, deriveTenantTheme } from '../utils/tenantTheme';
+import { pharmacyFieldErrors, pharmacyFieldSummary, pharmacyLogoText, type PharmacyFieldErrors, type PharmacyFormField } from '../utils/pharmacyFormErrors';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { attributedCareLabel, attributedClosedNote, attributedCountForOrganisation, attributedInCare, attributedPatientCounts, attributedStagesForOrganisation, portfolioAttributedCount, splitAttributedRecords } from '../utils/attributedPatients';
 import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
-import { completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
+import { ApiRequestError, completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
@@ -333,9 +334,7 @@ function OnboardPharmacy({ onClose, onCreated }: { onClose: () => void; onCreate
     setBusy(true);
     setError(null);
     const slug = slugify(name);
-    // Initials must be letters or digits: "K & J Pharmacy" gives KJ, not "K&", which the server refuses.
-    const initials = name.split(/\s+/).map(part => part.replace(/[^A-Za-z0-9]/g, '').charAt(0)).filter(Boolean).join('');
-    const logoText = (initials || name.replace(/[^A-Za-z0-9]/g, '') || 'RX').slice(0, 2).toUpperCase();
+    const logoText = pharmacyLogoText(name);
     const websiteDomains = domain ? [domain.replace(/^https?:\/\//, '').replace(/\/$/, '')] : [];
     const address = [addressLine1, addressLine2, addressLocality, addressPostcode.toUpperCase()].map(value => value.trim()).filter(Boolean).join(', ');
     try {
@@ -450,15 +449,29 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
   const [addressPostcode, setAddressPostcode] = useState(initialAddress.postcode);
   const [domains, setDomains] = useState(organisation.websiteDomains.join('\n'));
   const [status, setStatus] = useState(organisation.status);
-  const logoText = name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || organisation.logoText;
+  const logoText = pharmacyLogoText(name, organisation.logoText);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(organisation.emailLogoUrl ?? null);
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [removeLogo, setRemoveLogo] = useState(false);
   const [primaryColour, setPrimaryColour] = useState(organisation.brand.primary);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<PharmacyFieldErrors>({});
+  const formRef = useRef<HTMLFormElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const editTheme = deriveTenantTheme(primaryColour);
+  const field = (key: PharmacyFormField) => ({
+    name: key,
+    'aria-invalid': fieldErrors[key] ? true : undefined,
+    'aria-describedby': fieldErrors[key] ? `edit-pharmacy-${key}-error` : undefined,
+  });
+  const issue = (key: PharmacyFormField) => fieldErrors[key]
+    ? <small id={`edit-pharmacy-${key}-error`} className="admin-field-error">{fieldErrors[key]}</small>
+    : null;
+  const clearFieldError = (event: FormEvent<HTMLFormElement>) => {
+    const key = (event.target as HTMLInputElement).name as PharmacyFormField;
+    if (key && fieldErrors[key]) setFieldErrors(current => ({ ...current, [key]: undefined }));
+  };
   const editDialogRef = useModalFocus<HTMLElement>(true, onClose);
 
   useEffect(() => () => {
@@ -493,6 +506,7 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setFieldErrors({});
     const websiteDomains = [...new Set(domains.split(/[\n,]+/).map(value => value.trim().replace(/^https?:\/\//i, '').split('/')[0].toLowerCase()).filter(Boolean))];
     const address = [addressLine1, addressLine2, addressLocality, addressPostcode.toUpperCase()].map(value => value.trim()).filter(Boolean).join(', ');
     const input: UpdateOrganisationInput = {
@@ -543,7 +557,15 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
       });
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The pharmacy details could not be saved.');
+      const { fields, unplaced } = pharmacyFieldErrors(cause instanceof ApiRequestError ? cause.details : []);
+      setFieldErrors(fields);
+      const summary = pharmacyFieldSummary(fields);
+      if (summary) {
+        setError([summary, ...unplaced].join(' '));
+        requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+      } else {
+        setError(describeApiError(cause, 'The pharmacy details could not be saved.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -559,27 +581,27 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
           </div>
           <button className="icon-btn" onClick={onClose} aria-label="Close"><X size={18} /></button>
         </div>
-        <form className="admin-onboard-form" onSubmit={submit}>
+        <form ref={formRef} className="admin-onboard-form" onSubmit={submit} onChange={clearFieldError}>
           <div className="drawer-body onboarding-form">
             <section className="admin-onboard-section">
               <div className="form-section-heading"><span>01</span><div><strong>Registered organisation</strong><small>Corrections are saved to the pharmacy record and added to the audit trail.</small></div></div>
-              <label>Registered pharmacy name<input className="input" value={name} onChange={event => setName(event.target.value)} required /></label>
-              <label>Trading name<input className="input" value={tradingName} onChange={event => setTradingName(event.target.value)} required /></label>
-              <div className="form-grid-two"><label>GPhC number<input className="input" value={gphcNumber} onChange={event => setGphcNumber(event.target.value)} required /></label><label>Superintendent pharmacist<input className="input" value={superintendent} onChange={event => setSuperintendent(event.target.value)} required /></label></div>
-              <label>Company registration number<input className="input" value={companyNumber} onChange={event => setCompanyNumber(event.target.value)} /><small>Optional. This sits on the linked company record, not the pharmacy premises row.</small></label>
+              <label>Registered pharmacy name<input className="input" {...field('name')} value={name} onChange={event => setName(event.target.value)} required />{issue('name')}</label>
+              <label>Trading name<input className="input" {...field('tradingName')} value={tradingName} onChange={event => setTradingName(event.target.value)} required />{issue('tradingName')}</label>
+              <div className="form-grid-two"><label>GPhC number<input className="input" {...field('gphcNumber')} value={gphcNumber} onChange={event => setGphcNumber(event.target.value)} required />{issue('gphcNumber')}</label><label>Superintendent pharmacist<input className="input" {...field('superintendent')} value={superintendent} onChange={event => setSuperintendent(event.target.value)} required />{issue('superintendent')}</label></div>
+              <label>Company registration number<input className="input" {...field('companyNumber')} value={companyNumber} onChange={event => setCompanyNumber(event.target.value)} />{issue('companyNumber')}<small>Optional. This sits on the linked company record, not the pharmacy premises row.</small></label>
               <div className="onboarding-address-grid">
-                <label>Address line 1<input className="input" value={addressLine1} onChange={event => setAddressLine1(event.target.value)} autoComplete="address-line1" required /></label>
-                <label>Address line 2<input className="input" value={addressLine2} onChange={event => setAddressLine2(event.target.value)} autoComplete="address-line2" /></label>
-                <label>Town or city<input className="input" value={addressLocality} onChange={event => setAddressLocality(event.target.value)} autoComplete="address-level2" required /></label>
-                <label>Postcode<input className="input" value={addressPostcode} onChange={event => setAddressPostcode(event.target.value.toUpperCase())} autoComplete="postal-code" required /></label>
+                <label>Address line 1<input className="input" {...field('addressLine1')} value={addressLine1} onChange={event => setAddressLine1(event.target.value)} autoComplete="address-line1" required />{issue('addressLine1')}</label>
+                <label>Address line 2<input className="input" {...field('addressLine2')} value={addressLine2} onChange={event => setAddressLine2(event.target.value)} autoComplete="address-line2" />{issue('addressLine2')}</label>
+                <label>Town or city<input className="input" {...field('locality')} value={addressLocality} onChange={event => setAddressLocality(event.target.value)} autoComplete="address-level2" required />{issue('locality')}</label>
+                <label>Postcode<input className="input" {...field('postcode')} value={addressPostcode} onChange={event => setAddressPostcode(event.target.value.toUpperCase())} autoComplete="postal-code" required />{issue('postcode')}</label>
               </div>
-              <div className="form-grid-two"><label>Pharmacy landline<input className="input" type="tel" value={pharmacyPhone} onChange={event => setPharmacyPhone(event.target.value)} /></label><label>Pharmacy email<input className="input" type="email" value={pharmacyEmail} onChange={event => setPharmacyEmail(event.target.value)} /></label></div>
+              <div className="form-grid-two"><label>Pharmacy landline<input className="input" type="tel" {...field('pharmacyPhone')} value={pharmacyPhone} onChange={event => setPharmacyPhone(event.target.value)} />{issue('pharmacyPhone')}</label><label>Pharmacy email<input className="input" type="email" {...field('pharmacyEmail')} value={pharmacyEmail} onChange={event => setPharmacyEmail(event.target.value)} />{issue('pharmacyEmail')}</label></div>
               <small>Shown to patients in emails and the pharmacy finder.</small>
-              <div className="form-grid-two"><label>Superintendent contact name<input className="input" value={mainContactName} onChange={event => setMainContactName(event.target.value)} required /></label><label>Superintendent contact number<input className="input" type="tel" value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required /></label></div>
-              <label>Superintendent contact email<input className="input" type="email" value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required /></label>
+              <div className="form-grid-two"><label>Superintendent contact name<input className="input" {...field('mainContactName')} value={mainContactName} onChange={event => setMainContactName(event.target.value)} required />{issue('mainContactName')}</label><label>Superintendent contact number<input className="input" type="tel" {...field('mainContactPhone')} value={mainContactPhone} onChange={event => setMainContactPhone(event.target.value)} required />{issue('mainContactPhone')}</label></div>
+              <label>Superintendent contact email<input className="input" type="email" {...field('mainContactEmail')} value={mainContactEmail} onChange={event => setMainContactEmail(event.target.value)} required />{issue('mainContactEmail')}</label>
               <small>For HHH admin to reach the pharmacy. Never shown to patients.</small>
-              <label>Approved website domains<textarea className="input" value={domains} onChange={event => setDomains(event.target.value)} placeholder={'pharmacy.co.uk\nanother-pharmacy.co.uk'} /><small>Enter one domain per line. Protocols and page paths are removed automatically.</small></label>
-              <div className="form-grid-two"><label>Account status<select className="input" value={status === 'intake_live' ? 'onboarding' : status} onChange={event => setStatus(event.target.value as PharmacyTenant['status'])}><option value="onboarding">Onboarding</option>{status === 'live' && <option value="live">Live</option>}<option value="paused">Paused</option></select><small>Onboarding means the workspace is still training. Public intake is already on. Use Go live to unlock the live pharmacy workspace.</small></label></div>
+              <label>Approved website domains<textarea className="input" {...field('websiteDomains')} value={domains} onChange={event => setDomains(event.target.value)} placeholder={'pharmacy.co.uk\nanother-pharmacy.co.uk'} />{issue('websiteDomains')}<small>Enter one domain per line. Protocols and page paths are removed automatically.</small></label>
+              <div className="form-grid-two"><label>Account status<select className="input" {...field('status')} value={status === 'intake_live' ? 'onboarding' : status} onChange={event => setStatus(event.target.value as PharmacyTenant['status'])}><option value="onboarding">Onboarding</option>{status === 'live' && <option value="live">Live</option>}<option value="paused">Paused</option></select>{issue('status')}<small>Onboarding means the workspace is still training. Public intake is already on. Use Go live to unlock the live pharmacy workspace.</small></label></div>
             </section>
 
             <section className="admin-onboard-section">
@@ -606,10 +628,11 @@ function EditPharmacy({ organisation, onClose, onSaved }: { organisation: Pharma
               </section>
               <div className="admin-workspace-preview">
                 <div className="brand-colour-field">
-                  <input type="color" value={primaryColour} onChange={event => setPrimaryColour(event.target.value)} aria-label="Pharmacy workspace primary colour" />
+                  <input type="color" {...field('primaryColour')} value={primaryColour} onChange={event => setPrimaryColour(event.target.value)} aria-label="Pharmacy workspace primary colour" />
                   <div>
                     <strong>Primary brand colour</strong>
                     <small>{primaryColour.toUpperCase()} · accessible palette generated for their workspace</small>
+                    {issue('primaryColour')}
                   </div>
                   <div className="onboarding-palette" aria-hidden="true">
                     <i style={{ background: editTheme.primary }} />
