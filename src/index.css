@@ -161,6 +161,7 @@
 
 .secure-overview__header h1 {
   margin: 0.125rem 0 0.375rem;
+  line-height: 1.15;
 }
 
 .secure-overview__identity {
@@ -593,7 +594,10 @@
 .overview-compare.is-up { color: var(--color-success, #1f7a4d); }
 .overview-compare.is-down { color: var(--text-tertiary, #66756c); }
 .overview-census { display: flex; gap: 12px; margin: 12px 0; }
-.overview-census button { flex: 1; min-height: 44px; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: transparent; }
+.overview-census button { flex: 1; min-width: 0; min-height: 44px; display: grid; gap: 2px; align-content: start; text-align: left; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: transparent; cursor: pointer; }
+.overview-census button > span { color: var(--text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.overview-census button > strong { color: var(--text-primary); font-size: 15px; font-variant-numeric: tabular-nums; }
+.overview-census button > small { color: var(--text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .overview-milestone { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .order-stage-pill.is-referred { background: #f3e2c2; color: #6d4b12; }
 .patient-directory-row { display: grid; grid-template-columns: minmax(0, 1.4fr) auto minmax(0, 1fr); gap: 12px; width: 100%; min-height: 44px; align-items: center; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--border); background: transparent; text-align: left; }
@@ -7642,10 +7646,26 @@ html.modal-open .page-container{ overflow: hidden; }
 .patient-hub-row .order-stage-pill.is-active{ color: #166534; background: #dcfce7; border-color: #bbf7d0; }
 .patient-hub-row .order-stage-pill.is-inactive{ color: #9a3412; background: #ffedd5; border-color: #fed7aa; }
 .patient-hub-row .order-stage-pill.is-declined{ color: #991b1b; background: #fee2e2; border-color: #fecaca; }
+.patient-hub-row .order-stage-pill.is-awaiting{ color: #1e40af; background: #eff6ff; border-color: #bfdbfe; }
+.patient-hub-row .order-stage-pill.is-review{ color: #854d0e; background: #fef9c3; border-color: #fde68a; }
 .patient-hub-row__alerts{ grid-column: 1 / -1; display: grid; gap: 8px; }
 .patient-crm .crm-view-switch button,
 .patient-crm .order-filter-trigger{ min-height: 40px; font-size: 13px; }
+.pharmacy-patients .order-filter-trigger{ gap: 8px; padding: 0 12px; }
+@media (max-width: 480px){
+  .pharmacy-patients .crm-view-switch{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+    gap: 4px;
+    padding: 4px;
+    border-radius: 12px;
+  }
+  .pharmacy-patients .crm-view-switch button{ min-width: 0; padding: 0 8px; border-radius: 9px; }
+}
 .patient-hub-select{ position: relative; }
+@media (max-width: 480px){
+  .patient-hub-select__menu{ right: 0; min-width: 0; }
+}
 .patient-hub-select__menu{
   position: absolute;
   z-index: 20;
@@ -7653,7 +7673,7 @@ html.modal-open .page-container{ overflow: hidden; }
   left: 0;
   display: grid;
   min-width: 180px;
-  gap: 2px;
+  gap: 4px;
   padding: 6px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -7662,7 +7682,7 @@ html.modal-open .page-container{ overflow: hidden; }
 }
 .patient-hub-select__menu button{
   min-height: 40px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 0;
   border-radius: 6px;
   color: var(--text-primary);
@@ -13777,6 +13797,15 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 
 .order-crm-search:focus-within{ color: var(--tenant-primary-strong); border-color: var(--tenant-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tenant-primary) 10%, transparent); }
 .order-crm-search input{ width: 100%; border: 0; outline: 0; color: var(--text-primary); background: transparent; font: inherit; font-size: 13.5px; }
+/* Outranks the global boxed-input rule in both themes; the wrapper is the field. */
+:is(.page-body.order-crm:not(.patient-crm), .pharmacy-patients) .order-crm-search input,
+:is(.page-body.order-crm:not(.patient-crm), .pharmacy-patients) .order-crm-search input:focus{
+  min-height: 0;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
 .order-crm-search input::placeholder{ color: var(--text-tertiary); }
 
 .order-crm-filters{
@@ -13892,6 +13921,14 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-size: 9px;
 }
 .order-filter-menu__group button.active strong{ color: var(--tenant-on-primary); background: var(--tenant-primary); }
+
+.page-body.order-crm:not(.patient-crm) .order-filter-trigger,
+.page-body.order-crm:not(.patient-crm) .order-filter-menu__group button{ gap: 8px; padding: 0 12px; font-size: 12px; }
+.page-body.order-crm:not(.patient-crm) .order-filter-menu__group small{ padding: 2px 12px; font-size: 10px; }
+.page-body.order-crm:not(.patient-crm) .order-filter-menu__group button strong{ min-width: 20px; height: 20px; padding: 0 5px; font-size: 10.5px; }
+@media (max-width: 640px){
+  .page-body.order-crm:not(.patient-crm) .order-filter-menu > div[role="menu"]{ left: 0; right: auto; max-width: calc(100vw - 32px); }
+}
 
 .patient-crm .order-filter-more{ position: relative; flex: 0 0 auto; }
 .patient-crm .order-crm-controls:has(.order-filter-more[open]){ position: relative; z-index: 30; }
@@ -19851,7 +19888,7 @@ html[data-reduced-motion='true'] .rx-guided-active-indicator{ animation: none; }
   .rx-line-price-nudge,
   .rx-line-price{ min-height: 44px; }
 }
-.rx-line-price__rrp{ margin: 2px 0 0; color: var(--text-tertiary); font-size: 12px; }
+.rx-line-price__rrp{ margin: 6px 0 0; color: var(--text-tertiary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .rx-order-summary-rail__margin dd.is-amber,
 .rx-order-summary-rail__economics dd.is-amber{ color: var(--color-warning); }
 .rx-order-summary-rail__margin dd.is-muted,

@@ -3,7 +3,8 @@ import { config } from '../../bootstrap/config.js';
 import { emailInlineImages } from '../notifications/email-assets.js';
 import { resolveEmailHeader } from '../notifications/email-layout.js';
 import { isEmailTemplateCode } from '../notifications/message-kinds.js';
-import { BRAND_LOGO_PAYLOAD_KEY, fromAddressFor, replyToFor } from '../notifications/email-catalog.js';
+import { BRAND_HEADER_BACKGROUND_PAYLOAD_KEY, BRAND_LOGO_PAYLOAD_KEY, fromAddressFor, replyToFor } from '../notifications/email-catalog.js';
+import { emailHeaderBackgroundForLogo } from '../notifications/email-logo-background.js';
 import { renderEmailTemplate } from '../notifications/email-renderer.js';
 import { readOrganisationLogoBytes } from '../organisation/brand-logo.js';
 import type { StorageProvider } from '../../providers/storage/storage.provider.js';
@@ -132,7 +133,11 @@ async function deliverOne(
       const visible = { ...source };
       delete visible.bcc;
       const payload = brandLogo
-        ? { ...visible, [BRAND_LOGO_PAYLOAD_KEY]: 'true' }
+        ? {
+          ...visible,
+          [BRAND_LOGO_PAYLOAD_KEY]: 'true',
+          [BRAND_HEADER_BACKGROUND_PAYLOAD_KEY]: emailHeaderBackgroundForLogo(Buffer.from(brandLogo, 'base64')),
+        }
         : visible;
       const rendered = renderEmailTemplate(record.templateCode, payload);
       const fromAddress = isEmailTemplateCode(record.templateCode)

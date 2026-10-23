@@ -1,3 +1,5 @@
+import { DEFAULT_EMAIL_HEADER_BACKGROUND, isLightEmailHeader } from './email-logo-background.js';
+
 export const EMAIL_PUBLIC_ORIGIN = 'https://holistichealthhub.live';
 
 export const EMAIL_CID = {
@@ -41,6 +43,8 @@ export type EmailHeader = {
   height: number;
   fallbackText: string;
   assetFile?: string;
+  /** Header fill chosen to suit the pharmacy's logo; the default dark green when absent. */
+  background?: string;
 };
 
 export function escapeHtml(value: string) {
@@ -79,6 +83,8 @@ export function resolveEmailHeader(input: {
   organisationId?: string;
   pharmacyName?: string;
   hasBrandLogo?: boolean;
+  /** Set by the delivery worker from the uploaded logo itself. */
+  headerBackground?: string;
 }): EmailHeader {
   if (input.audience === 'admin') {
     return {
@@ -97,6 +103,9 @@ export function resolveEmailHeader(input: {
     width: BRAND_LOGO_DISPLAY.width,
     height: BRAND_LOGO_DISPLAY.height,
     fallbackText: pharmacyName || 'the pharmacy',
+    ...(input.hasBrandLogo && input.headerBackground && /^#[0-9a-f]{6}$/i.test(input.headerBackground)
+      ? { background: input.headerBackground.toLowerCase() }
+      : {}),
   };
 }
 
@@ -151,8 +160,14 @@ export function brandedEmail(input: {
   ).join('');
   const href = input.cta ? safeHttpUrl(input.cta.href) : '';
   const logoUrl = imageSrc(input.header.logoUrl);
+  const headerBackground = input.header.background && /^#[0-9a-f]{6}$/i.test(input.header.background)
+    ? input.header.background
+    : DEFAULT_EMAIL_HEADER_BACKGROUND;
+  const headerBorder = headerBackground === DEFAULT_EMAIL_HEADER_BACKGROUND
+    ? '#0f342c'
+    : isLightEmailHeader(headerBackground) ? '#e1e8e6' : headerBackground;
   const headerMark = logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" width="${input.header.width}" height="${input.header.height}" alt="${escapeHtml(input.header.logoAlt)}" style="width:${input.header.width}px; height:${input.header.height}px; max-width:100%; object-fit:contain; object-position:center; border:0; display:block;">`
+    ? `<img src="${escapeHtml(logoUrl)}" width="${input.header.width}" height="${input.header.height}" alt="${escapeHtml(input.header.logoAlt)}" style="width:${input.header.width}px; height:${input.header.height}px; max-width:100%; object-fit:contain; object-position:center; border:0; display:block; color:${isLightEmailHeader(headerBackground) ? '#123f36' : '#dce9e5'}; font-family:Arial, Helvetica, sans-serif; font-size:22px; font-weight:700;">`
     : `<p style="margin:0; color:#dce9e5; font-family:Arial, Helvetica, sans-serif; font-size:22px; line-height:28px; font-weight:700;">${escapeHtml(input.header.fallbackText)}</p>`;
   const highlight = input.highlight?.value
     ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%; margin:0 0 24px; border:1px solid #d7e0de; border-radius:18px; background:#f6fbfa;"><tr><td style="padding:26px;"><p style="margin:0 0 8px; color:#5c6864; font-size:12px; line-height:16px; font-weight:700; letter-spacing:1.6px; text-transform:uppercase;">${escapeHtml(input.highlight.label)}</p><p style="margin:0; color:#1d2321; font-size:42px; line-height:46px; font-weight:700;">${escapeHtml(input.highlight.value)}</p></td></tr></table>`
@@ -230,7 +245,7 @@ export function brandedEmail(input: {
       <td align="center" style="padding:40px 18px;">
         <table role="presentation" width="640" cellspacing="0" cellpadding="0" border="0" style="width:100%; max-width:640px; overflow:hidden; background:#fdfefd; border:1px solid #d9e2e0; border-radius:16px;">
           <tr>
-            <td align="center" style="padding:48px 42px; border-bottom:1px solid #0f342c; background:#123f36;">
+            <td align="center" bgcolor="${headerBackground}" style="padding:48px 42px; border-bottom:1px solid ${headerBorder}; background:${headerBackground};">
               ${headerMark}
             </td>
           </tr>

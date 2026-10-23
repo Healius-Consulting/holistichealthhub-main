@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  directoryStatusMatchesChip,
+  enquiryDirectoryStatus,
+  referralPeriodApplies,
   patientCrmGroup,
   patientCrmLane,
   patientCrmRecordKey,
@@ -71,6 +74,26 @@ test('status copy stays textual for colour-independent reading', () => {
   assert.match(meta.description, /HHH/);
   assert.equal(meta.tone, 'info');
   assert.equal(patientCrmRecordKey('patient', 'abc'), 'patient:abc');
+});
+
+test('assigned open enquiries are tagged by HHH progress and listed on All only', () => {
+  assert.equal(enquiryDirectoryStatus('New enquiry'), 'Awaiting referral');
+  assert.equal(enquiryDirectoryStatus('Under HHH review'), 'Under review');
+  for (const status of ['Awaiting referral', 'Under review'] as const) {
+    assert.equal(directoryStatusMatchesChip(status, 'all'), true);
+    assert.equal(directoryStatusMatchesChip(status, 'Referred'), false);
+    assert.equal(directoryStatusMatchesChip(status, 'Active'), false);
+    assert.equal(directoryStatusMatchesChip(status, 'Declined'), false);
+  }
+  assert.equal(directoryStatusMatchesChip('Referred', 'Referred'), true);
+  assert.equal(directoryStatusMatchesChip('Active', 'Referred'), false);
+});
+
+test('the referral period narrows the Referred tag and no other', () => {
+  assert.equal(referralPeriodApplies('Referred'), true);
+  for (const chip of ['all', 'Active', 'Inactive', 'Declined'] as const) {
+    assert.equal(referralPeriodApplies(chip), false);
+  }
 });
 
 test('list tags follow the queue group and use distinct tones', () => {

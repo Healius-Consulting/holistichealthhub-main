@@ -33,6 +33,8 @@ export type EmailAudience = 'patient' | 'pharmacy_owner' | 'staff' | 'admin';
  * logo uploaded after a message was queued must still reach the message.
  */
 export const BRAND_LOGO_PAYLOAD_KEY = 'hasBrandLogo';
+/** Header fill derived from that same logo at send time, so the banner suits the artwork. */
+export const BRAND_HEADER_BACKGROUND_PAYLOAD_KEY = 'brandHeaderBackground';
 export type EmailSchedule = 'immediate' | 'collection_hours' | 'payment_reminder';
 
 export const EMAIL_TEMPLATE_CODES = [
@@ -263,6 +265,7 @@ function render(input: {
         // Set by the delivery worker once it has the uploaded logo in hand, so the
         // markup and the attachment list can never disagree about whether one exists.
         hasBrandLogo: value(input.payload, BRAND_LOGO_PAYLOAD_KEY) === 'true',
+        headerBackground: value(input.payload, BRAND_HEADER_BACKGROUND_PAYLOAD_KEY),
       }),
       // Staff and admin mail is internal; only a patient needs to be told who the
       // controller is, and an internal footer naming their own pharmacy reads oddly.

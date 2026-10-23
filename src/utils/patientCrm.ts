@@ -87,6 +87,25 @@ export function patientCrmLane(record: PatientCrmFilterInput): PatientCrmLane {
   return 'care';
 }
 
+export const PATIENT_DIRECTORY_CHIPS = ['all', 'Referred', 'Active', 'Inactive', 'Declined'] as const;
+export type PatientDirectoryChip = (typeof PATIENT_DIRECTORY_CHIPS)[number];
+export type PatientEnquiryDirectoryStatus = 'Awaiting referral' | 'Under review';
+export type PatientDirectoryStatus = Exclude<PatientDirectoryChip, 'all'> | PatientEnquiryDirectoryStatus;
+
+/** Open enquiries assigned to this pharmacy, tagged by where HHH is with them. */
+export function enquiryDirectoryStatus(displayStatus: string): PatientEnquiryDirectoryStatus {
+  return displayStatus === 'Under HHH review' ? 'Under review' : 'Awaiting referral';
+}
+
+export function directoryStatusMatchesChip(status: PatientDirectoryStatus, chip: PatientDirectoryChip) {
+  return chip === 'all' || status === chip;
+}
+
+/** The referral period narrows the Referred tag only; other tags list every referral date. */
+export function referralPeriodApplies(chip: PatientDirectoryChip) {
+  return chip === 'Referred';
+}
+
 export function patientCrmRecordKey(kind: PatientCrmKind, id: string) {
   return `${kind}:${id}`;
 }

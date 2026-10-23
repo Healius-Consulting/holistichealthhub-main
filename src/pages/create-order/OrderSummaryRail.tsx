@@ -211,7 +211,7 @@ export default function OrderSummaryRail({
                     </div>
                     {(() => {
                       const rrp = rrpFor(item.productId);
-                      if (rrp == null || Math.abs(rrp - item.retail) < 0.005) return null;
+                      if (rrp == null) return null;
                       return <p className="rx-line-price__rrp">RRP {money(rrp)}</p>;
                     })()}
                     {(() => {

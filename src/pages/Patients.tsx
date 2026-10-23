@@ -32,10 +32,16 @@ import {
   type PatientDirectoryFilter,
 } from '../utils/patientDirectoryNavigation';
 import {
+  directoryStatusMatchesChip,
+  enquiryDirectoryStatus,
+  PATIENT_DIRECTORY_CHIPS,
   patientCrmGroup,
   patientCrmRecordKey,
   patientCrmStatusMeta,
+  referralPeriodApplies,
   type PatientCrmIcon,
+  type PatientDirectoryChip,
+  type PatientDirectoryStatus,
 } from '../utils/patientCrm';
 
 /** Placeholders keep every row present so a gap reads as "we do not hold this". */
@@ -309,7 +315,7 @@ export default function Patients() {
     const initial = selectedCrmKeyFromSearch(window.location.search);
     return initial ? [{ key: initial, layer: allocateRecordLayer() }] : [];
   });
-  const [statusChip, setStatusChip] = useState<'all' | 'Referred' | 'Active' | 'Inactive' | 'Declined'>('all');
+  const [statusChip, setStatusChip] = useState<PatientDirectoryChip>('all');
   const [referredPeriod, setReferredPeriod] = useState<'this-month' | 'last-month' | 'last-3' | 'all-time' | 'custom'>('all-time');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -406,7 +412,7 @@ export default function Patients() {
     const pad = (value: number) => String(value).padStart(2, '0');
     const startOf = (y: number, m: number) => `${y}-${pad(m)}-01`;
     const matchesPeriod = (record: CrmRecord) => {
-      if (referredPeriod === 'all-time') return true;
+      if (!referralPeriodApplies(statusChip) || referredPeriod === 'all-time') return true;
       const raw = record.patient?.crmPatient?.referredAt;
       if (!raw) return false;
       const day = raw.slice(0, 10);
@@ -422,8 +428,8 @@ export default function Patients() {
       const start = new Date(Date.UTC(year, month - 3, 1));
       return day >= `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-01` && day <= today;
     };
-    const statusOf = (record: CrmRecord): 'Referred' | 'Active' | 'Inactive' | 'Declined' | null => {
-      if (record.kind === 'enquiry') return record.journey === 'declined' ? 'Declined' : null;
+    const statusOf = (record: CrmRecord): PatientDirectoryStatus | null => {
+      if (record.kind === 'enquiry') return record.enquiry ? enquiryDirectoryStatus(record.enquiry.displayStatus) : null;
       if (record.patient?.crmPatient?.commercialStatus) return record.patient.crmPatient.commercialStatus;
       if (record.journey === 'declined' || record.journey === 'suspended') return 'Declined';
       if (record.journey === 'referred') return 'Referred';
@@ -432,7 +438,7 @@ export default function Patients() {
     };
     return records
       .map(record => ({ record, status: statusOf(record) }))
-      .filter(item => item.status && (statusChip === 'all' || item.status === statusChip) && matchesPeriod(item.record) && recordMatchesQuery(item.record, search))
+      .filter(item => item.status && directoryStatusMatchesChip(item.status, statusChip) && matchesPeriod(item.record) && recordMatchesQuery(item.record, search))
       .sort((left, right) => {
         if (sortBy === 'referral') return String(right.record.patient?.crmPatient?.referredAt || '').localeCompare(String(left.record.patient?.crmPatient?.referredAt || ''));
         if (sortBy === 'payment') {
@@ -549,7 +555,7 @@ export default function Patients() {
   };
 
   return (
-    <div className="page-body order-crm patient-crm">
+    <div className="page-body order-crm patient-crm pharmacy-patients">
       <section className="order-crm-controls">
         <div className="order-crm-search">
           <Search size={15} />
@@ -562,16 +568,13 @@ export default function Patients() {
           />
         </div>
         <div className="crm-view-switch" role="group" aria-label="Patient status">
-          {(['all', 'Referred', 'Active', 'Inactive', 'Declined'] as const).map(chip => (
+          {PATIENT_DIRECTORY_CHIPS.map(chip => (
             <button
               key={chip}
               type="button"
               aria-pressed={statusChip === chip}
               className={statusChip === chip ? 'is-on' : ''}
-              onClick={() => {
-                setStatusChip(chip);
-                if (chip === 'Referred') setReferredPeriod('this-month');
-              }}
+              onClick={() => setStatusChip(chip)}
             >
               {chip === 'all' ? 'All' : chip}
             </button>
@@ -660,12 +663,14 @@ export default function Patients() {
   );
 }
 
-const DIRECTORY_STATUS_CLASS = {
+const DIRECTORY_STATUS_CLASS: Record<PatientDirectoryStatus, string> = {
   Referred: ' is-referred',
   Active: ' is-active',
   Inactive: ' is-inactive',
   Declined: ' is-declined',
-} as const;
+  'Awaiting referral': ' is-awaiting',
+  'Under review': ' is-review',
+};
 
 function HubSelect<T extends string>({
   label,
@@ -718,7 +723,7 @@ function HubSelect<T extends string>({
 
 function PatientDirectoryCard({ record, status, onSelect }: {
   record: CrmRecord;
-  status: keyof typeof DIRECTORY_STATUS_CLASS;
+  status: PatientDirectoryStatus;
   onSelect: () => void;
 }) {
   const orders = record.patient?.orders ?? [];
@@ -732,7 +737,11 @@ function PatientDirectoryCard({ record, status, onSelect }: {
     <button type="button" className="patient-hub-row" onClick={onSelect}>
       <strong>{record.name}</strong>
       <span><em>Date of birth</em>{formatPatientDob(record.dob)}</span>
-      <span><em>Referred</em>{referredAt ? formatUkDate(referredAt, 'Not recorded') : 'Not recorded'}</span>
+      {record.enquiry ? (
+        <span><em>Received</em>{formatUkDate(record.enquiry.submittedAt, 'Not recorded')}</span>
+      ) : (
+        <span><em>Referred</em>{referredAt ? formatUkDate(referredAt, 'Not recorded') : 'Not recorded'}</span>
+      )}
       <span><em>Last order</em>{lastOrder ? formatUkDate(lastOrder.date) : 'No orders yet'}</span>
       <span className={`order-stage-pill${DIRECTORY_STATUS_CLASS[status]}`}>{status}</span>
       {collectionOverdue || reorderOverdue ? (
