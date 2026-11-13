@@ -38,6 +38,9 @@ Operational pharmacy emails go to the pharmacy email, or the superintendent when
 - `pharmacy_password_reset` (staff.password_reset): Sent from the staff login form, or when an HHH admin queues a reset. Reply-To: `IT@holistichealthhub.live`.
 - `pharmacy_2fa_enabled` (staff.2fa_enabled): Sent after a staff member enrols an authenticator app. Reply-To: `IT@holistichealthhub.live`.
 - `pharmacy_2fa_disabled` (staff.2fa_disabled): Sent after an HHH admin removes the authenticator app. Reply-To: `IT@holistichealthhub.live`.
+- `pharmacy_onboarding_submitted` (pharmacy_onboarding.submitted): Sent to the pharmacy email when a Curaleaf account form is submitted from the onboarding page.
+- `admin_pharmacy_onboarding_request` (pharmacy_onboarding.submitted): Sent only to the partner success mailbox when a pharmacy submits a Curaleaf account form. The filled form is attached. Not sent to every platform admin.
+- `pharmacy_onboarding_declined` (pharmacy_onboarding.declined): Sent to the pharmacy email when HHH declines a pharmacy onboarding request.
 
 ## Admin emails
 

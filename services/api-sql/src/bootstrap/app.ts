@@ -9,6 +9,7 @@ import { createAuthRouter } from '../transport/public/auth.router.js';
 import { createDirectoryRouter } from '../transport/public/directory.router.js';
 import { createPortalSetupRouter } from '../transport/portal/setup.router.js';
 import { createPublicEligibilityRouter } from '../transport/public/eligibility.router.js';
+import { createPublicPharmacyOnboardingRouter } from '../transport/public/pharmacy-onboarding.router.js';
 import { createPortalPrescriptionRouter } from '../transport/portal/prescription.router.js';
 import { createPortalOrderRouter } from '../transport/portal/order.router.js';
 import { createPublicPaymentRouter } from '../transport/public/payment.router.js';
@@ -23,6 +24,7 @@ import { createAdminStaffRouter } from '../transport/portal/admin-staff.router.j
 import { createAdminPatientRouter } from '../transport/portal/admin-patient.router.js';
 import { createPortalIntegrationRouter } from '../transport/portal/integration.router.js';
 import { createPortalFinanceRouter } from '../transport/portal/finance.router.js';
+import { createPortalPharmacyOnboardingRouter } from '../transport/portal/pharmacy-onboarding.router.js';
 
 export function isOriginPermitted(origin: string | undefined): boolean {
   return isPermittedWebOrigin(origin);
@@ -84,6 +86,7 @@ export function createApp(): Express {
   app.use('/v1', createDirectoryRouter());
   app.use('/v1', createPortalSetupRouter());
   app.use('/v1', createPublicEligibilityRouter());
+  app.use('/v1', createPublicPharmacyOnboardingRouter());
   app.use('/v1', createPublicUnsubscribeRouter());
   app.use('/v1', createPortalPrescriptionRouter());
   app.use('/v1', createPortalOrderRouter());
@@ -95,6 +98,7 @@ export function createApp(): Express {
   app.use('/v1', createAdminStaffRouter());
   app.use('/v1', createPortalIntegrationRouter());
   app.use('/v1', createPortalFinanceRouter());
+  app.use('/v1', createPortalPharmacyOnboardingRouter());
   app.use('/v2', createPublicIntakeV2Router());
   app.use('/v2', createPublicPostcodeSearchRouter());
   app.use('/v2', createPortalIntakeV2Router());

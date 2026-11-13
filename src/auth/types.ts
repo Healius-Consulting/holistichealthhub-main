@@ -35,6 +35,7 @@ export interface PharmsmartWelcome {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
+  gphcNumber?: string | null;
 }
 
 export interface AuthState {

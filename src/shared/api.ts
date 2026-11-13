@@ -295,6 +295,7 @@ export type PharmsmartLoginResult =
     email: string | null;
     firstName: string | null;
     lastName: string | null;
+    gphcNumber?: string | null;
   };
 
 export async function redeemPharmsmartLogin(token: string) {
@@ -384,6 +385,95 @@ export function createEligibilitySubmission(input: EligibilitySubmissionInput & 
   return apiRequest<EligibilitySubmissionReceipt>('/v1/public/eligibility-submissions', {
     method: 'POST', body: JSON.stringify(input),
   });
+}
+
+export type PharmacyOnboardingRequestView = {
+  id: string;
+  status: 'pending' | 'activated' | 'declined';
+  pharmacistName: string;
+  pharmacyName: string;
+  registeredCompanyName: string;
+  invoiceAddress: string;
+  deliveryAddress: string;
+  gphcNumber: string;
+  wdaNumber: string;
+  licenceDetails: string;
+  pharmacyEmail: string;
+  accountsEmail: string;
+  pharmacyPhone: string;
+  accountsPhone: string;
+  faxNumber: string | null;
+  signatureName: string;
+  signedOn: string;
+  licenceFilename: string;
+  organisationId: string | null;
+  declineReason: string | null;
+  decidedAt: string | null;
+  createdAt: string | null;
+};
+
+export type ActivatedPharmacyOnboarding = {
+  id: string;
+  referralToken: string;
+  name: string;
+  tradingName: string;
+  logoText: string;
+  gphcNumber: string;
+  superintendent: string;
+  mainContactName: string;
+  mainContactPhone: string;
+  mainContactEmail: string;
+  pharmacyPhone: string;
+  pharmacyEmail: string;
+  address: string;
+  primaryColour: string;
+};
+
+export async function submitCuraleafAccountForm(body: FormData) {
+  const securityHeaders = securityTokenProvider ? await securityTokenProvider() : {};
+  const response = await fetch(`${apiBaseUrl()}/v1/public/pharmacy-onboarding-requests`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: securityHeaders,
+    body,
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { code?: string; message?: string; details?: unknown } | null;
+    throw new ApiRequestError(response.status, payload?.code ?? 'REQUEST_FAILED', payload?.message ?? 'The form could not be submitted.', fieldIssues(payload?.details));
+  }
+  return response.json() as Promise<{ id: string; status: 'pending' | 'activated' | 'declined' }>;
+}
+
+export function listPharmacyOnboardingRequests() {
+  return apiRequest<{ records: PharmacyOnboardingRequestView[] }>('/v1/portal/admin/pharmacy-onboarding-requests');
+}
+
+export async function openPharmacyOnboardingFile(id: string, kind: 'filled-form' | 'licence') {
+  const securityHeaders = securityTokenProvider ? await securityTokenProvider() : {};
+  const response = await fetch(`${apiBaseUrl()}/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/${kind}`, {
+    credentials: 'include',
+    headers: { ...securityHeaders, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+    throw new ApiRequestError(response.status, payload?.code ?? 'REQUEST_FAILED', payload?.message ?? 'The file could not be opened.');
+  }
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+export function activatePharmacyOnboardingRequest(id: string) {
+  return apiRequest<{ request: PharmacyOnboardingRequestView; organisation: ActivatedPharmacyOnboarding }>(
+    `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/activate`,
+    { method: 'POST', body: JSON.stringify({}) },
+  );
+}
+
+export function declinePharmacyOnboardingRequest(id: string, reason: string) {
+  return apiRequest<{ request: PharmacyOnboardingRequestView }>(
+    `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/decline`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
+  );
 }
 
 export function completeReferralRecordsCheck(submissionId: string, input: { organisationId: string; notes: string }) {

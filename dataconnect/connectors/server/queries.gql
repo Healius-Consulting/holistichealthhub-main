@@ -376,6 +376,121 @@ query ListTenantShipments($organisationId: UUID!, $limit: Int!) @auth(level: NO_
   }
 }
 
+query ListOrganisationGphcNumbers @auth(level: NO_ACCESS) {
+  organisations(where: { archivedAt: { isNull: true } }) {
+    id
+    gphcNumber
+  }
+}
+
+query PharmacyOnboardingRequestByIdempotency($idempotencyKey: String!) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequests(where: { idempotencyKey: { eq: $idempotencyKey } }, limit: 1) {
+    id
+    status
+    pharmacistName
+    pharmacyName
+    registeredCompanyName
+    invoiceAddress
+    deliveryAddress
+    gphcNumber
+    wdaNumber
+    licenceDetails
+    pharmacyEmail
+    accountsEmail
+    pharmacyPhone
+    accountsPhone
+    faxNumber
+    signatureName
+    signedOn
+    licenceStoragePath
+    licenceContentType
+    licenceFilename
+    filledFormStoragePath
+    organisationId
+    declineReason
+    decidedAt
+    decidedByUid
+    idempotencyKey
+    createdAt
+  }
+}
+
+query PendingPharmacyOnboardingByGphc($gphcNumber: String!) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequests(
+    where: { gphcNumber: { eq: $gphcNumber }, status: { eq: PENDING } }
+    limit: 1
+  ) {
+    id
+    status
+    gphcNumber
+    idempotencyKey
+  }
+}
+
+query GetPharmacyOnboardingRequest($id: UUID!) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequest(key: { id: $id }) {
+    id
+    status
+    pharmacistName
+    pharmacyName
+    registeredCompanyName
+    invoiceAddress
+    deliveryAddress
+    gphcNumber
+    wdaNumber
+    licenceDetails
+    pharmacyEmail
+    accountsEmail
+    pharmacyPhone
+    accountsPhone
+    faxNumber
+    signatureName
+    signedOn
+    licenceStoragePath
+    licenceContentType
+    licenceFilename
+    filledFormStoragePath
+    organisationId
+    declineReason
+    decidedAt
+    decidedByUid
+    idempotencyKey
+    createdAt
+  }
+}
+
+query ListPharmacyOnboardingRequests($limit: Int!) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequests(orderBy: [{ createdAt: DESC }], limit: $limit) {
+    id
+    status
+    pharmacistName
+    pharmacyName
+    registeredCompanyName
+    invoiceAddress
+    deliveryAddress
+    gphcNumber
+    wdaNumber
+    licenceDetails
+    pharmacyEmail
+    accountsEmail
+    pharmacyPhone
+    accountsPhone
+    faxNumber
+    signatureName
+    signedOn
+    licenceStoragePath
+    licenceContentType
+    licenceFilename
+    filledFormStoragePath
+    organisationId
+    declineReason
+    decidedAt
+    decidedByUid
+    idempotencyKey
+    createdAt
+  }
+}
+
 query ListTenantGoodsReceipts($organisationId: UUID!, $limit: Int!) @auth(level: NO_ACCESS) {
   goodsReceipts(where: { organisationId: { eq: $organisationId } }, limit: $limit) {
     id

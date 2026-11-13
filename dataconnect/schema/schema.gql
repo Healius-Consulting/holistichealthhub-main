@@ -1253,3 +1253,44 @@ type CuraleafQuoteBankSync @table(key: ["environment"]) {
   lastError: String
   updatedAt: Timestamp! @default(expr: "request.time")
 }
+
+enum PharmacyOnboardingRequestStatus {
+  PENDING
+  ACTIVATED
+  DECLINED
+}
+
+# A pharmacy that is not on the platform yet, submitted from the public onboarding
+# page or the PharmSmart welcome screen. The controlled-drug licence and the filled
+# Curaleaf PDF stay in private storage; this row keeps the paths, not the bytes.
+type PharmacyOnboardingRequest @table {
+  id: UUID! @default(expr: "uuidV4()")
+  status: PharmacyOnboardingRequestStatus! @default(value: PENDING) @index
+  pharmacistName: String!
+  pharmacyName: String!
+  registeredCompanyName: String!
+  invoiceAddress: String!
+  deliveryAddress: String!
+  gphcNumber: String! @index
+  wdaNumber: String!
+  licenceDetails: String!
+  pharmacyEmail: String!
+  accountsEmail: String!
+  pharmacyPhone: String!
+  accountsPhone: String!
+  faxNumber: String
+  signatureName: String!
+  signedOn: String!
+  licenceStoragePath: String!
+  licenceContentType: String!
+  licenceFilename: String!
+  filledFormStoragePath: String!
+  organisation: Organisation @ref(fields: "organisationId")
+  organisationId: UUID @index
+  declineReason: String
+  decidedAt: Timestamp
+  decidedByUid: String
+  idempotencyKey: String! @unique
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}

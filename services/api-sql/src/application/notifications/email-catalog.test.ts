@@ -17,8 +17,8 @@ import {
 const rosterPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../artifacts/email-roster.md');
 
 describe('email catalog', () => {
-  it('keeps twenty-one templates with render, audience, events, and schedule', () => {
-    assert.equal(EMAIL_TEMPLATE_CODES.length, 22);
+  it('keeps every template renderable, with an audience, events, and a schedule', () => {
+    assert.equal(EMAIL_TEMPLATE_CODES.length, 25);
     for (const code of EMAIL_TEMPLATE_CODES) {
       const entry = EMAILS[code];
       assert.equal(typeof entry.render, 'function');

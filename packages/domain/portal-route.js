@@ -3,6 +3,7 @@ export const ADMIN_VIEW_PATHS = Object.freeze({
   referrals: '/referrals',
   patients: '/patients',
   finance: '/finance',
+  pharmacyRequests: '/pharmacy-requests',
 });
 
 export const PHARMACY_VIEW_PATHS = Object.freeze([

@@ -168,6 +168,20 @@ export class StorageProvider {
     return downloadUrl;
   }
 
+  async saveObject(storagePath: string, bytes: Buffer, contentType: string): Promise<void> {
+    try {
+      const bucket = this.storage.bucket(this.bucketName);
+      const file = bucket.file(storagePath);
+      await file.save(bytes, {
+        resumable: false,
+        contentType,
+        metadata: { contentType },
+      });
+    } catch (error) {
+      wrapStorageError(error, new HttpError(503, 'The onboarding file could not be stored.', 'STORAGE_WRITE_FAILED'));
+    }
+  }
+
   async deleteFile(storagePath: string): Promise<void> {
     try {
       const bucket = this.storage.bucket(this.bucketName);

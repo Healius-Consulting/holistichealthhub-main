@@ -18049,6 +18049,216 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   font-weight: 600;
 }
 
+.pharmsmart-guide__submitted{
+  margin: 0;
+  color: var(--green);
+  font-weight: 600;
+}
+
+.curaleaf-account-form{
+  width: min(720px, 100%);
+  height: min(92vh, 100%);
+}
+
+.curaleaf-account-form header button{
+  margin-left: auto;
+}
+
+.curaleaf-account-form__body{
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 20px 20px;
+}
+
+.curaleaf-account-form__body > p{
+  margin: 12px 0 0;
+  color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+.curaleaf-account-form__error{
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  color: #7f1d1d;
+  background: #fef2f2;
+  border-radius: 12px;
+}
+
+.curaleaf-account-form__grid{
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.curaleaf-account-form__grid label{
+  display: grid;
+  gap: 6px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.curaleaf-account-form__grid label span{
+  color: var(--ink-muted);
+  font-weight: 500;
+}
+
+.curaleaf-account-form__grid textarea{
+  resize: vertical;
+  min-height: 88px;
+}
+
+.curaleaf-account-form__sign{
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.curaleaf-account-form__sign span{
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.curaleaf-account-form__sign strong{
+  min-height: 48px;
+  padding-top: 4px;
+  color: #173f33;
+  font-family: "Segoe Script", "Snell Roundhand", "Brush Script MT", cursive;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.15;
+  border-bottom: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+}
+
+.curaleaf-account-form__sign strong.is-empty{
+  color: var(--ink-muted);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.curaleaf-account-form__sign em{
+  color: var(--ink-muted);
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.curaleaf-account-form footer{
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.curaleaf-account-form footer .btn{
+  min-height: 44px;
+  min-width: 140px;
+}
+
+.pharmacy-request-list{
+  display: grid;
+  gap: 10px;
+}
+
+.pharmacy-request{
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  padding: 16px;
+  text-align: left;
+  color: inherit;
+  background: var(--bg-surface);
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.pharmacy-request.is-selected{
+  border-color: color-mix(in srgb, var(--tenant-primary, #0f766e) 55%, #e2e8f0);
+}
+
+.pharmacy-request:focus-visible{
+  outline: 3px solid color-mix(in srgb, #3d8d65 55%, transparent);
+  outline-offset: 3px;
+}
+
+.pharmacy-request__title{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.pharmacy-request__meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.pharmacy-request-detail{
+  display: grid;
+  gap: 16px;
+}
+
+.pharmacy-request-detail dl{
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.pharmacy-request-detail dt{
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.pharmacy-request-detail dd{
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.pharmacy-request-actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pharmacy-request-actions .btn,
+.pharmacy-request-filters .btn{
+  min-height: 44px;
+}
+
+.pharmacy-request-filters{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.pharmacy-request-preview{
+  width: 100%;
+  min-height: 480px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+@media (max-width: 640px){
+  .pharmacy-request-detail dl{
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+  }
+  .pharmacy-request-detail dt{
+    margin-top: 8px;
+  }
+}
+
 .pharmsmart-guide__account{
   position: relative;
   z-index: 1;

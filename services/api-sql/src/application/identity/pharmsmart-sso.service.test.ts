@@ -119,6 +119,7 @@ describe('PharmSmart redemption', () => {
       firstName: 'Amina',
       lastName: 'Khan',
       email: 'amina.khan@pharmacy.test',
+      gphcNumber: '5550001',
     });
     assert.equal(created.length, 0);
     assert.equal(minted.length, 0);

@@ -3,8 +3,13 @@ import { createPortal } from 'react-dom';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import HhhBrandMark from '../components/HhhBrandMark';
 import { readOnboardingSpreadsheet, type OnboardingSheetRow } from './onboarding-sheet';
+import { CuraleafAccountForm } from './CuraleafAccountForm';
 import { PHARMSMART_ONBOARDING_PACKETS, pharmsmartOnboardingBookingUrl } from './pharmsmart-login';
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
+
+function isCuraleafSubmit(packet: typeof PHARMSMART_ONBOARDING_PACKETS[number]) {
+  return 'action' in packet && packet.action === 'submit';
+}
 
 function OnboardingPdfPreview({ href }: { href: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -132,6 +137,8 @@ export function PharmsmartWelcome({
   const embeddedBookingUrl = pharmsmartOnboardingBookingUrl(welcome, { embed: true, hostname });
   const knownName = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ');
   const [viewing, setViewing] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const closePreview = useRef<HTMLButtonElement>(null);
   const openPacket = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.href === viewing) ?? null;
 
@@ -166,7 +173,7 @@ export function PharmsmartWelcome({
             </div>
             <h1 id="pharmsmart-welcome-title">This pharmacy is not on Holistic Health Hub yet</h1>
             {knownName ? <p className="pharmsmart-guide__person">Signed in from PharmSmart as {knownName}.</p> : null}
-            <p>Send us the Curaleaf account form and the Worldpay form. You can do that without a call. After approval, you will get an email saying you can start using the platform.</p>
+            <p>Submit the Curaleaf account form here, and send us the Worldpay form. You can do that without a call. After approval, you will get an email saying you can start using the platform.</p>
           </header>
           <section className="pharmsmart-guide__book" aria-labelledby="pharmsmart-welcome-book">
             <h2 id="pharmsmart-welcome-book">Want more information?</h2>
@@ -203,14 +210,22 @@ export function PharmsmartWelcome({
                       </span>
                       <p>{packet.summary}</p>
                     </div>
-                    <div className="pharmsmart-guide__actions">
-                      <button className="pharmsmart-guide__view" type="button" aria-expanded={viewing === packet.href} onClick={() => setViewing(packet.href)}>View</button>
-                      <a className="pharmsmart-guide__download" href={packet.href} download>Download</a>
-                    </div>
+                    {isCuraleafSubmit(packet) ? (
+                      submitted
+                        ? <p className="pharmsmart-guide__submitted">Submitted. We have emailed the pharmacy address on the form.</p>
+                        : <div className="pharmsmart-guide__actions">
+                          <button className="pharmsmart-guide__view" type="button" aria-expanded={formOpen} onClick={() => setFormOpen(true)}>Submit</button>
+                        </div>
+                    ) : (
+                      <div className="pharmsmart-guide__actions">
+                        <button className="pharmsmart-guide__view" type="button" aria-expanded={viewing === packet.href} onClick={() => setViewing(packet.href)}>View</button>
+                        <a className="pharmsmart-guide__download" href={packet.href} download>Download</a>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
-              <p className="pharmsmart-guide__send">Send us the forms here</p>
+              <p className="pharmsmart-guide__send">Send the Worldpay form here</p>
               <div className="pharmsmart-guide__contact">
                 <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a>
               </div>
@@ -240,6 +255,12 @@ export function PharmsmartWelcome({
             </div>,
             document.body,
           ) : null}
+          <CuraleafAccountForm
+            open={formOpen}
+            welcome={welcome}
+            onClose={() => setFormOpen(false)}
+            onSubmitted={() => { setFormOpen(false); setSubmitted(true); }}
+          />
         </div>
       </section>
     </div>

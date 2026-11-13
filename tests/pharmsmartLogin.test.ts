@@ -68,7 +68,7 @@ test('a ready redemption is the only path that carries a session token', () => {
 test('the onboarding packets are a brochure and two short form descriptions', () => {
   assert.deepEqual(PHARMSMART_ONBOARDING_PACKETS.map(packet => packet.title), ['Brochure', 'Curaleaf account', 'Worldpay']);
   assert.deepEqual(PHARMSMART_ONBOARDING_PACKETS.map(packet => packet.detail), ['PDF', 'FORM', 'FORM']);
-  assert.match(PHARMSMART_ONBOARDING_PACKETS[1].summary, /controlled drug licence/);
+  assert.match(PHARMSMART_ONBOARDING_PACKETS[1].summary, /Fill this in and submit it here/);
   assert.match(PHARMSMART_ONBOARDING_PACKETS[2].summary, /Most of it is done/);
   assert.equal('entered' in PHARMSMART_ONBOARDING_PACKETS[2], false);
 });

@@ -46,9 +46,10 @@ import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboa
 import { attributedCareLabel, attributedClosedNote, attributedCountForOrganisation, attributedInCare, attributedPatientCounts, attributedStagesForOrganisation, portfolioAttributedCount, splitAttributedRecords } from '../utils/attributedPatients';
 import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
-import { ApiRequestError, completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
+import { ApiRequestError, completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, goLiveOrganisation, listPharmacyOnboardingRequests, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, removeOrganisationLogo, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason, updateOrganisation, uploadOrganisationLogo } from '../shared/api';
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation, type UpdateOrganisationInput } from '../shared/contracts';
 import { AdminGoLivePanel } from '../onboarding/AdminGoLivePanel';
+import { PharmacyOnboardingRequests } from './PharmacyOnboardingRequests';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
 import { useModalFocus } from '../accessibility/useModalFocus';
 import WorkspaceNavigation, { type WorkspaceNavGroup } from '../components/WorkspaceNavigation';
@@ -280,7 +281,7 @@ function splitPharmacyAddress(organisation: PharmacyTenant) {
   };
 }
 
-function AdminHeader({ view, setView, pending = 0, onViewAdmins }: { view: AdminView; setView: (view: AdminView) => void; pending?: number; onViewAdmins: () => void }) {
+function AdminHeader({ view, setView, pending = 0, pharmacyRequests = 0, onViewAdmins }: { view: AdminView; setView: (view: AdminView) => void; pending?: number; pharmacyRequests?: number; onViewAdmins: () => void }) {
   const { signOutStaff } = useAuth();
   const { state } = useApp();
   const staffName = state.staffSession?.name || 'HHH Administrator';
@@ -290,6 +291,7 @@ function AdminHeader({ view, setView, pending = 0, onViewAdmins }: { view: Admin
       { key: 'referrals', label: 'Patient intake', icon: <UserCheck size={17} />, count: pending },
       { key: 'patients', label: 'Patients', icon: <Users size={17} /> },
       { key: 'finance', label: 'Finance', icon: <PoundSterling size={17} /> },
+      { key: 'pharmacyRequests', label: 'Pharmacy requests', shortLabel: 'Requests', icon: <Building2 size={17} />, count: pharmacyRequests },
     ] },
   ];
   return <WorkspaceNavigation
@@ -1074,6 +1076,7 @@ function PharmacyStaffManager({ organisation, onCountChange }: { organisation: P
 export default function AdminPortal() {
   const { state, dispatch } = useApp();
   const [view, setView] = useState<AdminView>(adminViewFromPath);
+  const [pharmacyRequestCount, setPharmacyRequestCount] = useState(0);
   const [query, setQuery] = useState('');
   const [patientOrganisationId, setPatientOrganisationId] = useState('all');
   const [patientStatus, setPatientStatus] = useState('all');
@@ -1276,6 +1279,13 @@ export default function AdminPortal() {
   useEffect(() => {
     document.getElementById('admin-main-content')?.scrollTo({ top: 0 });
   }, [view, overviewPharmacyId, overviewManagePanel]);
+
+  useEffect(() => {
+    if (isLocalPortalPreview) return;
+    void listPharmacyOnboardingRequests()
+      .then(result => setPharmacyRequestCount(result.records.filter(record => record.status === 'pending').length))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const onPopState = () => {
@@ -1737,6 +1747,7 @@ export default function AdminPortal() {
     { label: 'Patient onboarding', detail: 'Record patient calls and decisions', group: 'Navigate', icon: <UserCheck size={16} />, run: () => { setView('referrals'); } },
     { label: 'Patient register', detail: 'Cross-pharmacy patient ownership', group: 'Navigate', icon: <Users size={16} />, run: () => { setView('patients'); } },
     { label: 'Referral finance', detail: '£50 first dispenses and £40 annual fees', group: 'Navigate', icon: <PoundSterling size={16} />, run: () => { setView('finance'); } },
+    { label: 'Pharmacy requests', detail: 'Curaleaf account forms waiting for a decision', group: 'Navigate', icon: <Building2 size={16} />, run: () => { setView('pharmacyRequests'); } },
     { label: 'Invite admin', detail: 'Add another HHH administrator account', group: 'Actions', icon: <UserPlus size={16} />, run: () => { setAdminDialogFocus('invite'); setShowAdminDialog(true); } },
     { label: 'View admins', detail: 'HHH administrator accounts', group: 'Navigate', icon: <Users size={16} />, run: () => { setAdminDialogFocus('list'); setShowAdminDialog(true); } },
     { label: 'Onboard pharmacy', detail: 'Create a new pharmacy workspace', group: 'Actions', icon: <Plus size={16} />, run: () => { setView('overview'); setShowOnboarding(true); } },
@@ -3000,12 +3011,13 @@ export default function AdminPortal() {
     referrals: { title: 'HHH patient intake and referral' },
     patients: { title: 'Patients and pharmacy attribution' },
     finance: { title: 'HHH referral finance' },
+    pharmacyRequests: { title: 'Pharmacy requests' },
   };
 
   return (
     <div className={`app-shell admin-shell unified-admin-shell admin-view-${view}`}>
       <a className="skip-link" href="#admin-main-content">Skip to main content</a>
-      <AdminHeader view={view} pending={pendingAdminDecisions} setView={next => { setView(next); setQuery(''); }} onViewAdmins={() => { setAdminDialogFocus('list'); setShowAdminDialog(true); }} />
+      <AdminHeader view={view} pending={pendingAdminDecisions} pharmacyRequests={pharmacyRequestCount} setView={next => { setView(next); setQuery(''); }} onViewAdmins={() => { setAdminDialogFocus('list'); setShowAdminDialog(true); }} />
       <div className="app-main">
         <WorkspacePageHeader section="HHH operations" context={pageMeta[view].title} title={pageMeta[view].title} commandLabel="Find anything" onSectionClick={() => { setView('overview'); setQuery(''); }} backAction={view !== 'overview' ? { label: 'Return to pharmacies', onClick: () => { setView('overview'); setQuery(''); } } : undefined} contextControl={<div className="header-context"><span>Access</span><span className="tenant-status tenant-status--live">Admin</span></div>} />
         <div id="admin-main-content" className="page-container admin-content" tabIndex={-1}>
@@ -3013,6 +3025,38 @@ export default function AdminPortal() {
           {view === 'referrals' && renderReferrals()}
           {view === 'patients' && renderPatients()}
           {view === 'finance' && renderFinance()}
+          {view === 'pharmacyRequests' && (
+            <PharmacyOnboardingRequests
+              onPendingCount={setPharmacyRequestCount}
+              onActivated={organisation => {
+                const tenant: PharmacyTenant = {
+                  id: organisation.id,
+                  slug: slugify(organisation.name),
+                  referralToken: organisation.referralToken,
+                  name: organisation.name,
+                  tradingName: organisation.tradingName,
+                  logoText: organisation.logoText,
+                  gphcNumber: organisation.gphcNumber,
+                  superintendent: organisation.superintendent,
+                  mainContactName: organisation.mainContactName,
+                  mainContactPhone: organisation.mainContactPhone,
+                  mainContactEmail: organisation.mainContactEmail,
+                  pharmacyPhone: organisation.pharmacyPhone,
+                  pharmacyEmail: organisation.pharmacyEmail,
+                  address: organisation.address,
+                  websiteDomains: [],
+                  status: 'onboarding',
+                  staffCount: 0,
+                  defaultPaymentRoute: 'manual',
+                  pharmacyDeliveryEnabled: false,
+                  brand: { primary: organisation.primaryColour, portalName: organisation.name },
+                  worldpay: { enabled: false, status: 'not-connected', environment: 'sandbox', merchantId: null, merchantName: null, lastSyncedAt: null },
+                };
+                dispatch({ type: 'ADD_ORGANISATION', organisation: tenant });
+                dispatch({ type: 'ADD_TOAST', message: `${organisation.name} is in training. Go live when the rest of setup is done.`, toastType: 'success' });
+              }}
+            />
+          )}
         </div>
       </div>
       {showOnboarding && <OnboardPharmacy onClose={() => setShowOnboarding(false)} onCreated={id => { setShowOnboarding(false); openPharmacyOnOverview(id, 'identity'); }} />}

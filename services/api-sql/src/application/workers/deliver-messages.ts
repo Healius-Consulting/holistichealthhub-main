@@ -3,7 +3,8 @@ import { config } from '../../bootstrap/config.js';
 import { emailInlineImages } from '../notifications/email-assets.js';
 import { resolveEmailHeader } from '../notifications/email-layout.js';
 import { isEmailTemplateCode } from '../notifications/message-kinds.js';
-import { BRAND_HEADER_BACKGROUND_PAYLOAD_KEY, BRAND_LOGO_PAYLOAD_KEY, fromAddressFor, replyToFor } from '../notifications/email-catalog.js';
+import { BRAND_HEADER_BACKGROUND_PAYLOAD_KEY, BRAND_LOGO_PAYLOAD_KEY, emailUsesAdminHeader, fromAddressFor, replyToFor } from '../notifications/email-catalog.js';
+import { FILLED_FORM_PATH_KEY, LICENCE_NAME_KEY, LICENCE_PATH_KEY, LICENCE_TYPE_KEY } from '../pharmacy-onboarding/emails.js';
 import { emailHeaderBackgroundForLogo } from '../notifications/email-logo-background.js';
 import { renderEmailTemplate } from '../notifications/email-renderer.js';
 import { readOrganisationLogoBytes } from '../organisation/brand-logo.js';
@@ -105,9 +106,34 @@ function payloadRecord(payload: unknown): Record<string, unknown> {
   return payload as Record<string, unknown>;
 }
 
+const FILE_ATTACHMENT_TEMPLATES = new Set(['admin_pharmacy_onboarding_request']);
+
+async function fileAttachmentsFor(record: NotificationOutboxRecord, deps: MessageDeliveryDeps) {
+  if (!FILE_ATTACHMENT_TEMPLATES.has(record.templateCode) || !deps.storage) return [];
+  const formPath = payloadValue(record.payload, FILLED_FORM_PATH_KEY);
+  const licencePath = payloadValue(record.payload, LICENCE_PATH_KEY);
+  const files = [
+    formPath ? { path: formPath, filename: 'curaleaf-account.pdf', contentType: 'application/pdf' } : null,
+    licencePath ? {
+      path: licencePath,
+      filename: payloadValue(record.payload, LICENCE_NAME_KEY) || 'controlled-drug-licence',
+      contentType: payloadValue(record.payload, LICENCE_TYPE_KEY) || 'application/octet-stream',
+    } : null,
+  ].filter((file): file is { path: string; filename: string; contentType: string } => Boolean(file));
+  const attachments = [];
+  for (const file of files) {
+    const downloaded = await deps.storage.downloadFile(file.path);
+    attachments.push({
+      filename: file.filename,
+      content: downloaded.bytes.toString('base64'),
+      content_type: downloaded.contentType || file.contentType,
+    });
+  }
+  return attachments;
+}
+
 function headerFor(record: NotificationOutboxRecord, hasBrandLogo: boolean) {
-  const admin = record.templateCode === 'admin_new_enquiry_received'
-    || payloadValue(record.payload, 'pharmacyName') === 'HHH admin workspace';
+  const admin = emailUsesAdminHeader(record.templateCode, record.payload);
   return resolveEmailHeader({
     audience: admin ? 'admin' : 'pharmacy',
     organisationId: payloadValue(record.payload, 'organisationId'),
@@ -124,11 +150,12 @@ async function deliverOne(
 ) {
   if (record.status !== 'PENDING') return 'skipped' as const;
   if (!isEmailTemplateCode(record.templateCode)) return 'deferred' as const;
+  const templateCode = record.templateCode;
   await deps.notificationRepo.markProcessing(record.id, record.attemptCount + 1);
   const fetchImpl = deps.fetchImpl ?? fetch;
   const brandLogo = await loadBrandLogo(payloadValue(record.payload, 'organisationId'));
   const response = provider.kind === 'resend'
-    ? await (() => {
+    ? await (async () => {
       const source = payloadRecord(record.payload);
       const visible = { ...source };
       delete visible.bcc;
@@ -139,14 +166,13 @@ async function deliverOne(
           [BRAND_HEADER_BACKGROUND_PAYLOAD_KEY]: emailHeaderBackgroundForLogo(Buffer.from(brandLogo, 'base64')),
         }
         : visible;
-      const rendered = renderEmailTemplate(record.templateCode, payload);
-      const fromAddress = isEmailTemplateCode(record.templateCode)
-        ? fromAddressFor(record.templateCode)
-        : provider.from;
+      const rendered = renderEmailTemplate(templateCode, payload);
+      const fileAttachments = await fileAttachmentsFor(record, deps);
+      const fromAddress = fromAddressFor(templateCode);
       const from = `Holistic Health Hub <${fromAddress}>`;
       // Only templates whose copy invites a reply carry one, so a patient never
       // writes into the unmonitored From address.
-      const replyTo = replyToFor(record.templateCode);
+      const replyTo = replyToFor(templateCode);
       return fetchImpl('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -163,7 +189,10 @@ async function deliverOne(
           subject: rendered.subject,
           html: rendered.html,
           text: rendered.text,
-          attachments: emailInlineImages(headerFor(record, Boolean(brandLogo)), brandLogo),
+          attachments: [
+            ...emailInlineImages(headerFor(record, Boolean(brandLogo)), brandLogo),
+            ...fileAttachments,
+          ],
           tags: [
             { name: 'template', value: record.templateCode },
             { name: 'channel', value: record.channel.toLowerCase() },

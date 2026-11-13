@@ -478,6 +478,89 @@ mutation CreateReferralToken(
   })
 }
 
+mutation CreatePharmacyOnboardingRequest(
+  $id: UUID!
+  $pharmacistName: String!
+  $pharmacyName: String!
+  $registeredCompanyName: String!
+  $invoiceAddress: String!
+  $deliveryAddress: String!
+  $gphcNumber: String!
+  $wdaNumber: String!
+  $licenceDetails: String!
+  $pharmacyEmail: String!
+  $accountsEmail: String!
+  $pharmacyPhone: String!
+  $accountsPhone: String!
+  $faxNumber: String
+  $signatureName: String!
+  $signedOn: String!
+  $licenceStoragePath: String!
+  $licenceContentType: String!
+  $licenceFilename: String!
+  $filledFormStoragePath: String!
+  $idempotencyKey: String!
+) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequest_insert(data: {
+    id: $id
+    pharmacistName: $pharmacistName
+    pharmacyName: $pharmacyName
+    registeredCompanyName: $registeredCompanyName
+    invoiceAddress: $invoiceAddress
+    deliveryAddress: $deliveryAddress
+    gphcNumber: $gphcNumber
+    wdaNumber: $wdaNumber
+    licenceDetails: $licenceDetails
+    pharmacyEmail: $pharmacyEmail
+    accountsEmail: $accountsEmail
+    pharmacyPhone: $pharmacyPhone
+    accountsPhone: $accountsPhone
+    faxNumber: $faxNumber
+    signatureName: $signatureName
+    signedOn: $signedOn
+    licenceStoragePath: $licenceStoragePath
+    licenceContentType: $licenceContentType
+    licenceFilename: $licenceFilename
+    filledFormStoragePath: $filledFormStoragePath
+    idempotencyKey: $idempotencyKey
+    status: PENDING
+  })
+}
+
+mutation ActivatePharmacyOnboardingRequest(
+  $id: UUID!
+  $organisationId: UUID!
+  $decidedAt: Timestamp!
+  $decidedByUid: String!
+) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequest_update(
+    key: { id: $id }
+    data: {
+      status: ACTIVATED
+      organisationId: $organisationId
+      decidedAt: $decidedAt
+      decidedByUid: $decidedByUid
+    }
+  )
+}
+
+mutation DeclinePharmacyOnboardingRequest(
+  $id: UUID!
+  $declineReason: String!
+  $decidedAt: Timestamp!
+  $decidedByUid: String!
+) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequest_update(
+    key: { id: $id }
+    data: {
+      status: DECLINED
+      declineReason: $declineReason
+      decidedAt: $decidedAt
+      decidedByUid: $decidedByUid
+    }
+  )
+}
+
 mutation UpdateOrganisationPrimaryContactUid(
   $id: UUID!
   $primaryContactUid: String!

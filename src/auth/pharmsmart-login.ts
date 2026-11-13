@@ -21,7 +21,8 @@ export const PHARMSMART_ONBOARDING_PACKETS = [
     href: '/onboarding/curaleaf-healius-new-account-form.pdf',
     title: 'Curaleaf account',
     detail: 'FORM',
-    summary: 'Fill this in, attach your controlled drug licence, and send it to us.',
+    summary: 'Fill this in and submit it here.',
+    action: 'submit',
     preview: 'pdf',
   },
   {
@@ -44,6 +45,7 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
         email: result.email,
         firstName: result.firstName,
         lastName: result.lastName,
+        gphcNumber: result.gphcNumber ?? null,
       },
     };
   }

@@ -38,6 +38,7 @@ export type PharmsmartLoginResult =
     email: string | null;
     firstName: string | null;
     lastName: string | null;
+    gphcNumber: string | null;
   };
 
 type Person = { email: string | null; firstName: string | null; lastName: string | null };
@@ -90,6 +91,7 @@ export class PharmsmartSsoService {
           email: info.email,
           firstName: info.firstName,
           lastName: info.lastName,
+          gphcNumber: info.gphcNumber,
         };
       }
       await this.refuse(null, matched.reason, context);

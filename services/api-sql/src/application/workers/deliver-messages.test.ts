@@ -108,6 +108,33 @@ test('sends without a header logo when the pharmacy has not uploaded one', async
   assert.match(body.html, /Eastwood Health/);
 });
 
+test('a new pharmacy request email carries the filled form and the licence', async t => {
+  process.env.RESEND_API_KEY = 'test-key';
+  t.after(() => { delete process.env.RESEND_API_KEY; });
+
+  const { repo } = notificationRepoStub([pendingRecord({
+    templateCode: 'admin_pharmacy_onboarding_request',
+    encryptedRecipient: 'spatel@healiusconsulting.com',
+    payload: {
+      pharmacyName: 'Eastwood Health',
+      gphcNumber: '2078912',
+      filledFormStoragePath: 'pharmacy-onboarding/req/curaleaf-account.pdf',
+      licenceStoragePath: 'pharmacy-onboarding/req/controlled-drug-licence.pdf',
+      licenceContentType: 'application/pdf',
+      licenceFilename: 'cd-licence.pdf',
+    },
+  })]);
+  const { storage } = storageStub([]);
+  const { bodies, fetchImpl } = resendCapture();
+
+  const summary = await deliverPatientMessages({ notificationRepo: repo, storage, fetchImpl });
+
+  assert.equal(summary.sent, 1);
+  const files = bodies[0]!.attachments.filter((file: { content_id?: string }) => !file.content_id);
+  assert.deepEqual(files.map((file: { filename: string }) => file.filename), ['curaleaf-account.pdf', 'cd-licence.pdf']);
+  assert.equal(files[0].content, Buffer.from('logo-bytes').toString('base64'));
+});
+
 test('a logo that cannot be read does not stop the message', async t => {
   process.env.RESEND_API_KEY = 'test-key';
   t.after(() => { delete process.env.RESEND_API_KEY; });

@@ -23,6 +23,8 @@ export const EMAIL_EVENT_NAMES = [
   'staff.password_reset',
   'staff.2fa_enabled',
   'staff.2fa_disabled',
+  'pharmacy_onboarding.submitted',
+  'pharmacy_onboarding.declined',
 ] as const;
 
 export type EmailEventName = (typeof EMAIL_EVENT_NAMES)[number];
@@ -60,6 +62,9 @@ export const EMAIL_TEMPLATE_CODES = [
   'pharmacy_order_dispatched',
   'pharmacy_prescription_close_to_expiry',
   'pharmacy_collection_completed',
+  'pharmacy_onboarding_submitted',
+  'admin_pharmacy_onboarding_request',
+  'pharmacy_onboarding_declined',
 ] as const;
 
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
@@ -109,6 +114,9 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_order_dispatched: 'orders',
   pharmacy_prescription_close_to_expiry: 'orders',
   pharmacy_collection_completed: 'orders',
+  pharmacy_onboarding_submitted: 'accounts',
+  admin_pharmacy_onboarding_request: 'enquiries',
+  pharmacy_onboarding_declined: 'accounts',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -209,8 +217,14 @@ function enquirySourceLabel(sourceType: string) {
   return sourceType.replaceAll('_', ' ').toLowerCase();
 }
 
+export function emailUsesAdminHeader(kind: string, payload: unknown) {
+  return kind === 'admin_new_enquiry_received'
+    || kind === 'admin_pharmacy_onboarding_request'
+    || value(payload, 'pharmacyName') === 'HHH admin workspace';
+}
+
 function isAdminAudience(kind: EmailTemplateCode, payload: unknown) {
-  return kind === 'admin_new_enquiry_received' || value(payload, 'pharmacyName') === 'HHH admin workspace';
+  return emailUsesAdminHeader(kind, payload);
 }
 
 function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
@@ -1019,6 +1033,87 @@ export const EMAILS = {
         paragraphs: [
           `A prescription is close to expiry${orderNumber ? ` for order <strong>${orderNumber}</strong>` : ''}.`,
           ...(summary ? [summary] : []),
+        ],
+      });
+    },
+  },
+  pharmacy_onboarding_submitted: {
+    audience: 'staff',
+    events: ['pharmacy_onboarding.submitted'],
+    schedule: 'immediate',
+    summary: 'Sent to the pharmacy email when a Curaleaf account form is submitted from the onboarding page.',
+    render: (payload) => {
+      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'your pharmacy');
+      const plainName = value(payload, 'pharmacyName') || 'your pharmacy';
+      return render({
+        kind: 'pharmacy_onboarding_submitted',
+        payload,
+        subject: 'Curaleaf account form received',
+        preheader: 'We have the Curaleaf account form.',
+        title: 'Form received',
+        text: `We have received the Curaleaf account form for ${plainName}. We will email you when the pharmacy can start using Holistic Health Hub.`,
+        paragraphs: [
+          `We have received the Curaleaf account form for <strong>${pharmacyName}</strong>.`,
+          'We will email you when the pharmacy can start using Holistic Health Hub.',
+        ],
+      });
+    },
+  },
+  admin_pharmacy_onboarding_request: {
+    audience: 'staff',
+    events: ['pharmacy_onboarding.submitted'],
+    schedule: 'immediate',
+    summary: 'Sent only to the partner success mailbox when a pharmacy submits a Curaleaf account form. The filled form is attached. Not sent to every platform admin.',
+    render: (payload) => {
+      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'A pharmacy');
+      const plainName = value(payload, 'pharmacyName') || 'A pharmacy';
+      const gphc = value(payload, 'gphcNumber');
+      return render({
+        kind: 'admin_pharmacy_onboarding_request',
+        payload,
+        subject: 'New pharmacy request',
+        preheader: `${plainName} submitted a Curaleaf account form.`,
+        title: 'New pharmacy request',
+        text: [
+          `${plainName}${gphc ? ` (GPhC ${gphc})` : ''} submitted a Curaleaf account form.`,
+          'The filled form is attached. Forward it to Curaleaf, then activate or decline the pharmacy in the portal.',
+        ].join('\n\n'),
+        paragraphs: [
+          `<strong>${pharmacyName}</strong>${gphc ? ` (GPhC ${escapeHtml(gphc)})` : ''} submitted a Curaleaf account form.`,
+          'The filled form is attached. Forward it to Curaleaf, then activate or decline the pharmacy in the portal.',
+        ],
+        cta: { label: 'Open pharmacy requests', href: 'https://portal.holistichealthhub.live/admin/pharmacy-requests' },
+        detailsTitle: 'Request',
+        details: [
+          { label: 'Pharmacy', value: value(payload, 'pharmacyName') },
+          { label: 'GPhC', value: gphc },
+          { label: 'Contact', value: value(payload, 'pharmacistName') },
+          { label: 'Pharmacy email', value: value(payload, 'pharmacyEmail') },
+        ],
+      });
+    },
+  },
+  pharmacy_onboarding_declined: {
+    audience: 'staff',
+    events: ['pharmacy_onboarding.declined'],
+    schedule: 'immediate',
+    summary: 'Sent to the pharmacy email when HHH declines a pharmacy onboarding request.',
+    render: (payload) => {
+      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'the pharmacy');
+      const plainName = value(payload, 'pharmacyName') || 'the pharmacy';
+      const reason = value(payload, 'declineReason');
+      const contact = primaryAddress(keyContact('healius'));
+      return render({
+        kind: 'pharmacy_onboarding_declined',
+        payload,
+        subject: 'Pharmacy request not accepted',
+        preheader: 'This pharmacy was not accepted onto Holistic Health Hub.',
+        title: 'Request not accepted',
+        text: `We could not accept ${plainName} onto Holistic Health Hub.${reason ? `\n\n${reason}` : ''}\n\nIf you need to talk this through, email ${contact}.`,
+        paragraphs: [
+          `We could not accept <strong>${pharmacyName}</strong> onto Holistic Health Hub.`,
+          ...(reason ? [escapeHtml(reason)] : []),
+          `If you need to talk this through, email ${mailLink(contact)}.`,
         ],
       });
     },
