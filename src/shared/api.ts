@@ -429,19 +429,11 @@ export type ActivatedPharmacyOnboarding = {
   primaryColour: string;
 };
 
-export async function submitCuraleafAccountForm(body: FormData) {
-  const securityHeaders = securityTokenProvider ? await securityTokenProvider() : {};
-  const response = await fetch(`${apiBaseUrl()}/v1/public/pharmacy-onboarding-requests`, {
+export function submitCuraleafAccountForm(input: Record<string, string>) {
+  return apiRequest<{ id: string; status: 'pending' | 'activated' | 'declined' }>('/v1/public/pharmacy-onboarding-requests', {
     method: 'POST',
-    credentials: 'include',
-    headers: securityHeaders,
-    body,
+    body: JSON.stringify(input),
   });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { code?: string; message?: string; details?: unknown } | null;
-    throw new ApiRequestError(response.status, payload?.code ?? 'REQUEST_FAILED', payload?.message ?? 'The form could not be submitted.', fieldIssues(payload?.details));
-  }
-  return response.json() as Promise<{ id: string; status: 'pending' | 'activated' | 'declined' }>;
 }
 
 export function listPharmacyOnboardingRequests() {

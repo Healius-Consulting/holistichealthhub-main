@@ -83,17 +83,23 @@ export function CuraleafAccountForm({
     setFields(current => ({ ...current, [key]: event.target.value }));
   };
 
-  const submit = async (event: FormEvent) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy) return;
+    const form = event.currentTarget;
+    if (!form.checkValidity()) {
+      form.querySelector<HTMLElement>(':invalid')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      form.reportValidity();
+      return;
+    }
     setBusy(true);
     setError(null);
-    const body = new FormData();
-    for (const [key, value] of Object.entries(fields)) body.set(key, value.trim());
-    body.set('signatureName', fields.pharmacistName.trim());
-    body.set('idempotencyKey', idempotencyKey.current);
     try {
-      await submitCuraleafAccountForm(body);
+      await submitCuraleafAccountForm({
+        ...Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, value.trim()])),
+        signatureName: fields.pharmacistName.trim(),
+        idempotencyKey: idempotencyKey.current,
+      });
       onSubmitted();
     } catch (cause) {
       const message = cause instanceof ApiRequestError

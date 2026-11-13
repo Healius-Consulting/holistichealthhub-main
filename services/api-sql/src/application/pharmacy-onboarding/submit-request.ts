@@ -23,7 +23,7 @@ export type SubmitPharmacyOnboardingInput = {
 };
 
 export async function submitPharmacyOnboardingRequest(
-  repo: Pick<SqlPharmacyOnboardingRepository, 'listOrganisationGphcNumbers' | 'findByIdempotencyKey' | 'findPendingByGphc' | 'insert'>,
+  repo: Pick<SqlPharmacyOnboardingRepository, 'listOrganisationGphcNumbers' | 'findByIdempotencyKey' | 'findPendingByGphc' | 'list' | 'insert'>,
   files: FileStore,
   input: SubmitPharmacyOnboardingInput,
 ): Promise<PharmacyOnboardingRequestRecord> {
@@ -43,6 +43,15 @@ export async function submitPharmacyOnboardingRequest(
   const pending = await repo.findPendingByGphc(gphcNumber);
   if (pending && pending.idempotencyKey !== fields.idempotencyKey) {
     throw new HttpError(409, 'A request for this GPhC number is already waiting.', 'ONBOARDING_REQUEST_PENDING');
+  }
+  const pharmacyEmail = fields.pharmacyEmail.trim().toLowerCase();
+  const sameInbox = (await repo.list(200)).find(row =>
+    row.status === 'PENDING'
+    && row.pharmacyEmail.trim().toLowerCase() === pharmacyEmail
+    && row.idempotencyKey !== fields.idempotencyKey
+  );
+  if (sameInbox) {
+    throw new HttpError(409, 'A request from this pharmacy email is already waiting.', 'ONBOARDING_REQUEST_PENDING');
   }
 
   const licence = input.licence && input.licence.bytes.length > 0 ? input.licence : null;

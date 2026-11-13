@@ -6,7 +6,7 @@ import {
   pharmacyOnboardingFieldsSchema,
   publicOnboardingStatus,
 } from '../../domain/pharmacy-onboarding/request.js';
-import { publicSubmissionLimiter } from '../../security/public-limits.js';
+import { publicPharmacyOnboardingLimiter } from '../../security/public-limits.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
@@ -15,15 +15,19 @@ import { submitPharmacyOnboardingRequest } from '../../application/pharmacy-onbo
 
 type UploadedLicence = { filename: string; declaredType: string; bytes: Buffer };
 
-function readSubmission(req: Request): Promise<{ fields: Record<string, string>; licence: UploadedLicence | null; tooLarge: boolean }> {
+/**
+ * Cloud Functions reads the body before Express sees the stream, and leaves it on
+ * `rawBody`. Piping the request hangs, so the submit button never finishes.
+ */
+function requestRawBody(req: Request) {
+  const raw = (req as Request & { rawBody?: Buffer | Uint8Array }).rawBody;
+  return raw ? Buffer.from(raw) : null;
+}
+
+function readMultipart(req: Request, contentType: string): Promise<{ fields: Record<string, string>; licence: UploadedLicence | null; tooLarge: boolean }> {
   return new Promise((resolve, reject) => {
-    const contentType = req.headers['content-type'];
-    if (!contentType?.includes('multipart/form-data')) {
-      reject(new HttpError(400, 'Submit the Curaleaf account form as a file upload.', 'INVALID_INPUT'));
-      return;
-    }
     const busboy = Busboy({
-      headers: { ...req.headers, 'content-type': contentType },
+      headers: { 'content-type': contentType },
       limits: { files: 1, fileSize: MAX_LICENCE_BYTES, fields: 20, fieldSize: 2_000 },
     });
     const fields: Record<string, string> = {};
@@ -48,8 +52,19 @@ function readSubmission(req: Request): Promise<{ fields: Record<string, string>;
     });
     busboy.on('error', reject);
     busboy.on('finish', () => resolve({ fields, licence, tooLarge }));
-    req.pipe(busboy);
+    const raw = requestRawBody(req);
+    if (raw) busboy.end(raw);
+    else req.pipe(busboy);
   });
+}
+
+async function readSubmission(req: Request): Promise<{ fields: unknown; licence: UploadedLicence | null; tooLarge: boolean }> {
+  const contentType = req.headers['content-type'] ?? '';
+  if (contentType.includes('application/json')) {
+    return { fields: req.body, licence: null, tooLarge: false };
+  }
+  if (contentType.includes('multipart/form-data')) return readMultipart(req, contentType);
+  throw new HttpError(400, 'The form could not be read. Submit it again.', 'INVALID_INPUT');
 }
 
 export function createPublicPharmacyOnboardingRouter(): Router {
@@ -58,7 +73,7 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   const storage = new StorageProvider();
   const notificationRepo = new SqlNotificationRepository();
 
-  router.post('/public/pharmacy-onboarding-requests', publicSubmissionLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/public/pharmacy-onboarding-requests', publicPharmacyOnboardingLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const submission = await readSubmission(req);
       if (submission.tooLarge) {

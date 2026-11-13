@@ -35,6 +35,7 @@ function repo(overrides: {
     listOrganisationGphcNumbers: async () => overrides.organisations ?? [],
     findByIdempotencyKey: async () => overrides.existing ?? null,
     findPendingByGphc: async () => overrides.pending ?? null,
+    list: async () => [],
     insert: async (input: unknown) => { saved.push(input); },
   };
 }
