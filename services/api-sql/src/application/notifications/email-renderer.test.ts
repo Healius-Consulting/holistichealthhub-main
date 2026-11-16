@@ -46,6 +46,16 @@ describe('email template renderer', () => {
     assert.doesNotMatch(rendered.html, /Avery Patel/);
   });
 
+  it('adds the pharmacy email to patient mail only when the pharmacy chose to show it', () => {
+    const base = { firstName: 'Avery', pharmacyName: 'Eastwood Health', pharmacyPhone: '01522 000 000', pharmacyGphcNumber: '9010203' };
+    const shown = renderEmailTemplate('patient_referred', { ...base, pharmacyPublicEmail: 'shop@eastwood.example' });
+    assert.match(shown.html, /shop@eastwood.example/);
+    assert.match(shown.text, /01522 000 000\nshop@eastwood.example/);
+    const hidden = renderEmailTemplate('patient_referred', { ...base, pharmacyPublicEmail: '' });
+    assert.doesNotMatch(hidden.html, /shop@eastwood.example/);
+    assert.match(hidden.html, /01522 000 000/);
+  });
+
   it('closes an enquiry without repeating the reason back to the patient', () => {
     const rendered = renderEmailTemplate('patient_enquiry_declined', {
       firstName: 'Avery',

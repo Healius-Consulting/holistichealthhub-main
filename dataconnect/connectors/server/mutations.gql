@@ -527,6 +527,53 @@ mutation CreatePharmacyOnboardingRequest(
   })
 }
 
+mutation CreatePharmacyOnboardingDeferral(
+  $id: UUID!
+  $gphcNumber: String!
+  $pharmsmartPharmacyId: String
+  $personName: String
+  $personEmail: String
+  $idempotencyKey: String!
+) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingDeferral_insert(data: {
+    id: $id
+    gphcNumber: $gphcNumber
+    pharmsmartPharmacyId: $pharmsmartPharmacyId
+    personName: $personName
+    personEmail: $personEmail
+    idempotencyKey: $idempotencyKey
+  })
+}
+
+mutation CreatePharmacyWorldpaySubmission(
+  $id: UUID!
+  $gphcNumber: String!
+  $tradingName: String!
+  $submittedAt: Timestamp!
+  $idempotencyKey: String!
+) @auth(level: NO_ACCESS) {
+  pharmacyWorldpaySubmission_insert(data: {
+    id: $id
+    gphcNumber: $gphcNumber
+    tradingName: $tradingName
+    submittedAt: $submittedAt
+    idempotencyKey: $idempotencyKey
+  })
+}
+
+mutation ArchiveDeclinedOrganisation($id: UUID!, $archivedAt: Timestamp!, $pausedReason: String!) @auth(level: NO_ACCESS) {
+  organisation_update(
+    key: { id: $id }
+    data: {
+      status: PAUSED
+      intakeEnabled: false
+      pausedReason: $pausedReason
+      pausedAt: $archivedAt
+      archivedAt: $archivedAt
+    }
+  )
+}
+
 mutation ActivatePharmacyOnboardingRequest(
   $id: UUID!
   $organisationId: UUID!

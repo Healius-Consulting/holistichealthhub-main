@@ -11,7 +11,6 @@ import Patients from './pages/Patients';
 import AdminPortal from './pages/AdminPortal';
 import PharmacySettings from './pages/PharmacySettings';
 import PharmacyFinance from './pages/PharmacyFinance';
-import KeyContacts from './pages/KeyContacts';
 
 import { tenantThemeVariables } from './utils/tenantTheme';
 import { AuthProvider } from './auth/AuthProvider';
@@ -58,6 +57,7 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
     pharmacyPhone: record.pharmacyPhone,
     pharmacyEmail: record.pharmacyEmail,
     curaleafPharmacyCode: record.curaleafPharmacyCode,
+    curaleafEnvironment: record.curaleafEnvironment ?? null,
     address: record.address,
     addressLine1: record.addressLine1,
     addressLine2: record.addressLine2,
@@ -74,6 +74,7 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
     defaultPaymentRoute: record.defaultPaymentRoute ?? 'manual',
     worldpayState: record.worldpayState ?? 'unconnected',
     pharmacyDeliveryEnabled: Boolean(record.pharmacyDeliveryEnabled),
+    showEmailToPatients: Boolean(record.showEmailToPatients),
     brand: { primary: record.primaryColour, portalName: record.portalName ?? record.name },
     worldpay: {
       enabled: record.defaultPaymentRoute === 'worldpay' || Boolean(record.worldpayEnabled),
@@ -290,7 +291,7 @@ function StaffWorkspace() {
         );
       case 'finance': return <PharmacyFinance />;
       case 'settings': return <PharmacySettings />;
-      case 'contacts': return <KeyContacts />;
+      case 'contacts': return <PharmacySettings initialSection="support" />;
       default: return <PharmacyOverview />;
     }
   };
@@ -315,7 +316,7 @@ function StaffWorkspace() {
         {state.workspaceMode === 'test' && !paused && (
           <div className="test-mode-banner" role="status">
             <strong>Test</strong>
-            <span>This pharmacy is using Curaleaf and Worldpay sandbox keys. Patients, orders and payments are real for this workspace, against those sandboxes only. Live credentials under Settings & Assets → Curaleaf move it to Live.</span>
+            <span>This pharmacy is using Curaleaf and Worldpay sandbox keys. Patients, orders and payments are real for this workspace, against those sandboxes only. Live credentials under Settings & Support → Curaleaf move it to Live.</span>
           </div>
         )}
         {paused && (

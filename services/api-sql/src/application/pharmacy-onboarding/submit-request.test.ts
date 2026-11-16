@@ -25,7 +25,8 @@ const fields: PharmacyOnboardingFields = {
 const licence = Buffer.from('%PDF-1.7\nlicence');
 
 function repo(overrides: {
-  organisations?: Array<{ id: string; gphcNumber: string }>;
+  organisations?: Array<{ id: string; gphcNumber: string; status?: string }>;
+  archived?: Array<{ id: string; gphcNumber: string }>;
   pending?: { id: string; idempotencyKey: string } | null;
   existing?: PharmacyOnboardingRequestRecord | null;
 } = {}) {
@@ -33,6 +34,7 @@ function repo(overrides: {
   return {
     saved,
     listOrganisationGphcNumbers: async () => overrides.organisations ?? [],
+    listArchivedOrganisationGphcNumbers: async () => overrides.archived ?? [],
     findByIdempotencyKey: async () => overrides.existing ?? null,
     findPendingByGphc: async () => overrides.pending ?? null,
     list: async () => [],
@@ -41,9 +43,29 @@ function repo(overrides: {
 }
 
 describe('submitPharmacyOnboardingRequest', () => {
-  it('refuses a GPhC that already belongs to a pharmacy', async () => {
+  it('refuses a GPhC whose earlier application was declined', async () => {
     await assert.rejects(
-      () => submitPharmacyOnboardingRequest(repo({ organisations: [{ id: 'org-1', gphcNumber: '2078912' }] }), {
+      () => submitPharmacyOnboardingRequest(repo({ archived: [{ id: 'org-9', gphcNumber: '2078912' }] }), {
+        saveObject: async () => {},
+        deleteFile: async () => {},
+      }, { fields, licence: null }),
+      (error: unknown) => error instanceof HttpError && error.code === 'APPLICATION_DECLINED',
+    );
+  });
+
+  it('tells a pharmacy waiting on Curaleaf that its form has already arrived', async () => {
+    await assert.rejects(
+      () => submitPharmacyOnboardingRequest(repo({ organisations: [{ id: 'org-1', gphcNumber: '2078912', status: 'ONBOARDING' }] }), {
+        saveObject: async () => {},
+        deleteFile: async () => {},
+      }, { fields, licence: null }),
+      (error: unknown) => error instanceof HttpError && error.code === 'ONBOARDING_ALREADY_RECEIVED' && /already have/.test(error.message),
+    );
+  });
+
+  it('refuses a GPhC that already belongs to a live pharmacy', async () => {
+    await assert.rejects(
+      () => submitPharmacyOnboardingRequest(repo({ organisations: [{ id: 'org-1', gphcNumber: '2078912', status: 'LIVE' }] }), {
         saveObject: async () => {},
         deleteFile: async () => {},
       }, { fields, licence: { filename: 'licence.pdf', declaredType: 'application/pdf', bytes: licence } }),
@@ -57,7 +79,7 @@ describe('submitPharmacyOnboardingRequest', () => {
         saveObject: async () => {},
         deleteFile: async () => {},
       }, { fields, licence: { filename: 'licence.pdf', declaredType: 'application/pdf', bytes: licence } }),
-      (error: unknown) => error instanceof HttpError && error.code === 'ONBOARDING_REQUEST_PENDING',
+      (error: unknown) => error instanceof HttpError && error.code === 'ONBOARDING_ALREADY_RECEIVED',
     );
   });
 

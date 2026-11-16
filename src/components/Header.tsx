@@ -9,8 +9,8 @@ const SCREEN_TITLES: Record<string, string> = {
   orders: 'Orders',
   patients: 'Patients hub',
   finance: 'Prescription financials',
-  settings: 'Settings & assets',
-  contacts: 'Key contacts',
+  settings: 'Settings & support',
+  contacts: 'Settings & support',
 };
 
 export default function Header() {

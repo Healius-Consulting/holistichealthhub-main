@@ -1,5 +1,5 @@
 import { formatUkDateTime } from '../utils/ukDates';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, KeyRound, RefreshCw, ShieldCheck } from 'lucide-react';
 import { activateCuraleafPharmacy, describeApiError, getCuraleafConnectionStatus, refreshCuraleafConnection } from '../shared/api';
 import type { CuraleafConnectionStatus } from '../shared/contracts';
@@ -26,6 +26,18 @@ function previewStatus(organisationId: string, customerId?: string, environment:
   };
 }
 
+/** Local preview: a pharmacy with no PHAR code on file has no connection yet. */
+function previewNotConfigured(): CuraleafConnectionStatus {
+  return {
+    configured: false,
+    connected: false,
+    status: 'not_configured',
+    environment: 'test',
+    checkedAt: null,
+    message: 'Local preview: no Curaleaf credentials saved yet.',
+  };
+}
+
 function environmentLabel(environment: CuraleafConnectionStatus['environment'] | undefined) {
   return environment === 'production' ? 'Live' : 'Test';
 }
@@ -33,9 +45,15 @@ function environmentLabel(environment: CuraleafConnectionStatus['environment'] |
 export default function CuraleafConnectionPanel({
   organisationId,
   customerIdHint,
+  environmentHint,
+  onConnection,
 }: {
   organisationId: string;
   customerIdHint?: string | null;
+  /** Local preview only: which Curaleaf estate the saved code belongs to. */
+  environmentHint?: 'test' | 'production' | null;
+  /** Told the saved PHAR code and environment (or null) whenever the connection loads or changes. */
+  onConnection?: (connection: { customerId: string; environment: 'test' | 'production' } | null) => void;
 }) {
   const { dispatch } = useApp();
   const [status, setStatus] = useState<CuraleafConnectionStatus | null>(null);
@@ -45,8 +63,11 @@ export default function CuraleafConnectionPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const onConnectionRef = useRef(onConnection);
+  onConnectionRef.current = onConnection;
   const applyStatus = useCallback((result: CuraleafConnectionStatus) => {
     setStatus(result);
+    onConnectionRef.current?.(result.configured && result.customerId ? { customerId: result.customerId, environment: result.environment } : null);
     setRotating(false);
     setForm(current => ({
       ...EMPTY_FORM,
@@ -60,14 +81,14 @@ export default function CuraleafConnectionPanel({
     setError(null);
     try {
       applyStatus(isLocalPortalPreview
-        ? previewStatus(organisationId, customerIdHint ?? undefined)
+        ? (customerIdHint ? previewStatus(organisationId, customerIdHint, environmentHint ?? 'test') : previewNotConfigured())
         : await getCuraleafConnectionStatus(organisationId));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'The Curaleaf connection status could not be loaded.');
     } finally {
       setBusy(false);
     }
-  }, [applyStatus, customerIdHint, organisationId]);
+  }, [applyStatus, customerIdHint, environmentHint, organisationId]);
 
   useEffect(() => {
     void loadStatus();

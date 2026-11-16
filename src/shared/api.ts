@@ -1,4 +1,5 @@
 import { shouldDispatchSessionEnded } from './sessionEnded';
+import type { PharmsmartPrefill } from '../auth/types';
 import type {
   CuraleafConnectionStatus,
   CuraleafActivationInput,
@@ -296,6 +297,8 @@ export type PharmsmartLoginResult =
     firstName: string | null;
     lastName: string | null;
     gphcNumber?: string | null;
+    pharmsmartPharmacyId?: string | null;
+    prefill?: PharmsmartPrefill;
   };
 
 export async function redeemPharmsmartLogin(token: string) {
@@ -410,6 +413,8 @@ export type PharmacyOnboardingRequestView = {
   declineReason: string | null;
   decidedAt: string | null;
   createdAt: string | null;
+  /** When the Worldpay form was sent. The form itself is never stored. */
+  worldpaySubmittedAt?: string | null;
 };
 
 export type ActivatedPharmacyOnboarding = {
@@ -436,8 +441,29 @@ export function submitCuraleafAccountForm(input: Record<string, string>) {
   });
 }
 
+/** Emailed to HHH as a PDF; the server keeps only the date it was sent. */
+export function submitWorldpayForm(input: Record<string, unknown>) {
+  return apiRequest<{ submittedAt: string }>('/v1/public/pharmacy-onboarding-worldpay', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function recordPharmacyOnboardingDeferral(input: {
+  gphcNumber: string;
+  pharmsmartPharmacyId?: string;
+  personName?: string;
+  personEmail?: string;
+  idempotencyKey: string;
+}) {
+  return apiRequest<{ id: string }>('/v1/public/pharmacy-onboarding-deferrals', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function listPharmacyOnboardingRequests() {
-  return apiRequest<{ records: PharmacyOnboardingRequestView[] }>('/v1/portal/admin/pharmacy-onboarding-requests');
+  return apiRequest<{ records: PharmacyOnboardingRequestView[]; worldpaySubmissions?: Array<{ gphcNumber: string; submittedAt: string }> }>('/v1/portal/admin/pharmacy-onboarding-requests');
 }
 
 export async function openPharmacyOnboardingFile(id: string, kind: 'filled-form' | 'licence') {
@@ -458,6 +484,14 @@ export function activatePharmacyOnboardingRequest(id: string) {
   return apiRequest<{ request: PharmacyOnboardingRequestView; organisation: ActivatedPharmacyOnboarding }>(
     `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/activate`,
     { method: 'POST', body: JSON.stringify({}) },
+  );
+}
+
+/** Archives a new pharmacy (for example when Curaleaf rejects it) and emails the reason. */
+export function declineNewPharmacy(organisationId: string, reason: string) {
+  return apiRequest<{ organisationId: string; requestId: string | null; declinedAt: string }>(
+    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/decline`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
   );
 }
 
@@ -958,6 +992,14 @@ export function getAdminPatientRegister(input: { query: string; organisationId: 
   if (input.from) query.set('from', input.from);
   if (input.to) query.set('to', input.to);
   return apiRequest<PatientRegisterExportResult>(`/v1/portal/admin/patient-register?${query.toString()}`);
+}
+
+/** The pharmacy's own choice; HHH admin only sees it. */
+export function updatePatientEmailVisibility(showEmailToPatients: boolean) {
+  return apiRequest<PortalOrganisation>('/v1/portal/organisation/patient-email', {
+    method: 'PATCH',
+    body: JSON.stringify({ showEmailToPatients }),
+  });
 }
 
 export function updateOrganisation(organisationId: string, input: UpdateOrganisationInput) {

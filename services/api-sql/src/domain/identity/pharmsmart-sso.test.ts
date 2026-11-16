@@ -51,6 +51,36 @@ describe('PharmSmart pharmacy info', () => {
       email: 'manoj.iihglobal@gmail.com',
       firstName: 'Sylvia',
       lastName: 'Hockett',
+      prefill: {},
+    });
+  });
+
+  it('reads the Curaleaf form pre-fill keys and joins the address lines', () => {
+    const info = parsePharmsmartPharmacyInfo(JSON.stringify({
+      status_code: 200,
+      data: {
+        gphc: '1234471',
+        pharmacy_name: 'Hockett Pharmacy',
+        company_name: 'Hockett Health Ltd',
+        branch_address_line1: '1 High Street',
+        branch_address_line2: '',
+        branch_town: 'Leeds',
+        branch_postcode: 'LS1 1AA',
+        pharmacy_email: 'shop@hockett.test',
+        accounts_phone: 1132460000,
+        fax: null,
+        cd_licence_number: 'CD-998',
+      },
+    }));
+    assert.equal(info.status, 'pharmacy');
+    if (info.status !== 'pharmacy') return;
+    assert.deepEqual(info.prefill, {
+      pharmacyName: 'Hockett Pharmacy',
+      registeredCompanyName: 'Hockett Health Ltd',
+      pharmacyEmail: 'shop@hockett.test',
+      accountsPhone: '1132460000',
+      licenceDetails: 'CD-998',
+      deliveryAddress: '1 High Street, Leeds, LS1 1AA',
     });
   });
 

@@ -85,6 +85,8 @@ export interface PublicDirectoryResult {
   gphcNumber: string;
   addressSummary: string;
   publicPhone?: string | null;
+  /** Only present when the pharmacy has chosen to show its email to patients. */
+  publicEmail?: string | null;
   website?: string | null;
   /** Controller identity and data-protection contacts, shown before the patient picks. */
   icoRegistrationNumber?: string | null;
@@ -1583,6 +1585,8 @@ export interface PortalOrganisation {
   pharmacyPhone?: string;
   pharmacyEmail?: string;
   curaleafPharmacyCode?: string;
+  /** Only a production Curaleaf connection makes a pharmacy live. */
+  curaleafEnvironment?: 'test' | 'production' | null;
   address: string;
   addressLine1?: string;
   addressLine2?: string;
@@ -1599,6 +1603,8 @@ export interface PortalOrganisation {
   worldpayState?: 'unconnected' | 'test' | 'live';
   defaultPaymentRoute?: 'manual' | 'worldpay';
   pharmacyDeliveryEnabled?: boolean;
+  /** Patients see the pharmacy email as well as its phone. */
+  showEmailToPatients?: boolean;
   autoPlacementEnabled?: boolean;
   curaleafTestValidation?: CuraleafValidationRecord | null;
   curaleafLiveValidation?: CuraleafValidationRecord | null;

@@ -1018,19 +1018,21 @@ html{
   justify-content: center;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-brand,
+/* Resting rail: the logo alone. The pin appears once the rail opens. */
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-brand-copy,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-collapse,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-menu-label,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-item-content > span,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .nav-queue-count,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .user-profile-info,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-footer-action span,
-.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-version,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-exit span{
   display: none;
 }
 
-.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-collapse{
-  margin: 0;
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-brand{
+  justify-content: center;
+  gap: 0;
 }
 
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-menu{
@@ -2728,171 +2730,6 @@ td.font-semibold{
 
 .admin-client-compliance{ margin-top: 24px; }
 
-.admin-golive-panel{
-  margin: 0;
-  padding: 18px 20px;
-}
-
-.admin-golive-panel__head{
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
-}
-
-.admin-golive-panel__head h2{
-  margin: 2px 0 6px;
-  font-size: 16px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.admin-golive-panel__head p{
-  max-width: 640px;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.5;
-}
-
-.admin-golive-panel__head .btn{
-  min-height: 44px;
-}
-
-.admin-golive-facts{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 14px;
-  padding: 0;
-  list-style: none;
-}
-
-.admin-golive-facts li{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-}
-
-.admin-golive-actions{
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.admin-golive-actions li{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 44px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.admin-golive-actions li > div{
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.admin-golive-actions strong{
-  font-size: 0.8125rem;
-  font-weight: 650;
-}
-
-.admin-golive-actions span{
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.45;
-}
-
-.admin-golive-actions .btn{
-  min-height: 44px;
-  flex-shrink: 0;
-}
-
-.admin-golive-actions__aside{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.admin-golive-ack{
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 12px 14px;
-  color: var(--color-warning);
-  background: color-mix(in srgb, var(--color-warning) 8%, var(--bg-surface));
-  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, var(--border));
-  border-radius: var(--radius-md);
-  font-size: 0.75rem;
-  line-height: 1.5;
-  cursor: pointer;
-}
-
-.admin-golive-ack > svg{
-  flex: 0 0 auto;
-  margin-top: 2px;
-}
-
-.admin-golive-ack input{
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  margin-top: 1px;
-  accent-color: var(--tenant-primary);
-}
-
-.admin-golive-ack span{
-  min-width: 0;
-}
-
-.admin-golive-panel__hint,
-.admin-golive-panel__empty{
-  margin: 12px 0 0;
-  color: var(--text-tertiary);
-  font-size: 0.75rem;
-}
-
-@media (max-width: 620px) {
-  .admin-golive-panel__head{
-    display: grid;
-    align-items: stretch;
-  }
-  .admin-golive-panel__head .btn{
-    width: 100%;
-    min-height: 44px;
-  }
-  .admin-golive-actions li{
-    display: grid;
-    align-items: stretch;
-  }
-  .admin-golive-actions .btn{
-    width: 100%;
-  }
-  .admin-golive-actions__aside{
-    justify-content: stretch;
-  }
-  .admin-golive-actions__aside .btn{
-    flex: 1;
-  }
-}
-
 .admin-staff-card{ margin-top: 24px; }
 
 .admin-staff-invite-form{ display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; padding: 18px; margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-elevated); }
@@ -4284,17 +4121,6 @@ body{ background: var(--bg-app); }
 
 .sidebar-brand-copy--cobrand small{ max-width: 155px; margin-top: 0; overflow: hidden; color: #b3c1bc; font-size: 9px; letter-spacing: .035em; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
 .sidebar-brand-copy--cobrand em{ max-width: 155px; overflow: hidden; color: #80958d; font-size: 8px; font-style: normal; letter-spacing: .025em; text-overflow: ellipsis; white-space: nowrap; }
-
-.sidebar-version{
-  display: block;
-  padding: 8px 18px 7px;
-  color: #80958d;
-  border-bottom: 1px solid rgba(255,255,255,.1);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 760px){ .sidebar-version{ display: none; } }
 
 .sidebar-menu-label{
   display: block;
@@ -14066,6 +13892,694 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .patient-crm .order-crm-filters button strong{ display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 999px; color: var(--text-tertiary); background: var(--bg-elevated); font-size: 9px; }
 .patient-crm .order-crm-filters button.active strong{ color: var(--tenant-on-primary); background: var(--tenant-primary); }
 
+/* Pharmacy requests: a tab of the pharmacies overview, styled as its own rows and record. */
+.patient-crm .order-crm-filters button.has-attention:not(.active) strong{ color: #92400e; background: #fef3c7; }
+
+.admin-request-group > header strong{ color: #92400e; }
+
+.admin-decline-button{ color: #b91c1c; }
+.admin-decline-button:hover:not(:disabled), .admin-decline-button[aria-expanded='true']{ color: #991b1b; border-color: #fecaca; background: #fef2f2; }
+
+.admin-activation{
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fffbeb, var(--bg-elevated) 70%);
+}
+
+.admin-activation > header{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-activation__icon{
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 10px;
+}
+
+.admin-activation > header > span:nth-child(2){ display: grid; gap: 2px; min-width: 0; }
+.admin-activation > header small{ color: #92400e; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.admin-activation > header strong{ color: var(--text-primary); font-size: 15px; font-weight: 700; }
+
+@media (max-width: 640px){
+  .admin-activation > header{ grid-template-columns: auto minmax(0, 1fr); }
+  .admin-activation > header .btn{ grid-column: 1 / -1; justify-self: start; }
+}
+
+.admin-activation ol{
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.admin-activation li{
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 12px 14px;
+}
+
+.admin-activation li + li{ border-top: 1px solid var(--border); }
+
+.admin-activation__mark{
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: #fff;
+  border: 1.5px solid var(--border-strong, #cbd5e1);
+  border-radius: 50%;
+}
+
+.admin-activation li.is-done .admin-activation__mark{ background: #059669; border-color: #059669; }
+.admin-activation li.is-next:last-child .admin-activation__mark{ border-color: #d97706; box-shadow: 0 0 0 3px #fef3c7; }
+
+.admin-activation__text{ display: grid; gap: 2px; min-width: 0; }
+.admin-activation__text strong{ color: var(--text-primary); font-size: 13px; font-weight: 700; }
+.admin-activation__text small{ color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+
+.admin-activation__step-actions{ display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-activation__step-actions .btn{ display: inline-flex; align-items: center; gap: 5px; }
+
+@media (max-width: 640px){
+  .admin-activation li{ grid-template-columns: 22px minmax(0, 1fr); }
+  .admin-activation__step-actions{ grid-column: 2; }
+}
+
+.admin-activation__error{ margin: 0; color: #b91c1c; font-size: 12px; }
+
+.admin-activation--done{ border-color: #a7f3d0; background: linear-gradient(180deg, #ecfdf5, var(--bg-elevated) 70%); }
+.admin-activation--done .admin-activation__icon{ color: #047857; background: #d1fae5; }
+.admin-activation--done > header small{ color: #047857; }
+.admin-activation--stopped{ border-color: #fecaca; background: linear-gradient(180deg, #fef2f2, var(--bg-elevated) 70%); }
+.admin-activation--stopped .admin-activation__icon{ color: #b91c1c; background: #fee2e2; }
+.admin-activation--stopped > header small{ color: #b91c1c; }
+.admin-activation__body{ margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+
+/* Pharmacy record as one page: a slim section bar, then each section in turn. */
+/* 'hidden' makes the record a scroll container and stops the bar sticking; 'clip' still clips. */
+.admin-overview-crm .order-crm-detail{ overflow: clip; }
+
+.pharmacy-dashboard__nav{
+  position: sticky;
+  /* Flush with the top of the scrolling page, whatever its top padding is at this width. */
+  top: calc(-1 * var(--admin-scroll-pad-top, 0px));
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  backdrop-filter: blur(6px);
+}
+
+.pharmacy-dashboard__nav button{
+  min-height: 32px;
+  padding: 0 12px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pharmacy-dashboard__nav button:hover{ color: var(--text-primary); background: var(--bg-hover, #f1f5f4); }
+.pharmacy-dashboard__nav button:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 2px; }
+
+.pharmacy-dashboard{ display: grid; gap: 22px; }
+
+.pharmacy-dashboard__section{
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  scroll-margin-top: calc(56px - var(--admin-scroll-pad-top, 0px));
+}
+
+.pharmacy-dashboard__section + .pharmacy-dashboard__section{ padding-top: 22px; border-top: 1px solid var(--border); }
+
+.pharmacy-dashboard__heading{
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* The record's status tag keeps its own width when the header wraps. */
+.admin-overview-crm .order-crm-record__hero > .order-stage-pill{ flex: 0 0 auto; align-self: flex-start; justify-self: start; width: fit-content; max-width: 100%; }
+
+/* Cards inside the pharmacy dashboard wrap rather than push past the record at mid widths. */
+.pharmacy-dashboard .admin-detail-grid{ grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); margin-top: 0; }
+.pharmacy-dashboard .admin-detail-card,
+.pharmacy-dashboard .admin-staff-card{ min-width: 0; max-width: 100%; margin-top: 0; }
+.pharmacy-dashboard .brand-editor-row{ grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.pharmacy-dashboard .resource-url{ overflow-wrap: anywhere; }
+.pharmacy-dashboard .admin-detail-list > div{ grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr); }
+.pharmacy-dashboard .admin-detail-list > div > *{ min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 760px){ .pharmacy-dashboard .admin-detail-list > div{ grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+
+.pharmacy-curaleaf-card{ display: grid; gap: 14px; }
+.pharmacy-curaleaf-card > p{ margin: 0; }
+#pharmacy-section-curaleaf{ scroll-margin-top: calc(56px - var(--admin-scroll-pad-top, 0px)); }
+
+@media (max-width: 760px){
+  .pharmacy-dashboard .admin-staff-row{
+    grid-template-columns: 38px minmax(0, 1fr);
+    row-gap: 8px;
+  }
+  /* Role, status and actions drop under the name instead of off the edge. */
+  .pharmacy-dashboard .admin-staff-row > :nth-child(n+3){ grid-column: 2; justify-self: start; }
+  .pharmacy-dashboard .admin-staff-row-actions{ justify-self: start; }
+  .pharmacy-dashboard__nav{ padding-inline: 12px; overflow-x: auto; flex-wrap: nowrap; }
+}
+
+/* A request's application details: label over value, wrapping, never squeezed. */
+.admin-request-details{
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 0 20px;
+  margin: 0;
+}
+
+.admin-request-details > div{
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.admin-request-details dt{ color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
+.admin-request-details dd{ margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+
+.admin-request-quote{
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg-elevated);
+  border-left: 3px solid #dc2626;
+  border-radius: 0 8px 8px 0;
+}
+
+/* Pharmacy details: four cards that each edit in place, then the eligibility link. */
+.pharmacy-details{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.pharmacy-details__card{
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  container-type: inline-size;
+}
+
+.pharmacy-details__card.is-wide{ grid-column: 1 / -1; }
+.pharmacy-details__card.is-editing{ border-color: color-mix(in srgb, var(--tenant-primary) 45%, var(--border)); box-shadow: 0 0 0 3px var(--tenant-focus-ring, rgba(15, 118, 110, .12)); }
+
+.pharmacy-details__card > header{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.pharmacy-details__card h4{ margin: 0; color: var(--text-primary); font-size: 14px; font-weight: 700; }
+.pharmacy-details__card > header .btn{ display: inline-flex; align-items: center; gap: 5px; }
+
+.pharmacy-details__icon{
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--tenant-primary-strong, #0f766e);
+  background: var(--tenant-primary-soft, #e6f4f1);
+  border-radius: 8px;
+}
+
+.pharmacy-details__list{ display: grid; margin: 0; }
+
+.pharmacy-details__row{
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.3fr);
+  gap: 4px 14px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pharmacy-details__row dt{ color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
+.pharmacy-details__row dd{ display: grid; gap: 2px; margin: 0; min-width: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.pharmacy-details__row dd small{ color: var(--text-tertiary); font-size: 11px; font-weight: 500; }
+.pharmacy-details__empty{ color: var(--text-tertiary); font-weight: 500; }
+
+@container (max-width: 360px){
+  .pharmacy-details__row{ grid-template-columns: minmax(0, 1fr); }
+}
+
+.pharmacy-details__tag{
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-surface, #f1f5f4);
+  border-radius: 999px;
+}
+
+.pharmacy-details__link{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  padding: 0;
+  color: var(--tenant-primary-strong, #0f766e);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.pharmacy-details__address{
+  display: grid;
+  gap: 2px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.pharmacy-details__address small{ margin-top: 6px; color: var(--text-tertiary); font-size: 11px; font-weight: 500; }
+
+.pharmacy-details__form{ display: grid; gap: 12px; }
+
+.pharmacy-details__fields{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@container (max-width: 420px){
+  .pharmacy-details__fields{ grid-template-columns: minmax(0, 1fr); }
+}
+
+.pharmacy-details__fields > *{ min-width: 0; }
+.pharmacy-details__fields > .is-wide{ grid-column: 1 / -1; }
+
+.pharmacy-details__fields label,
+.pharmacy-details__logo{
+  display: grid;
+  gap: 5px;
+  align-content: start;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pharmacy-details__fields label > span:first-child,
+.pharmacy-details__logo > span:first-child{ display: flex; gap: 6px; align-items: baseline; color: var(--text-primary); }
+.pharmacy-details__fields em{ color: var(--text-tertiary); font-size: 11px; font-style: normal; font-weight: 500; }
+.pharmacy-details__fields small{ color: var(--text-tertiary); font-size: 11px; font-weight: 500; }
+.pharmacy-details__fields textarea{ resize: vertical; min-height: 56px; }
+
+.pharmacy-details__group{
+  margin: 4px 0 -4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.pharmacy-details__colour-input{ display: flex; align-items: center; gap: 8px; }
+.pharmacy-details__colour-input input{ width: 44px; height: 36px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-elevated); cursor: pointer; }
+.pharmacy-details__colour-input code{ color: var(--text-primary); font-size: 12px; }
+.pharmacy-details__logo-actions{ display: flex; flex-wrap: wrap; gap: 6px; }
+.pharmacy-details__logo-actions .btn{ display: inline-flex; align-items: center; gap: 5px; }
+
+.pharmacy-details__actions{ display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.pharmacy-details__actions.is-start{ justify-content: flex-start; }
+.pharmacy-details__actions .btn{ display: inline-flex; align-items: center; gap: 5px; }
+.pharmacy-details__error{ margin: 0; color: #b91c1c; font-size: 12px; }
+.pharmacy-details__note{ margin: 0; color: var(--text-secondary); font-size: 13px; }
+
+.pharmacy-details__url{
+  display: block;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  background: var(--bg-surface, #f6f8f7);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.pharmacy-details__brand{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-top: 3px solid;
+  border-radius: 10px;
+}
+
+.pharmacy-details__mark{
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  border-radius: 10px;
+}
+
+.pharmacy-details__mark.has-image{ width: 84px; background: #fff; border: 1px solid var(--border); }
+.pharmacy-details__mark img{ width: 100%; height: 100%; object-fit: contain; }
+.pharmacy-details__brand-copy{ display: grid; min-width: 0; }
+.pharmacy-details__brand-copy strong{ color: var(--text-primary); font-size: 13px; overflow-wrap: anywhere; }
+.pharmacy-details__brand-copy small{ color: var(--text-tertiary); font-size: 11px; }
+.pharmacy-details__swatches{ display: flex; gap: 4px; }
+.pharmacy-details__swatches i{ width: 16px; height: 16px; border: 1px solid rgba(0,0,0,.08); border-radius: 50%; }
+.pharmacy-details__colour-value{ display: inline-flex; align-items: center; gap: 6px; }
+.pharmacy-details__colour-value i{ width: 12px; height: 12px; border-radius: 3px; }
+.pharmacy-details__domains{ display: inline-flex; align-items: flex-start; gap: 5px; }
+
+/* Details: two even columns (Pharmacy | Contacts, Brand | Eligibility link), then Curaleaf full width. */
+.pharmacy-dashboard{ container-type: inline-size; }
+.pharmacy-dashboard .pharmacy-details{ grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+@container (max-width: 680px){ .pharmacy-dashboard .pharmacy-details{ grid-template-columns: minmax(0, 1fr); } }
+.pharmacy-details__card{ align-content: start; }
+.pharmacy-details__card.pharmacy-curaleaf-card{ grid-column: 1 / -1; }
+
+.pharmacy-details__brand-row{ display: inline-flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pharmacy-details__brand-row code{ color: var(--text-primary); font-size: 12px; }
+.pharmacy-details__brand-row .pharmacy-details__mark{ width: 32px; height: 32px; font-size: 11px; border-radius: 8px; }
+.pharmacy-details__brand-row .pharmacy-details__mark.has-image{ width: 72px; }
+
+/* Section bar: the section in view is marked. */
+.pharmacy-dashboard__nav button.is-active{ color: var(--text-primary); background: var(--tenant-primary-soft, #e6f4f1); box-shadow: inset 0 -2px 0 var(--tenant-primary, #0f766e); }
+
+/* Curaleaf connection inside Details: the same row language as the other cards. */
+.pharmacy-curaleaf-card .admin-curaleaf-connect{ display: grid; gap: 12px; }
+.pharmacy-curaleaf-card .settings-meta-grid{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 18px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+@container (max-width: 680px){ .pharmacy-curaleaf-card .settings-meta-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pharmacy-curaleaf-card .settings-meta-grid > div{
+  display: grid;
+  gap: 2px;
+  padding: 9px 0;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+}
+.pharmacy-curaleaf-card .settings-meta-grid span{ color: var(--text-tertiary); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.pharmacy-curaleaf-card .settings-meta-grid strong{ color: var(--text-primary); font-size: 13px; font-weight: 600; }
+
+/* Staff card: the same frame and header as the Details cards. */
+.pharmacy-dashboard .admin-staff-card{ padding: 16px 18px; border-radius: 12px; box-shadow: none; }
+.pharmacy-dashboard .admin-staff-card .admin-staff-invite-form{ margin-top: 0; }
+
+/* Show email to patients: a switch under the contacts list. */
+.pharmacy-details__switch-row{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface, #f6f8f7);
+}
+.pharmacy-details__switch-row > span{ display: grid; gap: 2px; min-width: 0; }
+.pharmacy-details__switch-row strong{ color: var(--text-primary); font-size: 13px; }
+.pharmacy-details__switch-row small{ color: var(--text-secondary); font-size: 12px; }
+.pharmacy-details__switch-row .pharmacy-details__tag{ margin: 0; }
+.pharmacy-details__tag.is-on{ color: #047857; background: #d1fae5; }
+.pharmacy-details__switch{
+  position: relative;
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  background: #cbd5e1;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+.pharmacy-details__switch > span{
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0,0,0,.2);
+  transition: transform .15s ease;
+}
+.pharmacy-details__switch[aria-checked="true"]{ background: var(--tenant-primary, #0f766e); }
+.pharmacy-details__switch[aria-checked="true"] > span{ transform: translateX(16px); }
+.pharmacy-details__switch:disabled{ cursor: not-allowed; opacity: .5; }
+.pharmacy-details__switch:focus-visible{ outline: 2px solid var(--tenant-primary, #0f766e); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce){ .pharmacy-details__switch, .pharmacy-details__switch > span{ transition: none; } }
+
+/* Pharmacy summary: Account (state and next action) beside Performance (numbers). */
+.pharmacy-summary{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.pharmacy-summary__card{
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  container-type: inline-size;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+}
+
+.pharmacy-summary__card > header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pharmacy-summary__card h3{ margin: 0; color: var(--text-primary); font-size: 14px; font-weight: 700; }
+.pharmacy-summary__hint{ color: var(--text-tertiary); font-size: 12px; }
+.pharmacy-summary__period{ display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg-app, #f6f5f1); }
+.pharmacy-summary__period button{ min-width: 38px; min-height: 26px; padding: 0 10px; border: 0; border-radius: 999px; color: var(--text-secondary); font: inherit; font-size: 12px; font-weight: 700; background: transparent; cursor: pointer; transition: background .15s ease, color .15s ease, box-shadow .15s ease; }
+.pharmacy-summary__period button:hover{ color: var(--text-primary); }
+.pharmacy-summary__period button.is-active{ color: var(--text-primary); background: var(--bg-elevated); box-shadow: 0 1px 2px rgba(15, 23, 42, .12), inset 0 0 0 1px var(--border); }
+.pharmacy-summary__period button:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce){ .pharmacy-summary__period button{ transition: none; } }
+
+.pharmacy-summary__card ul{ display: grid; margin: 0; padding: 0; list-style: none; }
+
+.pharmacy-summary__row{
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pharmacy-summary__label{ color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
+.pharmacy-summary__value{ display: grid; gap: 3px; min-width: 0; }
+.pharmacy-summary__value small{ color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+
+.pharmacy-summary__state{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: start;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pharmacy-summary__state::before{ content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pharmacy-summary__state.is-ok{ color: #047857; }
+.pharmacy-summary__state.is-wait{ color: #b45309; }
+.pharmacy-summary__state.is-off{ color: #64748b; }
+.pharmacy-summary__state.is-stop{ color: #b91c1c; }
+
+/* In a narrow card the action sits under the explanation instead of squeezing it. */
+@container (max-width: 520px){
+  .pharmacy-summary__row{ grid-template-columns: 96px minmax(0, 1fr); }
+  .pharmacy-summary__row > :last-child{ grid-column: 2; justify-self: start; }
+  .pharmacy-summary__row > span[aria-hidden="true"]:last-child{ display: none; }
+}
+
+@container (max-width: 340px){
+  .pharmacy-summary__row{ grid-template-columns: minmax(0, 1fr); }
+  .pharmacy-summary__row > :last-child{ grid-column: 1; }
+}
+
+.pharmacy-summary__metrics{
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--border);
+}
+
+.pharmacy-summary__metric{ display: grid; gap: 2px; padding: 12px 14px; background: var(--bg-elevated); }
+/* Patients and Revenue each get a heading and their own row of tiles. */
+.pharmacy-summary__group{ display: grid; gap: 8px; }
+.pharmacy-summary__group > h4{ margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+.pharmacy-summary__metrics.is-patients{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pharmacy-summary__metrics.is-revenue{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 560px){
+  .pharmacy-summary__metrics.is-revenue{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pharmacy-summary__metrics.is-revenue .pharmacy-summary__metric:first-child{ grid-column: 1 / -1; }
+}
+.pharmacy-summary__metric small{ color: var(--text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.pharmacy-summary__metric strong{ color: var(--text-primary); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pharmacy-summary__metric span{ color: var(--text-secondary); font-size: 12px; }
+.pharmacy-summary__note{ margin: 0; color: var(--text-tertiary); font-size: 12px; line-height: 1.45; }
+
+.curaleaf-account-form__notice{
+  margin: 0;
+  padding: 12px 14px;
+  color: #173f33;
+  background: #e9f1ed;
+  border: 1px solid #c7ddd2;
+  border-radius: 12px;
+}
+
+.admin-request-record .order-crm-record__actions .btn-primary{ min-width: 150px; }
+
+.admin-request-next{
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+}
+
+.admin-request-next strong{ color: var(--text-primary); }
+
+.admin-request-decline{
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+}
+
+.admin-request-decline h3{ margin: 0; color: #991b1b; font-size: 13px; font-weight: 700; }
+.admin-request-decline p{ margin: 0; color: var(--text-secondary); font-size: 12px; }
+.admin-request-decline textarea{ resize: vertical; min-height: 76px; }
+
+.admin-request-decline__actions{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-request-files{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-request-files .btn{ display: inline-flex; align-items: center; gap: 6px; }
+.admin-request-files .btn[aria-pressed='true']{ border-color: var(--tenant-primary); background: var(--tenant-primary-soft); }
+
+.admin-request-preview{
+  display: block;
+  width: 100%;
+  height: min(70vh, 760px);
+  max-width: 100%;
+  object-fit: contain;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.admin-request-grid{ grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+.admin-request-reason{
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-overview-crm__facts .admin-worldpay-form{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--text-tertiary);
+}
+
+.admin-overview-crm__facts .admin-worldpay-form::before{
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.admin-overview-crm__facts .admin-worldpay-form.is-sent{ color: #047857; }
+
 .order-crm-workspace{
   display: grid;
   grid-template-columns: clamp(310px, 28%, 390px) minmax(0, 1fr);
@@ -17815,244 +18329,484 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   padding: clamp(36px, 6vw, 72px) clamp(20px, 4vw, 40px) clamp(72px, 10vw, 112px);
 }
 
-.pharmsmart-guide{
+/* Pharmacy onboarding: hero (pitch + choices | how it works), then one panel for the chosen path. */
+.onb{
   display: grid;
-  gap: 36px;
+  align-content: start;
+  gap: clamp(28px, 4vw, 48px);
+  width: min(100%, 1160px);
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 32px) max(20px, env(safe-area-inset-right, 0px)) clamp(56px, 8vw, 96px) max(20px, env(safe-area-inset-left, 0px));
 }
 
-.pharmsmart-guide .staff-login-lockup{
-  margin-bottom: 28px;
-}
-
-.pharmsmart-guide h1{
-  max-width: 12em;
-  margin: 0 0 16px;
-  color: var(--green);
-  font-family: var(--serif);
-  font-size: clamp(34px, 4vw, 46px);
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  line-height: 1.08;
-}
-
-.pharmsmart-guide h2{
-  margin: 0 0 14px;
-  color: var(--green);
-  font-family: var(--serif);
-  font-size: 28px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-}
-
-.pharmsmart-guide__intro > p,
-.pharmsmart-guide__docs p{
-  margin: 0;
-  color: var(--ink-muted);
-  font-size: 16px;
-  line-height: 1.55;
-}
-
-.pharmsmart-guide__intro > p{
-  max-width: 42ch;
-}
-
-.pharmsmart-guide__person{
-  margin-bottom: 8px !important;
-}
-
-.pharmsmart-guide__contact{
+.onb__top{
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 22px;
-}
-
-.pharmsmart-guide__contact a{
-  padding: 0 16px;
-  background: #fff;
-  border: 1px solid color-mix(in srgb, var(--green) 22%, transparent);
-  border-radius: 999px;
-}
-
-.pharmsmart-guide__contact a:hover{
-  background: var(--mint-light);
-}
-
-.pharmsmart-guide__contact a,
-.pharmsmart-guide__book > a,
-.pharmsmart-guide__email{
-  display: inline-flex;
   align-items: center;
-  min-height: 44px;
-  color: var(--green);
-  font-weight: 600;
-  text-decoration: none;
+  justify-content: space-between;
+  gap: 12px 24px;
 }
 
-.pharmsmart-guide__email{
-  min-height: 44px;
-  padding: 0;
+.onb__top .staff-login-lockup{ margin: 0; }
+
+.onb__account{
+  margin: 0;
   color: var(--ink-muted);
   font-size: 15px;
+}
+
+.onb__signin{
+  padding: 0;
+  color: var(--green);
+  font: inherit;
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
+  background: none;
   border: 0;
-  background: transparent;
   cursor: pointer;
-  font-family: inherit;
 }
 
-.pharmsmart-guide__materials{
+/* Phones put the chosen panel straight under the choices; wide screens put it under both columns. */
+.onb__hero{
   display: grid;
-  gap: 36px;
+  grid-template-areas: "pitch" "panel" "how";
+  gap: clamp(28px, 4vw, 48px);
+  align-items: start;
 }
 
-.pharmsmart-guide__brochure{
-  padding: 28px 28px 24px;
-  color: var(--cream);
-  background: var(--green);
-  border-radius: 24px;
-  box-shadow: 0 22px 48px rgba(23, 63, 51, 0.22);
+.onb__pitch{ grid-area: pitch; }
+.onb__how{ grid-area: how; }
+.onb__panel-slot{ grid-area: panel; min-width: 0; }
+.onb__panel-slot:empty{ display: none; }
+
+@media (min-width: 960px){
+  .onb__hero{
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+    grid-template-areas: "pitch how" "panel panel";
+    column-gap: 56px;
+  }
 }
 
-.pharmsmart-guide__brochure h2{
-  margin-bottom: 12px;
-  color: var(--cream);
-  font-size: clamp(34px, 4vw, 44px);
-  letter-spacing: -0.04em;
-  line-height: 1.02;
+@media (max-width: 559px){
+  .onb .onb__choices{ display: grid; grid-template-columns: 1fr 1fr; }
+  .onb .onb__choice{ padding: 0 12px; }
+  .onb .onb__choice--later{ grid-column: 1 / -1; justify-self: center; }
 }
 
-.pharmsmart-guide__brochure p{
-  max-width: 36ch;
+.onb__pitch{
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.onb__eyebrow{
   margin: 0;
-  color: color-mix(in srgb, var(--cream) 86%, var(--mint));
-  font-size: 18px;
-  line-height: 1.45;
+  color: var(--rust);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.pharmsmart-guide__brochure .pharmsmart-guide__actions{
-  margin-top: 22px;
-}
-
-.pharmsmart-guide__brochure .pharmsmart-guide__view{
+.onb h1{
+  max-width: 17ch;
+  margin: 0;
   color: var(--green);
-  background: var(--cream);
-  border-color: var(--cream);
+  font-family: var(--serif);
+  font-size: clamp(36px, 5vw, 60px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
 }
 
-.pharmsmart-guide__brochure .pharmsmart-guide__view:hover,
-.pharmsmart-guide__brochure .pharmsmart-guide__view[aria-expanded='true']{
+.onb h2{
+  margin: 0;
   color: var(--green);
-  background: var(--mint);
-  border-color: var(--mint);
+  font-family: var(--serif);
+  font-size: clamp(24px, 2.6vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
 }
 
-.pharmsmart-guide__brochure .pharmsmart-guide__download{
-  color: var(--cream);
-  background: transparent;
-  border-color: color-mix(in srgb, var(--cream) 55%, transparent);
+.onb h3{
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
 }
 
-.pharmsmart-guide__brochure .pharmsmart-guide__download:hover{
-  color: var(--green);
-  background: var(--cream);
-  border-color: var(--cream);
+.onb p{ margin: 0; }
+
+.onb__lede{
+  max-width: 58ch;
+  color: var(--ink-muted);
+  font-size: clamp(17px, 1.4vw, 19px);
+  line-height: 1.55;
 }
 
-.pharmsmart-guide__brochure :is(.pharmsmart-guide__view, .pharmsmart-guide__download):focus-visible{
-  outline: 3px solid var(--cream);
-  outline-offset: 3px;
-}
-
-.pharmsmart-guide__docs ul{
+.onb__facts{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.pharmsmart-guide__docs li{
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px 24px;
-  align-items: start;
-  padding: 18px 0;
-  border-top: 1px solid color-mix(in srgb, var(--green) 16%, transparent);
-}
-
-.pharmsmart-guide__docs li:last-child{
-  border-bottom: 1px solid color-mix(in srgb, var(--green) 16%, transparent);
-}
-
-.pharmsmart-guide__name{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.pharmsmart-guide__docs strong{
-  color: var(--ink);
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.pharmsmart-guide__tag{
+.onb__facts li{
   display: inline-flex;
   align-items: center;
-  min-height: 22px;
-  padding: 0 8px;
+  gap: 8px;
+  padding: 7px 14px;
   color: var(--green);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-size: 14px;
+  font-weight: 500;
   background: var(--mint-light);
   border-radius: 999px;
 }
 
-.pharmsmart-guide__actions{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+.onb__facts li::before{
+  content: "";
+  width: 6px;
+  height: 6px;
+  background: var(--bright);
+  border-radius: 50%;
 }
 
-.pharmsmart-guide__view,
-.pharmsmart-guide__download{
-  display: inline-flex;
+.onb__person{
+  color: var(--ink-muted);
+  font-size: 15px;
+}
+
+.onb__person strong{ color: var(--ink); font-weight: 600; }
+
+.onb__choices{
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0 16px;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.onb__choice{
+  min-height: 52px;
+  padding: 0 24px;
+  color: var(--green);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--green) 35%, transparent);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s var(--ease-out), border-color 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+
+.onb__choice:hover{ background: var(--mint-light); }
+
+.onb__choice--setup{
+  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.onb__choice--setup:hover{ background: var(--green-deep); border-color: var(--green-deep); }
+
+.onb__choice--later{
+  padding: 0 12px;
+  color: var(--ink-muted);
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.onb__choice--later:hover{ color: var(--green); background: transparent; }
+
+.onb__choice[aria-pressed='true']:not(.onb__choice--setup){
+  background: var(--mint-light);
+  border-color: var(--green);
+}
+
+.onb__choice--later[aria-pressed='true']{ text-decoration: none; }
+
+.onb__brochure{
+  color: var(--ink-muted);
+  font-size: 15px;
+}
+
+.onb__brochure button,
+.onb__error button{
+  padding: 0;
   color: var(--green);
   font: inherit;
   font-weight: 600;
-  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.onb__how{
+  display: grid;
+  gap: 18px;
+  padding: clamp(22px, 3vw, 32px);
+  color: #e8f0eb;
+  background: var(--green);
+  border-radius: 24px;
+}
+
+.onb__how h2{
+  color: #fff;
+  font-size: 22px;
+}
+
+.onb__how ol{
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: onb-step;
+}
+
+.onb__how li{
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 2px;
+  padding: 14px 0;
+  counter-increment: onb-step;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.onb__how li::before{
+  content: counter(onb-step);
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--mint);
+  border-radius: 50%;
+}
+
+.onb__how li strong{
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.onb__how li span{
+  color: rgba(232, 240, 235, 0.82);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.onb__panel-slot{ scroll-margin-top: 24px; }
+
+.onb__panel{
+  display: grid;
+  gap: 14px;
+  padding: clamp(22px, 3vw, 36px);
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
+  border-radius: 24px;
+  box-shadow: 0 18px 48px rgba(21, 56, 44, 0.07);
+}
+
+.onb__panel > p{
+  max-width: 62ch;
+  color: var(--ink-muted);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.onb__panel-head{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 20px;
+}
+
+.onb__progress{
+  padding: 4px 12px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--mint-light);
+  border-radius: 999px;
+}
+
+.onb__forms{
+  display: grid;
+  gap: 12px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: onb-form;
+}
+
+.onb__forms > li{
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 6px 16px;
+  align-items: start;
+  padding: 18px 20px;
+  background: var(--cream);
+  border: 1px solid transparent;
+  border-radius: 18px;
+  counter-increment: onb-form;
+}
+
+.onb__forms > li::before{
+  content: counter(onb-form);
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--green);
+  font-weight: 700;
+  background: #fff;
+  border: 1.5px solid color-mix(in srgb, var(--green) 30%, transparent);
+  border-radius: 50%;
+}
+
+.onb__forms > li.is-done::before{
+  content: "✓";
+  color: #fff;
+  background: var(--bright);
+  border-color: var(--bright);
+}
+
+.onb__forms > li > div{
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.onb__forms h3{ font-size: 17px; }
+
+.onb__forms > li > div p{
+  max-width: 60ch;
+  color: var(--ink-muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.onb__forms > li > :last-child:not(div){
+  grid-column: 2;
+  justify-self: start;
+}
+
+@media (min-width: 640px){
+  .onb__forms > li{ grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; }
+  .onb__forms > li > :last-child:not(div){ grid-column: 3; justify-self: end; }
+}
+
+.onb__forms .onb__done::before{ display: none; }
+
+.onb__panel-head a{
+  color: var(--green);
+  font-weight: 600;
+}
+
+.onb__actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.onb__button{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 22px;
+  color: var(--green);
+  font: inherit;
+  font-weight: 600;
   text-decoration: none;
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--green) 35%, transparent);
   border-radius: 999px;
   cursor: pointer;
 }
 
-.pharmsmart-guide__view[aria-expanded='true'],
-.pharmsmart-guide__view:hover,
-.pharmsmart-guide__download:hover{
-  background: var(--mint-light);
+.onb__button:hover{ background: var(--mint-light); }
+
+.onb__button--primary{
+  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
 }
 
-.pharmsmart-guide__send{
-  margin: 18px 0 0;
+.onb__button--primary:hover{ background: var(--green-deep); }
+
+.onb__button--quiet{ border-color: transparent; }
+
+.onb__done{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--bright) !important;
+  font-size: 14px !important;
+  font-weight: 600;
+}
+
+.onb__done::before{
+  content: "✓";
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: #fff;
+  font-size: 13px;
+  background: var(--bright);
+  border-radius: 50%;
+}
+
+.onb__address{
   color: var(--ink);
   font-weight: 600;
+  user-select: all;
+  overflow-wrap: anywhere;
 }
 
-.pharmsmart-guide__submitted{
-  margin: 0;
-  color: var(--green);
-  font-weight: 600;
+.onb__calendar{
+  display: block;
+  width: 100%;
+  height: min(720px, 80vh);
+  min-height: 560px;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
+  border-radius: 16px;
+}
+
+.onb__error{ color: var(--rust) !important; }
+
+.onb__foot{
+  padding-top: 20px;
+  color: var(--ink-subtle);
+  font-size: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.onb :is(a, button):focus-visible{
+  outline: 3px solid color-mix(in srgb, var(--bright) 55%, transparent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .onb__choice{ transition: none; }
 }
 
 .curaleaf-account-form{
@@ -18094,14 +18848,137 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .curaleaf-account-form__grid label{
   display: grid;
   gap: 6px;
+  align-content: start;
+  min-width: 0;
   color: var(--ink);
   font-weight: 600;
 }
 
-.curaleaf-account-form__grid label span{
+.curaleaf-account-form__grid label span,
+.curaleaf-account-form__grid legend span{
   color: var(--ink-muted);
+  font-size: 13px;
   font-weight: 500;
 }
+
+.curaleaf-account-form__grid fieldset{
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin: 0;
+  padding: 18px 0 4px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.curaleaf-account-form__grid legend{
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 0 12px;
+  color: var(--green);
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 500;
+}
+
+@media (min-width: 640px){
+  .curaleaf-account-form__grid fieldset{ grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+}
+
+.worldpay-form .worldpay-form__label{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  color: var(--ink);
+  font-size: inherit;
+  font-weight: 600;
+}
+
+@media (min-width: 640px){
+  .curaleaf-account-form__grid fieldset > .is-wide{ grid-column: 1 / -1; }
+}
+
+.worldpay-form legend .is-ok{ color: #3d8d65; font-weight: 600; }
+.worldpay-form legend .is-off{ color: #a84f35; font-weight: 600; }
+
+.worldpay-form__remove,
+.worldpay-form__add{
+  font: inherit;
+  font-weight: 600;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.worldpay-form__remove{
+  margin-left: auto;
+  padding: 0;
+  font-family: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+}
+
+.worldpay-form legend{ width: 100%; }
+
+.worldpay-form__add{
+  justify-self: start;
+  min-height: 44px;
+  margin: 4px 0 8px;
+  padding: 0 18px;
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--green) 40%, transparent);
+  border-radius: 999px;
+}
+
+.worldpay-form__add:hover{ background: var(--mint-light); }
+
+.worldpay-form__defaults{
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 18px 20px 10px;
+  background: var(--mint-light);
+  border: 1.5px solid color-mix(in srgb, var(--green) 28%, transparent);
+  border-radius: 16px;
+}
+
+.worldpay-form__defaults-head{
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  padding-bottom: 6px;
+}
+
+.worldpay-form__defaults-head strong{
+  color: var(--green);
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 500;
+}
+
+.worldpay-form__defaults-head > span:last-child{
+  max-width: 62ch;
+  color: var(--ink-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.worldpay-form__badge{
+  padding: 3px 10px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--green);
+  border-radius: 999px;
+}
+
+.worldpay-form__defaults fieldset{ border-top-color: color-mix(in srgb, var(--green) 18%, transparent); }
 
 .curaleaf-account-form__grid textarea{
   resize: vertical;
@@ -18152,136 +19029,15 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 
 .curaleaf-account-form footer .btn{
-  min-height: 44px;
+  min-height: 48px;
   min-width: 140px;
+  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
+  border-radius: 999px;
 }
 
-.pharmacy-request-list{
-  display: grid;
-  gap: 10px;
-}
-
-.pharmacy-request{
-  display: grid;
-  gap: 12px;
-  width: 100%;
-  padding: 16px;
-  text-align: left;
-  color: inherit;
-  background: var(--bg-surface);
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.pharmacy-request.is-selected{
-  border-color: color-mix(in srgb, var(--tenant-primary, #0f766e) 55%, #e2e8f0);
-}
-
-.pharmacy-request:focus-visible{
-  outline: 3px solid color-mix(in srgb, #3d8d65 55%, transparent);
-  outline-offset: 3px;
-}
-
-.pharmacy-request__title{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.pharmacy-request__meta{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.pharmacy-request-detail{
-  display: grid;
-  gap: 16px;
-}
-
-.pharmacy-request-detail dl{
-  display: grid;
-  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
-  gap: 8px 16px;
-  margin: 0;
-}
-
-.pharmacy-request-detail dt{
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-}
-
-.pharmacy-request-detail dd{
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.pharmacy-request-actions{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pharmacy-request-actions .btn,
-.pharmacy-request-filters .btn{
-  min-height: 44px;
-}
-
-.pharmacy-request-filters{
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.pharmacy-request-preview{
-  width: 100%;
-  min-height: 480px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-@media (max-width: 640px){
-  .pharmacy-request-detail dl{
-    grid-template-columns: 1fr;
-    gap: 2px 0;
-  }
-  .pharmacy-request-detail dt{
-    margin-top: 8px;
-  }
-}
-
-.pharmsmart-guide__account{
-  position: relative;
-  z-index: 1;
-  margin-top: 8px;
-  padding-top: 28px;
-  padding-bottom: clamp(56px, 8vw, 88px);
-  background: var(--cream);
-  border-top: 1px solid color-mix(in srgb, var(--green) 16%, transparent);
-}
-
-.pharmsmart-guide__account h2{
-  margin-bottom: 4px;
-  font-size: 22px;
-}
-
-.pharmsmart-guide__account p{
-  max-width: 42ch;
-}
-
-.pharmsmart-guide__account a{
-  color: var(--green);
-  font-weight: 600;
-}
+.curaleaf-account-form footer .btn:hover:not(:disabled){ background: #0f2b23; }
 
 .onboarding-dialog{
   --green: #173f33;
@@ -18457,98 +19213,6 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   color: var(--ink-muted);
 }
 
-.pharmsmart-guide :is(a, button):focus-visible{
-  outline: 3px solid color-mix(in srgb, var(--bright) 55%, transparent);
-  outline-offset: 3px;
-  border-radius: 8px;
-}
-
-.pharmsmart-guide__book{
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.pharmsmart-guide__book > a{
-  align-self: flex-start;
-  min-height: 36px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.pharmsmart-welcome-calendar{
-  display: block;
-  width: 100%;
-  height: 70vh;
-  min-height: 560px;
-  background: #fff;
-  border: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
-  border-radius: 16px;
-}
-
-.pharmsmart-welcome-skip{
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.pharmsmart-welcome-skip:focus{
-  position: static;
-  width: auto;
-  height: auto;
-  clip: auto;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  margin-bottom: 16px;
-  overflow: visible;
-  color: var(--green);
-  white-space: normal;
-}
-
-.pharmsmart-guide__layout{
-  display: grid;
-  gap: 28px;
-}
-
-@media (min-width: 900px){
-  .pharmsmart-guide__layout{
-    position: relative;
-    grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
-    grid-template-areas:
-      "intro book"
-      "docs book";
-    column-gap: 56px;
-    row-gap: 20px;
-    align-items: start;
-  }
-
-  .pharmsmart-guide__intro{ grid-area: intro; }
-  .pharmsmart-guide__materials{ grid-area: docs; }
-  .pharmsmart-guide__book{
-    grid-area: book;
-    position: absolute;
-    inset: 0;
-    height: auto;
-    max-height: none;
-    overflow: hidden;
-  }
-
-  .pharmsmart-welcome-calendar{
-    flex: 1 1 auto;
-    height: auto;
-    min-height: 0;
-  }
-}
-
-@media (max-width: 899px){
-  .pharmsmart-welcome-calendar{ height: 70vh; }
-}
 
 .staff-login-page .staff-login-heading{
   align-items: flex-start;
@@ -20882,4 +21546,13 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
     margin: 0;
     color: #854f0b;
   }
+}
+
+/* Settings and help sit at the bottom of the rail, just above the signed-in person. */
+.sidebar-menu.sidebar-menu--bottom{
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  border-top: 1px solid var(--tenant-sidebar-border, var(--border));
 }

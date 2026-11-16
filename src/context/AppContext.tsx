@@ -360,6 +360,7 @@ export interface PharmacyTenant {
   pharmacyPhone?: string;
   pharmacyEmail?: string;
   curaleafPharmacyCode?: string;
+  curaleafEnvironment?: 'test' | 'production' | null;
   address: string;
   addressLine1?: string;
   addressLine2?: string;
@@ -377,6 +378,8 @@ export interface PharmacyTenant {
   /** Admin view of the stored Worldpay merchant: no credentials, sandbox, or live. */
   worldpayState?: 'unconnected' | 'test' | 'live';
   pharmacyDeliveryEnabled: boolean;
+  /** Patients see the pharmacy email as well as its phone. Off by default. */
+  showEmailToPatients?: boolean;
   brand: {
     primary: string;
     portalName: string;

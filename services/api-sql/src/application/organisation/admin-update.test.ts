@@ -54,6 +54,7 @@ function createRepos(current: OrganisationRecord | null = organisation) {
   const profileUpdates: unknown[] = [];
   const brandUpdates: unknown[] = [];
   const statusUpdates: unknown[] = [];
+  const emailVisibility: boolean[] = [];
   const createdDomains: string[] = [];
   const deletedDomains: string[] = [];
   const directoryUpserts: unknown[] = [];
@@ -62,6 +63,7 @@ function createRepos(current: OrganisationRecord | null = organisation) {
     profileUpdates,
     brandUpdates,
     statusUpdates,
+    emailVisibility,
     createdDomains,
     deletedDomains,
     directoryUpserts,
@@ -87,6 +89,11 @@ function createRepos(current: OrganisationRecord | null = organisation) {
         if (!stored) return;
         stored = { ...stored, status };
         statusUpdates.push(status);
+      },
+      async updateOrganisationShowEmailToPatients(_id: string, show: boolean) {
+        if (!stored) return;
+        stored = { ...stored, showEmailToPatients: show };
+        emailVisibility.push(show);
       },
       async listOrganisationDomains() {
         return [{ id: 'domain-1', hostname: 'old.example' }];
@@ -210,6 +217,12 @@ describe('updateAdminOrganisationDetails', () => {
       (error: unknown) => error instanceof HttpError && error.code === 'ACTIVATION_ACTION_REQUIRED',
     );
     assert.deepEqual(deps.statusUpdates, []);
+  });
+
+  it('does not let HHH admin change whether patients see the pharmacy email', async () => {
+    const deps = createRepos();
+    await assert.rejects(() => updateAdminOrganisationDetails(organisation.id, { showEmailToPatients: true }, deps));
+    assert.deepEqual(deps.emailVisibility, []);
   });
 
   it('returns NOT_FOUND for an unknown organisation', async () => {

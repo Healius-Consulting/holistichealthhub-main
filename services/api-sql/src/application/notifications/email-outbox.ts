@@ -51,6 +51,8 @@ export function pharmacyEmailContext(
     // Patients are given the pharmacy's landline and inbox, never the superintendent's own contact.
     pharmacyPhone: organisation?.pharmacyPhone || organisation?.mainContactPhone || '',
     pharmacyEmail: organisation?.pharmacyEmail || organisation?.mainContactEmail || '',
+    // Only when the pharmacy has chosen to show it; the superintendent's own email never is.
+    pharmacyPublicEmail: organisation?.showEmailToPatients ? organisation.pharmacyEmail || '' : '',
     pharmacyAddress: organisation?.address || '',
     pharmacyGphcNumber: organisation?.gphcNumber || '',
     pharmacyIcoNumber: profile?.icoRegistrationNumber || '',

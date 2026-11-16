@@ -19,6 +19,8 @@ import type { IntegrationConnectionRecord, IntegrationName } from '../../reposit
 import { SqlCuraleafQuoteBankRepository } from '../../repositories/sql/curaleaf-quote-bank.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
+import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
+import { applyCuraleafActivation } from '../../application/organisation/curaleaf-activation.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { requireStaff } from '../../security/require-staff.js';
 import type { RequestContext } from '../../security/request-context.js';
@@ -120,6 +122,7 @@ export function createPortalIntegrationRouter(): Router {
   }
   const quoteBankRepo = new SqlCuraleafQuoteBankRepository();
   const organisationRepo = new SqlOrganisationRepository();
+  const identityRepo = new SqlIdentityRepository();
 
   const status = (integration: IntegrationName) => async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -204,6 +207,23 @@ export function createPortalIntegrationRouter(): Router {
       // Validation is a real call to Curaleaf that came back, which is exactly
       // the evidence the Overview chip is asking for.
       noteVendorSuccess(organisationId, 'CURALEAF');
+      // Live Curaleaf credentials are what make a pharmacy live; test ones keep it in onboarding.
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      const activation = organisation
+        ? await applyCuraleafActivation(organisationRepo, organisation, restored.environment)
+        : null;
+      if (activation) {
+        await identityRepo.appendAudit({
+          organisationId,
+          actorUid: req.context && 'uid' in req.context ? req.context.uid : null,
+          actorRole: 'HHH_ADMIN',
+          event: activation === 'went_live' ? 'organisation.went_live' : 'organisation.reverted_from_live',
+          recordType: 'Organisation',
+          recordId: organisationId,
+          requestId: req.context?.requestId ?? null,
+          details: { automatic: true, reason: 'curaleaf_credentials', environment: restored.environment },
+        }).catch(() => undefined);
+      }
       res.status(200).json(curaleafStatusPayload(restored, {
         message: validation.message,
         checkedAt: validation.checkedAt,

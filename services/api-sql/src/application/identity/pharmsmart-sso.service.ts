@@ -7,6 +7,7 @@ import {
   pharmsmartDisplayName,
   pharmsmartSetupGaps,
   readPharmsmartSetupTicket,
+  type PharmsmartPrefill,
   type PharmsmartSetupGap,
   type PharmsmartStaffCandidate,
 } from '../../domain/identity/pharmsmart-sso.js';
@@ -39,6 +40,8 @@ export type PharmsmartLoginResult =
     firstName: string | null;
     lastName: string | null;
     gphcNumber: string | null;
+    pharmsmartPharmacyId: string | null;
+    prefill: PharmsmartPrefill;
   };
 
 type Person = { email: string | null; firstName: string | null; lastName: string | null };
@@ -92,6 +95,8 @@ export class PharmsmartSsoService {
           firstName: info.firstName,
           lastName: info.lastName,
           gphcNumber: info.gphcNumber,
+          pharmsmartPharmacyId: info.pharmsmartPharmacyId,
+          prefill: info.prefill,
         };
       }
       await this.refuse(null, matched.reason, context);

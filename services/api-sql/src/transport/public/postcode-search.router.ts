@@ -86,6 +86,8 @@ export function createPublicPostcodeSearchRouter(): Router {
           gphcNumber: profile.gphcNumber,
           addressSummary: directoryAddressSummary(profile),
           publicPhone: profile.publicPhone,
+          // Hidden unless the pharmacy has chosen to show it; the phone is always shown.
+          publicEmail: profile.showEmailToPatients ? profile.publicEmail || null : null,
           website: profile.website ?? null,
           // Privacy 1.1 and 1.5: the controller's identity and contacts are shown to
           // the patient before they choose, not only after they have applied.

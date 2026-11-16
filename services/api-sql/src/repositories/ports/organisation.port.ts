@@ -33,6 +33,8 @@ export interface OrganisationRecord {
   worldpayEnabled: boolean;
   defaultPaymentRoute: 'MANUAL' | 'WORLDPAY';
   pharmacyDeliveryEnabled: boolean;
+  /** Patients see the pharmacy email as well as its phone. Off by default. */
+  showEmailToPatients?: boolean;
   autoPlacementEnabled: boolean;
   gdprComplianceFlag: boolean;
   pausedReason: string | null;
@@ -151,6 +153,7 @@ export interface OrganisationRepositoryPort {
   updateOrganisationBrand(id: string, input: UpdateOrganisationBrandInput): Promise<void>;
   updateOrganisationClassification(id: string, classification: OrganisationRecord['classification']): Promise<void>;
   updateOrganisationStatus(id: string, status: OrganisationRecord['status']): Promise<void>;
+  updateOrganisationShowEmailToPatients(id: string, show: boolean): Promise<void>;
   updateOrganisationPaymentRoute(id: string, defaultPaymentRoute: OrganisationRecord['defaultPaymentRoute'], worldpayEnabled: boolean): Promise<void>;
   updateOrganisationPharmacyDelivery(id: string, enabled: boolean): Promise<void>;
   updateOrganisationIntakeEnabled(id: string, intakeEnabled: boolean): Promise<void>;

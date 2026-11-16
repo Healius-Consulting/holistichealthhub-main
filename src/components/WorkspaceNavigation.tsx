@@ -13,6 +13,8 @@ export interface WorkspaceNavItem<Key extends string = string> {
 export interface WorkspaceNavGroup<Key extends string = string> {
   label: string;
   items: WorkspaceNavItem<Key>[];
+  /** Pinned to the bottom of the desktop rail, just above the signed-in person. */
+  placement?: 'top' | 'bottom';
 }
 
 const COLLAPSE_STORAGE_KEY = 'hhh_workspace_sidebar_collapsed';
@@ -37,7 +39,6 @@ interface WorkspaceNavigationProps<Key extends string> {
   mobilePrimaryKeys: Key[];
   onNavigate: (key: Key) => void;
   brand: { title: string; subtitle: string; partner?: string; logoText?: string; logoSrc?: string; logo?: ReactNode };
-  version?: string;
   user: { initials: string; name: string; role: string };
   exitAction: { label: string; icon: ReactNode; onClick: () => void };
   footerAction?: { label: string; icon: ReactNode; onClick: () => void };
@@ -51,7 +52,6 @@ export default function WorkspaceNavigation<Key extends string>({
   mobilePrimaryKeys,
   onNavigate,
   brand,
-  version,
   user,
   exitAction,
   footerAction,
@@ -62,6 +62,8 @@ export default function WorkspaceNavigation<Key extends string>({
   const [collapsed, setCollapsed] = useState(true);
   const mobileMenuRef = useModalFocus<HTMLElement>(mobileMenuOpen, () => setMobileMenuOpen(false));
   const items = groups.flatMap(group => group.items);
+  const topGroups = groups.filter(group => group.placement !== 'bottom');
+  const bottomGroups = groups.filter(group => group.placement === 'bottom');
   const mobilePrimary = mobilePrimaryKeys.map(key => items.find(item => item.key === key)).filter((item): item is WorkspaceNavItem<Key> => Boolean(item));
   const mobileMore = items.filter(item => !mobilePrimaryKeys.includes(item.key));
   const mobileMoreActive = mobileMore.some(item => item.key === activeKey);
@@ -141,7 +143,7 @@ export default function WorkspaceNavigation<Key extends string>({
           </button>
         </div>
         <nav className="sidebar-menu" aria-label={`${ariaLabel} navigation`}>
-          {groups.map((group, index) => (
+          {topGroups.map((group, index) => (
             <div className="workspace-nav-group" key={group.label}>
               {index > 0 ? <span className="sidebar-section-separator" aria-hidden="true" /> : null}
               <span className={`sidebar-menu-label${index ? ' sidebar-menu-label--spaced' : ''}`}>{group.label}</span>
@@ -149,7 +151,15 @@ export default function WorkspaceNavigation<Key extends string>({
             </div>
           ))}
         </nav>
-        {version ? <span className="sidebar-version" aria-label={`Portal version ${version}`}>{version}</span> : null}
+        {bottomGroups.length ? (
+          <nav className="sidebar-menu sidebar-menu--bottom" aria-label={`${ariaLabel} settings and help`}>
+            {bottomGroups.map(group => (
+              <div className="workspace-nav-group" key={group.label}>
+                {group.items.map(renderDesktopItem)}
+              </div>
+            ))}
+          </nav>
+        ) : null}
         <div className="sidebar-footer">
           {footerAction ? (
             <button type="button" className="btn btn-sm sidebar-footer-action" onClick={footerAction.onClick}>

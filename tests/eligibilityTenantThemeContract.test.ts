@@ -30,7 +30,9 @@ test('the general HHH eligibility form keeps forest and rust until a pharmacy to
 });
 
 test('admin brand copy says the palette also reaches the pharmacy eligibility form', () => {
-  assert.match(admin, /pharmacy staff portal and on that pharmacy's eligibility form/);
-  assert.match(admin, /staff portal and eligibility form/);
-  assert.doesNotMatch(admin, /staff portal only/);
+  // The brand card in the pharmacy Details section owns this copy now.
+  const details = readFileSync(new URL('../src/pages/admin/PharmacyDetails.tsx', import.meta.url), 'utf8');
+  assert.match(details, /Staff portal and eligibility form/);
+  assert.match(details, /Sites allowed to embed the eligibility form/);
+  assert.doesNotMatch(admin + details, /staff portal only/i);
 });

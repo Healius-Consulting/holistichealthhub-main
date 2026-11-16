@@ -4,6 +4,8 @@ import type {
   PharmacyOnboardingRequestRecord,
   PharmacyOnboardingStatus,
 } from '../../domain/pharmacy-onboarding/request.js';
+import type { PharmacyOnboardingDeferralRecord } from '../../domain/pharmacy-onboarding/deferral.js';
+import type { WorldpaySubmissionNote } from '../../domain/pharmacy-onboarding/worldpay.js';
 
 const REQUEST_FIELDS = `
   id
@@ -65,7 +67,41 @@ const LIST_GPHC_GQL = `
     organisations(where: { archivedAt: { isNull: true } }) {
       id
       gphcNumber
+      status
     }
+  }
+`;
+
+const LIST_ARCHIVED_GPHC_GQL = `
+  query ListArchivedOrganisationGphcNumbers {
+    organisations(where: { archivedAt: { isNull: false } }) {
+      id
+      gphcNumber
+    }
+  }
+`;
+
+const BY_ORGANISATION_GQL = `
+  query PharmacyOnboardingRequestByOrganisation($organisationId: UUID!) {
+    pharmacyOnboardingRequests(where: { organisationId: { eq: $organisationId } }, limit: 1) {
+      ${REQUEST_FIELDS}
+    }
+  }
+`;
+
+/** Declining a new pharmacy archives it: it leaves the overview and its staff lose access. */
+const ARCHIVE_ORGANISATION_GQL = `
+  mutation ArchiveDeclinedOrganisation($id: UUID!, $archivedAt: Timestamp!, $pausedReason: String!) {
+    organisation_update(
+      key: { id: $id }
+      data: {
+        status: PAUSED
+        intakeEnabled: false
+        pausedReason: $pausedReason
+        pausedAt: $archivedAt
+        archivedAt: $archivedAt
+      }
+    )
   }
 `;
 
@@ -96,6 +132,76 @@ const GET_GQL = `
     pharmacyOnboardingRequest(key: { id: $id }) {
       ${REQUEST_FIELDS}
     }
+  }
+`;
+
+const DEFERRAL_BY_IDEMPOTENCY_GQL = `
+  query PharmacyOnboardingDeferralByIdempotency($idempotencyKey: String!) {
+    pharmacyOnboardingDeferrals(where: { idempotencyKey: { eq: $idempotencyKey } }, limit: 1) {
+      id
+    }
+  }
+`;
+
+const INSERT_DEFERRAL_GQL = `
+  mutation CreatePharmacyOnboardingDeferral(
+    $id: UUID!
+    $gphcNumber: String!
+    $pharmsmartPharmacyId: String
+    $personName: String
+    $personEmail: String
+    $idempotencyKey: String!
+  ) {
+    pharmacyOnboardingDeferral_insert(data: {
+      id: $id
+      gphcNumber: $gphcNumber
+      pharmsmartPharmacyId: $pharmsmartPharmacyId
+      personName: $personName
+      personEmail: $personEmail
+      idempotencyKey: $idempotencyKey
+    })
+  }
+`;
+
+const WORLDPAY_FIELDS = `
+  id
+  gphcNumber
+  tradingName
+  submittedAt
+  idempotencyKey
+`;
+
+const WORLDPAY_BY_IDEMPOTENCY_GQL = `
+  query PharmacyWorldpaySubmissionByIdempotency($idempotencyKey: String!) {
+    pharmacyWorldpaySubmissions(where: { idempotencyKey: { eq: $idempotencyKey } }, limit: 1) {
+      ${WORLDPAY_FIELDS}
+    }
+  }
+`;
+
+const LIST_WORLDPAY_GQL = `
+  query ListPharmacyWorldpaySubmissions($limit: Int!) {
+    pharmacyWorldpaySubmissions(orderBy: [{ submittedAt: DESC }], limit: $limit) {
+      ${WORLDPAY_FIELDS}
+    }
+  }
+`;
+
+const INSERT_WORLDPAY_GQL = `
+  mutation CreatePharmacyWorldpaySubmission(
+    $id: UUID!
+    $gphcNumber: String!
+    $tradingName: String!
+    $submittedAt: Timestamp!
+    $idempotencyKey: String!
+  ) {
+    pharmacyWorldpaySubmission_insert(data: {
+      id: $id
+      gphcNumber: $gphcNumber
+      tradingName: $tradingName
+      submittedAt: $submittedAt
+      idempotencyKey: $idempotencyKey
+    })
   }
 `;
 
@@ -197,11 +303,31 @@ const DECLINE_GQL = `
 `;
 
 export class SqlPharmacyOnboardingRepository {
-  async listOrganisationGphcNumbers(): Promise<Array<{ id: string; gphcNumber: string }>> {
+  async listOrganisationGphcNumbers(): Promise<Array<{ id: string; gphcNumber: string; status?: string }>> {
     const result = await dataConnect.executeGraphql<{
-      organisations: Array<{ id: string; gphcNumber: string }>;
+      organisations: Array<{ id: string; gphcNumber: string; status?: string }>;
     }, Record<string, never>>(LIST_GPHC_GQL);
     return result.data.organisations ?? [];
+  }
+
+  async listArchivedOrganisationGphcNumbers(): Promise<Array<{ id: string; gphcNumber: string }>> {
+    const result = await dataConnect.executeGraphql<{
+      organisations: Array<{ id: string; gphcNumber: string }>;
+    }, Record<string, never>>(LIST_ARCHIVED_GPHC_GQL);
+    return result.data.organisations ?? [];
+  }
+
+  async findByOrganisationId(organisationId: string): Promise<PharmacyOnboardingRequestRecord | null> {
+    const result = await dataConnect.executeGraphql<{
+      pharmacyOnboardingRequests: RawRequest[];
+    }, { organisationId: string }>(BY_ORGANISATION_GQL, { variables: { organisationId: asUuid(organisationId) } });
+    return toRecord(result.data.pharmacyOnboardingRequests?.[0]);
+  }
+
+  async archiveOrganisation(id: string, reason: string, archivedAt: string): Promise<void> {
+    await dataConnect.executeGraphql<unknown, { id: string; archivedAt: string; pausedReason: string }>(ARCHIVE_ORGANISATION_GQL, {
+      variables: { id: asUuid(id), archivedAt, pausedReason: `Declined: ${reason}`.slice(0, 500) },
+    });
   }
 
   async findByIdempotencyKey(idempotencyKey: string): Promise<PharmacyOnboardingRequestRecord | null> {
@@ -234,6 +360,39 @@ export class SqlPharmacyOnboardingRepository {
 
   async insert(input: Omit<PharmacyOnboardingRequestRecord, 'status' | 'organisationId' | 'declineReason' | 'decidedAt' | 'decidedByUid' | 'createdAt'>): Promise<void> {
     await dataConnect.executeGraphql<unknown, typeof input>(INSERT_GQL, { variables: input });
+  }
+
+  async findDeferralByIdempotencyKey(idempotencyKey: string): Promise<{ id: string } | null> {
+    const result = await dataConnect.executeGraphql<{
+      pharmacyOnboardingDeferrals: Array<{ id: string }>;
+    }, { idempotencyKey: string }>(DEFERRAL_BY_IDEMPOTENCY_GQL, { variables: { idempotencyKey } });
+    return result.data.pharmacyOnboardingDeferrals?.[0] ?? null;
+  }
+
+  async findWorldpaySubmissionByIdempotencyKey(idempotencyKey: string): Promise<WorldpaySubmissionNote | null> {
+    const result = await dataConnect.executeGraphql<{
+      pharmacyWorldpaySubmissions: WorldpaySubmissionNote[];
+    }, { idempotencyKey: string }>(WORLDPAY_BY_IDEMPOTENCY_GQL, { variables: { idempotencyKey } });
+    return result.data.pharmacyWorldpaySubmissions?.[0] ?? null;
+  }
+
+  async listWorldpaySubmissions(limit = 500): Promise<WorldpaySubmissionNote[]> {
+    const result = await dataConnect.executeGraphql<{
+      pharmacyWorldpaySubmissions: WorldpaySubmissionNote[];
+    }, { limit: number }>(LIST_WORLDPAY_GQL, { variables: { limit } });
+    return result.data.pharmacyWorldpaySubmissions ?? [];
+  }
+
+  async insertWorldpaySubmission(note: WorldpaySubmissionNote): Promise<void> {
+    await dataConnect.executeGraphql<unknown, WorldpaySubmissionNote>(INSERT_WORLDPAY_GQL, {
+      variables: { ...note, id: asUuid(note.id) },
+    });
+  }
+
+  async insertDeferral(record: PharmacyOnboardingDeferralRecord): Promise<void> {
+    await dataConnect.executeGraphql<unknown, PharmacyOnboardingDeferralRecord>(INSERT_DEFERRAL_GQL, {
+      variables: { ...record, id: asUuid(record.id) },
+    });
   }
 
   async activate(id: string, organisationId: string, decidedAt: string, decidedByUid: string): Promise<void> {

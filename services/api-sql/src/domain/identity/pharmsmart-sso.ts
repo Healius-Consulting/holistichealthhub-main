@@ -27,6 +27,25 @@ export function pharmsmartSsoContract(): PharmsmartSsoContract {
   };
 }
 
+/**
+ * Curaleaf account form values PharmSmart can pass through. Only keys PharmSmart
+ * actually sent are present, so the form leaves the rest for the pharmacy to type.
+ */
+export type PharmsmartPrefill = Partial<Record<
+  | 'pharmacyName'
+  | 'registeredCompanyName'
+  | 'deliveryAddress'
+  | 'invoiceAddress'
+  | 'pharmacyPhone'
+  | 'pharmacyEmail'
+  | 'accountsEmail'
+  | 'accountsPhone'
+  | 'faxNumber'
+  | 'wdaNumber'
+  | 'licenceDetails',
+  string
+>>;
+
 export type PharmsmartPharmacyInfo =
   | {
     status: 'pharmacy';
@@ -35,6 +54,7 @@ export type PharmsmartPharmacyInfo =
     email: string | null;
     firstName: string | null;
     lastName: string | null;
+    prefill: PharmsmartPrefill;
   }
   | { status: 'expired' }
   | { status: 'rejected' };
@@ -74,7 +94,44 @@ export function parsePharmsmartPharmacyInfo(body: string): PharmsmartPharmacyInf
     email,
     firstName: responseText(data.first_name) || null,
     lastName: responseText(data.last_name) || null,
+    prefill: parsePharmsmartPrefill(record.data as Record<string, unknown>),
   };
+}
+
+const PREFILL_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, string, number]> = [
+  ['pharmacyName', 'pharmacy_name', 160],
+  ['registeredCompanyName', 'company_name', 160],
+  ['pharmacyPhone', 'pharmacy_phone', 40],
+  ['pharmacyEmail', 'pharmacy_email', 254],
+  ['accountsEmail', 'accounts_email', 254],
+  ['accountsPhone', 'accounts_phone', 40],
+  ['faxNumber', 'fax', 40],
+  ['wdaNumber', 'wda_number', 40],
+  ['licenceDetails', 'cd_licence_number', 500],
+];
+
+function joinAddress(data: Record<string, unknown>, prefix: 'branch' | 'invoice') {
+  const parts = [`${prefix}_address_line1`, `${prefix}_address_line2`, `${prefix}_town`, `${prefix}_postcode`]
+    .map(key => responseText(data[key]))
+    .filter(Boolean);
+  return parts.join(', ').slice(0, 500);
+}
+
+/**
+ * Keys as requested from IIH on 16 Nov 2026. Missing, empty or non-text values are
+ * left out. The pharmacy email is the shared inbox, never the signed-in person's.
+ */
+export function parsePharmsmartPrefill(data: Record<string, unknown>): PharmsmartPrefill {
+  const prefill: PharmsmartPrefill = {};
+  for (const [field, key, max] of PREFILL_KEYS) {
+    const text = responseText(data[key]);
+    if (text) prefill[field] = text.slice(0, max);
+  }
+  const deliveryAddress = joinAddress(data, 'branch');
+  if (deliveryAddress) prefill.deliveryAddress = deliveryAddress;
+  const invoiceAddress = joinAddress(data, 'invoice');
+  if (invoiceAddress) prefill.invoiceAddress = invoiceAddress;
+  return prefill;
 }
 
 export function pharmsmartDisplayName(person: { firstName: string | null; lastName: string | null }) {

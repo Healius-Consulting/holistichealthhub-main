@@ -215,6 +215,40 @@ export function createPortalPharmacyRouter(): Router {
     }
   });
 
+  // PATCH /v1/portal/organisation/patient-email - the pharmacy decides whether patients see its email.
+  // Its phone is always shown. HHH admin sees this choice but does not set it.
+  router.patch('/portal/organisation/patient-email', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      const { showEmailToPatients } = z.object({ showEmailToPatients: z.boolean() }).strict().parse(req.body);
+      const current = await organisationRepo.findOrganisationById(scope.organisationId);
+      if (!current) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      if (showEmailToPatients && !current.pharmacyEmail?.trim()) {
+        throw new HttpError(400, 'Add a pharmacy email before showing it to patients.', 'PHARMACY_EMAIL_REQUIRED');
+      }
+      if (Boolean(current.showEmailToPatients) !== showEmailToPatients) {
+        await organisationRepo.updateOrganisationShowEmailToPatients(scope.organisationId, showEmailToPatients);
+        await identityRepo.appendAudit({
+          organisationId: scope.organisationId,
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          event: 'organisation.patient_email_visibility_changed',
+          recordType: 'Organisation',
+          recordId: scope.organisationId,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: scope.surface,
+          details: { showEmailToPatients },
+        });
+      }
+      const updated = await organisationRepo.findOrganisationById(scope.organisationId);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(toPortalOrganisation(updated ?? current));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.patch('/portal/organisation/profile', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);

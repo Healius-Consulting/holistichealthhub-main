@@ -373,6 +373,10 @@ type Organisation @table {
   worldpayEnabled: Boolean! @default(value: false)
   defaultPaymentRoute: PaymentRoute! @default(value: MANUAL)
   pharmacyDeliveryEnabled: Boolean! @default(value: false)
+  # Off: patients see the pharmacy phone only. On: the pharmacy email too, in
+  # patient emails and the pharmacy finder. Privacy and complaints contacts are
+  # separate and always shown.
+  showEmailToPatients: Boolean! @default(value: false)
   autoPlacementEnabled: Boolean! @default(value: false)
   gdprComplianceFlag: Boolean! @default(value: true)
   pausedReason: String
@@ -1293,4 +1297,28 @@ type PharmacyOnboardingRequest @table {
   idempotencyKey: String! @unique
   createdAt: Timestamp! @default(expr: "request.time")
   updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+# A note that a pharmacy sent the Worldpay card processing form from the onboarding
+# page. The form itself (bank and identity details) is emailed and never stored;
+# this row only says who sent it and when.
+type PharmacyWorldpaySubmission @table {
+  id: UUID! @default(expr: "uuidV4()")
+  gphcNumber: String! @index
+  tradingName: String!
+  submittedAt: Timestamp!
+  idempotencyKey: String! @unique
+}
+
+# A PharmSmart visitor who chose "Not yet" on the onboarding page. No branch is
+# created. The details come from the PharmSmart welcome the browser was given, so
+# they identify who to follow up with; they are not proof of identity.
+type PharmacyOnboardingDeferral @table {
+  id: UUID! @default(expr: "uuidV4()")
+  gphcNumber: String! @index
+  pharmsmartPharmacyId: String
+  personName: String
+  personEmail: String
+  idempotencyKey: String! @unique
+  createdAt: Timestamp! @default(expr: "request.time")
 }

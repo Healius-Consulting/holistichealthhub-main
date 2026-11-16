@@ -39,8 +39,9 @@ Operational pharmacy emails go to the pharmacy email, or the superintendent when
 - `pharmacy_2fa_enabled` (staff.2fa_enabled): Sent after a staff member enrols an authenticator app. Reply-To: `IT@holistichealthhub.live`.
 - `pharmacy_2fa_disabled` (staff.2fa_disabled): Sent after an HHH admin removes the authenticator app. Reply-To: `IT@holistichealthhub.live`.
 - `pharmacy_onboarding_submitted` (pharmacy_onboarding.submitted): Sent to the pharmacy email when a Curaleaf account form is submitted from the onboarding page.
-- `admin_pharmacy_onboarding_request` (pharmacy_onboarding.submitted): Sent only to the partner success mailbox when a pharmacy submits a Curaleaf account form. The filled form is attached. Not sent to every platform admin.
+- `admin_pharmacy_onboarding_request` (pharmacy_onboarding.submitted): Sent to partner success and the HHH admin inbox when a pharmacy submits a Curaleaf account form. The pharmacy is created in onboarding at the same time; the filled form is attached for Curaleaf. Not sent to every platform admin.
 - `pharmacy_onboarding_declined` (pharmacy_onboarding.declined): Sent to the pharmacy email when HHH declines a pharmacy onboarding request.
+- `admin_worldpay_form_submitted` (pharmacy_onboarding.worldpay_submitted): Sent straight away, not through the outbox, to partner success and the HHH admin inbox when a pharmacy submits the Worldpay form. The filled form is attached as a PDF. Its bank and identity details are never stored.
 
 ## Admin emails
 

@@ -1,11 +1,10 @@
-import { ArrowUpRight, BadgePoundSterling, FilePlus, Home, LifeBuoy, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
+import { ArrowUpRight, BadgePoundSterling, FilePlus, Home, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
 
 
 import { useAuth } from '../auth/useAuth';
 import { useApp, type Screen } from '../context/AppContext';
 import HhhBrandMark from './HhhBrandMark';
 import WorkspaceNavigation, { type WorkspaceNavGroup } from './WorkspaceNavigation';
-import { PORTAL_APP_VERSION } from '../constants/pharmacy';
 import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
 
 export default function Navigation() {
@@ -36,8 +35,13 @@ export default function Navigation() {
       items: [
         { key: 'formulary', label: 'Catalogue', shortLabel: 'Catalogue', icon: <Tags size={17} /> },
         { key: 'finance', label: 'Financials', shortLabel: 'Financials', icon: <BadgePoundSterling size={17} /> },
-        { key: 'settings', label: 'Settings & Assets', icon: <Settings size={17} /> },
-        { key: 'contacts', label: 'Help', shortLabel: 'Help', icon: <LifeBuoy size={17} /> },
+      ],
+    },
+    {
+      label: 'Settings and support',
+      placement: 'bottom',
+      items: [
+        { key: 'settings', label: 'Settings & Support', shortLabel: 'Settings', icon: <Settings size={17} /> },
       ],
     },
   ];
@@ -46,12 +50,11 @@ export default function Navigation() {
   return (
     <WorkspaceNavigation
       ariaLabel="Pharmacy workspace"
-      activeKey={state.screen}
+      activeKey={state.screen === 'contacts' ? 'settings' : state.screen}
       groups={groups}
       mobilePrimaryKeys={['home', 'create', 'orders', 'patients']}
       onNavigate={screen => dispatch({ type: 'SET_SCREEN', screen })}
       brand={{ title: 'Holistic Health Hub', subtitle: 'Pharmacy operations', partner: organisation.name, logo: <HhhBrandMark /> }}
-      version={PORTAL_APP_VERSION}
       user={{ initials: staffInitials, name: staffName, role: isAdminViewingClient ? 'HHH administrator' : `Pharmacy staff · ${pharmacyWorkspaceStatusLabel(state.workspaceMode)}` }}
       exitAction={{
         label: isAdminViewingClient ? 'Return to administration' : 'Sign out',

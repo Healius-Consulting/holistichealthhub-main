@@ -161,6 +161,8 @@ export function toPortalOrganisation(
     emailLogoHeight?: number | null;
     emailLogoUpdatedAt?: string | null;
     curaleafPharmacyCode?: string | null;
+    /** Only a production connection makes a pharmacy live. */
+    curaleafEnvironment?: 'test' | 'production' | null;
     worldpayState?: 'unconnected' | 'test' | 'live';
   },
 ) {
@@ -184,6 +186,7 @@ export function toPortalOrganisation(
     pharmacyPhone: organisation.pharmacyPhone ?? undefined,
     pharmacyEmail: organisation.pharmacyEmail ?? undefined,
     curaleafPharmacyCode: extras?.curaleafPharmacyCode ?? undefined,
+    curaleafEnvironment: extras?.curaleafEnvironment ?? null,
     address: organisationAddressSummary(organisation),
     addressLine1: organisation.addressLine1 ?? undefined,
     addressLine2: organisation.addressLine2 ?? undefined,
@@ -198,6 +201,7 @@ export function toPortalOrganisation(
     worldpayState: extras?.worldpayState ?? 'unconnected',
     defaultPaymentRoute: lower(organisation.defaultPaymentRoute),
     pharmacyDeliveryEnabled: organisation.pharmacyDeliveryEnabled,
+    showEmailToPatients: Boolean(organisation.showEmailToPatients),
     autoPlacementEnabled: organisation.autoPlacementEnabled,
     intakeEnabled: organisation.intakeEnabled,
     testAccount: organisation.classification === 'TRAINING',

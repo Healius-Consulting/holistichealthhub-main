@@ -36,6 +36,8 @@ test('a welcome redemption stays on the guide and does not open a session', () =
   assert.equal(next.action, 'welcome');
   assert.equal('customToken' in next, false);
   if (next.action !== 'welcome') return;
+  assert.deepEqual(next.welcome.prefill, {});
+  assert.equal(next.welcome.pharmsmartPharmacyId, null);
   const booking = new URL(pharmsmartOnboardingBookingUrl(next.welcome, {
     embed: true,
     hostname: 'portal.holistichealthhub.live',

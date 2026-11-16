@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { ApiRequestError, submitCuraleafAccountForm } from '../shared/api';
 import type { PharmsmartWelcome } from './types';
 
+export type CuraleafFormValues = Fields;
+
 type Fields = {
   pharmacistName: string;
   pharmacyName: string;
@@ -15,24 +17,36 @@ type Fields = {
   pharmacyPhone: string;
   accountsPhone: string;
   faxNumber: string;
+  wdaNumber: string;
+  licenceDetails: string;
 };
 
+/**
+ * Name and GPhC come from the PharmSmart sign-in. The rest comes from the keys
+ * requested from IIH, when PharmSmart sends them. The pharmacy email is the shared
+ * inbox, so it is never filled from the signed-in person's own email.
+ */
 function blank(welcome: PharmsmartWelcome): Fields {
   const name = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ').trim();
+  const prefill = welcome.prefill ?? {};
+  const from = (key: keyof NonNullable<PharmsmartWelcome['prefill']>) => prefill[key]?.trim() ?? '';
   return {
     pharmacistName: name,
-    pharmacyName: '',
-    registeredCompanyName: '',
-    invoiceAddress: '',
-    deliveryAddress: '',
+    pharmacyName: from('pharmacyName'),
+    registeredCompanyName: from('registeredCompanyName'),
+    invoiceAddress: from('invoiceAddress') || from('deliveryAddress'),
+    deliveryAddress: from('deliveryAddress'),
     gphcNumber: welcome.gphcNumber?.trim() ?? '',
-    pharmacyEmail: welcome.email?.trim() ?? '',
-    accountsEmail: '',
-    pharmacyPhone: '',
-    accountsPhone: '',
-    faxNumber: '',
+    pharmacyEmail: from('pharmacyEmail'),
+    accountsEmail: from('accountsEmail'),
+    pharmacyPhone: from('pharmacyPhone'),
+    accountsPhone: from('accountsPhone'),
+    faxNumber: from('faxNumber'),
+    wdaNumber: from('wdaNumber'),
+    licenceDetails: from('licenceDetails'),
   };
 }
+
 
 export function CuraleafAccountForm({
   open,
@@ -43,7 +57,7 @@ export function CuraleafAccountForm({
   open: boolean;
   welcome: PharmsmartWelcome;
   onClose: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (values: CuraleafFormValues) => void;
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -55,6 +69,7 @@ export function CuraleafAccountForm({
   onCloseRef.current = onClose;
   const [fields, setFields] = useState<Fields>(() => blank(welcome));
   const [error, setError] = useState<string | null>(null);
+  const [alreadyReceived, setAlreadyReceived] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   busyRef.current = busy;
 
@@ -62,6 +77,7 @@ export function CuraleafAccountForm({
     if (!open) return;
     setFields(blank(welcomeRef.current));
     setError(null);
+    setAlreadyReceived(null);
     setBusy(false);
     idempotencyKey.current = crypto.randomUUID();
     closeRef.current?.focus();
@@ -100,8 +116,14 @@ export function CuraleafAccountForm({
         signatureName: fields.pharmacistName.trim(),
         idempotencyKey: idempotencyKey.current,
       });
-      onSubmitted();
+      onSubmitted(fields);
     } catch (cause) {
+      // A second form for a pharmacy we already have is not a failure: say so plainly.
+      if (cause instanceof ApiRequestError && cause.code === 'ONBOARDING_ALREADY_RECEIVED') {
+        setAlreadyReceived(cause.message);
+        setBusy(false);
+        return;
+      }
       const message = cause instanceof ApiRequestError
         ? cause.message
         : 'The form could not be submitted. Try again.';
@@ -120,19 +142,34 @@ export function CuraleafAccountForm({
         </header>
         <div className="curaleaf-account-form__body">
           <p>These details are written onto the Curaleaf account form. The date is added when you submit.</p>
+          {alreadyReceived ? <p className="curaleaf-account-form__notice" role="status"><strong>Already received.</strong> {alreadyReceived}</p> : null}
           {error ? <p className="curaleaf-account-form__error" role="alert">{error}</p> : null}
           <div className="curaleaf-account-form__grid">
-            <label>Pharmacist / contact name<input className="input" name="pharmacistName" value={fields.pharmacistName} onChange={set('pharmacistName')} required autoComplete="name" /></label>
-            <label>Pharmacy name<input className="input" name="pharmacyName" value={fields.pharmacyName} onChange={set('pharmacyName')} required autoComplete="organization" /></label>
-            <label>Registered company name<input className="input" name="registeredCompanyName" value={fields.registeredCompanyName} onChange={set('registeredCompanyName')} required /></label>
-            <label>Invoice address<textarea className="input" name="invoiceAddress" value={fields.invoiceAddress} onChange={set('invoiceAddress')} required rows={3} autoComplete="billing street-address" /></label>
-            <label>Delivery address<textarea className="input" name="deliveryAddress" value={fields.deliveryAddress} onChange={set('deliveryAddress')} required rows={3} autoComplete="shipping street-address" /></label>
-            <label>GPhC number<input className="input" name="gphcNumber" value={fields.gphcNumber} onChange={set('gphcNumber')} required inputMode="numeric" autoComplete="off" /></label>
-            <label>Pharmacy email<input className="input" name="pharmacyEmail" type="email" value={fields.pharmacyEmail} onChange={set('pharmacyEmail')} required autoComplete="email" /></label>
-            <label>Pharmacy telephone<input className="input" name="pharmacyPhone" type="tel" value={fields.pharmacyPhone} onChange={set('pharmacyPhone')} required autoComplete="tel" /></label>
-            <label>Accounts email <span>(invoicing — main contact for questions)</span><input className="input" name="accountsEmail" type="email" value={fields.accountsEmail} onChange={set('accountsEmail')} required autoComplete="email" /></label>
-            <label>Accounts telephone <span>(invoicing — main contact for questions)</span><input className="input" name="accountsPhone" type="tel" value={fields.accountsPhone} onChange={set('accountsPhone')} required autoComplete="tel" /></label>
-            <label>Fax number <span>Optional</span><input className="input" name="faxNumber" type="tel" value={fields.faxNumber} onChange={set('faxNumber')} autoComplete="off" /></label>
+            <fieldset>
+              <legend>Pharmacy</legend>
+              <label>Pharmacy name<input className="input" name="pharmacyName" value={fields.pharmacyName} onChange={set('pharmacyName')} required autoComplete="organization" /></label>
+              <label>Registered company name<input className="input" name="registeredCompanyName" value={fields.registeredCompanyName} onChange={set('registeredCompanyName')} required /></label>
+              <label>GPhC premises number<input className="input" name="gphcNumber" value={fields.gphcNumber} onChange={set('gphcNumber')} required inputMode="numeric" autoComplete="off" /></label>
+              <label>Pharmacist / contact name<input className="input" name="pharmacistName" value={fields.pharmacistName} onChange={set('pharmacistName')} required autoComplete="name" /></label>
+            </fieldset>
+            <fieldset>
+              <legend>Addresses</legend>
+              <label>Invoice address<textarea className="input" name="invoiceAddress" value={fields.invoiceAddress} onChange={set('invoiceAddress')} required rows={3} autoComplete="billing street-address" /></label>
+              <label>Delivery address<textarea className="input" name="deliveryAddress" value={fields.deliveryAddress} onChange={set('deliveryAddress')} required rows={3} autoComplete="shipping street-address" /></label>
+            </fieldset>
+            <fieldset>
+              <legend>Contact details</legend>
+              <label>Pharmacy email<input className="input" name="pharmacyEmail" type="email" value={fields.pharmacyEmail} onChange={set('pharmacyEmail')} required autoComplete="email" /></label>
+              <label>Pharmacy telephone<input className="input" name="pharmacyPhone" type="tel" value={fields.pharmacyPhone} onChange={set('pharmacyPhone')} required autoComplete="tel" /></label>
+              <label>Accounts email <span>Main contact for invoices</span><input className="input" name="accountsEmail" type="email" value={fields.accountsEmail} onChange={set('accountsEmail')} required autoComplete="email" /></label>
+              <label>Accounts telephone <span>Main contact for invoices</span><input className="input" name="accountsPhone" type="tel" value={fields.accountsPhone} onChange={set('accountsPhone')} required autoComplete="tel" /></label>
+              <label>Fax number <span>Optional</span><input className="input" name="faxNumber" type="tel" value={fields.faxNumber} onChange={set('faxNumber')} autoComplete="off" /></label>
+            </fieldset>
+            <fieldset>
+              <legend>Licences <span>Optional</span></legend>
+              <label>WDA licence number<input className="input" name="wdaNumber" value={fields.wdaNumber} onChange={set('wdaNumber')} maxLength={40} autoComplete="off" /></label>
+              <label>Controlled drugs licence number<input className="input" name="licenceDetails" value={fields.licenceDetails} onChange={set('licenceDetails')} maxLength={500} autoComplete="off" /></label>
+            </fieldset>
             <p className="curaleaf-account-form__sign">
               <span>Signature</span>
               <strong className={fields.pharmacistName.trim() ? undefined : 'is-empty'}>{fields.pharmacistName.trim() || 'Appears here from the name above'}</strong>
@@ -141,7 +178,9 @@ export function CuraleafAccountForm({
           </div>
         </div>
         <footer>
-          <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit'}</button>
+          {alreadyReceived
+            ? <button className="btn btn-primary" type="button" onClick={onClose}>Close</button>
+            : <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit'}</button>}
         </footer>
       </form>
     </div>,

@@ -3,7 +3,7 @@ import { config } from '../../bootstrap/config.js';
 import { emailInlineImages } from '../notifications/email-assets.js';
 import { resolveEmailHeader } from '../notifications/email-layout.js';
 import { isEmailTemplateCode } from '../notifications/message-kinds.js';
-import { BRAND_HEADER_BACKGROUND_PAYLOAD_KEY, BRAND_LOGO_PAYLOAD_KEY, emailUsesAdminHeader, fromAddressFor, replyToFor } from '../notifications/email-catalog.js';
+import { BRAND_HEADER_BACKGROUND_PAYLOAD_KEY, BRAND_LOGO_PAYLOAD_KEY, emailUsesAdminHeader, fromAddressFor, replyToFor, type EmailTemplateCode } from '../notifications/email-catalog.js';
 import { FILLED_FORM_PATH_KEY, LICENCE_NAME_KEY, LICENCE_PATH_KEY, LICENCE_TYPE_KEY } from '../pharmacy-onboarding/emails.js';
 import { emailHeaderBackgroundForLogo } from '../notifications/email-logo-background.js';
 import { renderEmailTemplate } from '../notifications/email-renderer.js';
@@ -256,4 +256,58 @@ export async function deliverPatientMessages(deps: MessageDeliveryDeps, limit = 
     }
   }
   return summary;
+}
+
+export type ImmediateEmail = {
+  templateCode: EmailTemplateCode;
+  to: string[];
+  payload: Record<string, unknown>;
+  attachments: Array<{ filename: string; content: Buffer; contentType: string }>;
+  /** Resend keeps this for 24 hours, so a retried submit cannot send twice. */
+  idempotencyKey: string;
+};
+
+/**
+ * Sends one admin email straight away instead of through the outbox, for content
+ * that must never be written to the database (the Worldpay form's bank and
+ * identity details). Only Resend is allowed: the generic webhook provider would
+ * hand the data to another service.
+ */
+export async function sendEmailNow(email: ImmediateEmail, fetchImpl: typeof fetch = fetch) {
+  const provider = await providerConfig();
+  if (!provider || provider.kind !== 'resend') {
+    throw new Error('Email sending is not set up for this environment.');
+  }
+  const rendered = renderEmailTemplate(email.templateCode, email.payload);
+  const header = resolveEmailHeader({ audience: 'admin', organisationId: '', pharmacyName: '', hasBrandLogo: false });
+  const response = await fetchImpl('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${provider.apiKey}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'User-Agent': 'HolisticHealthHub/1.0',
+      'Idempotency-Key': email.idempotencyKey,
+    },
+    body: JSON.stringify({
+      from: `Holistic Health Hub <${fromAddressFor(email.templateCode)}>`,
+      to: email.to,
+      subject: rendered.subject,
+      html: rendered.html,
+      text: rendered.text,
+      attachments: [
+        ...emailInlineImages(header, null),
+        ...email.attachments.map(file => ({
+          filename: file.filename,
+          content: file.content.toString('base64'),
+          content_type: file.contentType,
+        })),
+      ],
+      tags: [{ name: 'template', value: email.templateCode }, { name: 'channel', value: 'email' }],
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Message provider returned ${response.status}${detail ? `: ${detail.slice(0, 160)}` : '.'}`);
+  }
 }

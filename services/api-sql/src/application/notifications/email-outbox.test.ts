@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
-import { pharmacyOwnerRecipients } from './email-outbox.js';
+import { pharmacyEmailContext, pharmacyOwnerRecipients } from './email-outbox.js';
 
 const organisationId = '70913a30-71c3-4a41-952e-d532927af58c';
 
@@ -52,4 +52,14 @@ describe('pharmacy operational email recipients', () => {
       { email: 'desk@example.test', displayName: 'Pharmacy desk' },
     ]);
   });
+});
+
+
+it('the pharmacy email reaches patients only when the pharmacy chose to show it; the phone always does', () => {
+  const pharmacy = { id: 'org-1', name: 'Eastwood', pharmacyPhone: '01522 000 000', pharmacyEmail: 'shop@eastwood.example', mainContactEmail: 'super@eastwood.example' } as never;
+  assert.equal(pharmacyEmailContext(pharmacy).pharmacyPublicEmail, '');
+  assert.equal(pharmacyEmailContext(pharmacy).pharmacyPhone, '01522 000 000');
+  assert.equal(pharmacyEmailContext({ ...(pharmacy as object), showEmailToPatients: true } as never).pharmacyPublicEmail, 'shop@eastwood.example');
+  // The superintendent's own address is never shown in its place.
+  assert.equal(pharmacyEmailContext({ ...(pharmacy as object), pharmacyEmail: '', showEmailToPatients: true } as never).pharmacyPublicEmail, '');
 });

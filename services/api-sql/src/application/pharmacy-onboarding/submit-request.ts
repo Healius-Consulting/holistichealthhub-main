@@ -16,6 +16,8 @@ type FileStore = {
   deleteFile(storagePath: string): Promise<void>;
 };
 
+export const ALREADY_RECEIVED_MESSAGE = 'We already have the Curaleaf account form for this pharmacy. There is nothing more to send: we will email the pharmacy when its account is ready to use.';
+
 export type SubmitPharmacyOnboardingInput = {
   fields: PharmacyOnboardingFields;
   licence?: { filename: string; declaredType: string | null; bytes: Buffer } | null;
@@ -23,7 +25,7 @@ export type SubmitPharmacyOnboardingInput = {
 };
 
 export async function submitPharmacyOnboardingRequest(
-  repo: Pick<SqlPharmacyOnboardingRepository, 'listOrganisationGphcNumbers' | 'findByIdempotencyKey' | 'findPendingByGphc' | 'list' | 'insert'>,
+  repo: Pick<SqlPharmacyOnboardingRepository, 'listOrganisationGphcNumbers' | 'listArchivedOrganisationGphcNumbers' | 'findByIdempotencyKey' | 'findPendingByGphc' | 'list' | 'insert'>,
   files: FileStore,
   input: SubmitPharmacyOnboardingInput,
 ): Promise<PharmacyOnboardingRequestRecord> {
@@ -36,13 +38,22 @@ export async function submitPharmacyOnboardingRequest(
   if (existing) return existing;
 
   const organisations = await repo.listOrganisationGphcNumbers();
-  const alreadyOnPlatform = organisations.some(organisation => normaliseGphcNumber(organisation.gphcNumber) === gphcNumber);
-  if (alreadyOnPlatform) {
+  const onPlatform = organisations.find(organisation => normaliseGphcNumber(organisation.gphcNumber) === gphcNumber);
+  if (onPlatform?.status === 'LIVE') {
     throw new HttpError(409, 'This pharmacy is already on Holistic Health Hub. Sign in with the pharmacy account.', 'GPHC_ALREADY_ON_PLATFORM');
+  }
+  // Every form creates the pharmacy straight away, so a second form for the same
+  // GPhC is a repeat while it waits on Curaleaf, not a new pharmacy.
+  if (onPlatform) {
+    throw new HttpError(409, ALREADY_RECEIVED_MESSAGE, 'ONBOARDING_ALREADY_RECEIVED');
+  }
+  const archived = await repo.listArchivedOrganisationGphcNumbers();
+  if (archived.some(organisation => normaliseGphcNumber(organisation.gphcNumber) === gphcNumber)) {
+    throw new HttpError(409, 'An earlier application for this GPhC number was declined. Email spatel@healiusconsulting.com to talk it through.', 'APPLICATION_DECLINED');
   }
   const pending = await repo.findPendingByGphc(gphcNumber);
   if (pending && pending.idempotencyKey !== fields.idempotencyKey) {
-    throw new HttpError(409, 'A request for this GPhC number is already waiting.', 'ONBOARDING_REQUEST_PENDING');
+    throw new HttpError(409, ALREADY_RECEIVED_MESSAGE, 'ONBOARDING_ALREADY_RECEIVED');
   }
   const pharmacyEmail = fields.pharmacyEmail.trim().toLowerCase();
   const sameInbox = (await repo.list(200)).find(row =>
@@ -51,7 +62,7 @@ export async function submitPharmacyOnboardingRequest(
     && row.idempotencyKey !== fields.idempotencyKey
   );
   if (sameInbox) {
-    throw new HttpError(409, 'A request from this pharmacy email is already waiting.', 'ONBOARDING_REQUEST_PENDING');
+    throw new HttpError(409, ALREADY_RECEIVED_MESSAGE, 'ONBOARDING_ALREADY_RECEIVED');
   }
 
   const licence = input.licence && input.licence.bytes.length > 0 ? input.licence : null;

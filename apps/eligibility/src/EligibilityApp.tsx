@@ -82,8 +82,12 @@ function EligibilityBrand({
   </header>;
 }
 
+/** Phone always; email only when the pharmacy shows it; then its website. */
 function directoryContactLine(result: PublicDirectoryResult) {
-  return result.website?.trim() ?? '';
+  return [result.publicPhone, result.publicEmail, result.website]
+    .map(part => part?.trim() ?? '')
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /**

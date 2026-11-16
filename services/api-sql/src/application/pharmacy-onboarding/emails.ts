@@ -1,5 +1,6 @@
 import { queueEmailToRecipients } from '../notifications/email-outbox.js';
 import { keyContact } from '../notifications/key-contacts.js';
+import { emailAliasDomain } from '../notifications/email-catalog.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
 
@@ -14,6 +15,14 @@ function partnerSuccessAddress() {
   const address = keyContact('healius').emails[0]?.address;
   if (!address) throw new Error('Partner success has no email address.');
   return address;
+}
+
+/**
+ * The filled Curaleaf form goes to the HHH admin inbox, not to Curaleaf, until HHH
+ * has checked submissions for duplicates and false details (decided 16 Nov 2026).
+ */
+export function onboardingAdminInbox() {
+  return `admin@${emailAliasDomain()}`;
 }
 
 export async function queuePharmacyOnboardingSubmitted(
@@ -35,7 +44,10 @@ export async function queuePharmacyOnboardingSubmitted(
   );
   await queueEmailToRecipients(
     notificationRepo,
-    [{ email: partnerSuccessAddress(), displayName: 'Shaylen Patel' }],
+    [
+      { email: partnerSuccessAddress(), displayName: 'Shaylen Patel' },
+      { email: onboardingAdminInbox(), displayName: 'Holistic Health Hub admin' },
+    ],
     'admin_pharmacy_onboarding_request',
     {
       ...shared,
@@ -64,5 +76,19 @@ export async function queuePharmacyOnboardingDeclined(
       declineReason: reason,
     },
     ['pharmacy-onboarding-declined', request.id],
+  );
+}
+
+/** The decline email for a pharmacy that was created on submit and then declined. */
+export async function queuePharmacyDeclinedEmail(
+  notificationRepo: NotificationRepositoryPort,
+  input: { email: string; pharmacyName: string; reason: string; key: string },
+) {
+  await queueEmailToRecipients(
+    notificationRepo,
+    [{ email: input.email, displayName: input.pharmacyName }],
+    'pharmacy_onboarding_declined',
+    { pharmacyName: input.pharmacyName, declineReason: input.reason },
+    ['pharmacy-onboarding-declined', input.key],
   );
 }

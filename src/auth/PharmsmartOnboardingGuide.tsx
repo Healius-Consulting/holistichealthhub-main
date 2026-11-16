@@ -3,13 +3,19 @@ import { createPortal } from 'react-dom';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import HhhBrandMark from '../components/HhhBrandMark';
 import { readOnboardingSpreadsheet, type OnboardingSheetRow } from './onboarding-sheet';
-import { CuraleafAccountForm } from './CuraleafAccountForm';
-import { PHARMSMART_ONBOARDING_PACKETS, pharmsmartOnboardingBookingUrl } from './pharmsmart-login';
+import { CuraleafAccountForm, type CuraleafFormValues } from './CuraleafAccountForm';
+import { WorldpayForm, type WorldpayStart } from './WorldpayForm';
+import {
+  PHARMACY_ONBOARDING_CHOICES,
+  PHARMACY_ONBOARDING_PITCH,
+  PHARMSMART_ONBOARDING_PACKETS,
+  pharmsmartOnboardingBookingUrl,
+  type PharmacyOnboardingChoice,
+} from './pharmsmart-login';
+import { recordPharmacyOnboardingDeferral } from '../shared/api';
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 
-function isCuraleafSubmit(packet: typeof PHARMSMART_ONBOARDING_PACKETS[number]) {
-  return 'action' in packet && packet.action === 'submit';
-}
+const BROCHURE = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.title === 'Brochure')!;
 
 function OnboardingPdfPreview({ href }: { href: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -139,6 +145,57 @@ export function PharmsmartWelcome({
   const [viewing, setViewing] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [curaleafValues, setCuraleafValues] = useState<CuraleafFormValues | null>(null);
+  const [worldpayOpen, setWorldpayOpen] = useState(false);
+  const [worldpaySent, setWorldpaySent] = useState(false);
+  const [choice, setChoice] = useState<PharmacyOnboardingChoice | null>(null);
+  const [deferral, setDeferral] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const deferralKey = useRef(crypto.randomUUID());
+
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const choose = (next: PharmacyOnboardingChoice) => {
+    setChoice(next);
+    if (next === 'later') void recordNotYet();
+  };
+
+  // The chosen panel sits below the hero; bring it into view, mostly for phones.
+  useEffect(() => {
+    if (!choice || formOpen || worldpayOpen) return;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
+  }, [choice, formOpen, worldpayOpen]);
+
+  // Whatever the pharmacy has already told us carries into the Worldpay form.
+  const worldpayPrefill: WorldpayStart = {
+    legalName: curaleafValues?.registeredCompanyName ?? welcome.prefill?.registeredCompanyName,
+    tradingName: curaleafValues?.pharmacyName ?? welcome.prefill?.pharmacyName,
+    contactName: curaleafValues?.pharmacistName ?? knownName,
+    gphcNumber: curaleafValues?.gphcNumber ?? welcome.gphcNumber ?? undefined,
+    registeredAddress: curaleafValues?.invoiceAddress ?? welcome.prefill?.invoiceAddress,
+    tradingAddress: curaleafValues?.deliveryAddress ?? welcome.prefill?.deliveryAddress,
+    landline: curaleafValues?.pharmacyPhone ?? welcome.prefill?.pharmacyPhone,
+    businessEmail: curaleafValues?.pharmacyEmail ?? welcome.prefill?.pharmacyEmail,
+  };
+
+  // Only a PharmSmart visit says who chose "Not yet"; an anonymous visit records nothing.
+  const recordNotYet = async () => {
+    const gphcNumber = welcome.gphcNumber?.trim();
+    if (!gphcNumber || deferral === 'saving' || deferral === 'saved') return;
+    setDeferral('saving');
+    try {
+      await recordPharmacyOnboardingDeferral({
+        gphcNumber,
+        pharmsmartPharmacyId: welcome.pharmsmartPharmacyId ?? '',
+        personName: knownName,
+        personEmail: welcome.email ?? '',
+        idempotencyKey: deferralKey.current,
+      });
+      setDeferral('saved');
+    } catch {
+      setDeferral('failed');
+    }
+  };
   const closePreview = useRef<HTMLButtonElement>(null);
   const openPacket = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.href === viewing) ?? null;
 
@@ -157,88 +214,128 @@ export function PharmsmartWelcome({
     };
   }, [openPacket]);
 
+  const fromPharmsmart = Boolean(welcome.gphcNumber?.trim());
+  const signIn = accountHref
+    ? <a className="onb__signin" href={accountHref} target="_blank" rel="noopener noreferrer">Sign in</a>
+    : <button className="onb__signin" type="button" onClick={onUseEmail}>Sign in</button>;
+
   return (
     <div className="staff-login-page auth-page staff-login-page--guide">
-      <section className="staff-login-panel">
-        <div className="pharmsmart-guide">
-          <a className="pharmsmart-welcome-skip" href="#onboarding-packets">Skip to the documents</a>
-          <div className="pharmsmart-guide__layout">
-          <header className="pharmsmart-guide__intro">
-            <div className="staff-login-lockup" aria-label="Holistic Health Hub">
-              <HhhBrandMark />
-              <span>
-                <strong>Holistic Health Hub</strong>
-                <small>Pharmacy onboarding</small>
-              </span>
-            </div>
-            <h1 id="pharmsmart-welcome-title">This pharmacy is not on Holistic Health Hub yet</h1>
-            {knownName ? <p className="pharmsmart-guide__person">Signed in from PharmSmart as {knownName}.</p> : null}
-            <p>Submit the Curaleaf account form here, and send us the Worldpay form. You can do that without a call. After approval, you will get an email saying you can start using the platform.</p>
-          </header>
-          <section className="pharmsmart-guide__book" aria-labelledby="pharmsmart-welcome-book">
-            <h2 id="pharmsmart-welcome-book">Want more information?</h2>
-            <p>A call is optional. Book one if you would like to talk it through before you send the forms.</p>
-            <iframe
-              className="pharmsmart-welcome-calendar"
-              title="Optional 30-minute call with Shaylen Patel"
-              src={embeddedBookingUrl}
-            />
-            <a href={bookingUrl} target="_blank" rel="noopener noreferrer">Open the booking page</a>
-          </section>
-          <div className="pharmsmart-guide__materials">
-            <section className="pharmsmart-guide__brochure" aria-labelledby="pharmsmart-welcome-brochure">
-              <h2 id="pharmsmart-welcome-brochure">Brochure</h2>
-              {PHARMSMART_ONBOARDING_PACKETS.filter(packet => packet.detail !== 'FORM').map(packet => (
-                <div key={packet.href}>
-                  <p>{packet.summary}</p>
-                  <div className="pharmsmart-guide__actions">
-                    <button className="pharmsmart-guide__view" type="button" aria-expanded={viewing === packet.href} aria-label={`View ${packet.title}`} onClick={() => setViewing(packet.href)}>View</button>
-                    <a className="pharmsmart-guide__download" href={packet.href} download aria-label={`Download ${packet.title}`}>Download</a>
-                  </div>
-                </div>
+      <div className="onb">
+        <header className="onb__top">
+          <div className="staff-login-lockup" aria-label="Holistic Health Hub">
+            <HhhBrandMark />
+            <span>
+              <strong>Holistic Health Hub</strong>
+              <small>Pharmacy onboarding</small>
+            </span>
+          </div>
+          <p className="onb__account">Already on Holistic Health Hub? {signIn}</p>
+        </header>
+
+        <section className="onb__hero" aria-labelledby="onb-title">
+          <div className="onb__pitch">
+            <p className="onb__eyebrow">{PHARMACY_ONBOARDING_PITCH.eyebrow}</p>
+            <h1 id="onb-title">{PHARMACY_ONBOARDING_PITCH.title}</h1>
+            <p className="onb__lede">{PHARMACY_ONBOARDING_PITCH.lede}</p>
+            <ul className="onb__facts">
+              {PHARMACY_ONBOARDING_PITCH.facts.map(fact => <li key={fact}>{fact}</li>)}
+            </ul>
+            {knownName ? <p className="onb__person">Signed in from PharmSmart as <strong>{knownName}</strong>{welcome.gphcNumber ? <> · GPhC {welcome.gphcNumber}</> : null}</p> : null}
+            <div className="onb__choices" role="group" aria-label="How would you like to start?">
+              {PHARMACY_ONBOARDING_CHOICES.map(option => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`onb__choice onb__choice--${option.id}`}
+                  aria-pressed={choice === option.id}
+                  aria-controls="onb-panel"
+                  onClick={() => choose(option.id)}
+                >
+                  {option.label}
+                </button>
               ))}
-            </section>
-            <section id="onboarding-packets" className="pharmsmart-guide__docs" aria-labelledby="pharmsmart-welcome-docs">
-              <h2 id="pharmsmart-welcome-docs">Send us the forms</h2>
-              <ul>
-                {PHARMSMART_ONBOARDING_PACKETS.filter(packet => packet.detail === 'FORM').map(packet => (
-                  <li key={packet.href}>
-                    <div>
-                      <span className="pharmsmart-guide__name">
-                        <strong>{packet.title}</strong>
-                        <span className="pharmsmart-guide__tag">FORM</span>
-                      </span>
-                      <p>{packet.summary}</p>
-                    </div>
-                    {isCuraleafSubmit(packet) ? (
-                      submitted
-                        ? <p className="pharmsmart-guide__submitted">Submitted. We have emailed the pharmacy address on the form.</p>
-                        : <div className="pharmsmart-guide__actions">
-                          <button className="pharmsmart-guide__view" type="button" aria-expanded={formOpen} onClick={() => setFormOpen(true)}>Submit</button>
-                        </div>
-                    ) : (
-                      <div className="pharmsmart-guide__actions">
-                        <button className="pharmsmart-guide__view" type="button" aria-expanded={viewing === packet.href} onClick={() => setViewing(packet.href)}>View</button>
-                        <a className="pharmsmart-guide__download" href={packet.href} download>Download</a>
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <p className="pharmsmart-guide__send">Send the Worldpay form here</p>
-              <div className="pharmsmart-guide__contact">
-                <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a>
+            </div>
+            <p className="onb__brochure">
+              Want the detail first? <button type="button" onClick={() => setViewing(BROCHURE.href)}>Read the brochure</button>
+            </p>
+          </div>
+
+          <aside className="onb__how" aria-labelledby="onb-how">
+            <h2 id="onb-how">How it works for patients</h2>
+            <ol>
+              {PHARMACY_ONBOARDING_PITCH.steps.map(step => (
+                <li key={step.title}>
+                  <strong>{step.title}</strong>
+                  <span>{step.body}</span>
+                </li>
+              ))}
+            </ol>
+          </aside>
+
+        <div id="onb-panel" ref={panelRef} className="onb__panel-slot" aria-live="polite">
+          {choice === 'setup' ? (
+            <section className="onb__panel" aria-labelledby="onb-setup">
+              <div className="onb__panel-head">
+                <h2 id="onb-setup">{submitted && worldpaySent ? 'You are all set' : 'Two forms to set up'}</h2>
+                <span className="onb__progress">{Number(submitted) + Number(worldpaySent)} of 2 sent</span>
               </div>
+              <p>
+                {submitted && worldpaySent
+                  ? 'Both forms are with our team. We will email the pharmacy address when your account is ready.'
+                  : 'Fill both in on this page. Each one takes a few minutes, and you can do them in either order.'}
+              </p>
+              <ol className="onb__forms">
+                <li className={submitted ? 'is-done' : undefined}>
+                  <div>
+                    <h3>Curaleaf account</h3>
+                    <p>Opens your account with Curaleaf Laboratories, so you can order stock. You will need your GPhC premises number, company name, invoice and delivery addresses, and an accounts contact.</p>
+                  </div>
+                  {submitted
+                    ? <p className="onb__done">Sent</p>
+                    : <button type="button" className="onb__button onb__button--primary" onClick={() => setFormOpen(true)}>Fill in</button>}
+                </li>
+                <li className={worldpaySent ? 'is-done' : undefined}>
+                  <div>
+                    <h3>Worldpay card payments</h3>
+                    <p>Lets patients pay by card through a secure link. You will need the bank account for payouts and each owner's date of birth and home address.</p>
+                  </div>
+                  {worldpaySent
+                    ? <p className="onb__done">Sent</p>
+                    : <button type="button" className="onb__button onb__button--primary" onClick={() => setWorldpayOpen(true)}>Fill in</button>}
+                </li>
+              </ol>
             </section>
-          </div>
-          </div>
-          <section className="pharmsmart-guide__account" aria-labelledby="pharmsmart-welcome-account">
-            <h2 id="pharmsmart-welcome-account">Already have an account</h2>
-            {accountHref
-              ? <a className="pharmsmart-guide__email" href={accountHref} target="_blank" rel="noopener noreferrer">Use email and password</a>
-              : <button className="pharmsmart-guide__email" type="button" onClick={onUseEmail}>Use email and password</button>}
-            <p>If this page should not have shown, email <a href="mailto:spatel@healiusconsulting.com">spatel@healiusconsulting.com</a> and we can look into it.</p>
-          </section>
+          ) : null}
+
+          {choice === 'demo' ? (
+            <section className="onb__panel" aria-labelledby="onb-demo">
+              <div className="onb__panel-head">
+                <h2 id="onb-demo">Book a 30-minute demo</h2>
+                <a href={bookingUrl} target="_blank" rel="noopener noreferrer">Open in a new tab</a>
+              </div>
+              <p>Pick a time with Shaylen Patel. You can set up afterwards from this page.</p>
+              <iframe className="onb__calendar" title="30-minute demo call with Shaylen Patel" src={embeddedBookingUrl} />
+            </section>
+          ) : null}
+
+          {choice === 'later' ? (
+            <section className="onb__panel" aria-labelledby="onb-later">
+              <h2 id="onb-later">No problem</h2>
+              <p>Nothing has been set up for this pharmacy. Come back to this page whenever you are ready, or read the brochure in the meantime.</p>
+              {deferral === 'failed'
+                ? <p className="onb__error">We could not save your answer. <button type="button" onClick={() => void recordNotYet()}>Try again</button></p>
+                : null}
+            </section>
+          ) : null}
+        </div>
+        </section>
+
+        {fromPharmsmart ? (
+          <footer className="onb__foot">
+            <p>Seeing this page by mistake? Email <strong className="onb__address">spatel@healiusconsulting.com</strong> and we will look into it.</p>
+          </footer>
+        ) : null}
           {openPacket ? createPortal(
             <div className="onboarding-dialog" role="presentation">
               <button className="onboarding-dialog__backdrop" type="button" aria-label="Close preview" onClick={() => setViewing(null)} />
@@ -259,10 +356,15 @@ export function PharmsmartWelcome({
             open={formOpen}
             welcome={welcome}
             onClose={() => setFormOpen(false)}
-            onSubmitted={() => { setFormOpen(false); setSubmitted(true); }}
+            onSubmitted={values => { setFormOpen(false); setSubmitted(true); setCuraleafValues(values); }}
           />
-        </div>
-      </section>
+          <WorldpayForm
+            open={worldpayOpen}
+            prefill={worldpayPrefill}
+            onClose={() => setWorldpayOpen(false)}
+            onSubmitted={() => { setWorldpayOpen(false); setWorldpaySent(true); }}
+          />
+      </div>
     </div>
   );
 }

@@ -9,6 +9,36 @@ import type { PharmsmartWelcome } from './types';
 
 export const PHARMSMART_ONBOARDING_CALENDLY = 'https://calendly.com/spatel-72k/30min';
 
+/**
+ * DRAFT, 16 Nov 2026: taken from the client's brochure until they supply the page
+ * pitch. Swap the wording here; the page reads nothing else.
+ */
+export const PHARMACY_ONBOARDING_PITCH = {
+  eyebrow: 'For community pharmacies',
+  title: 'The clinic prescribes. You dispense. We handle everything in between.',
+  lede: 'Holistic Health Hub is a private medical cannabis service that runs through your pharmacy. Curaleaf Clinic assesses and prescribes, and you dispense on terms we have already negotiated with Curaleaf Laboratories.',
+  facts: [
+    'No cost to join',
+    'No monthly fees or lock-in',
+    'You keep the full margin',
+    'Prescribing liability sits with the clinic',
+  ],
+  steps: [
+    { title: 'Intake', body: 'A patient fills in a short eligibility form through your pharmacy\'s own link or QR code.' },
+    { title: 'Remote onboarding', body: 'Our team checks eligibility and refers the patient to Curaleaf Clinic.' },
+    { title: 'Clinical review', body: 'A specialist consults remotely and sends the prescription to your pharmacy.' },
+    { title: 'Dispense and collect', body: 'You send a payment link, order on the platform, and the patient collects from you each month.' },
+  ],
+} as const;
+
+export const PHARMACY_ONBOARDING_CHOICES = [
+  { id: 'setup', label: 'Set up now' },
+  { id: 'demo', label: 'Book a demo' },
+  { id: 'later', label: 'Not yet' },
+] as const;
+
+export type PharmacyOnboardingChoice = typeof PHARMACY_ONBOARDING_CHOICES[number]['id'];
+
 export const PHARMSMART_ONBOARDING_PACKETS = [
   {
     href: '/onboarding/holistic-health-hub-brochure.pdf',
@@ -46,6 +76,8 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
         firstName: result.firstName,
         lastName: result.lastName,
         gphcNumber: result.gphcNumber ?? null,
+        pharmsmartPharmacyId: result.pharmsmartPharmacyId ?? null,
+        prefill: result.prefill ?? {},
       },
     };
   }

@@ -27,6 +27,8 @@ export const publicPharmacyOnboardingLimiter = publicLimiter(60 * 60 * 1000, 3, 
   code: 'RATE_LIMITED',
   message: 'This form was sent recently. Wait an hour before sending it again.',
 });
+/** "Not yet" is one click per visit. Ten an hour allows a few retries and stops scripts. */
+export const publicPharmacyOnboardingDeferralLimiter = publicLimiter(60 * 60 * 1000, 10);
 export const publicPaymentStatusLimiter = publicLimiter(15 * 60 * 1000, 90);
 export const publicWebhookLimiter = publicLimiter(15 * 60 * 1000, 300);
 export const publicReferralResolveLimiter = publicLimiter(15 * 60 * 1000, 240);

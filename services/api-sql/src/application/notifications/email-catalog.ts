@@ -25,6 +25,7 @@ export const EMAIL_EVENT_NAMES = [
   'staff.2fa_disabled',
   'pharmacy_onboarding.submitted',
   'pharmacy_onboarding.declined',
+  'pharmacy_onboarding.worldpay_submitted',
 ] as const;
 
 export type EmailEventName = (typeof EMAIL_EVENT_NAMES)[number];
@@ -65,6 +66,7 @@ export const EMAIL_TEMPLATE_CODES = [
   'pharmacy_onboarding_submitted',
   'admin_pharmacy_onboarding_request',
   'pharmacy_onboarding_declined',
+  'admin_worldpay_form_submitted',
 ] as const;
 
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
@@ -117,6 +119,7 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_onboarding_submitted: 'accounts',
   admin_pharmacy_onboarding_request: 'enquiries',
   pharmacy_onboarding_declined: 'accounts',
+  admin_worldpay_form_submitted: 'enquiries',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -220,6 +223,7 @@ function enquirySourceLabel(sourceType: string) {
 export function emailUsesAdminHeader(kind: string, payload: unknown) {
   return kind === 'admin_new_enquiry_received'
     || kind === 'admin_pharmacy_onboarding_request'
+    || kind === 'admin_worldpay_form_submitted'
     || value(payload, 'pharmacyName') === 'HHH admin workspace';
 }
 
@@ -315,6 +319,7 @@ function fields(payload: unknown) {
   const pharmacyDetails = [
     { label: 'Pharmacy', value: value(payload, 'pharmacyName') },
     { label: 'Phone', value: value(payload, 'pharmacyPhone') },
+    { label: 'Email', value: value(payload, 'pharmacyPublicEmail') },
     { label: 'Address', value: value(payload, 'pharmacyAddress') },
   ];
   return {
@@ -361,6 +366,7 @@ function signatureLines(payload: unknown) {
     patientSender(payload),
     value(payload, 'pharmacyGphcNumber').trim() ? `GPhC ${value(payload, 'pharmacyGphcNumber').trim()}` : '',
     value(payload, 'pharmacyPhone').trim(),
+    value(payload, 'pharmacyPublicEmail').trim(),
     value(payload, 'pharmacyWebsite').trim(),
   ].filter(Boolean);
 }
@@ -1063,7 +1069,7 @@ export const EMAILS = {
     audience: 'staff',
     events: ['pharmacy_onboarding.submitted'],
     schedule: 'immediate',
-    summary: 'Sent only to the partner success mailbox when a pharmacy submits a Curaleaf account form. The filled form is attached. Not sent to every platform admin.',
+    summary: 'Sent to partner success and the HHH admin inbox when a pharmacy submits a Curaleaf account form. The pharmacy is created in onboarding at the same time; the filled form is attached for Curaleaf. Not sent to every platform admin.',
     render: (payload) => {
       const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'A pharmacy');
       const plainName = value(payload, 'pharmacyName') || 'A pharmacy';
@@ -1071,16 +1077,16 @@ export const EMAILS = {
       return render({
         kind: 'admin_pharmacy_onboarding_request',
         payload,
-        subject: 'New pharmacy request',
-        preheader: `${plainName} submitted a Curaleaf account form.`,
-        title: 'New pharmacy request',
+        subject: 'New pharmacy: Curaleaf form received',
+        preheader: `${plainName} joined and is waiting on Curaleaf.`,
+        title: 'New pharmacy',
         text: [
           `${plainName}${gphc ? ` (GPhC ${gphc})` : ''} submitted a Curaleaf account form.`,
-          'The filled form is attached. Forward it to Curaleaf, then activate or decline the pharmacy in the portal.',
+          'The pharmacy is already set up in onboarding and the filled form is attached. Forward it to Curaleaf. When they send the PHAR code and API key, enter them in the portal to activate it, or decline it there if Curaleaf reject the account.',
         ].join('\n\n'),
         paragraphs: [
           `<strong>${pharmacyName}</strong>${gphc ? ` (GPhC ${escapeHtml(gphc)})` : ''} submitted a Curaleaf account form.`,
-          'The filled form is attached. Forward it to Curaleaf, then activate or decline the pharmacy in the portal.',
+          'The pharmacy is already set up in onboarding and the filled form is attached. Forward it to Curaleaf. When they send the PHAR code and API key, enter them in the portal to activate it, or decline it there if Curaleaf reject the account.',
         ],
         cta: { label: 'Open pharmacy requests', href: 'https://portal.holistichealthhub.live/admin/pharmacy-requests' },
         detailsTitle: 'Request',
@@ -1089,6 +1095,35 @@ export const EMAILS = {
           { label: 'GPhC', value: gphc },
           { label: 'Contact', value: value(payload, 'pharmacistName') },
           { label: 'Pharmacy email', value: value(payload, 'pharmacyEmail') },
+        ],
+      });
+    },
+  },
+  admin_worldpay_form_submitted: {
+    audience: 'staff',
+    events: ['pharmacy_onboarding.worldpay_submitted'],
+    schedule: 'immediate',
+    summary: 'Sent straight away, not through the outbox, to partner success and the HHH admin inbox when a pharmacy submits the Worldpay form. The filled form is attached as a PDF. Its bank and identity details are never stored.',
+    render: (payload) => {
+      const plainName = value(payload, 'tradingName') || 'A pharmacy';
+      const gphc = value(payload, 'gphcNumber');
+      const line = `${plainName}${gphc ? ` (GPhC ${gphc})` : ''} submitted the Worldpay card processing form.`;
+      const htmlLine = `<strong>${escapeHtml(plainName)}</strong>${gphc ? ` (GPhC ${escapeHtml(gphc)})` : ''} submitted the Worldpay card processing form.`;
+      const advice = 'The filled form is attached. It holds bank and identity details, so forward it to Worldpay and keep it out of shared folders. The platform has not kept a copy.';
+      return render({
+        kind: 'admin_worldpay_form_submitted',
+        payload,
+        subject: `Worldpay form: ${plainName}`,
+        preheader: line,
+        title: 'Worldpay form submitted',
+        text: [line, advice].join('\n\n'),
+        paragraphs: [htmlLine, advice],
+        cta: { label: 'Open pharmacy requests', href: 'https://portal.holistichealthhub.live/admin/pharmacy-requests' },
+        detailsTitle: 'Submission',
+        details: [
+          { label: 'Pharmacy', value: plainName },
+          { label: 'GPhC', value: gphc },
+          { label: 'Contact', value: value(payload, 'contactName') },
         ],
       });
     },

@@ -120,6 +120,8 @@ describe('PharmSmart redemption', () => {
       lastName: 'Khan',
       email: 'amina.khan@pharmacy.test',
       gphcNumber: '5550001',
+      pharmsmartPharmacyId: '30',
+      prefill: {},
     });
     assert.equal(created.length, 0);
     assert.equal(minted.length, 0);

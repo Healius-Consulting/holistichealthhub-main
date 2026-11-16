@@ -415,6 +415,51 @@ query PharmacyOnboardingRequestByIdempotency($idempotencyKey: String!) @auth(lev
   }
 }
 
+query PharmacyOnboardingDeferralByIdempotency($idempotencyKey: String!) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingDeferrals(where: { idempotencyKey: { eq: $idempotencyKey } }, limit: 1) {
+    id
+    gphcNumber
+    createdAt
+  }
+}
+
+query PharmacyWorldpaySubmissionByIdempotency($idempotencyKey: String!) @auth(level: NO_ACCESS) {
+  pharmacyWorldpaySubmissions(where: { idempotencyKey: { eq: $idempotencyKey } }, limit: 1) {
+    id
+    gphcNumber
+    tradingName
+    submittedAt
+    idempotencyKey
+  }
+}
+
+query ListPharmacyWorldpaySubmissions($limit: Int!) @auth(level: NO_ACCESS) {
+  pharmacyWorldpaySubmissions(orderBy: [{ submittedAt: DESC }], limit: $limit) {
+    id
+    gphcNumber
+    tradingName
+    submittedAt
+    idempotencyKey
+  }
+}
+
+query ListArchivedOrganisationGphcNumbers @auth(level: NO_ACCESS) {
+  organisations(where: { archivedAt: { isNull: false } }) {
+    id
+    gphcNumber
+  }
+}
+
+query PharmacyOnboardingRequestByOrganisation($organisationId: UUID!) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequests(where: { organisationId: { eq: $organisationId } }, limit: 1) {
+    id
+    status
+    pharmacyName
+    pharmacyEmail
+    organisationId
+  }
+}
+
 query PendingPharmacyOnboardingByGphc($gphcNumber: String!) @auth(level: NO_ACCESS) {
   pharmacyOnboardingRequests(
     where: { gphcNumber: { eq: $gphcNumber }, status: { eq: PENDING } }

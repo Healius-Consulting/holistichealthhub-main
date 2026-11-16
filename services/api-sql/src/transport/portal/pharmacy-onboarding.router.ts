@@ -5,10 +5,11 @@ import {
   activatePharmacyOnboardingRequest,
   declinePharmacyOnboardingRequest,
 } from '../../application/pharmacy-onboarding/decide-request.js';
-import { queuePharmacyOnboardingDeclined } from '../../application/pharmacy-onboarding/emails.js';
+import { queuePharmacyDeclinedEmail, queuePharmacyOnboardingDeclined } from '../../application/pharmacy-onboarding/emails.js';
+import { declineNewPharmacy } from '../../application/pharmacy-onboarding/decline-pharmacy.js';
 import { safeDownloadName } from '../../application/pharmacy-onboarding/licence-file.js';
 import { HttpError } from '../../domain/common/errors.js';
-import { publicOnboardingStatus, type PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
+import { compactGphcNumber, publicOnboardingStatus, type PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
@@ -20,7 +21,7 @@ import { requireStaff } from '../../security/require-staff.js';
 
 const idSchema = z.string().uuid();
 
-function toView(record: PharmacyOnboardingRequestRecord) {
+function toView(record: PharmacyOnboardingRequestRecord, worldpaySubmittedAt: string | null = null) {
   return {
     id: record.id,
     status: publicOnboardingStatus(record.status),
@@ -44,7 +45,20 @@ function toView(record: PharmacyOnboardingRequestRecord) {
     declineReason: record.declineReason,
     decidedAt: record.decidedAt,
     createdAt: record.createdAt,
+    /** Only the date: the Worldpay form itself is emailed and never stored. */
+    worldpaySubmittedAt,
   };
+}
+
+/** Latest Worldpay note per GPhC, matched the same compact way the form stores it. */
+function worldpayDates(notes: Array<{ gphcNumber: string; submittedAt: string }>) {
+  const latest = new Map<string, string>();
+  for (const note of notes) {
+    const key = compactGphcNumber(note.gphcNumber) ?? note.gphcNumber;
+    const current = latest.get(key);
+    if (!current || note.submittedAt > current) latest.set(key, note.submittedAt);
+  }
+  return (gphcNumber: string) => latest.get(compactGphcNumber(gphcNumber) ?? gphcNumber) ?? null;
 }
 
 export function createPortalPharmacyOnboardingRouter(): Router {
@@ -58,9 +72,14 @@ export function createPortalPharmacyOnboardingRouter(): Router {
 
   router.get('/portal/admin/pharmacy-onboarding-requests', requireStaff('admin'), async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const records = await repo.list();
+      const [records, notes] = await Promise.all([repo.list(), repo.listWorldpaySubmissions()]);
+      const worldpayFor = worldpayDates(notes);
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json({ records: records.map(toView) });
+      res.status(200).json({
+        records: records.map(record => toView(record, worldpayFor(record.gphcNumber))),
+        // Pharmacies already on the platform can send the Worldpay form too.
+        worldpaySubmissions: notes.map(note => ({ gphcNumber: note.gphcNumber, submittedAt: note.submittedAt })),
+      });
     } catch (error) {
       next(error);
     }
@@ -77,6 +96,38 @@ export function createPortalPharmacyOnboardingRouter(): Router {
   router.get('/portal/admin/pharmacy-onboarding-requests/:id/licence', requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       await sendFile(repo, storage, idSchema.parse(req.params.id), 'licence', res);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/admin/organisations/:id/decline - Curaleaf rejected a new pharmacy, or it should not be here
+  router.post('/portal/admin/organisations/:id/decline', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = idSchema.parse(req.params.id);
+      const { reason } = z.object({ reason: z.string() }).parse(req.body);
+      const result = await declineNewPharmacy({
+        findOrganisation: id => organisationRepo.findOrganisationById(id),
+        findRequestByOrganisation: id => repo.findByOrganisationId(id),
+        archiveOrganisation: (id, note, at) => repo.archiveOrganisation(id, note, at),
+        declineRequest: (id, note, at, actor) => repo.decline(id, note, at, actor),
+        emailPharmacy: input => queuePharmacyDeclinedEmail(notificationRepo, input),
+      }, { organisationId, reason, actorUid: scope.uid });
+      await identityRepo.appendAudit({
+        organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.declined',
+        recordType: 'Organisation',
+        recordId: organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: { requestId: result.requestId },
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

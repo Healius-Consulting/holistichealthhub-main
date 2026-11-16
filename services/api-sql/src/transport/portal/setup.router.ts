@@ -394,6 +394,24 @@ export function createPortalSetupRouter(): Router {
         const preferred = preferIntegrationConnection(rows);
         if (preferred) worldpayByOrganisation.set(key, preferred);
       }
+      // The PHAR code is the last activation step for every pharmacy, so the
+      // directory needs it to show which ones are still waiting on Curaleaf.
+      const curaleafRows = new Map<string, Array<(typeof connections)[number]>>();
+      for (const connection of connections) {
+        if (connection.integration !== 'CURALEAF' || connection.status === 'DISCONNECTED') continue;
+        const key = connection.organisationId.toLowerCase();
+        curaleafRows.set(key, [...(curaleafRows.get(key) ?? []), connection]);
+      }
+      const curaleafCodeByOrganisation = new Map<string, { code: string; environment: 'test' | 'production' }>();
+      for (const [key, rows] of curaleafRows) {
+        const preferred = preferIntegrationConnection(rows);
+        if (preferred?.externalCustomerId) {
+          curaleafCodeByOrganisation.set(key, {
+            code: preferred.externalCustomerId,
+            environment: preferred.environment === 'PRODUCTION' ? 'production' : 'test',
+          });
+        }
+      }
       const logos = await resolveOrganisationLogos(storage, organisations.map(organisation => organisation.id)).catch(() => new Map());
       const domainsByOrganisation = new Map<string, string[]>();
       for (const domain of domains) {
@@ -406,6 +424,8 @@ export function createPortalSetupRouter(): Router {
       res.status(200).json(organisations.map(organisation => toPortalOrganisation(organisation, {
         websiteDomains: domainsByOrganisation.get(organisation.id.toLowerCase()) ?? [],
         worldpayState: worldpayAdminState(worldpayByOrganisation.get(organisation.id.toLowerCase()) ?? null),
+        curaleafPharmacyCode: curaleafCodeByOrganisation.get(organisation.id.toLowerCase())?.code ?? null,
+        curaleafEnvironment: curaleafCodeByOrganisation.get(organisation.id.toLowerCase())?.environment ?? null,
         ...logos.get(organisation.id),
       })));
     } catch (error) {

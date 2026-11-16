@@ -12,6 +12,8 @@ export interface DirectoryProfileRecord {
   postcode: string;
   publicEmail: string;
   publicPhone: string | null;
+  /** The pharmacy chose to show its email to patients; otherwise only the phone is shown. */
+  showEmailToPatients?: boolean;
   icoRegistrationNumber: string | null;
   privacyContactEmail: string | null;
   dataProtectionOfficer: string | null;

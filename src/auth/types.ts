@@ -31,11 +31,29 @@ export interface PharmsmartSetup {
   lastName: string | null;
 }
 
+/** Curaleaf account form values PharmSmart sent. A missing key is left for the pharmacy to type. */
+export type PharmsmartPrefill = Partial<Record<
+  | 'pharmacyName'
+  | 'registeredCompanyName'
+  | 'deliveryAddress'
+  | 'invoiceAddress'
+  | 'pharmacyPhone'
+  | 'pharmacyEmail'
+  | 'accountsEmail'
+  | 'accountsPhone'
+  | 'faxNumber'
+  | 'wdaNumber'
+  | 'licenceDetails',
+  string
+>>;
+
 export interface PharmsmartWelcome {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
   gphcNumber?: string | null;
+  pharmsmartPharmacyId?: string | null;
+  prefill?: PharmsmartPrefill;
 }
 
 export interface AuthState {

@@ -26,6 +26,7 @@ type DirectoryOrganisationRow = {
   mainContactPhone: string | null;
   pharmacyEmail?: string | null;
   pharmacyPhone?: string | null;
+  showEmailToPatients?: boolean | null;
   websiteDomains?: string[] | null;
   status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED';
   classification: 'STANDARD' | 'TRAINING' | 'ALLOCATION_HOLDING';
@@ -93,6 +94,7 @@ const LIST_DIRECTORY_ORGANISATIONS_GQL = `
       mainContactPhone
       pharmacyEmail
       pharmacyPhone
+      showEmailToPatients
       status
       classification
       archivedAt
@@ -189,6 +191,7 @@ function toListedProfile(
     // Patients get the pharmacy's own line and inbox; the superintendent's contact is a fallback for records that predate them.
     publicEmail: profile?.publicEmail || organisation.pharmacyEmail || organisation.mainContactEmail || '',
     publicPhone: profile?.publicPhone ?? organisation.pharmacyPhone ?? organisation.mainContactPhone,
+    showEmailToPatients: Boolean(organisation.showEmailToPatients),
     icoRegistrationNumber: profile?.icoRegistrationNumber ?? null,
     privacyContactEmail: profile?.privacyContactEmail ?? null,
     dataProtectionOfficer: profile?.dataProtectionOfficer ?? null,

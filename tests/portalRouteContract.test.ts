@@ -10,6 +10,9 @@ test('admin routes are explicit and pharmacy details are identifier-scoped', () 
   assert.deepEqual(parseAdminRelativePath('/pharmacy/branch_01-test'), { kind: 'organisation', organisationId: 'branch_01-test' });
   assert.equal(isSupportedPortalRelativePath('admin', '/pharmacy/branch_01-test'), true);
   assert.deepEqual(parseAdminRelativePath('/platform'), { kind: 'view', view: 'overview' });
+  // Requests are a tab of the pharmacies overview; the old path still opens it.
+  assert.deepEqual(parseAdminRelativePath('/pharmacy-requests'), { kind: 'view', view: 'overview', filter: 'requests' });
+  assert.equal(isSupportedPortalRelativePath('admin', '/pharmacy-requests'), true);
   assert.equal(isSupportedPortalRelativePath('admin', '/platform'), true);
 });
 

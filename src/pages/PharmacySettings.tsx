@@ -1,25 +1,29 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { organisationAddressFields } from '../utils/organisationAddress';
 import {
   AlertTriangle,
   Building2,
   CheckCircle2,
+  Compass,
   Copy,
   CreditCard,
   Download,
   ExternalLink,
   FileArchive,
   Link2,
+  Mail,
   Pencil,
+  Phone,
   QrCode,
   RefreshCw,
   Save,
   ShieldCheck,
   Tags,
 } from 'lucide-react';
+import { KEY_CONTACTS, telHref } from '@hhh/domain/key-contacts';
 import { useApp } from '../context/AppContext';
 import { brandSwatchStyle } from '../utils/tenantTheme';
-import { ApiRequestError, getCuraleafConnectionStatus, getReferralLink, isApiConfigured, refreshCuraleafConnection, updatePaymentSettings, updatePharmacyProfile } from '../shared/api';
+import { ApiRequestError, describeApiError, getCuraleafConnectionStatus, getReferralLink, isApiConfigured, refreshCuraleafConnection, updatePatientEmailVisibility, updatePaymentSettings, updatePharmacyProfile } from '../shared/api';
 import type { CuraleafConnectionStatus } from '../shared/contracts';
 import { curaleafCatalogueEstateLabel } from '../utils/catalogueEstate';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
@@ -37,10 +41,29 @@ function formatLastVerified(value: Date | string | null): string {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(when);
 }
 
-export default function PharmacySettings() {
+const SETTINGS_SECTIONS = [
+  { id: 'organisation', label: 'Organisation' },
+  { id: 'payments', label: 'Payments' },
+  { id: 'assets', label: 'Assets' },
+  { id: 'support', label: 'Support' },
+] as const;
+
+export type SettingsSection = typeof SETTINGS_SECTIONS[number]['id'];
+
+/** The element that actually scrolls this page (the workspace main area, not the window). */
+function scrollParentOf(element: HTMLElement | null): HTMLElement {
+  let node = element?.parentElement ?? null;
+  while (node && node !== document.body) {
+    const { overflowY } = getComputedStyle(node);
+    if ((overflowY === 'auto' || overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node;
+    node = node.parentElement;
+  }
+  return document.scrollingElement as HTMLElement;
+}
+
+export default function PharmacySettings({ initialSection }: { initialSection?: SettingsSection } = {}) {
   const { state, dispatch } = useApp();
   const organisation = useMemo(() => state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0], [state]);
-  const [activeTab, setActiveTab] = useState<'settings' | 'assets'>('settings');
   const [savingRoute, setSavingRoute] = useState(false);
   const [savingDelivery, setSavingDelivery] = useState(false);
   const [worldpayRefreshControl, setWorldpayRefreshControl] = useState<{ refresh: () => void; busy: boolean } | null>(null);
@@ -52,10 +75,100 @@ export default function PharmacySettings() {
   const [curaleafStatus, setCuraleafStatus] = useState<CuraleafConnectionStatus | null>(null);
   const [curaleafRefreshing, setCuraleafRefreshing] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
-  // Read-only is the resting state: these details are correct far more often than
-  // they are wrong, and a page of live inputs invites accidental edits to a
-  // pharmacy's registered name or GPhC number.
-  const [editingProfile, setEditingProfile] = useState(false);
+  // Read-only is the resting state: each card edits on its own, so a page of live
+  // inputs never invites accidental edits to a registered name or GPhC number.
+  const [editingCard, setEditingCard] = useState<'pharmacy' | 'contacts' | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? 'organisation');
+  const navRef = useRef<HTMLElement | null>(null);
+  // The section a click is scrolling to: the highlight follows the scroll, then settles here.
+  const pendingSectionRef = useRef<SettingsSection | null>(null);
+
+  // Jump so a section starts just below the pinned bar; scrollIntoView would hide it underneath.
+  const goToSection = useCallback((id: SettingsSection, instant = false) => {
+    const target = document.getElementById(`settings-section-${id}`);
+    if (!target) return;
+    const scroller = scrollParentOf(target);
+    const barHeight = navRef.current?.offsetHeight ?? 0;
+    const scrollerTop = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+    const offset = target.getBoundingClientRect().top - scrollerTop - barHeight - 12;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || instant || Math.abs(offset) < 2) { pendingSectionRef.current = null; setActiveSection(id); }
+    else pendingSectionRef.current = id;
+    scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: reduce || instant ? 'auto' : 'smooth' });
+    if (!(reduce || instant)) return;
+    // An instant jump can be measured where it landed: the header and pinned bar settle
+    // only once the page moves, so correct against the bar's real position.
+    for (let pass = 0; pass < 3; pass += 1) {
+      const bar = navRef.current?.getBoundingClientRect().bottom ?? 0;
+      const miss = target.getBoundingClientRect().top - bar - 12;
+      if (Math.abs(miss) < 2) break;
+      const before = scroller.scrollTop;
+      scroller.scrollTop = before + miss;
+      if (scroller.scrollTop === before) break;
+    }
+  }, []);
+
+  // Key contacts and other deep links open straight on their section.
+  useEffect(() => {
+    if (!initialSection || initialSection === 'organisation') return;
+    // The link, QR and Curaleaf cards load after mount and push the section down,
+    // so keep it aligned while the page settles, until staff take over or 1.5s pass.
+    const root = navRef.current?.parentElement;
+    const align = () => goToSection(initialSection, true);
+    const frame = window.requestAnimationFrame(align);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(align);
+    if (root) observer?.observe(root);
+    const stop = () => {
+      observer?.disconnect();
+      for (const type of ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const) window.removeEventListener(type, stop);
+    };
+    // Listen a frame later: the keypress or click that opened this page is still bubbling.
+    const listen = window.setTimeout(() => {
+      for (const type of ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const) window.addEventListener(type, stop, { passive: true });
+    }, 50);
+    const timer = window.setTimeout(stop, 2500);
+    return () => { window.cancelAnimationFrame(frame); window.clearTimeout(listen); window.clearTimeout(timer); stop(); };
+  }, [initialSection, goToSection]);
+
+  // Highlight the section under the bar as staff scroll.
+  useEffect(() => {
+    const first = document.getElementById('settings-section-organisation');
+    if (!first) return;
+    const scroller = scrollParentOf(first);
+    const target: HTMLElement | Window = scroller === document.scrollingElement ? window : scroller;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const line = (navRef.current?.getBoundingClientRect().bottom ?? 0) + 40;
+      let current: SettingsSection = 'organisation';
+      for (const section of SETTINGS_SECTIONS) {
+        const el = document.getElementById(`settings-section-${section.id}`);
+        if (el && el.getBoundingClientRect().top <= line) current = section.id;
+      }
+      if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2) current = 'support';
+      setActiveSection(current);
+    };
+    // Pin the bar flush with the top of the scroller, whatever its top padding is at this width.
+    const pin = () => {
+      if (!navRef.current) return;
+      const pad = scroller === document.scrollingElement ? 0 : parseFloat(getComputedStyle(scroller).paddingTop) || 0;
+      navRef.current.style.top = `${-pad}px`;
+    };
+    pin();
+    window.addEventListener('resize', pin);
+    let settle = 0;
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        if (pendingSectionRef.current) setActiveSection(pendingSectionRef.current);
+        pendingSectionRef.current = null;
+      }, 120);
+    };
+    target.addEventListener('scroll', onScroll, { passive: true });
+    update();
+    return () => { target.removeEventListener('scroll', onScroll); window.removeEventListener('resize', pin); window.clearTimeout(settle); if (frame) window.cancelAnimationFrame(frame); };
+  }, []);
   const [profileForm, setProfileForm] = useState({
     tradingName: '',
     name: '',
@@ -99,13 +212,6 @@ export default function PharmacySettings() {
 
   useEffect(() => {
     let cancelled = false;
-    if (activeTab !== 'assets') {
-      setFormUrl('');
-      setQr('');
-      setLinkError('');
-      setLinkLoading(false);
-      return;
-    }
     setFormUrl('');
     setQr('');
     setLinkError('');
@@ -118,7 +224,7 @@ export default function PharmacySettings() {
       .catch(error => { if (!cancelled) setLinkError(error instanceof Error ? error.message : 'The eligibility link could not be loaded.'); })
       .finally(() => { if (!cancelled) setLinkLoading(false); });
     return () => { cancelled = true; };
-  }, [activeTab, organisation.id, organisation.referralToken, linkRefresh]);
+  }, [organisation.id, organisation.referralToken, linkRefresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -227,7 +333,8 @@ export default function PharmacySettings() {
           pharmacyEmail: profileForm.pharmacyEmail || undefined,
         },
       });
-      setEditingProfile(false);
+     
+      setEditingCard(null);
       notify('Pharmacy details saved.');
     } catch (error) {
       // Editing stays open on failure so the typed values are not thrown away.
@@ -258,6 +365,23 @@ export default function PharmacySettings() {
     }
   };
 
+  const [savingEmailVisibility, setSavingEmailVisibility] = useState(false);
+  // The pharmacy's own choice. HHH admin sees it but cannot change it.
+  const setEmailVisibility = async (show: boolean) => {
+    const previous = Boolean(organisation.showEmailToPatients);
+    setSavingEmailVisibility(true);
+    dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { showEmailToPatients: show } });
+    try {
+      if (!isLocalPortalPreview && isApiConfigured) await updatePatientEmailVisibility(show);
+      notify(show ? 'Patients will see your email as well as your phone.' : 'Patients will see your phone only.');
+    } catch (error) {
+      dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { showEmailToPatients: previous } });
+      dispatch({ type: 'ADD_TOAST', message: describeApiError(error, 'The setting could not be saved.'), toastType: 'error' });
+    } finally {
+      setSavingEmailVisibility(false);
+    }
+  };
+
   const setPharmacyDelivery = async (enabled: boolean) => {
     const previous = organisation.pharmacyDeliveryEnabled;
     setSavingDelivery(true);
@@ -279,313 +403,368 @@ export default function PharmacySettings() {
     }
   };
 
+  const address = organisationAddressFields(organisation);
+  const premises = [address.addressLine1, address.addressLine2, address.locality, address.county, address.postcode].filter(Boolean).join(', ');
+  const statusLabel = organisation.status === 'paused' ? 'Paused' : pharmacyWorkspaceStatusLabel(state.workspaceMode);
+  const statusTone = organisation.status === 'paused' ? 'danger' : state.workspaceMode === 'live' ? 'paid' : 'warning';
+  const field = (key: keyof typeof profileForm) => (event: { target: { value: string } }) => (
+    setProfileForm(current => ({ ...current, [key]: key === 'postcode' ? event.target.value.toUpperCase() : event.target.value }))
+  );
+  const cancelEdit = () => { setProfileForm(profileFromOrganisation()); setEditingCard(null); };
+  const editActions = (
+    <div className="pharmacy-details__actions">
+      <button type="button" className="btn btn-sm" disabled={profileSaving} onClick={cancelEdit}>Cancel</button>
+      <button type="submit" className="btn btn-primary btn-sm" disabled={profileSaving}><Save size={13} /> {profileSaving ? 'Saving…' : 'Save'}</button>
+    </div>
+  );
+  const editButton = (card: 'pharmacy' | 'contacts', label: string) => editingCard === card ? null : (
+    <button type="button" className="btn btn-sm" disabled={editingCard !== null} aria-label={`Edit ${label}`} onClick={() => { setProfileForm(profileFromOrganisation()); setEditingCard(card); }}>
+      <Pencil size={13} /> Edit
+    </button>
+  );
+  const row = (label: string, value: ReactNode, hint?: string) => (
+    <div className="pharmacy-details__row">
+      <dt>{label}</dt>
+      <dd>{value || <span className="pharmacy-details__empty">Not given</span>}{hint ? <small>{hint}</small> : null}</dd>
+    </div>
+  );
+
   return (
-    <div className="page-body pharmacy-settings" data-tour="settings">
-      <header className="pharmacy-settings__header">
-        <div className="tenant-mark" style={brandSwatchStyle(organisation.brand.primary)}>{organisation.logoText}</div>
-        <div className="pharmacy-settings__identity">
-          <h2>{organisation.brand.portalName}</h2>
-          <p>{organisation.name} · GPhC {organisation.gphcNumber}</p>
+    <div className="page-body pharmacy-settings-page pharmacy-dashboard" data-tour="settings">
+      <header className="pharmacy-settings-page__hero">
+        <span className="pharmacy-settings-page__mark" style={brandSwatchStyle(organisation.brand.primary)} aria-hidden="true">{organisation.logoText}</span>
+        <div className="pharmacy-settings-page__titles">
+          <h2>{organisation.name}</h2>
+          <p>{organisation.tradingName && organisation.tradingName !== organisation.name ? `${organisation.tradingName} · ` : ''}GPhC {organisation.gphcNumber}</p>
         </div>
-        <span className={`pill ${organisation.status === 'paused' ? 'pill-red' : state.workspaceMode === 'live' ? 'pill-green' : state.workspaceMode === 'test' ? 'pill-info' : 'pill-amber'}`}>
-          {organisation.status === 'paused' ? 'Paused' : pharmacyWorkspaceStatusLabel(state.workspaceMode)}
-        </span>
+        <span className={`order-stage-pill order-tone--${statusTone}`}>{statusLabel}</span>
       </header>
 
-      <div className="pharmacy-settings__nav" role="tablist" aria-label="Settings views">
-        <button type="button" role="tab" id="settings-tab-organisation" aria-selected={activeTab === 'settings'} aria-controls="settings-panel-organisation" onClick={() => setActiveTab('settings')}>
-          <Building2 size={14} aria-hidden="true" /> Organisation
-        </button>
-        <button type="button" role="tab" id="settings-tab-assets" aria-selected={activeTab === 'assets'} aria-controls="settings-panel-assets" onClick={() => setActiveTab('assets')}>
-          <QrCode size={14} aria-hidden="true" /> Assets
-        </button>
-      </div>
 
-      {activeTab === 'settings' ? (
-        <div className="pharmacy-settings__flow" id="settings-panel-organisation" role="tabpanel" aria-labelledby="settings-tab-organisation">
-          <section className="pharmacy-settings-section">
-            <header>
-              <h3><RefreshCw size={16} aria-hidden="true" /> Workspace tour</h3>
-            </header>
-            <p className="pharmacy-settings-section__lead">Walk through Overview, Patients, Orders, Create order, Catalogue, Finance and Settings. Completing or skipping saves against this staff account.</p>
-            <button type="button" className="btn btn-secondary pharmacy-settings-tour-replay" onClick={() => requestWorkspaceTourReplay()}>
-              Replay workspace tour
-            </button>
-          </section>
+      <nav ref={navRef} className="pharmacy-dashboard__nav pharmacy-settings-page__nav" aria-label="Settings sections">
+        {SETTINGS_SECTIONS.map(section => (
+          <button
+            key={section.id}
+            type="button"
+            className={activeSection === section.id ? 'is-active' : undefined}
+            aria-current={activeSection === section.id ? 'location' : undefined}
+            onClick={() => goToSection(section.id)}
+          >
+            {section.label}
+          </button>
+        ))}
+      </nav>
 
-          <section className="pharmacy-settings-section">
-            <header>
-              <h3><Building2 size={16} aria-hidden="true" /> Pharmacy Delivery</h3>
-              <span className={`pill ${organisation.pharmacyDeliveryEnabled ? 'pill-green' : 'pill-neutral'}`}>
-                {organisation.pharmacyDeliveryEnabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </header>
-            <p className="pharmacy-settings-section__lead">Allow new order drafts to add a pharmacy-managed delivery charge of up to £15. Existing eligible drafts keep their choice if this is later disabled.</p>
-            <label className="pharmacy-settings-toggle">
-              <span><strong>Offer Pharmacy Delivery</strong><small>{organisation.pharmacyDeliveryEnabled ? 'Enabled for new drafts.' : 'Disabled for new drafts.'}</small></span>
-              <input type="checkbox" checked={organisation.pharmacyDeliveryEnabled} disabled={savingDelivery} onChange={event => void setPharmacyDelivery(event.target.checked)} />
-              <span aria-hidden="true" />
-            </label>
-          </section>
-
-          <section className="pharmacy-settings-section">
-            <header><h3><Tags size={16} aria-hidden="true" /> Curaleaf</h3></header>
-            <div className="pharmacy-settings-curaleaf">
-              <div className="pharmacy-settings-curaleaf__facts">
-                <div className="pharmacy-settings-curaleaf__id">
-                  <span>Customer ID</span>
-                  <strong>{curaleafStatus?.customerId ?? 'Not assigned'}</strong>
-                </div>
-                <div className="pharmacy-settings-curaleaf__id">
-                  <span>Estate</span>
-                  <strong>{curaleafStatus ? curaleafCatalogueEstateLabel(curaleafStatus.environment) : 'Not yet checked'}</strong>
-                </div>
-              </div>
-              <button type="button" className="btn btn-secondary" disabled={curaleafRefreshing} onClick={() => void refreshCuraleaf()}>
-                <RefreshCw size={14} aria-hidden="true" /> {curaleafRefreshing ? 'Refreshing…' : 'Refresh'}
-              </button>
-            </div>
-            <p className="pharmacy-settings-section__lead">Curaleaf supplies patient price and wholesale cost. Your team can add optional dispensing and eligible Pharmacy Delivery charges while building an order.</p>
-            <button type="button" className="pharmacy-settings-link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
-          </section>
-
-          <section className="pharmacy-settings-section">
-            <header>
-              <h3><Building2 size={16} aria-hidden="true" /> Pharmacy details</h3>
-              {!editingProfile ? (
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingProfile(true)}>
-                  <Pencil size={14} aria-hidden="true" /> Edit
-                </button>
-              ) : null}
-            </header>
-            <p className="pharmacy-settings-section__lead">Trading name, GPhC registration, address and contact details. Branding and go-live status remain managed by HHH.</p>
-            {/* Three groups, in the order someone reads a pharmacy record: who the
-                business is, where it is, and who to call about it. */}
-            {!editingProfile ? (
-              <div className="pharmacy-settings-profile">
-                <div className="pharmacy-settings-profile__group">
-                  <h4>Pharmacy details</h4>
-                  <dl>
-                    <div><dt>Trading name</dt><dd>{organisation.tradingName || '—'}</dd></div>
-                    <div><dt>Registered company name</dt><dd>{organisation.name || '—'}</dd></div>
-                    <div><dt>GPhC number</dt><dd>{organisation.gphcNumber || '—'}</dd></div>
-                    <div><dt>Superintendent pharmacist</dt><dd>{organisation.superintendent || '—'}</dd></div>
-                  </dl>
-                </div>
-                <div className="pharmacy-settings-profile__group">
-                  <h4>Address</h4>
-                  <dl>
-                    <div><dt>Address line 1</dt><dd>{profileForm.addressLine1 || '—'}</dd></div>
-                    <div><dt>Address line 2</dt><dd>{profileForm.addressLine2 || '—'}</dd></div>
-                    <div><dt>Town or city</dt><dd>{profileForm.locality || '—'}</dd></div>
-                    <div><dt>County</dt><dd>{profileForm.county || '—'}</dd></div>
-                    <div><dt>Postcode</dt><dd>{profileForm.postcode || '—'}</dd></div>
-                  </dl>
-                </div>
-                <div className="pharmacy-settings-profile__group">
-                  <h4>Pharmacy contact</h4>
-                  <p className="pharmacy-settings-profile__hint">Shown to patients in emails and the pharmacy finder.</p>
-                  <dl>
-                    <div><dt>Landline</dt><dd>{organisation.pharmacyPhone || '—'}</dd></div>
-                    <div><dt>Email</dt><dd>{organisation.pharmacyEmail || '—'}</dd></div>
-                  </dl>
-                </div>
-                <div className="pharmacy-settings-profile__group">
-                  <h4>Superintendent contact</h4>
-                  <p className="pharmacy-settings-profile__hint">Used by HHH admin to reach the pharmacy. Never shown to patients.</p>
-                  <dl>
-                    <div><dt>Name</dt><dd>{organisation.mainContactName || '—'}</dd></div>
-                    <div><dt>Phone</dt><dd>{organisation.mainContactPhone || '—'}</dd></div>
-                    <div><dt>Email</dt><dd>{organisation.mainContactEmail || '—'}</dd></div>
-                  </dl>
-                </div>
-              </div>
-            ) : (
-              <form className="pharmacy-settings-form" onSubmit={event => void saveProfile(event)}>
-                <fieldset className="pharmacy-settings-form__group">
-                  <legend>Pharmacy details</legend>
-                  <div className="pharmacy-settings-form__grid">
-                    <label>Trading name<input className="input" value={profileForm.tradingName} onChange={event => setProfileForm(current => ({ ...current, tradingName: event.target.value }))} required /></label>
-                    <label>Registered company name<input className="input" value={profileForm.name} onChange={event => setProfileForm(current => ({ ...current, name: event.target.value }))} required /></label>
-                    <label>GPhC number<input className="input" value={profileForm.gphcNumber} onChange={event => setProfileForm(current => ({ ...current, gphcNumber: event.target.value }))} required /></label>
-                    <label>Superintendent pharmacist<input className="input" value={profileForm.superintendent} onChange={event => setProfileForm(current => ({ ...current, superintendent: event.target.value }))} required /></label>
+      <section id="settings-section-organisation" className="pharmacy-settings-page__section" aria-labelledby="settings-heading-organisation">
+        <header className="pharmacy-settings-page__section-head">
+          <h3 id="settings-heading-organisation">Organisation</h3>
+          <p>Who you are, what you offer, and how patients and HHH reach you.</p>
+        </header>
+        <div className="pharmacy-details">
+            {/* Pharmacy: who the business is and where. */}
+            <section className={`pharmacy-details__card${editingCard === 'pharmacy' ? ' is-editing' : ''}`} aria-labelledby="settings-card-pharmacy">
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true"><Building2 size={16} /></span>
+                <h4 id="settings-card-pharmacy">Pharmacy</h4>
+                {editButton('pharmacy', 'pharmacy details')}
+              </header>
+              {editingCard === 'pharmacy' ? (
+                <form className="pharmacy-details__form" onSubmit={event => void saveProfile(event)}>
+                  <div className="pharmacy-details__fields">
+                    <label className="is-wide"><span>Pharmacy name</span><input className="input" value={profileForm.name} onChange={field('name')} required /></label>
+                    <label className="is-wide"><span>Company name</span><input className="input" value={profileForm.tradingName} onChange={field('tradingName')} required /></label>
+                    <label><span>GPhC premises number</span><input className="input" value={profileForm.gphcNumber} onChange={field('gphcNumber')} required /></label>
+                    <label><span>Superintendent pharmacist</span><input className="input" value={profileForm.superintendent} onChange={field('superintendent')} required /></label>
+                    <p className="pharmacy-details__group is-wide">Premises</p>
+                    <label className="is-wide"><span>Address line 1</span><input className="input" value={profileForm.addressLine1} onChange={field('addressLine1')} autoComplete="address-line1" required /></label>
+                    <label className="is-wide"><span>Address line 2 <em>Optional</em></span><input className="input" value={profileForm.addressLine2} onChange={field('addressLine2')} autoComplete="address-line2" /></label>
+                    <label><span>Town or city</span><input className="input" value={profileForm.locality} onChange={field('locality')} autoComplete="address-level2" required /></label>
+                    <label><span>County <em>Optional</em></span><input className="input" value={profileForm.county} onChange={field('county')} autoComplete="address-level1" /></label>
+                    <label><span>Postcode</span><input className="input" value={profileForm.postcode} onChange={field('postcode')} autoComplete="postal-code" required /></label>
                   </div>
-                </fieldset>
-                <fieldset className="pharmacy-settings-form__group">
-                  <legend>Address</legend>
-                  <div className="pharmacy-settings-form__grid">
-                    <label>Address line 1<input className="input" value={profileForm.addressLine1} onChange={event => setProfileForm(current => ({ ...current, addressLine1: event.target.value }))} autoComplete="address-line1" required /></label>
-                    <label>Address line 2<input className="input" value={profileForm.addressLine2} onChange={event => setProfileForm(current => ({ ...current, addressLine2: event.target.value }))} autoComplete="address-line2" /></label>
-                    <label>Town or city<input className="input" value={profileForm.locality} onChange={event => setProfileForm(current => ({ ...current, locality: event.target.value }))} autoComplete="address-level2" required /></label>
-                    <label>County<input className="input" value={profileForm.county} onChange={event => setProfileForm(current => ({ ...current, county: event.target.value }))} autoComplete="address-level1" /></label>
-                    <label>Postcode<input className="input" value={profileForm.postcode} onChange={event => setProfileForm(current => ({ ...current, postcode: event.target.value.toUpperCase() }))} autoComplete="postal-code" required /></label>
-                  </div>
-                </fieldset>
-                <fieldset className="pharmacy-settings-form__group">
-                  <legend>Pharmacy contact</legend>
-                  <p className="pharmacy-settings-profile__hint">Shown to patients in emails and the pharmacy finder.</p>
-                  <div className="pharmacy-settings-form__grid">
-                    <label>Pharmacy landline<input className="input" type="tel" value={profileForm.pharmacyPhone} onChange={event => setProfileForm(current => ({ ...current, pharmacyPhone: event.target.value }))} autoComplete="tel" /></label>
-                    <label>Pharmacy email<input className="input" type="email" value={profileForm.pharmacyEmail} onChange={event => setProfileForm(current => ({ ...current, pharmacyEmail: event.target.value }))} autoComplete="email" /></label>
-                  </div>
-                </fieldset>
-                <fieldset className="pharmacy-settings-form__group">
-                  <legend>Superintendent contact</legend>
-                  <p className="pharmacy-settings-profile__hint">Used by HHH admin to reach the pharmacy. Never shown to patients.</p>
-                  <div className="pharmacy-settings-form__grid">
-                    <label>Contact name<input className="input" value={profileForm.mainContactName} onChange={event => setProfileForm(current => ({ ...current, mainContactName: event.target.value }))} /></label>
-                    <label>Contact phone<input className="input" type="tel" value={profileForm.mainContactPhone} onChange={event => setProfileForm(current => ({ ...current, mainContactPhone: event.target.value }))} /></label>
-                    <label className="is-wide">Contact email<input className="input" type="email" value={profileForm.mainContactEmail} onChange={event => setProfileForm(current => ({ ...current, mainContactEmail: event.target.value }))} /></label>
-                  </div>
-                </fieldset>
-                <div className="pharmacy-settings-actions">
-                  <button type="submit" className="btn btn-primary" disabled={profileSaving}><Save size={14} /> {profileSaving ? 'Saving…' : 'Save pharmacy details'}</button>
-                  {/* Cancel restores what is on record rather than leaving half-typed
-                      values behind for the next person who opens Edit. */}
+                  {editActions}
+                </form>
+              ) : (
+                <>
+                  <dl className="pharmacy-details__list">
+                    {row('Pharmacy name', organisation.name)}
+                    {row('Company', organisation.tradingName)}
+                    {row('GPhC number', organisation.gphcNumber)}
+                    {row('Superintendent', organisation.superintendent)}
+                    {row('Premises', premises)}
+                  </dl>
+                <div className="pharmacy-details__switch-row">
+                  <span>
+                    <strong id="settings-delivery">Offer Pharmacy Delivery</strong>
+                    <small>{organisation.pharmacyDeliveryEnabled ? 'New drafts can add a delivery charge of up to £15.' : 'Off for new drafts. Existing drafts keep their choice.'}</small>
+                  </span>
                   <button
                     type="button"
-                    className="btn btn-secondary"
-                    disabled={profileSaving}
-                    onClick={() => { setProfileForm(profileFromOrganisation()); setEditingProfile(false); }}
+                    role="switch"
+                    className="pharmacy-details__switch"
+                    aria-checked={organisation.pharmacyDeliveryEnabled}
+                    aria-labelledby="settings-delivery"
+                    disabled={savingDelivery}
+                    onClick={() => void setPharmacyDelivery(!organisation.pharmacyDeliveryEnabled)}
                   >
-                    Cancel
+                    <span aria-hidden="true" />
                   </button>
                 </div>
-              </form>
-            )}
-          </section>
-
-          <section className="pharmacy-settings-section pharmacy-settings-section--payment">
+                </>
+              )}
+            </section>
+            {/* Contacts: what patients see, and how HHH reaches you. */}
+            <section className={`pharmacy-details__card${editingCard === 'contacts' ? ' is-editing' : ''}`} aria-labelledby="settings-card-contacts">
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true"><Phone size={16} /></span>
+                <h4 id="settings-card-contacts">Contacts</h4>
+                {editButton('contacts', 'contacts')}
+              </header>
+              {editingCard === 'contacts' ? (
+                <form className="pharmacy-details__form" onSubmit={event => void saveProfile(event)}>
+                  <div className="pharmacy-details__fields">
+                    <p className="pharmacy-details__group is-wide">Pharmacy</p>
+                    <label><span>Landline</span><input className="input" type="tel" value={profileForm.pharmacyPhone} onChange={field('pharmacyPhone')} autoComplete="tel" /><small>Shown to patients.</small></label>
+                    <label><span>Email</span><input className="input" type="email" value={profileForm.pharmacyEmail} onChange={field('pharmacyEmail')} autoComplete="email" /><small>{organisation.showEmailToPatients ? 'Shown to patients.' : 'Not shown to patients.'}</small></label>
+                    <p className="pharmacy-details__group is-wide">For HHH only</p>
+                    <label className="is-wide"><span>Superintendent contact</span><input className="input" value={profileForm.mainContactName} onChange={field('mainContactName')} /></label>
+                    <label><span>Contact number</span><input className="input" type="tel" value={profileForm.mainContactPhone} onChange={field('mainContactPhone')} /></label>
+                    <label><span>Contact email</span><input className="input" type="email" value={profileForm.mainContactEmail} onChange={field('mainContactEmail')} /></label>
+                  </div>
+                  {editActions}
+                </form>
+              ) : (
+                <>
+                  <dl className="pharmacy-details__list">
+                    {row('Landline', organisation.pharmacyPhone)}
+                    {row('Email', organisation.pharmacyEmail)}
+                    {row('Superintendent contact', organisation.mainContactName)}
+                    {row('Contact number', organisation.mainContactPhone)}
+                    {row('Contact email', organisation.mainContactEmail)}
+                  </dl>
+                  <div className="pharmacy-details__switch-row">
+                    <span>
+                      <strong id="settings-email-visibility">Show email to patients</strong>
+                      <small>{!organisation.pharmacyEmail?.trim() ? 'Add a pharmacy email first.' : organisation.showEmailToPatients ? 'Patients see your email and phone.' : 'Patients see your phone only.'}</small>
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      className="pharmacy-details__switch"
+                      aria-checked={Boolean(organisation.showEmailToPatients)}
+                      aria-labelledby="settings-email-visibility"
+                      disabled={savingEmailVisibility || (!organisation.pharmacyEmail?.trim() && !organisation.showEmailToPatients)}
+                      onClick={() => void setEmailVisibility(!organisation.showEmailToPatients)}
+                    >
+                      <span aria-hidden="true" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+        </div>
+      </section>
+      <section id="settings-section-payments" className="pharmacy-settings-page__section" aria-labelledby="settings-heading-payments">
+        <header className="pharmacy-settings-page__section-head">
+          <h3 id="settings-heading-payments">Payments</h3>
+          <p>How orders are paid for and priced.</p>
+        </header>
+        <div className="pharmacy-details">
+            {/* Payment: how new orders take payment, with the Worldpay merchant beneath. */}
+            <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-payment">
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true"><CreditCard size={16} /></span>
+                <h4 id="settings-card-payment">Payment route</h4>
+                <span className={`pharmacy-details__tag${organisation.defaultPaymentRoute === 'worldpay' ? ' is-on' : ''}`}>
+                  {organisation.defaultPaymentRoute === 'worldpay' ? 'Worldpay' : 'Pharmacy payment'}
+                </span>
+              </header>
+              <p className="pharmacy-details__note">How new orders take payment. Each order keeps the route chosen when it was created.</p>
+              <div className="pharmacy-settings-route" role="radiogroup" aria-label="Default payment route">
+                <button type="button" role="radio" aria-checked={organisation.defaultPaymentRoute === 'manual'} disabled={savingRoute} onClick={() => void setPaymentRoute('manual')}>
+                  <span><strong>Pharmacy payment</strong><small>EPOS, cash, bank transfer or another pharmacy-controlled route.</small></span>
+                  {organisation.defaultPaymentRoute === 'manual' ? <CheckCircle2 size={16} /> : <span />}
+                </button>
+                <button type="button" role="radio" aria-checked={organisation.defaultPaymentRoute === 'worldpay'} disabled={savingRoute || organisation.worldpay.status !== 'connected'} onClick={() => void setPaymentRoute('worldpay')}>
+                  <span><strong>Worldpay hosted checkout</strong><small>{organisation.worldpay.status === 'connected' ? 'Verified merchant connection; settlement goes directly to this pharmacy.' : 'Connect and verify the pharmacy merchant account below first.'}</small></span>
+                  {organisation.defaultPaymentRoute === 'worldpay' ? <CheckCircle2 size={16} /> : <span />}
+                </button>
+              </div>
+              {organisation.worldpay.status === 'connected' ? (
+                <dl className="pharmacy-details__list pharmacy-settings-page__worldpay">
+                  {row('Environment', organisation.worldpay.environment === 'live' ? 'Live' : 'Try')}
+                  {row('Last verified', formatLastVerified(organisation.worldpay.lastSyncedAt))}
+                </dl>
+              ) : (
+                <p className="pharmacy-details__note"><ShieldCheck size={14} aria-hidden="true" /> Worldpay is optional. Connect the merchant below when you are ready.</p>
+              )}
+              {organisation.worldpay.status === 'connected' ? (
+                <div className="pharmacy-details__actions is-start">
+                  <button type="button" className="btn btn-sm" disabled={!worldpayRefreshControl || worldpayRefreshControl.busy} onClick={() => worldpayRefreshControl?.refresh()}>
+                    <RefreshCw size={13} className={worldpayRefreshControl?.busy ? 'spin' : ''} /> {worldpayRefreshControl?.busy ? 'Refreshing…' : 'Refresh status'}
+                  </button>
+                </div>
+              ) : null}
+              <WorldpayConnectionPanel
+                organisationId={organisation.id}
+                onNotify={(message, tone) => dispatch({ type: 'ADD_TOAST', message, toastType: tone, dedupeKey: 'worldpay-refresh' })}
+                onRefreshControl={setWorldpayRefreshControl}
+                onConnected={connection => {
+                  dispatch({
+                    type: 'UPDATE_WORLDPAY',
+                    organisationId: organisation.id,
+                    updates: {
+                      status: connection.connected ? 'connected' : connection.configured ? 'onboarding' : 'not-connected',
+                      environment: connection.environment === 'live' ? 'live' : 'sandbox',
+                      merchantId: connection.maskedIdentifier ?? null,
+                      lastSyncedAt: connection.checkedAt ?? connection.updatedAt ?? new Date().toISOString(),
+                    },
+                  });
+                  if (!connection.connected && organisation.defaultPaymentRoute === 'worldpay') {
+                    dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { defaultPaymentRoute: 'manual' } });
+                    if (!isLocalPortalPreview && isApiConfigured) {
+                      void updatePaymentSettings(organisation.id, 'manual').catch(() => {
+                        dispatch({ type: 'ADD_TOAST', message: 'Worldpay was disconnected. Default payment route still needs switching to pharmacy payment.', toastType: 'warning' });
+                      });
+                    }
+                  }
+                }}
+              />
+            </section>
+            {/* Curaleaf: who supplies you, and the catalogue that comes from it. */}
+            <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-curaleaf">
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true"><Tags size={16} /></span>
+                <h4 id="settings-card-curaleaf">Curaleaf</h4>
+                <button type="button" className="btn btn-sm" disabled={curaleafRefreshing} onClick={() => void refreshCuraleaf()}>
+                  <RefreshCw size={13} className={curaleafRefreshing ? 'spin' : undefined} /> {curaleafRefreshing ? 'Refreshing…' : 'Refresh'}
+                </button>
+              </header>
+              <dl className="pharmacy-details__list">
+                {row('Customer ID', curaleafStatus?.customerId ?? '', curaleafStatus?.customerId ? undefined : 'Assigned by HHH once Curaleaf approve the account')}
+                {row('Estate', curaleafStatus ? curaleafCatalogueEstateLabel(curaleafStatus.environment) : 'Not yet checked')}
+              </dl>
+              <p className="pharmacy-details__note">Curaleaf sets patient price and wholesale cost. You can add a dispensing charge, and Pharmacy Delivery if it is on, while building an order.</p>
+              <button type="button" className="pharmacy-details__link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
+            </section>
+        </div>
+      </section>
+      <section id="settings-section-assets" className="pharmacy-settings-page__section" aria-labelledby="settings-heading-assets">
+        <header className="pharmacy-settings-page__section-head">
+          <h3 id="settings-heading-assets">Assets</h3>
+          <p>Patient intake: your eligibility link, QR code and content packs.</p>
+        </header>
+        <div className="pharmacy-details">
+            {linkError ? (
+              <div className="banner banner-red is-wide pharmacy-settings-page__banner" role="alert">
+                <AlertTriangle size={16} /><span>{linkError}</span>
+                <button className="btn btn-sm" type="button" onClick={() => setLinkRefresh(value => value + 1)}><RefreshCw size={14} /> Retry</button>
+              </div>
+            ) : null}
+            <section className="pharmacy-details__card" aria-labelledby="settings-card-link">
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true"><Link2 size={16} /></span>
+                <h4 id="settings-card-link">Eligibility link</h4>
+              </header>
+              <p className="pharmacy-details__note">Every patient who uses this link or its QR code is attributed to {organisation.name}. Put it on your website, in emails or on counter materials.</p>
+              <code className="pharmacy-details__url" aria-live="polite">{linkLoading ? 'Loading your pharmacy link…' : formUrl || 'Link unavailable'}</code>
+              <div className="pharmacy-details__actions is-start">
+                <button className="btn btn-primary btn-sm" type="button" disabled={!formUrl} onClick={() => void copyLink()}><Copy size={13} /> Copy link</button>
+                {formUrl ? <a className="btn btn-sm" href={formUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Preview form</a> : null}
+              </div>
+            </section>
+            <section className="pharmacy-details__card" aria-labelledby="settings-card-qr">
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true"><QrCode size={16} /></span>
+                <h4 id="settings-card-qr">QR code</h4>
+                <button className="btn btn-sm" type="button" disabled={!qr} onClick={() => { downloadDataUrl(qr, `${organisation.slug}-eligibility-qr.png`); notify('High-resolution QR code saved.'); }}>
+                  <Download size={13} /> Save
+                </button>
+              </header>
+              <div className="pharmacy-settings-page__qr">
+                {qr
+                  ? <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
+                  : <div className="pharmacy-settings-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>}
+                <p className="pharmacy-details__note">The same link as a high-resolution image, for leaflets, posters and counter cards.</p>
+              </div>
+            </section>
+            <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-packs">
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true"><FileArchive size={16} /></span>
+                <h4 id="settings-card-packs">Content packs</h4>
+              </header>
+              <ul className="pharmacy-settings-page__packs">
+                <li className="pharmacy-details__switch-row">
+                  <span>
+                    <strong>Developer pack</strong>
+                    <small>Suggested page copy, the link, QR usage notes and the high-resolution image, zipped for your web developer.</small>
+                  </span>
+                  <button className="btn btn-sm" type="button" disabled={!formUrl} onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}>
+                    <Download size={13} /> Download .zip
+                  </button>
+                </li>
+                <li className="pharmacy-details__switch-row is-muted">
+                  <span>
+                    <strong>More approved materials</strong>
+                    <small>Posters and leaflets will appear here when they are ready.</small>
+                  </span>
+                  <span className="pharmacy-details__tag">Coming soon</span>
+                </li>
+              </ul>
+            </section>
+        </div>
+      </section>
+      <section id="settings-section-support" className="pharmacy-settings-page__section" aria-labelledby="settings-heading-support">
+        <header className="pharmacy-settings-page__section-head">
+          <h3 id="settings-heading-support">Support</h3>
+          <p>The workspace tour, and who to phone or email. Holistic Health Hub is email only.</p>
+        </header>
+        <div className="pharmacy-details">
+          <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-tour">
             <header>
-              <h3><CreditCard size={16} aria-hidden="true" /> Payment route</h3>
-              <span className={`pill ${organisation.defaultPaymentRoute === 'worldpay' ? 'pill-green' : 'pill-neutral'}`}>
-                {organisation.defaultPaymentRoute === 'worldpay' ? 'Worldpay' : 'Pharmacy payment'}
-              </span>
+              <span className="pharmacy-details__icon" aria-hidden="true"><Compass size={16} /></span>
+              <h4 id="settings-card-tour">Workspace tour</h4>
             </header>
-            <p className="pharmacy-settings-section__lead">How new orders take payment. Each order permanently records the route selected when it was created.</p>
-
-            <div className="pharmacy-settings-route" role="radiogroup" aria-label="Default payment route">
-              <button type="button" role="radio" aria-checked={organisation.defaultPaymentRoute === 'manual'} disabled={savingRoute} onClick={() => void setPaymentRoute('manual')}>
-                <span><strong>Pharmacy payment</strong><small>EPOS, cash, bank transfer or another pharmacy-controlled route.</small></span>
-                {organisation.defaultPaymentRoute === 'manual' ? <CheckCircle2 size={16} /> : <span />}
-              </button>
-              <button type="button" role="radio" aria-checked={organisation.defaultPaymentRoute === 'worldpay'} disabled={savingRoute || organisation.worldpay.status !== 'connected'} onClick={() => void setPaymentRoute('worldpay')}>
-                <span><strong>Worldpay hosted checkout</strong><small>{organisation.worldpay.status === 'connected' ? 'Verified merchant connection; settlement goes directly to this pharmacy.' : 'Connect and verify the pharmacy merchant account below first.'}</small></span>
-                {organisation.defaultPaymentRoute === 'worldpay' ? <CheckCircle2 size={16} /> : <span />}
+            <div className="pharmacy-details__switch-row">
+              <span>
+                <strong>Replay the tour</strong>
+                <small>Walk through Overview, Patients, Orders, Create order, Catalogue, Finance and Settings again.</small>
+              </span>
+              <button type="button" className="btn btn-sm pharmacy-settings-tour-replay" onClick={() => requestWorkspaceTourReplay()}>
+                <RefreshCw size={13} /> Replay
               </button>
             </div>
-
-            {/* The merchant entity and the chosen route are each stated exactly once —
-                the entity by the connection panel below, the route by the pill and the
-                radio group above — so this strip carries only what neither of them says. */}
-            {organisation.worldpay.status === 'connected' && (
-              <div className="pharmacy-settings-connection">
-                <div><span>Environment</span><strong>{organisation.worldpay.environment === 'live' ? 'Live' : 'Try'}</strong></div>
-                <div><span>Last verified</span><strong>{formatLastVerified(organisation.worldpay.lastSyncedAt)}</strong></div>
-                <button type="button" className="btn btn-sm" disabled={!worldpayRefreshControl || worldpayRefreshControl.busy} onClick={() => worldpayRefreshControl?.refresh()}>
-                  <RefreshCw size={13} className={worldpayRefreshControl?.busy ? 'spin' : ''} /> {worldpayRefreshControl?.busy ? 'Refreshing…' : 'Refresh status'}
-                </button>
-              </div>
-            )}
-
-            {/* Only worth saying while it is still a decision to make. */}
-            {organisation.worldpay.status !== 'connected' ? (
-              <p className="pharmacy-settings-note"><ShieldCheck size={15} aria-hidden="true" /><span>Worldpay is optional. Connect the merchant here when you are ready.</span></p>
-            ) : null}
-            <WorldpayConnectionPanel
-              organisationId={organisation.id}
-              onNotify={(message, tone) => dispatch({ type: 'ADD_TOAST', message, toastType: tone, dedupeKey: 'worldpay-refresh' })}
-              onRefreshControl={setWorldpayRefreshControl}
-              onConnected={connection => {
-                dispatch({
-                  type: 'UPDATE_WORLDPAY',
-                  organisationId: organisation.id,
-                  updates: {
-                    status: connection.connected ? 'connected' : connection.configured ? 'onboarding' : 'not-connected',
-                    environment: connection.environment === 'live' ? 'live' : 'sandbox',
-                    merchantId: connection.maskedIdentifier ?? null,
-                    lastSyncedAt: connection.checkedAt ?? connection.updatedAt ?? new Date().toISOString(),
-                  },
-                });
-                if (!connection.connected && organisation.defaultPaymentRoute === 'worldpay') {
-                  dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { defaultPaymentRoute: 'manual' } });
-                  if (!isLocalPortalPreview && isApiConfigured) {
-                    void updatePaymentSettings(organisation.id, 'manual').catch(() => {
-                      dispatch({ type: 'ADD_TOAST', message: 'Worldpay was disconnected. Default payment route still needs switching to pharmacy payment.', toastType: 'warning' });
-                    });
-                  }
-                }
-              }}
-            />
           </section>
+          {KEY_CONTACTS.map((contact, index) => (
+            <section
+              key={contact.key}
+              className={`pharmacy-details__card${KEY_CONTACTS.length % 2 === 1 && index === KEY_CONTACTS.length - 1 ? ' is-wide' : ''}`}
+              aria-labelledby={`settings-contact-${contact.key}`}
+            >
+              <header>
+                <span className="pharmacy-details__icon" aria-hidden="true">{contact.phone ? <Phone size={16} /> : <Mail size={16} />}</span>
+                <h4 id={`settings-contact-${contact.key}`}>{contact.org}</h4>
+                <span className={`pharmacy-details__tag${contact.pill === 'ok' ? ' is-on' : ''}`}>{contact.role}</span>
+              </header>
+              {contact.description ? <p className="pharmacy-details__note">{contact.description}</p> : null}
+              <dl className="pharmacy-details__list">
+                {contact.phone
+                  ? row('Phone', <a className="pharmacy-settings-page__contact-link" href={telHref(contact.phone)}>{contact.phone}</a>)
+                  : row('Phone', <span className="pharmacy-details__empty">Email only</span>)}
+                {contact.emails.map(email => (
+                  <div key={email.address} className="pharmacy-details__row">
+                    <dt>{email.label ?? 'Email'}</dt>
+                    <dd><a className="pharmacy-settings-page__contact-link" href={`mailto:${email.address}`}>{email.address}</a></dd>
+                  </div>
+                ))}
+              </dl>
+              {contact.portalUrl ? (
+                <a className="pharmacy-details__link" href={contact.portalUrl} target="_blank" rel="noreferrer">Open {contact.org} portal <ExternalLink size={12} aria-hidden="true" /></a>
+              ) : null}
+            </section>
+          ))}
         </div>
-      ) : (
-        <div className="pharmacy-settings__flow" id="settings-panel-assets" role="tabpanel" aria-labelledby="settings-tab-assets">
-          {linkError ? <div className="banner banner-red" role="alert"><AlertTriangle size={16} /><span>{linkError}</span><button className="btn btn-sm" type="button" onClick={() => setLinkRefresh(value => value + 1)}><RefreshCw size={14} /> Retry</button></div> : null}
-
-          <p className="pharmacy-settings-assets__intro">
-            Everything you need to point patients at your eligibility form — a link to share, a QR
-            code to print, and a pack for whoever looks after your website. Use whichever you need,
-            in any order.
-          </p>
-
-          <div className="pharmacy-settings-assets__tools">
-            <section className="pharmacy-settings-section pharmacy-settings-tool">
-              <header><h3><Link2 size={16} aria-hidden="true" /> Your eligibility link</h3></header>
-              <p className="pharmacy-settings-section__lead">The form stays hosted by HHH. Put this URL on your website, in emails, or on counter materials.</p>
-              <p className="pharmacy-settings-url" aria-live="polite">{linkLoading ? 'Loading the protected pharmacy link…' : formUrl || 'Link unavailable'}</p>
-              <div className="pharmacy-settings-actions">
-                <button className="btn btn-primary" type="button" disabled={!formUrl} onClick={copyLink}><Copy size={14} /> Copy link</button>
-                {formUrl ? <a className="btn btn-secondary" href={formUrl} target="_blank" rel="noreferrer"><ExternalLink size={14} /> Preview form</a> : <button className="btn btn-secondary" type="button" disabled><ExternalLink size={14} /> Preview form</button>}
-              </div>
-            </section>
-
-            <section className="pharmacy-settings-section pharmacy-settings-tool">
-              <header><h3><QrCode size={16} aria-hidden="true" /> Print-ready QR code</h3></header>
-              <p className="pharmacy-settings-section__lead">The same link as a high-resolution image, for leaflets, posters and counter cards.</p>
-              {qr ? (
-                <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
-              ) : (
-                <div className="pharmacy-settings-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>
-              )}
-              <div className="pharmacy-settings-actions">
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  disabled={!qr}
-                  onClick={() => { downloadDataUrl(qr, `${organisation.slug}-eligibility-qr.png`); notify('High-resolution QR code saved.'); }}
-                >
-                  <Download size={14} /> Save QR code
-                </button>
-              </div>
-            </section>
-          </div>
-
-          <div className="pharmacy-settings-packs" aria-label="Content packs">
-            <section className="pharmacy-settings-section pharmacy-settings-tool pharmacy-settings-tool--secondary">
-              <header><h3><FileArchive size={16} aria-hidden="true" /> Developer pack</h3></header>
-              <p className="pharmacy-settings-section__lead">Suggested page copy, the hosted-form link, QR usage notes and the high-resolution image, zipped up to hand over.</p>
-              <div className="pharmacy-settings-actions">
-                <button className="btn btn-secondary" type="button" disabled={!formUrl} onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}>
-                  <FileArchive size={15} /> Download content pack (.zip)
-                </button>
-              </div>
-            </section>
-            {[2, 3].map(number => (
-              <section key={number} className="pharmacy-settings-section pharmacy-settings-tool pharmacy-settings-tool--secondary is-coming-soon">
-                <header><h3><FileArchive size={16} aria-hidden="true" /> Content pack {number}</h3><span className="pill pill-neutral">Coming soon</span></header>
-                <p className="pharmacy-settings-section__lead">Additional approved pharmacy materials will appear here when available.</p>
-                <div className="pharmacy-settings-actions"><button className="btn btn-secondary" type="button" disabled>Coming soon</button></div>
-              </section>
-            ))}
-          </div>
-
-          <p className="pharmacy-settings-attribution">
-            <Link2 size={14} aria-hidden="true" />
-            <span>Submissions from this link are attributed to {organisation.name}. The token is specific to your pharmacy — do not share another pharmacy&rsquo;s URL.</span>
-          </p>
-        </div>
-      )}
+      </section>
     </div>
   );
 }
