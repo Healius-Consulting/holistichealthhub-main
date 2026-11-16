@@ -1334,14 +1334,18 @@ function ArticlePage({ slug }: { slug: string }) {
 /**
  * Parts 2 and 3 of the approved HHH developer pack, published verbatim. The
  * wording is legally operative — the pharmacy is the controller and HHH is its
- * processor — so edit these only from an updated approved pack, and bump both the
- * version line here and PRIVACY_NOTICE_VERSION in the intake router together.
+ * processor — so edit these only from an updated approved pack. Terms and the
+ * privacy notice are versioned separately: bump the version line on the page
+ * you change, and the matching constant in
+ * services/api-sql/src/domain/legal/notice-version.ts.
  */
-const LEGAL_LAST_UPDATED = '7 September 2026';
-const LEGAL_VERSION = '1.0';
+const PRIVACY_LAST_UPDATED = '7 September 2026';
+const PRIVACY_VERSION = '1.0';
+const TERMS_LAST_UPDATED = '15 November 2026';
+const TERMS_PAGE_VERSION = '1.1';
 
-function LegalMeta() {
-  return <p className="hhh-legal-meta">Last updated: {LEGAL_LAST_UPDATED} · Version: {LEGAL_VERSION}</p>;
+function LegalMeta({ updated, version }: { updated: string; version: string }) {
+  return <p className="hhh-legal-meta">Last updated: {updated} · Version: {version}</p>;
 }
 
 function TermsPage() {
@@ -1352,7 +1356,7 @@ function TermsPage() {
           <div className="hhh-rise-copy hhh-page-head__intro">
             <p className="hhh-kicker">Terms of Use</p>
             <h1>Terms of Use — specialist referral service</h1>
-            <LegalMeta />
+            <LegalMeta updated={TERMS_LAST_UPDATED} version={TERMS_PAGE_VERSION} />
           </div>
 
           <h2>1. Who provides this service</h2>
@@ -1383,9 +1387,13 @@ function TermsPage() {
           <p>5.4 <strong>Referral.</strong> If we decide to refer you, we send your application and record to the clinic and tell you we have done so. From then on the clinic is your contact for appointments and treatment.</p>
           <p>5.5 <strong>Prescriptions, collection and delivery.</strong> If you are prescribed, the clinic sends the prescription to us. We tell you the cost, take payment, order your medicine, and tell you when it is ready. You collect it from the pharmacy (bring photo ID) or, where we offer delivery, we send it by a tracked service that requires proof of identity and an adult signature on receipt. We tell you which applies, and any delivery charge, before you pay.</p>
 
-          <h2>6. Costs</h2>
+          <h2>6. Costs, payment and refunds</h2>
           <p>6.1 The eligibility check and referral are free.</p>
           <p>6.2 Consultations are private and are charged by the clinic. Medicine is private and is charged separately by us when you order it. Current clinic fees are shown at <PublicLink href="/costs">holistichealthhub.live/costs</PublicLink>. You will be told the applicable fees before you book, and the price of any medicine and any delivery charge before you pay.</p>
+          <p>6.3 <strong>Paying for medicine.</strong> We take payment before we order your medicine. Depending on how your pharmacy takes payment, you pay either through a secure payment link we email to you or in the pharmacy. Card details for a payment link are entered on our payment provider’s secure page, not on this website.</p>
+          <p>6.4 <strong>Refunds.</strong> Refunds for medicine are made by your pharmacy to the card used to pay or, if you paid in the pharmacy, in the same way you paid. If we cannot supply an item you have paid for, we refund you for it. Once you have paid, we will not ask you for more money for that order.</p>
+          <p>6.5 <strong>Medicine not collected.</strong> If you do not collect your medicine before your prescription expires, we cannot supply it against that prescription. We keep it and supply it against a new prescription for the same medicine without a further payment. If we use that stock for another patient instead, we refund you for it. Otherwise, medicine that was ready but not collected is not refunded.</p>
+          <p>6.6 <strong>Returns.</strong> For safety reasons, medicine cannot be returned once it has been supplied to you. This does not affect your legal rights, for example if a medicine is faulty.</p>
 
           <h2>7. Your responsibilities</h2>
           <p>7.1 Give accurate and complete information, and tell us if anything changes before your referral is made.</p>
@@ -1434,7 +1442,7 @@ function PrivacyPage() {
           <div className="hhh-rise-copy hhh-page-head__intro">
             <p className="hhh-kicker">Privacy Notice</p>
             <h1>Privacy Notice — specialist referral service</h1>
-            <LegalMeta />
+            <LegalMeta updated={PRIVACY_LAST_UPDATED} version={PRIVACY_VERSION} />
           </div>
 
           <h2>1. Who is responsible for your information</h2>

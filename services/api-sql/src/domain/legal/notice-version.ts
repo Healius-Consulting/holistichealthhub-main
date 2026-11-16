@@ -5,4 +5,4 @@
  * stamp does not match the text the patient agreed to is not an audit trail.
  */
 export const PRIVACY_NOTICE_VERSION = '2026-09-07-v1.0';
-export const TERMS_VERSION = '2026-09-07-v1.0';
+export const TERMS_VERSION = '2026-11-15-v1.1';
