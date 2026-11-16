@@ -6,6 +6,8 @@ export interface StaffUserRecord {
   role: 'HHH_ADMIN' | 'PHARMACY_STAFF';
   status: 'INVITED' | 'ACTIVE' | 'DISABLED' | 'REMOVED';
   disabled: boolean;
+  /** The pharmacy's own status, read with the staff record so admission can refuse a suspended pharmacy. */
+  organisation?: { status: string } | null;
   preferences?: unknown;
   invitedAt?: string | null;
   activatedAt?: string | null;

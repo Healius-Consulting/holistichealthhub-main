@@ -42,7 +42,7 @@ describe('pharmacy intake access', () => {
       classification: 'TRAINING',
       status: 'ONBOARDING',
     }), true);
-    assert.equal(pharmacyOperationalAccess({ ...organisation, status: 'PAUSED' }), true);
+    assert.equal(pharmacyOperationalAccess({ ...organisation, status: 'PAUSED' }), false);
     assert.equal(canActivateReferredPatient(organisation), true);
     assert.equal(canActivateReferredPatient({ ...organisation, status: 'PAUSED' }), false);
     assert.equal(canActivateReferredPatient({ ...organisation, status: 'ONBOARDING' }), true);
@@ -90,6 +90,6 @@ describe('pharmacy intake access', () => {
     });
     assert.deepEqual(platformTest, { patients: true, orders: true, pendingEnquiries: true });
     const paused = pharmacyPortalRecordAccess({ ...organisation, status: 'PAUSED' });
-    assert.deepEqual(paused, { patients: true, orders: true, pendingEnquiries: false });
+    assert.deepEqual(paused, { patients: false, orders: false, pendingEnquiries: false });
   });
 });

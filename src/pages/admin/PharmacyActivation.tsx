@@ -3,6 +3,8 @@ import { Check, FileText, KeyRound } from 'lucide-react';
 import {
   declineNewPharmacy,
   describeApiError,
+  liftPharmacySuspension,
+  suspendPharmacy,
   openPharmacyOnboardingFile,
   type PharmacyOnboardingRequestView,
 } from '../../shared/api';
@@ -178,6 +180,75 @@ export function DeclinePharmacyPanel({
       <div className="admin-request-decline__actions">
         <button type="button" className="btn btn-sm" disabled={busy} onClick={onCancel}>Cancel</button>
         <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => void submit()}>{busy ? 'Rejecting…' : 'Reject pharmacy'}</button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Suspend stops a live pharmacy using the platform until HHH lifts it: staff are
+ * signed out and refused, the eligibility link stops taking patients and the
+ * pharmacy leaves the finder. Records are kept and payments in flight still settle.
+ */
+export function SuspendPharmacyPanel({
+  organisationId,
+  pharmacyName,
+  suspended,
+  onCancel,
+  onDone,
+}: {
+  organisationId: string;
+  pharmacyName: string;
+  suspended: boolean;
+  onCancel: () => void;
+  onDone: (status: 'paused' | 'live' | 'onboarding') => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { reasonRef.current?.focus(); }, []);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (suspended) {
+        const result = isLocalPortalPreview ? { status: 'live' as const } : await liftPharmacySuspension(organisationId);
+        onDone(result.status);
+      } else {
+        if (!isLocalPortalPreview) await suspendPharmacy(organisationId, reason.trim() || undefined);
+        onDone('paused');
+      }
+    } catch (cause) {
+      setError(describeApiError(cause, suspended ? 'The suspension could not be lifted.' : 'The pharmacy could not be suspended.'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="admin-request-decline" aria-labelledby="admin-suspend-title">
+      <h3 id="admin-suspend-title">{suspended ? `Lift the suspension on ${pharmacyName}` : `Suspend ${pharmacyName}`}</h3>
+      {suspended ? (
+        <p>
+          Staff can sign in again and the eligibility link takes patients again. The pharmacy goes back to live if its live
+          Curaleaf credentials are still saved, otherwise it waits for them.
+        </p>
+      ) : (
+        <>
+          <p>
+            Its staff are signed out and cannot sign in, its eligibility link stops taking patients and it leaves the pharmacy
+            finder. Its records are kept and payments already in progress still complete. You can lift this at any time.
+          </p>
+          <textarea ref={reasonRef} className="input" rows={2} value={reason} onChange={event => setReason(event.target.value)} aria-label="Reason for suspending, kept in the audit log" placeholder="Reason, kept in the audit log (optional)" />
+        </>
+      )}
+      {error ? <p className="admin-activation__error" role="alert">{error}</p> : null}
+      <div className="admin-request-decline__actions">
+        <button type="button" className="btn btn-sm" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button type="button" className={`btn btn-sm ${suspended ? 'btn-primary' : 'btn-danger'}`} disabled={busy} onClick={() => void submit()}>
+          {busy ? (suspended ? 'Lifting…' : 'Suspending…') : (suspended ? 'Lift suspension' : 'Suspend pharmacy')}
+        </button>
       </div>
     </section>
   );

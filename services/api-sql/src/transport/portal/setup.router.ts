@@ -12,6 +12,7 @@ import {
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { canAcceptPublicIntake } from '../../domain/organisation/access.js';
+import { liftSuspensionStatus, suspendStatus } from '../../application/organisation/suspension.js';
 import {
   buildGoLiveReadinessView,
   buildSetupStatusView,
@@ -536,6 +537,68 @@ export function createPortalSetupRouter(): Router {
         surface: scope.surface,
       });
       res.status(200).json(await goLiveSnapshot(updated));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Suspend stops a live pharmacy's use of the platform; lift brings it back. Both are audited.
+  router.post('/portal/admin/organisations/:id/suspend', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const { reason } = z.object({ reason: z.string().trim().max(500).optional() }).parse(req.body ?? {});
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const next_ = suspendStatus(organisation);
+      if (next_) {
+        await organisationRepo.updateOrganisationStatus(organisation.id, next_);
+        await identityRepo.appendAudit({
+          organisationId: organisation.id,
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          event: 'organisation.suspended',
+          recordType: 'Organisation',
+          recordId: organisation.id,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: scope.surface,
+          details: reason ? { reason } : undefined,
+        });
+      }
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ status: 'paused' });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/admin/organisations/:id/lift-suspension', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const curaleaf = await integrationRepo.findConnection(organisation.id, 'CURALEAF').catch(() => null);
+      const environment = curaleaf && curaleaf.status !== 'DISCONNECTED' ? curaleaf.environment ?? null : null;
+      const next_ = liftSuspensionStatus(organisation, environment);
+      if (next_) {
+        await organisationRepo.updateOrganisationStatus(organisation.id, next_);
+        await identityRepo.appendAudit({
+          organisationId: organisation.id,
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          event: 'organisation.suspension_lifted',
+          recordType: 'Organisation',
+          recordId: organisation.id,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: scope.surface,
+          details: { status: next_ },
+        });
+      }
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ status: (next_ ?? organisation.status).toLowerCase() });
     } catch (error) {
       next(error);
     }

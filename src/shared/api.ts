@@ -487,6 +487,22 @@ export function activatePharmacyOnboardingRequest(id: string) {
   );
 }
 
+/** Stops a live pharmacy's use of the platform: staff locked out, eligibility link off. */
+export function suspendPharmacy(organisationId: string, reason?: string) {
+  return apiRequest<{ status: 'paused' }>(
+    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/suspend`,
+    { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) },
+  );
+}
+
+/** Lifts a suspension: back to live on live Curaleaf credentials, otherwise awaiting Curaleaf. */
+export function liftPharmacySuspension(organisationId: string) {
+  return apiRequest<{ status: 'live' | 'onboarding' | 'paused' }>(
+    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/lift-suspension`,
+    { method: 'POST', body: '{}' },
+  );
+}
+
 /** Archives a new pharmacy (for example when Curaleaf rejects it) and emails the reason. */
 export function declineNewPharmacy(organisationId: string, reason: string) {
   return apiRequest<{ organisationId: string; requestId: string | null; declinedAt: string }>(

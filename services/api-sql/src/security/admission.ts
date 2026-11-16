@@ -11,6 +11,7 @@ export interface AdmissionValidationInput {
 }
 
 export type AdmissionFailureCode =
+  | 'PHARMACY_SUSPENDED'
   | 'SESSION_NOT_FOUND'
   | 'STAFF_NOT_FOUND'
   | 'ACCOUNT_DISABLED'
@@ -93,6 +94,11 @@ export function validatePortalAdmission(input: AdmissionValidationInput): Admiss
     }
   }
 
+
+  // A suspended pharmacy's staff are locked out until HHH lifts the suspension.
+  if (staffRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'PAUSED') {
+    return { status: 403, code: 'PHARMACY_SUSPENDED', event: 'auth.pharmacy_suspended' };
+  }
 
   // Check revocation and expiry
   if (session.revokedAt) {

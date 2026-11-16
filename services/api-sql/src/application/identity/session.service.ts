@@ -1,3 +1,4 @@
+import { PHARMACY_SUSPENDED_MESSAGE } from '../../security/require-staff.js';
 import { auth } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { isPharmsmartSsoSignIn } from '../../domain/identity/pharmsmart-sso.js';
@@ -112,6 +113,9 @@ export class SessionService {
     const organisationId = staff.organisationId;
     if (rawRole === 'PHARMACY_STAFF' && !organisationId) {
       throw new HttpError(403, 'The account is not assigned to a pharmacy.', 'TENANT_REQUIRED');
+    }
+    if (rawRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'PAUSED') {
+      throw new HttpError(403, PHARMACY_SUSPENDED_MESSAGE, 'PHARMACY_SUSPENDED');
     }
 
     // 6. Create Firebase session cookie

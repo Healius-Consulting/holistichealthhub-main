@@ -15,3 +15,9 @@ test('expired workspace sessions still force a re-login', () => {
   assert.equal(shouldDispatchSessionEnded(401, 'SESSION_IDLE_EXPIRED', '/admin/orders'), true);
   assert.equal(shouldDispatchSessionEnded(403, 'UNAUTHENTICATED', '/pharmacy'), false);
 });
+
+test('a suspended pharmacy ends the session with its own code, but not on the login page', () => {
+  assert.equal(shouldDispatchSessionEnded(403, 'PHARMACY_SUSPENDED', '/pharmacy/orders'), true);
+  assert.equal(shouldDispatchSessionEnded(403, 'PHARMACY_SUSPENDED', '/login'), false);
+  assert.equal(shouldDispatchSessionEnded(403, 'SURFACE_DENIED', '/pharmacy/orders'), false);
+});

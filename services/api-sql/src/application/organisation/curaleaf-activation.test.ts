@@ -29,8 +29,9 @@ test('test credentials never make a pharmacy live, and take a live one back to o
   assert.equal(curaleafActivationChange(pharmacy({ status: 'LIVE' }), 'PRODUCTION'), null);
 });
 
-test('an old paused pharmacy goes live on live credentials; rejected and training ones are left alone', () => {
-  assert.equal(curaleafActivationChange(pharmacy({ status: 'PAUSED' }), 'PRODUCTION'), 'went_live');
+test('a suspended pharmacy stays suspended on any credentials; rejected and training ones are left alone', () => {
+  assert.equal(curaleafActivationChange(pharmacy({ status: 'PAUSED' }), 'PRODUCTION'), null);
+  assert.equal(curaleafActivationChange(pharmacy({ status: 'PAUSED' }), 'TEST'), null);
   assert.equal(curaleafActivationChange(pharmacy({ archivedAt: '2026-11-16T00:00:00Z' }), 'PRODUCTION'), null);
   assert.equal(curaleafActivationChange(pharmacy({ gphcNumber: 'TRAINING-PRIMARY' }), 'PRODUCTION'), null);
 });

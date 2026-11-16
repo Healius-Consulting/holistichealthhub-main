@@ -22,11 +22,15 @@ export function canReceiveReferral(organisation: OrganisationRecord | null | und
   return canAcceptPublicIntake(organisation);
 }
 
-/** Pharmacy CRM, orders, and writes. Platform Test pharmacies are live under Test without a go-live flip. Paused keeps existing records. */
+/**
+ * Pharmacy CRM, orders, and writes. Platform Test pharmacies are live under Test without a go-live flip.
+ * A suspended (PAUSED) pharmacy has none: its staff are refused at admission, and this keeps the write
+ * routes shut too. Its records are kept for when the suspension is lifted.
+ */
 export function pharmacyOperationalAccess(organisation: OrganisationRecord | null | undefined): boolean {
   if (!organisation || organisation.archivedAt) return false;
   if (isPlatformTestOrganisation(organisation)) return true;
-  return organisation.status === 'LIVE' || organisation.status === 'PAUSED';
+  return organisation.status === 'LIVE';
 }
 
 /** Pending enquiries and referred patient records — not orders. */

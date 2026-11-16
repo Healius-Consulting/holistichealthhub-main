@@ -16,9 +16,9 @@ export function curaleafActivationChange(
   organisation: Pick<OrganisationRecord, 'id' | 'status' | 'archivedAt' | 'gphcNumber' | 'classification'>,
   environment: Environment | null,
 ): CuraleafActivationChange {
-  // Rejected pharmacies are archived. There is no suspended state any more, so an
-  // old PAUSED pharmacy is treated like one awaiting Curaleaf.
-  if (organisation.archivedAt) return null;
+  // Rejected pharmacies are archived. A suspended (PAUSED) pharmacy stays suspended
+  // whatever credentials are saved: only HHH lifting the suspension brings it back.
+  if (organisation.archivedAt || organisation.status === 'PAUSED') return null;
   if (isPlatformTestOrganisation(organisation) || /^TRAINING-/i.test(organisation.gphcNumber ?? '')) return null;
   if (environment === 'PRODUCTION') return organisation.status === 'LIVE' ? null : 'went_live';
   return organisation.status === 'LIVE' ? 'left_live' : null;

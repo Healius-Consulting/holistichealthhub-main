@@ -243,7 +243,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const sessionEnded = (event: Event) => {
       const code = (event as CustomEvent<{ code?: string }>).detail?.code;
       if (code === 'APP_CHECK_REQUIRED') return;
-      const notice = code === 'SESSION_IDLE_EXPIRED' ? 'Your session was locked after 15 minutes of inactivity.' : 'Your secure session ended. Sign in again to continue.';
+      const notice = code === 'SESSION_IDLE_EXPIRED'
+        ? 'Your session was locked after 15 minutes of inactivity.'
+        : code === 'PHARMACY_SUSPENDED'
+          ? 'This pharmacy\'s account is suspended. Contact Holistic Health Hub to restore access.'
+          : 'Your secure session ended. Sign in again to continue.';
       setApiCsrfToken(null);
       setState({ phase: 'anonymous', staff: null, error: null, notice });
       channel.postMessage({ type: 'signed-out', reason: notice });
@@ -430,6 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'PHARMSMART_SETUP_INCOMPLETE',
       'EMAIL_IN_USE',
       'ACCOUNT_DISABLED',
+      'PHARMACY_SUSPENDED',
       'EMAIL_NOT_VERIFIED',
       'ACCOUNT_INACTIVE',
     ].includes(error.code);

@@ -49,7 +49,7 @@ import { type ActivatedPharmacyOnboarding, completeReferralRecordsCheck, createO
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation } from '../shared/contracts';
 import { PharmacyRequestRecord, PharmacyRequestRow, usePharmacyRequests } from './admin/PharmacyRequests';
 import { formatRequestDate } from './admin/requestFormat';
-import { ActivationChecklist, DeclinePharmacyPanel } from './admin/PharmacyActivation';
+import { ActivationChecklist, DeclinePharmacyPanel, SuspendPharmacyPanel } from './admin/PharmacyActivation';
 import { PharmacySummary } from './admin/PharmacySummary';
 import { performancePeriodStart, type PerformancePeriod } from '../utils/performancePeriod';
 import { PharmacyDetails } from './admin/PharmacyDetails';
@@ -955,6 +955,7 @@ export default function AdminPortal() {
   const [overviewFilter, setOverviewFilter] = useState<OverviewFilter>(overviewFilterFromPath);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [declineOpen, setDeclineOpen] = useState(false);
+  const [suspendOpen, setSuspendOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<OverviewManagePanel>('summary');
   // The section a click is scrolling to: the highlight follows the scroll, then settles here.
   const pendingSectionRef = useRef<OverviewManagePanel | null>(null);
@@ -1577,7 +1578,7 @@ export default function AdminPortal() {
    * pharmacies are always connected to the sandbox and never wait.
    */
   const awaitingCuraleaf = useCallback(
-    (org: PharmacyTenant) => !isTrainingDirectoryPharmacy(org) && org.status !== 'live' && org.curaleafEnvironment !== 'production',
+    (org: PharmacyTenant) => !isTrainingDirectoryPharmacy(org) && org.status !== 'live' && org.status !== 'paused' && org.curaleafEnvironment !== 'production',
     [],
   );
   const overviewPharmacies = state.organisations.filter(org => {
@@ -1604,7 +1605,8 @@ export default function AdminPortal() {
   const selectedRequest = pharmacyRequests.records.find(request => request.id === selectedRequestId && request.status !== 'activated') ?? null;
   const overviewResultCount = overviewPharmacies.length + overviewRequests.length + declinedRequests.length;
   const awaitingPharmacies = overviewPharmacies.filter(awaitingCuraleaf);
-  const registeredPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org));
+  const registeredPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org) && org.status !== 'paused');
+  const suspendedPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && org.status === 'paused');
   const trainingPharmacies = overviewPharmacies.filter(org => isTrainingDirectoryPharmacy(org));
   const awaitingCount = state.organisations.filter(awaitingCuraleaf).length + pharmacyRequests.pending.length;
   const requestForOrganisation = useCallback(
@@ -1635,9 +1637,10 @@ export default function AdminPortal() {
 
   const statusLabel = (status: PharmacyTenant['status']) => {
     if (status === 'live') return 'Live';
+    if (status === 'paused') return 'Suspended';
     return 'Onboarding';
   };
-  const pharmacyTone = (status: PharmacyTenant['status']) => status === 'live' ? 'paid' : 'warning';
+  const pharmacyTone = (status: PharmacyTenant['status']) => status === 'live' ? 'paid' : status === 'paused' ? 'danger' : 'warning';
   /** A pharmacy is Test, Awaiting Curaleaf or Live; rejected ones leave the directory. */
   const pharmacyStageLabel = (organisation: PharmacyTenant) => {
     if (isTrainingDirectoryPharmacy(organisation)) return 'Test';
@@ -1762,7 +1765,9 @@ export default function AdminPortal() {
         ? 'Test'
         : selectedPharmacy?.status === 'live'
           ? 'Live'
-          : 'Onboarding';
+          : selectedPharmacy?.status === 'paused'
+            ? 'Suspended'
+            : 'Onboarding';
     const formUrl = referralLink;
     const selectedIntakeLive = selectedPharmacy ? intakeIsLive(selectedPharmacy) : false;
 
@@ -1782,6 +1787,7 @@ export default function AdminPortal() {
                       }
             setSelectedRequestId(null);
             setDeclineOpen(false);
+            setSuspendOpen(false);
             setOverviewPharmacyId(organisation.id);
             setOverviewManageOpen(false);
           }}
@@ -1826,7 +1832,9 @@ export default function AdminPortal() {
     const selectedApplication = selectedPharmacy ? requestForOrganisation(selectedPharmacy.id) : null;
     const selectedAwaiting = Boolean(selectedPharmacy && awaitingCuraleaf(selectedPharmacy));
     // Reject is for pharmacies still being set up, for example when Curaleaf turn the account down.
-    const selectedCanDecline = Boolean(selectedPharmacy && !isTrainingDirectoryPharmacy(selectedPharmacy) && selectedPharmacy.status !== 'live');
+    const selectedCanDecline = Boolean(selectedPharmacy && !isTrainingDirectoryPharmacy(selectedPharmacy) && selectedPharmacy.status !== 'live' && selectedPharmacy.status !== 'paused');
+    const selectedCanSuspend = Boolean(selectedPharmacy && !isTrainingDirectoryPharmacy(selectedPharmacy) && selectedPharmacy.status === 'live');
+    const selectedSuspended = Boolean(selectedPharmacy && selectedPharmacy.status === 'paused');
 
     return (
       <div className="page-body order-crm patient-crm admin-overview-crm">
@@ -1977,6 +1985,18 @@ export default function AdminPortal() {
                         {registeredPharmacies.map(organisation => renderPharmacyRow(organisation))}
                       </section>
                     ) : null}
+                    {suspendedPharmacies.length ? (
+                      <section className="order-crm-list-group" aria-label="Suspended pharmacies">
+                        <header>
+                          <span>
+                            <strong>Suspended</strong>
+                            <small>Staff locked out, eligibility link off</small>
+                          </span>
+                          <b>{suspendedPharmacies.length}</b>
+                        </header>
+                        {suspendedPharmacies.map(organisation => renderPharmacyRow(organisation))}
+                      </section>
+                    ) : null}
                     {trainingPharmacies.length ? (
                       <section className="order-crm-list-group" aria-label="Testing pharmacies">
                         <header>
@@ -2055,6 +2075,11 @@ export default function AdminPortal() {
                       {selectedCanDecline ? (
                         <button type="button" className="btn btn-sm admin-decline-button" aria-expanded={declineOpen} onClick={() => setDeclineOpen(open => !open)}>Reject</button>
                       ) : null}
+                      {selectedCanSuspend || selectedSuspended ? (
+                        <button type="button" className={`btn btn-sm${selectedSuspended ? '' : ' admin-decline-button'}`} aria-expanded={suspendOpen} onClick={() => setSuspendOpen(open => !open)}>
+                          {selectedSuspended ? 'Lift suspension' : 'Suspend'}
+                        </button>
+                      ) : null}
                       {selectedAwaiting ? null : <button type="button" className="btn btn-sm" onClick={() => { setFinanceOrganisationId(selectedPharmacy.id); setView('finance'); }}>Open ledger</button>}
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => goToSection('identity')}><Pencil size={13} /> Edit details</button>
                     </div>
@@ -2075,6 +2100,28 @@ export default function AdminPortal() {
                   ))}
                 </nav>
                 <div className="patient-crm-detail__body pharmacy-dashboard">
+                  {suspendOpen && (selectedCanSuspend || selectedSuspended) ? (
+                    <SuspendPharmacyPanel
+                      key={`${selectedPharmacy.id}-${selectedPharmacy.status}`}
+                      organisationId={selectedPharmacy.id}
+                      pharmacyName={selectedPharmacy.name}
+                      suspended={selectedSuspended}
+                      onCancel={() => setSuspendOpen(false)}
+                      onDone={status => {
+                        dispatch({ type: 'UPDATE_ORGANISATION', organisationId: selectedPharmacy.id, updates: { status } });
+                        setSuspendOpen(false);
+                        dispatch({
+                          type: 'ADD_TOAST',
+                          toastType: 'success',
+                          message: status === 'paused'
+                            ? `${selectedPharmacy.name} is suspended. Its staff are signed out and its eligibility link is off.`
+                            : status === 'live'
+                              ? `${selectedPharmacy.name} is live again.`
+                              : `${selectedPharmacy.name}'s suspension is lifted. It is awaiting live Curaleaf credentials.`,
+                        });
+                      }}
+                    />
+                  ) : null}
                   {declineOpen && selectedCanDecline ? (
                     <DeclinePharmacyPanel
                       key={selectedPharmacy.id}

@@ -34,6 +34,7 @@ const GET_PORTAL_ADMISSION_GQL = `
       status
       disabled
       version
+      organisation { status }
     }
   }
 `;
@@ -54,6 +55,7 @@ const GET_STAFF_USER_GQL = `
       lastSignedInAt
       createdAt
       version
+      organisation { status }
     }
   }
 `;

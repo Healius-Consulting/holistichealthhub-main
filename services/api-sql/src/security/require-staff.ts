@@ -20,6 +20,8 @@ declare global {
 
 const identityRepo = new SqlIdentityRepository();
 
+export const PHARMACY_SUSPENDED_MESSAGE = 'This pharmacy\'s account is suspended. Contact Holistic Health Hub to restore access.';
+
 export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') {
 
   return async (request: Request, response: Response, next: NextFunction): Promise<void> => {
@@ -54,9 +56,11 @@ export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') 
         // A 403 is an authenticated staff member hitting a permission wall, and
         // "Session admission failed." reads as a scary auth outage instead of the
         // plain "your role cannot do this" that it actually is.
-        const message = failure.status === 403
-          ? 'Your staff role is not permitted to perform this action.'
-          : 'Session admission failed.';
+        const message = failure.code === 'PHARMACY_SUSPENDED'
+          ? PHARMACY_SUSPENDED_MESSAGE
+          : failure.status === 403
+            ? 'Your staff role is not permitted to perform this action.'
+            : 'Session admission failed.';
         throw new HttpError(failure.status, message, failure.code);
       }
 
