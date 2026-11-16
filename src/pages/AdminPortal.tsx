@@ -1121,11 +1121,14 @@ export default function AdminPortal() {
   useEffect(() => {
     const path = view === 'overview' && overviewFilter === 'requests'
       ? surfaceRoutePath(ADMIN_REQUESTS_PATH, appPathPrefix)
-      : view === 'overview' && overviewPharmacyId
-        ? adminPathForOrganisation(overviewPharmacyId)
-        : adminPathForView(view);
+      // A request on screen has no pharmacy link yet; keeping the last pharmacy's would reopen the wrong record.
+      : view === 'overview' && selectedRequestId
+        ? adminPathForView('overview')
+        : view === 'overview' && overviewPharmacyId
+          ? adminPathForOrganisation(overviewPharmacyId)
+          : adminPathForView(view);
     if (window.location.pathname !== path) window.history.pushState(null, '', withLocationSearch(path));
-  }, [overviewFilter, overviewPharmacyId, view]);
+  }, [overviewFilter, overviewPharmacyId, selectedRequestId, view]);
 
   useEffect(() => {
     if (!overviewManageOpen) return;

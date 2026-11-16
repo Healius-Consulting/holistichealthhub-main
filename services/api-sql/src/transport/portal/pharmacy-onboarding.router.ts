@@ -18,8 +18,9 @@ import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
+import { uuidParam } from './uuid-param.js';
 
-const idSchema = z.string().uuid();
+const idSchema = uuidParam;
 
 function toView(record: PharmacyOnboardingRequestRecord, worldpaySubmittedAt: string | null = null) {
   return {
