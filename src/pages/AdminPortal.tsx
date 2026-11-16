@@ -1982,7 +1982,7 @@ export default function AdminPortal() {
                         <header>
                           <span>
                             <strong>Testing pharmacies</strong>
-                            <small>Primary and Alternate sandbox</small>
+                            <small>Sandbox pharmacies</small>
                           </span>
                           <b>{trainingPharmacies.length}</b>
                         </header>

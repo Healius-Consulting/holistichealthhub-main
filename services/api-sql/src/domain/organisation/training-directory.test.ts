@@ -3,6 +3,10 @@ import { describe, it } from 'node:test';
 import { isPlatformTestOrganisation, isTrainingDirectoryOrganisation } from './training-directory.js';
 
 describe('isPlatformTestOrganisation', () => {
+  it('recognises Tertiary, moved to Test after onboarding, by id', () => {
+    assert.equal(isPlatformTestOrganisation({ id: '69abbc03-37f2-42da-bc28-d133abad74e7', name: 'tertiary pharmacy' }), true);
+  });
+
   it('recognises Primary and Alternate by id only', () => {
     assert.equal(isPlatformTestOrganisation({
       id: '70913a30-71c3-4a41-952e-d532927af58c',

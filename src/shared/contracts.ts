@@ -1620,9 +1620,10 @@ export const HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL = 'Holistic Health Hub Allocat
 const PLATFORM_TEST_PHARMACY_IDS = new Set([
   '70913a3071c34a41952ed532927af58c', // Primary
   'f486a221223644a5b072f06de399ab0e', // Alternate
+  '69abbc0337f242dabc28d133abad74e7', // Tertiary
 ]);
 
-/** Primary and Alternate — always-on platform Test pharmacies, not dummy Training. */
+/** Primary, Alternate and Tertiary — always-on platform Test pharmacies, not dummy Training. */
 export function isPlatformTestPharmacy(organisation: {
   id?: string | null;
   name?: string | null;

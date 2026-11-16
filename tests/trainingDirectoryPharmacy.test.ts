@@ -5,6 +5,7 @@ import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy } from '../src/shar
 test('only the known Primary and Alternate IDs are platform Test pharmacies', () => {
   assert.equal(isPlatformTestPharmacy({ id: '70913a30-71c3-4a41-952e-d532927af58c', tradingName: 'Primary Branch' }), true);
   assert.equal(isTrainingDirectoryPharmacy({ id: 'f486a221-2236-44a5-b072-f06de399ab0e', name: 'Alternate Pharmacy' }), true);
+  assert.equal(isPlatformTestPharmacy({ id: '69abbc0337f242dabc28d133abad74e7', name: 'tertiary pharmacy' }), true);
   assert.equal(isPlatformTestPharmacy({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', testAccount: true, tradingName: 'Sandbox' }), false);
   assert.equal(isPlatformTestPharmacy({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', workspaceClassification: 'training', tradingName: 'Demo' }), false);
 });

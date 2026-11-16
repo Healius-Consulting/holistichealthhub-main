@@ -1,7 +1,7 @@
 import { HttpError } from '../common/errors.js';
 import { isPlatformTestOrganisation } from './training-directory.js';
 
-/** Non-platform pharmacies stay locked on Curaleaf TEST. Primary and Alternate may pay on sandbox keys. */
+/** Non-platform pharmacies stay locked on Curaleaf TEST. Platform Test pharmacies may pay on sandbox keys. */
 export function curaleafTestPaymentAllowed(
   organisation: { id: string } | null | undefined,
   curaleafEnvironment: string | null | undefined,
