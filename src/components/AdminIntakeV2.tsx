@@ -488,7 +488,6 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
   }, [appState.organisations, candidateQuery, candidates, currentDestinationId, patientArea]);
   const canRefer = reviewComplete && destinationSaved;
   const queueLabel = queueFilter === 'website' ? 'Website' : queueFilter === 'qr' ? 'QR links' : 'Intake queue';
-  const declineOpen = referralOutcome === 'declined' || referralOutcome === 'rejected';
   const chooseOutcome = (outcome: ReferralOutcome) => {
     setReferralOutcome(outcome);
     if (outcome === 'complete' || declineReason) return;
