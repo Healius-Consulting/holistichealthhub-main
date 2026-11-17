@@ -13332,37 +13332,6 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .admin-v2-intake__route strong, .admin-v2-intake__route p{ overflow-wrap: anywhere; }
 .admin-v2-intake__route p{ color: var(--text-tertiary); font-size: 10px; }
 .admin-v2-intake__decision-actions{ display: flex; flex-wrap: wrap; gap: 8px; }
-.admin-intake-folds{ display: grid; gap: 8px; }
-.admin-intake-fold{ border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); }
-.admin-intake-fold h3{ margin: 0; }
-.admin-intake-fold__trigger{
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 56px;
-  padding: 12px 14px;
-  border: 0;
-  border-radius: 12px;
-  color: var(--text-primary);
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-.admin-intake-fold__trigger span{ display: grid; gap: 2px; min-width: 0; }
-.admin-intake-fold__trigger small{ color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
-.admin-intake-fold__trigger svg{ flex: 0 0 auto; color: var(--text-tertiary); transition: transform var(--transition-fast); }
-.admin-intake-fold.is-open .admin-intake-fold__trigger svg{ transform: rotate(180deg); }
-.admin-intake-fold__trigger:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: -2px; }
-.admin-intake-fold__body{ display: grid; gap: 12px; padding: 0 14px 14px; }
-.admin-intake-fold__body label{ display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
-.admin-intake-fold__body .input{ min-height: 44px; }
-.admin-intake-fold__body dl{ display: grid; gap: 8px; margin: 0; }
-.admin-intake-fold__body dl > div{ display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 8px; }
-.admin-intake-fold__body dt{ margin: 0; color: var(--text-tertiary); font-size: 12px; }
-.admin-intake-fold__body dd{ margin: 0; color: var(--text-primary); }
 .admin-intake-outcome,
 .admin-intake-clinic-choice{ display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
 .admin-intake-outcome button,
@@ -13392,20 +13361,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 }
 .admin-intake-outcome button:focus-visible,
 .admin-intake-clinic-choice button:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 2px; }
-.admin-intake-withdraw{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-.admin-intake-withdraw div{ display: grid; gap: 2px; }
-.admin-intake-withdraw small{ color: var(--text-tertiary); font-size: 12px; }
 @media (max-width: 640px){
-  .admin-intake-withdraw{ align-items: stretch; flex-direction: column; }
-  .admin-intake-fold__body dl > div{ grid-template-columns: 1fr; }
 }
 .admin-v2-intake__rows button:focus-visible, .admin-v2-intake__detail button:focus-visible{ outline: 3px solid color-mix(in srgb, var(--tenant-primary) 32%, transparent); outline-offset: -3px; }
 .admin-v2-queue__rows{ display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
@@ -13422,7 +13378,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .admin-intake-duplicates{
   display: grid;
   gap: 10px;
-  margin: 0 0 14px;
+  margin: 0;
   padding: 12px 14px;
   border: 1px solid #c7d2fe;
   border-radius: 10px;
@@ -21555,4 +21511,158 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
   padding-top: 10px;
   padding-bottom: 10px;
   border-top: 1px solid var(--tenant-sidebar-border, var(--border));
+}
+
+/* Admin patient intake: the open enquiry reads like the pharmacy record. One header,
+   a pinned section bar, then each section in turn with always-open cards. */
+.admin-intake-crm .order-crm-detail{ overflow: clip; }
+.admin-intake-record{ padding-top: 18px; }
+.admin-intake-record .pharmacy-details{ align-items: stretch; }
+.admin-intake-card mark{ padding: 0 4px; color: #92400e; background: #fef3c7; border-radius: 4px; }
+.admin-intake-card dd small{ display: block; }
+.admin-intake-card > header > .order-stage-pill,
+.admin-intake-card > header > .btn{ justify-self: end; white-space: nowrap; }
+.admin-intake-note{ margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+.admin-intake-flag{ margin: 0; }
+.admin-intake-form{ display: grid; gap: 12px; }
+.admin-intake-form label{ display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; font-weight: 700; }
+.admin-intake-form label small{ color: var(--text-tertiary); font-size: 11.5px; font-weight: 500; }
+.admin-intake-form .input{ min-height: 40px; }
+.admin-intake-form textarea.input{ min-height: 64px; }
+.admin-intake-form--inline{ grid-template-columns: minmax(0, 320px) auto; align-items: end; justify-content: start; }
+.admin-intake-actions{ display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.admin-intake-actions .btn{ display: inline-flex; align-items: center; gap: 6px; }
+.admin-intake-search{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.admin-intake-search .search-box{ margin: 0; }
+.admin-intake-checklist{ display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-intake-checklist li{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 9px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.admin-intake-checklist li svg{ color: var(--text-tertiary); }
+.admin-intake-checklist li.is-done{ border-style: solid; color: var(--text-primary); }
+.admin-intake-checklist li.is-done svg{ color: #0f6b4c; }
+.admin-intake-record .admin-intake-outcome,
+.admin-intake-record .admin-intake-clinic-choice{ grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+.admin-intake-record .admin-intake-outcome button,
+.admin-intake-record .admin-intake-clinic-choice button{ min-height: 64px; }
+@container (max-width: 420px){
+  .admin-intake-form--inline{ grid-template-columns: minmax(0, 1fr); }
+  .admin-intake-form--inline .btn{ justify-self: start; }
+}
+/* The one-line section bar scrolls inside the record on a phone rather than widening it. */
+.admin-intake-crm .order-crm-detail,
+.admin-intake-crm .order-crm-record,
+.admin-intake-nav{ min-width: 0; max-width: 100%; }
+/* Intake: copy buttons beside contact and pharmacy details; pharmacy name, GPhC and postcode in its card header. */
+.admin-intake-card__title{ display: grid; gap: 1px; min-width: 0; }
+.admin-intake-card__title h4{ overflow-wrap: anywhere; }
+.admin-intake-card__title small{ color: var(--text-tertiary); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.admin-intake-copy{ display: inline-flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.admin-intake-copy > span{ min-width: 0; overflow-wrap: anywhere; }
+.admin-intake-copy__btn{
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-top: -3px;
+  padding: 0;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.admin-intake-copy__btn:hover{ color: var(--text-primary); background: var(--bg-surface); border-color: var(--border); }
+.admin-intake-copy__btn:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 1px; }
+.admin-intake-copy__btn.is-copied{ color: #0f6b4c; }
+/* Intake review: every status visible at once, each with what it means. */
+.admin-intake-review{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@container (max-width: 560px){ .admin-intake-review{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 340px){ .admin-intake-review{ grid-template-columns: minmax(0, 1fr); } }
+.admin-intake-review__option{
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 9px;
+  min-height: 58px;
+  padding: 10px 12px;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.admin-intake-review__option:hover{ border-color: color-mix(in srgb, var(--tenant-primary) 30%, var(--border)); }
+.admin-intake-review__option:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 2px; }
+.admin-intake-review__option strong{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; }
+.admin-intake-review__option strong em{ padding: 0 6px; color: var(--text-secondary); font-size: 10.5px; font-style: normal; font-weight: 700; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 999px; }
+.admin-intake-review__option small{ grid-column: 2; color: var(--text-tertiary); font-size: 12px; line-height: 1.35; }
+.admin-intake-review__dot{ width: 10px; height: 10px; background: var(--text-tertiary); border-radius: 50%; }
+.admin-intake-review__option.is-warning .admin-intake-review__dot{ background: #d97706; }
+.admin-intake-review__option.is-curaleaf-review .admin-intake-review__dot{ background: #4f46e5; }
+.admin-intake-review__option.is-paid .admin-intake-review__dot{ background: #0f6b4c; }
+.admin-intake-review__option.is-danger .admin-intake-review__dot{ background: #b91c1c; }
+.admin-intake-review__option.is-on{
+  border-color: var(--tenant-primary);
+  background: var(--tenant-primary-soft);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tenant-primary) 25%, transparent);
+}
+.admin-intake-review__footer{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.admin-intake-review__footer .admin-intake-note{ flex: 1 1 240px; }
+.admin-intake-review__footer .admin-intake-actions{ min-height: 32px; }
+/* Intake pharmacy picker: one list that filters as you type, then confirm the move. */
+.admin-intake-picker__search{ margin: 0; }
+.admin-intake-picker{
+  display: grid;
+  gap: 6px;
+  max-height: 300px;
+  padding: 2px;
+  margin: -2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.admin-intake-picker__row{
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.admin-intake-picker__row:hover{ border-color: color-mix(in srgb, var(--tenant-primary) 30%, var(--border)); }
+.admin-intake-picker__row:focus-visible{ outline: 2px solid var(--tenant-primary); outline-offset: 1px; }
+.admin-intake-picker__row.is-on{ border-color: var(--tenant-primary); background: var(--tenant-primary-soft); }
+.admin-intake-picker__radio{ width: 16px; height: 16px; border: 1.5px solid var(--border-strong, #9ca3af); border-radius: 50%; background: var(--bg-surface); }
+.admin-intake-picker__row.is-on .admin-intake-picker__radio{ border: 5px solid var(--tenant-primary); }
+.admin-intake-picker__name{ display: grid; gap: 1px; min-width: 0; }
+.admin-intake-picker__name strong{ font-size: 13px; overflow-wrap: anywhere; }
+.admin-intake-picker__name small{ color: var(--text-tertiary); font-size: 12px; overflow-wrap: anywhere; }
+.admin-intake-picker__tags{ display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.admin-intake-picker__empty{ margin: 0; padding: 14px; color: var(--text-tertiary); font-size: 13px; text-align: center; border: 1px dashed var(--border); border-radius: 10px; }
+.admin-intake-picker__confirm{ display: grid; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.admin-intake-picker__confirm > p{ margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.admin-intake-picker__confirm > p strong{ color: var(--text-primary); }
+@container (max-width: 380px){
+  .admin-intake-picker__row{ grid-template-columns: 16px minmax(0, 1fr); }
+  .admin-intake-picker__tags{ grid-column: 2; justify-content: flex-start; }
 }

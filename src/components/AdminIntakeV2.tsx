@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CheckCircle2, ChevronDown, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, type LucideIcon } from 'lucide-react';
+import { Building2, Check, CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, Stethoscope, User, UserX, type LucideIcon } from 'lucide-react';
 import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason, type PatientAgreementChannel } from '../shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type DuplicateRecordMatch, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { useApp } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
@@ -11,8 +12,28 @@ import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
 type Detail = Record<string, unknown>;
 type ReviewStatus = 'not_started' | 'due' | 'attempted' | 'in_progress' | 'completed' | 'unable_to_contact';
 type QueueFilter = 'all' | 'website' | 'qr';
-type IntakePanel = 'patient' | 'eligibility' | 'pharmacy' | 'review' | 'referral';
+type IntakeSection = 'patient' | 'eligibility' | 'pharmacy' | 'review' | 'referral';
 type ReferralOutcome = 'complete' | 'declined' | 'rejected';
+
+/** The open enquiry is one page; these are its sections, in order. */
+const INTAKE_SECTIONS: { id: IntakeSection; label: string }[] = [
+  { id: 'patient', label: 'Patient' },
+  { id: 'eligibility', label: 'Eligibility' },
+  { id: 'pharmacy', label: 'Pharmacy' },
+  { id: 'review', label: 'Review' },
+  { id: 'referral', label: 'Referral' },
+];
+const INTAKE_NAV = '.admin-intake-nav';
+
+/** Scroll the admin page so a section starts just below the pinned section bar. */
+function scrollToIntakeSection(section: IntakeSection, smooth: boolean) {
+  const container = document.getElementById('admin-main-content');
+  const target = document.getElementById(`intake-section-${section}`);
+  if (!container || !target) return;
+  const barHeight = document.querySelector<HTMLElement>(INTAKE_NAV)?.offsetHeight ?? 0;
+  const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top - barHeight - 16;
+  container.scrollTo({ top: container.scrollTop + offset, behavior: smooth ? 'smooth' : 'auto' });
+}
 
 const assignmentReasons = ['patient_preference', 'capacity', 'delivery_or_collection', 'geographic_coverage', 'service_compatibility', 'administrative_correction'] as const;
 const words = (value: unknown) => String(value ?? '').replaceAll('_', ' ');
@@ -50,8 +71,8 @@ const previewDedicated: V2EligibilityQueueItem = {
   nextFollowUpAt: null, destinationLocked: false,
 };
 const previewCandidates: Detail[] = [
-  { id: 'preview-pharmacy', name: 'Primary Branch', gphcNumber: 'TRAINING-PRIMARY', address: 'Leeds' },
-  { id: 'preview-pharmacy-2', name: 'Alternate Pharmacy', gphcNumber: 'TRAINING-ALTERNATE', address: 'Manchester' },
+  { id: 'preview-pharmacy', name: 'Primary Branch', gphcNumber: 'TRAINING-PRIMARY', address: '12 Park Row, Leeds', postcode: 'LS1 5HD', phone: '0113 000 0000', email: 'primary@example.test' },
+  { id: 'preview-pharmacy-2', name: 'Alternate Pharmacy', gphcNumber: 'TRAINING-ALTERNATE', address: '4 King Street, Manchester', postcode: 'M2 4LQ', phone: '0161 000 0000', email: 'alternate@example.test' },
 ];
 
 function previewDetail(record: V2EligibilityQueueItem): Detail {
@@ -71,6 +92,20 @@ function previewDetail(record: V2EligibilityQueueItem): Detail {
   };
 }
 
+const REVIEW_OPTIONS: Array<{ id: ReviewStatus; hint: string }> = [
+  { id: 'not_started', hint: 'Nobody has contacted them yet.' },
+  { id: 'due', hint: 'A call or email is due.' },
+  { id: 'attempted', hint: 'Tried to reach them, no reply yet.' },
+  { id: 'in_progress', hint: 'Talking to them now.' },
+  { id: 'completed', hint: 'Checks done. Unlocks Referral.' },
+  { id: 'unable_to_contact', hint: 'Tried and could not reach them.' },
+];
+
+function postcodeArea(value: unknown) {
+  const match = /^\s*([a-z]{1,2})\d/i.exec(String(value ?? ''));
+  return match ? match[1]!.toUpperCase() : null;
+}
+
 const isOpenStage = (stage: string) => stage === 'New' || stage === 'Under HHH review';
 
 function duplicateMatches(value: unknown): DuplicateRecordMatch[] {
@@ -88,6 +123,7 @@ interface AdminIntakeV2Props {
 }
 
 export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {}) {
+  const { state: appState } = useApp();
   const [general, setGeneral] = useState<V2EligibilityQueueItem[]>([]);
   const [referrals, setReferrals] = useState<V2EligibilityQueueItem[]>([]);
   const [selected, setSelected] = useState<V2EligibilityQueueItem | null>(null);
@@ -101,9 +137,14 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
   // agreement on record (Terms 5.2); the server refuses the move without it.
   const [agreementChannel, setAgreementChannel] = useState<PatientAgreementChannel | ''>('');
   const [onboardingNote, setOnboardingNote] = useState('');
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawNote, setWithdrawNote] = useState('');
   const [declineReason, setDeclineReason] = useState<DeclineReason | ''>('');
   const [existingClinicAccount, setExistingClinicAccount] = useState(false);
-  const [openPanel, setOpenPanel] = useState<IntakePanel | null>('patient');
+  const [activeSection, setActiveSection] = useState<IntakeSection>('patient');
+  // A section-bar jump lets the highlight run through the sections it passes,
+  // then settles on the one that was picked.
+  const pendingSectionRef = useRef<IntakeSection | null>(null);
   const [referralOutcome, setReferralOutcome] = useState<ReferralOutcome>('complete');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('not_started');
   const [queueQuery, setQueueQuery] = useState('');
@@ -114,6 +155,54 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
   const [message, setMessage] = useState('');
   const listRowsRef = useRef<HTMLDivElement>(null);
   const [listOverflow, setListOverflow] = useState({ top: false, bottom: false });
+
+  /** The section bar scrolls to a part of the record; it marks the target once the scroll settles. */
+  const goToSection = useCallback((section: IntakeSection) => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const container = document.getElementById('admin-main-content');
+    const before = container?.scrollTop ?? 0;
+    if (reduce) { pendingSectionRef.current = null; setActiveSection(section); }
+    else pendingSectionRef.current = section;
+    scrollToIntakeSection(section, !reduce);
+    // Already in place means no scroll events to settle on, so mark it once the click lands.
+    window.setTimeout(() => {
+      if (pendingSectionRef.current === section && (container?.scrollTop ?? 0) === before) { setActiveSection(section); pendingSectionRef.current = null; }
+    }, 150);
+  }, []);
+
+  const recordReady = Boolean(selected && detail && !detailLoading);
+  // Mark the section under the pinned bar as the admin scrolls the record.
+  useEffect(() => {
+    const container = document.getElementById('admin-main-content');
+    if (!container || !recordReady) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const bar = document.querySelector<HTMLElement>(INTAKE_NAV);
+      if (!bar) return;
+      const line = bar.getBoundingClientRect().bottom + 40;
+      let current: IntakeSection = 'patient';
+      for (const section of INTAKE_SECTIONS) {
+        const el = document.getElementById(`intake-section-${section.id}`);
+        if (el && el.getBoundingClientRect().top <= line) current = section.id;
+      }
+      // At the very bottom the last section is the one being read, even if short.
+      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 2) current = INTAKE_SECTIONS[INTAKE_SECTIONS.length - 1]!.id;
+      setActiveSection(current);
+    };
+    let settle = 0;
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        if (pendingSectionRef.current) setActiveSection(pendingSectionRef.current);
+        pendingSectionRef.current = null;
+      }, 120);
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    update();
+    return () => { container.removeEventListener('scroll', onScroll); window.clearTimeout(settle); if (frame) window.cancelAnimationFrame(frame); };
+  }, [recordReady, selected?.id]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -148,15 +237,6 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
     setReferralOutcome('complete');
   };
 
-  const loadCandidates = async (caseId: string, query = '') => {
-    if (isLocalPortalPreview) {
-      const normalised = query.toLowerCase();
-      setCandidates(previewCandidates.filter(candidate => !normalised || String(candidate.name).toLowerCase().includes(normalised)));
-      return;
-    }
-    setCandidates((await getAssignmentCandidates(caseId, query)).records);
-  };
-
   const open = async (record: V2EligibilityQueueItem) => {
     setSelected(record);
     setDetail(null);
@@ -164,9 +244,12 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
     setCandidateQuery('');
     setAllocationNote('');
     setOnboardingNote('');
+    setWithdrawOpen(false);
+    setWithdrawNote('');
     setExistingClinicAccount(false);
     setReferralOutcome('complete');
-    setOpenPanel('patient');
+    setActiveSection('patient');
+    pendingSectionRef.current = null;
     setMessage('');
     try {
       if (isLocalPortalPreview) {
@@ -205,19 +288,6 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
     return next;
   };
 
-  const findCandidates = async () => {
-    if (!selected) return;
-    setBusy(true);
-    setMessage('');
-    try {
-      await loadCandidates(selected.id, candidateQuery);
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : 'Eligible pharmacies could not be loaded.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const saveDestination = async () => {
     if (!selected || !detail || !destination) return;
     setBusy(true);
@@ -237,7 +307,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
       }
       setAllocationNote('');
       setAgreementChannel('');
-      setOpenPanel(reviewComplete ? 'referral' : 'review');
+      goToSection(reviewComplete ? 'referral' : 'review');
       setMessage('Pending destination updated. The previous pharmacy can no longer see this enquiry; it now appears for the new pharmacy.');
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : 'The pending destination could not be changed.');
@@ -260,7 +330,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
       } else {
         applyDetail({ ...detail, followUpStatus: reviewStatus, assignmentVersion: Number(detail.assignmentVersion ?? 0) + 1 });
       }
-      if (reviewStatus === 'completed') setOpenPanel('referral');
+      if (reviewStatus === 'completed') goToSection('referral');
       setMessage('HHH review status saved.');
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : 'The HHH review status could not be saved.');
@@ -310,12 +380,14 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
       if (!isLocalPortalPreview) {
         await withdrawV2Intake(selected.id, {
           expectedVersion: Number(detail.assignmentVersion ?? selected.version),
-          notes: onboardingNote.trim() || null,
+          notes: withdrawNote.trim() || null,
         });
         setSelected(null);
         setDetail(null);
         await load();
       }
+      setWithdrawOpen(false);
+      setWithdrawNote('');
       setMessage('Withdrawal recorded and removed from the active intake queue. The patient has been emailed.');
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : 'The withdrawal could not be recorded.');
@@ -369,10 +441,51 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
   // Mirrors the server's rule: agreement is needed only when a pharmacy already holds the enquiry.
   const movingFromPharmacy = Boolean(detail?.assignedOrganisationId);
   const destinationSaved = Boolean(currentDestinationId) && sameId(destination, currentDestinationId);
+  // Whether the enquiry is already saved with a pharmacy, regardless of an unsaved pick.
+  const hasDestination = Boolean(currentDestinationId);
   const reviewComplete = detail?.followUpStatus === 'completed';
   const sourceName = String(detail?.sourceOrganisationName ?? (detail?.sourceType === 'general_hhh_website' ? 'Main HHH website' : 'Original QR pharmacy'));
   const destinationName = String(detail?.assignedOrganisationName ?? candidates.find(candidate => candidate.id === currentDestinationId)?.name ?? 'Not assigned');
   const selectedReview = reviewMeta(selected?.followUpStatus);
+  const destinationPharmacy = useMemo(() => {
+    if (!currentDestinationId) return null;
+    const organisation = appState.organisations.find(item => sameId(item.id, currentDestinationId));
+    const candidate = candidates.find(item => sameId(String(item.id), currentDestinationId));
+    const text = (...values: unknown[]) => values.map(value => (value == null ? '' : String(value).trim())).find(Boolean) || null;
+    return {
+      name: text(organisation?.name, candidate?.name, detail?.assignedOrganisationName) ?? 'Pharmacy',
+      gphc: text(organisation?.gphcNumber, candidate?.gphcNumber),
+      postcode: text(organisation?.postcode, candidate?.postcode),
+      phone: text(organisation?.pharmacyPhone, organisation?.mainContactPhone, candidate?.phone),
+      email: text(organisation?.pharmacyEmail, organisation?.mainContactEmail, candidate?.email),
+    };
+  }, [appState.organisations, candidates, currentDestinationId, detail?.assignedOrganisationName]);
+  const pickedCandidate = candidates.find(candidate => sameId(String(candidate.id), destination));
+  const pickedName = pickedCandidate ? String(pickedCandidate.name) : 'the chosen pharmacy';
+  // Postcode area is the letters before the first digit (LS1 5HD → LS).
+  const patientArea = postcodeArea(detail?.postcode ?? selected?.postcode);
+  const candidateRows = useMemo(() => {
+    const query = candidateQuery.trim().toLowerCase();
+    const rows = candidates.map(candidate => {
+      const id = String(candidate.id);
+      const organisation = appState.organisations.find(item => sameId(item.id, id));
+      const postcode = String(organisation?.postcode ?? candidate.postcode ?? '').trim() || null;
+      const classification = String(candidate.workspaceClassification ?? '');
+      return {
+        id,
+        name: String(candidate.name ?? organisation?.name ?? 'Pharmacy'),
+        gphc: String(candidate.gphcNumber ?? organisation?.gphcNumber ?? '').trim() || null,
+        postcode,
+        address: String(candidate.address ?? organisation?.address ?? ''),
+        current: Boolean(currentDestinationId) && sameId(id, currentDestinationId),
+        sameArea: Boolean(patientArea) && postcodeArea(postcode) === patientArea,
+        kind: classification === 'allocation_holding' || classification === 'training' ? workspaceClassificationLabel(classification) : null,
+      };
+    });
+    return rows
+      .filter(row => !query || `${row.name} ${row.gphc ?? ''} ${row.postcode ?? ''} ${row.address}`.toLowerCase().includes(query))
+      .sort((left, right) => Number(right.current) - Number(left.current) || Number(right.sameArea) - Number(left.sameArea) || left.name.localeCompare(right.name));
+  }, [appState.organisations, candidateQuery, candidates, currentDestinationId, patientArea]);
   const canRefer = reviewComplete && destinationSaved;
   const queueLabel = queueFilter === 'website' ? 'Website' : queueFilter === 'qr' ? 'QR links' : 'Intake queue';
   const declineOpen = referralOutcome === 'declined' || referralOutcome === 'rejected';
@@ -383,7 +496,6 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
     if (flag === 'TREATMENTS_NOT_TRIED') setDeclineReason('ELIGIBILITY_NOT_MET');
     if (flag === 'PSYCHOSIS_HISTORY') setDeclineReason('PSYCHIATRIC_EXCLUSION');
   };
-  const togglePanel = (panel: IntakePanel) => setOpenPanel(current => current === panel ? null : panel);
 
   return (
     <div className="page-body order-crm patient-crm admin-intake-crm">
@@ -492,174 +604,287 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                     <strong>{destinationSaved ? destinationName : 'Pending'}</strong>
                     <span className="order-crm-record__opened">{reviewComplete ? 'Review complete' : 'Review still open'}</span>
                   </div>
+                  <div className="order-crm-record__actions" role="group" aria-label="Enquiry actions">
+                    <button type="button" className="btn btn-sm admin-decline-button" aria-expanded={withdrawOpen} onClick={() => setWithdrawOpen(value => !value)}>
+                      <UserX size={13} aria-hidden="true" /> Withdraw
+                    </button>
+                  </div>
                 </div>
               </header>
 
-              <div className="patient-crm-detail__body admin-intake-folds">
-                {duplicates.length ? (
-                  <section className="admin-intake-duplicates" aria-label="Possible duplicate entry">
-                    <p>
-                      <Copy size={14} aria-hidden="true" />
-                      <strong>Duplicate entry.</strong>{' '}
-                      {duplicates.length === 1 ? 'One other record' : `${duplicates.length} other records`} look like the same person.
-                    </p>
-                    <ul>
-                      {duplicates.map(match => (
-                        <li key={`${match.kind}:${match.id}`}>
-                          <span className={`pill ${onboardingStatusPillClass(match.stage)}`}>{onboardingStatusLabel(match.stage)}</span>
-                          <span>
-                            <strong>{match.kind === 'patient' ? 'Patient record' : 'Application'}{match.organisationName ? ` · ${match.organisationName}` : ''}</strong>
-                            <small>{match.name} · last updated {shortDate(match.date)} · matched on {match.matchedOn === 'email' ? 'email address' : 'name and date of birth'}</small>
-                          </span>
-                          {match.kind === 'patient' || !isOpenStage(match.stage) ? (onOpenRecord ? <button type="button" className="btn btn-sm" onClick={() => openDuplicate(match)}>View record</button> : null)
-                            : <button type="button" className="btn btn-sm" onClick={() => openDuplicate(match)}>Open in queue</button>}
-                        </li>
-                      ))}
-                    </ul>
+              <nav className="pharmacy-dashboard__nav admin-intake-nav" aria-label={`${selected.patientDisplayName} sections`}>
+                {INTAKE_SECTIONS.map(section => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className={activeSection === section.id ? 'is-active' : undefined}
+                    aria-current={activeSection === section.id ? 'location' : undefined}
+                    onClick={() => goToSection(section.id)}
+                  >
+                    {section.label}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="patient-crm-detail__body pharmacy-dashboard admin-intake-record">
+                {withdrawOpen ? (
+                  <section className="admin-request-decline" aria-labelledby="intake-withdraw-title">
+                    <h3 id="intake-withdraw-title">Record that {compactPatientName(selected.patientDisplayName)} withdrew</h3>
+                    <p>Use this when they do not want to continue, including after the first conversation. They are emailed and the enquiry leaves the queue. This cannot be undone.</p>
+                    <textarea className="input" rows={2} value={withdrawNote} onChange={event => setWithdrawNote(event.target.value)} aria-label="Note, kept with the record" placeholder="Note, kept with the record (optional)" />
+                    <div className="admin-request-decline__actions">
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={() => setWithdrawOpen(false)}>Cancel</button>
+                      <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => void recordWithdrawal()}>{busy ? 'Recording…' : 'Record withdrawal'}</button>
+                    </div>
                   </section>
                 ) : null}
-
-                <IntakeFold
-                  id="intake-patient"
-                  title="Patient and contact"
-                  summary={`${formatPatientDob(detail.dob == null ? null : String(detail.dob))} · ${String(detail.postcode ?? 'No postcode')}`}
-                  open={openPanel === 'patient'}
-                  onToggle={() => togglePanel('patient')}
-                >
-                  <dl>
-                    <div><dt>Date of birth</dt><dd>{formatPatientDob(detail.dob == null ? null : String(detail.dob))}</dd></div>
-                    <div><dt>Postcode</dt><dd>{String(detail.postcode ?? '—')}</dd></div>
-                    <div><dt>Email</dt><dd>{String(detail.email ?? '—')}</dd></div>
-                    <div><dt>Mobile</dt><dd>{String(detail.mobile ?? '—')}</dd></div>
-                  </dl>
-                </IntakeFold>
-
-                <IntakeFold
-                  id="intake-eligibility"
-                  title="Eligibility answers"
-                  summary={screeningFlag ? 'Screening flag' : words(detail.primaryCondition || 'No primary condition')}
-                  open={openPanel === 'eligibility'}
-                  onToggle={() => togglePanel('eligibility')}
-                >
-                  {screeningFlag ? (
-                    <p className="banner banner-amber" role="status">
-                      <strong>Screening flag.</strong>{' '}
-                      {screeningFlag === 'TREATMENTS_NOT_TRIED'
-                        ? 'The patient answered that they have not tried two licensed treatments.'
-                        : 'The patient reported a psychosis or schizophrenia diagnosis for themselves or immediate family.'}
-                      {' '}This is a flag only. It does not decline the application.
-                    </p>
+                <section id="intake-section-patient" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-patient">
+                  <h3 id="intake-heading-patient" className="pharmacy-dashboard__heading">Patient</h3>
+                  {duplicates.length ? (
+                    <section className="admin-intake-duplicates" aria-label="Possible duplicate entry">
+                      <p>
+                        <Copy size={14} aria-hidden="true" />
+                        <strong>Duplicate entry.</strong>{' '}
+                        {duplicates.length === 1 ? 'One other record' : `${duplicates.length} other records`} look like the same person.
+                      </p>
+                      <ul>
+                        {duplicates.map(match => (
+                          <li key={`${match.kind}:${match.id}`}>
+                            <span className={`pill ${onboardingStatusPillClass(match.stage)}`}>{onboardingStatusLabel(match.stage)}</span>
+                            <span>
+                              <strong>{match.kind === 'patient' ? 'Patient record' : 'Application'}{match.organisationName ? ` · ${match.organisationName}` : ''}</strong>
+                              <small>{match.name} · last updated {shortDate(match.date)} · matched on {match.matchedOn === 'email' ? 'email address' : 'name and date of birth'}</small>
+                            </span>
+                            {match.kind === 'patient' || !isOpenStage(match.stage) ? (onOpenRecord ? <button type="button" className="btn btn-sm" onClick={() => openDuplicate(match)}>View record</button> : null)
+                              : <button type="button" className="btn btn-sm" onClick={() => openDuplicate(match)}>Open in queue</button>}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
                   ) : null}
-                  <dl>
-                    <div><dt>Primary condition</dt><dd>{words(detail.primaryCondition || '—')}</dd></div>
-                    <div><dt>Conditions</dt><dd>{Array.isArray(detail.conditions) ? detail.conditions.map(words).join(', ') : '—'}</dd></div>
-                    <div><dt>Two treatments</dt><dd>{detail.triedTwoTreatments ? 'Yes' : <mark>No / not confirmed</mark>}</dd></div>
-                    <div><dt>Psychosis exclusion</dt><dd>{detail.psychosisExclusion ? <mark>Reported</mark> : 'Not reported'}</dd></div>
-                  </dl>
-                </IntakeFold>
-
-                <IntakeFold
-                  id="intake-pharmacy"
-                  title="Pharmacy"
-                  summary={destinationSaved ? destinationName : 'Destination not saved'}
-                  open={openPanel === 'pharmacy'}
-                  onToggle={() => togglePanel('pharmacy')}
-                >
-                  <div className="admin-v2-intake__route">
-                    <span><small>Original source</small><strong>{sourceName}</strong></span>
-                    <span aria-hidden="true">→</span>
-                    <span><small>Current destination</small><strong>{destinationName}</strong></span>
+                  <div className="pharmacy-details">
+                    <IntakeCard icon={User} title="Contact">
+                      <dl className="pharmacy-details__list">
+                        <CopyFact label="Date of birth" value={detail.dob == null ? null : formatPatientDob(String(detail.dob))} />
+                        <CopyFact label="Postcode" value={detail.postcode} />
+                        <CopyFact label="Email" value={detail.email} />
+                        <CopyFact label="Mobile" value={detail.mobile} />
+                      </dl>
+                    </IntakeCard>
+                    <IntakeCard icon={Inbox} title="Enquiry">
+                      <dl className="pharmacy-details__list">
+                        <Fact label="Case reference">{selected.caseReference}</Fact>
+                        <Fact label="Came in through">{isWebsite(selected) ? 'Main HHH website' : <>QR link<small>{sourceName}</small></>}</Fact>
+                        <Fact label="Submitted">{dateTime(selected.submittedAt)}</Fact>
+                        <Fact label="Consent">{detail.referralConsent && detail.dataSharingConsent ? 'Referral and data sharing' : <mark>Not fully given</mark>}</Fact>
+                      </dl>
+                    </IntakeCard>
                   </div>
-                  <p>Move the enquiry only if it should sit with a different pharmacy. {HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL} stays available as a holding destination.</p>
-                  <div className="search-box"><Search size={15} /><input value={candidateQuery} onChange={event => setCandidateQuery(event.target.value)} placeholder="Search eligible pharmacies" aria-label="Search eligible pharmacies" /></div>
-                  <button type="button" className="btn btn-sm" onClick={() => void findCandidates()} disabled={busy}>Search pharmacies</button>
-                  <label>Pending destination<select className="input" value={destination} onChange={event => setDestination(event.target.value)}><option value="">Select a pharmacy</option>{candidates.map(candidate => {
-                    const classification = String(candidate.workspaceClassification ?? '');
-                    const extra = classification === 'allocation_holding' || classification === 'training' ? ` · ${workspaceClassificationLabel(classification)}` : '';
-                    return <option key={String(candidate.id)} value={String(candidate.id)}>{String(candidate.name)} · GPhC {String(candidate.gphcNumber ?? 'not recorded')}{extra}</option>;
-                  })}</select></label>
-                  <label>Reason<select className="input" value={reason} onChange={event => setReason(event.target.value as typeof reason)}><option value="patient_preference">Patient preference</option><option value="capacity">Capacity</option><option value="delivery_or_collection">Delivery or collection needs</option><option value="geographic_coverage">Geographic coverage</option><option value="service_compatibility">Service compatibility</option><option value="administrative_correction">Administrative correction</option></select></label>
-                  {movingFromPharmacy ? (
-                    <label>How the patient agreed to the move<select className="input" value={agreementChannel} onChange={event => setAgreementChannel(event.target.value as PatientAgreementChannel | '')} required>
-                      <option value="">Choose how they agreed…</option>
-                      <option value="phone">By phone</option>
-                      <option value="email">By email</option>
-                      <option value="sms">By text message</option>
-                      <option value="in_person">In person</option>
-                      <option value="not_applicable">N/A</option>
-                    </select><small>This enquiry is already with {destinationName}. Record how the patient agreed before it moves.</small></label>
-                  ) : null}
-                  <label>Private HHH note<textarea className="input" rows={3} value={allocationNote} onChange={event => setAllocationNote(event.target.value)} /></label>
-                  <button type="button" className="btn" disabled={busy || !destination || sameId(destination, currentDestinationId) || (movingFromPharmacy && !agreementChannel)} onClick={() => void saveDestination()}>Save destination</button>
-                </IntakeFold>
+                </section>
 
-                <IntakeFold
-                  id="intake-review"
-                  title="HHH review"
-                  summary={reviewMeta(reviewStatus).label}
-                  open={openPanel === 'review'}
-                  onToggle={() => togglePanel('review')}
-                >
-                  <p>This status is for HHH only. Pharmacies do not see it.</p>
-                  <label>Review status<select className="input" value={reviewStatus} onChange={event => setReviewStatus(event.target.value as ReviewStatus)}><option value="not_started">Not started</option><option value="due">Follow-up due</option><option value="attempted">Contact attempted</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="unable_to_contact">Unable to contact</option></select></label>
-                  <button type="button" className="btn" disabled={busy || reviewStatus === detail.followUpStatus} onClick={() => void saveReview()}>Save review status</button>
-                </IntakeFold>
+                <section id="intake-section-eligibility" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-eligibility">
+                  <h3 id="intake-heading-eligibility" className="pharmacy-dashboard__heading">Eligibility</h3>
+                  <IntakeCard icon={Stethoscope} title="Form answers" tag={screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : <span className="order-stage-pill order-tone--paid">No flags</span>}>
+                    {screeningFlag ? (
+                      <p className="banner banner-amber admin-intake-flag" role="status">
+                        <strong>Screening flag.</strong>{' '}
+                        {screeningFlag === 'TREATMENTS_NOT_TRIED'
+                          ? 'The patient answered that they have not tried two licensed treatments.'
+                          : 'The patient reported a psychosis or schizophrenia diagnosis for themselves or immediate family.'}
+                        {' '}This is a flag only. It does not decline the application.
+                      </p>
+                    ) : null}
+                    <dl className="pharmacy-details__list">
+                      <CopyFact label="Primary condition" value={detail.primaryCondition ? words(detail.primaryCondition) : null} />
+                      <CopyFact label="Conditions" value={Array.isArray(detail.conditions) && detail.conditions.length ? detail.conditions.map(words).join(', ') : null} />
+                      <CopyFact label="Two treatments tried" value={detail.triedTwoTreatments ? 'Yes' : 'No or not confirmed'} flagged={!detail.triedTwoTreatments} />
+                      <CopyFact label="Psychosis history" value={detail.psychosisExclusion ? 'Reported' : 'Not reported'} flagged={Boolean(detail.psychosisExclusion)} />
+                    </dl>
+                  </IntakeCard>
+                </section>
 
-                <IntakeFold
-                  id="intake-referral"
-                  title="Referral"
-                  summary={declineOpen ? (referralOutcome === 'rejected' ? 'Rejected' : 'Declined') : existingClinicAccount ? 'Existing Curaleaf account' : canRefer ? `Ready for ${destinationName}` : 'Waiting on review and destination'}
-                  open={openPanel === 'referral'}
-                  onToggle={() => togglePanel('referral')}
-                >
-                  <div className="admin-intake-outcome" role="radiogroup" aria-label="Referral outcome">
-                    <button type="button" role="radio" aria-checked={referralOutcome === 'complete'} className={referralOutcome === 'complete' ? 'is-on' : ''} onClick={() => chooseOutcome('complete')}>
-                      <strong>Complete referral</strong>
-                      <small>Mark them referred for the pharmacy.</small>
-                    </button>
-                    <button type="button" role="radio" aria-checked={referralOutcome === 'declined'} className={referralOutcome === 'declined' ? 'is-on' : ''} onClick={() => chooseOutcome('declined')}>
-                      <strong>Declined</strong>
-                      <small>Eligibility or clinical decision.</small>
-                    </button>
-                    <button type="button" role="radio" aria-checked={referralOutcome === 'rejected'} className={referralOutcome === 'rejected' ? 'is-on' : ''} onClick={() => chooseOutcome('rejected')}>
-                      <strong>Rejected</strong>
-                      <small>Close the enquiry without a referral.</small>
-                    </button>
-                  </div>
-
-                  {referralOutcome === 'complete' ? (
-                    <>
-                      <div className="admin-intake-clinic-choice" role="radiogroup" aria-label="Curaleaf account">
-                        <button type="button" role="radio" aria-checked={!existingClinicAccount} className={!existingClinicAccount ? 'is-on' : ''} onClick={() => setExistingClinicAccount(false)}>
-                          <strong>New Curaleaf account</strong>
-                          <small>They register with the clinic. Sends the standard referral email.</small>
-                        </button>
-                        <button type="button" role="radio" aria-checked={existingClinicAccount} className={existingClinicAccount ? 'is-on is-curaleaf' : ''} onClick={() => setExistingClinicAccount(true)}>
-                          <strong>Already with Curaleaf</strong>
-                          <small>They keep their clinic login. Sends the existing-account email. No £50 fee.</small>
-                        </button>
+                <section id="intake-section-pharmacy" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-pharmacy">
+                  <h3 id="intake-heading-pharmacy" className="pharmacy-dashboard__heading">Pharmacy</h3>
+                  <div className="pharmacy-details">
+                    <IntakeCard
+                      icon={Building2}
+                      title={destinationPharmacy?.name ?? 'No pharmacy yet'}
+                      subtitle={destinationPharmacy ? [destinationPharmacy.gphc ? `GPhC ${destinationPharmacy.gphc}` : null, destinationPharmacy.postcode].filter(Boolean).join(' · ') || 'GPhC and postcode not recorded' : 'Choose one to send the enquiry to'}
+                      tag={<span className={`order-stage-pill order-tone--${hasDestination ? 'paid' : 'warning'}`}>{hasDestination ? 'Saved' : 'Not saved'}</span>}
+                    >
+                      <dl className="pharmacy-details__list">
+                        {destinationPharmacy ? (
+                          <>
+                            <CopyFact label="GPhC" value={destinationPharmacy.gphc} />
+                            <CopyFact label="Postcode" value={destinationPharmacy.postcode} />
+                            <CopyFact label="Phone" value={destinationPharmacy.phone} />
+                            <CopyFact label="Email" value={destinationPharmacy.email} />
+                          </>
+                        ) : null}
+                        <Fact label="Came from">{sourceName}</Fact>
+                      </dl>
+                      <p className="admin-intake-note">The pharmacy it is with can see this enquiry until you refer it or move it. {HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL} is always available as a holding place.</p>
+                    </IntakeCard>
+                    <IntakeCard icon={RefreshCw} title={hasDestination ? 'Move to another pharmacy' : 'Choose a pharmacy'} subtitle={`${candidateRows.length} of ${candidates.length} eligible${patientArea ? ` · ${patientArea} area first` : ''}`}>
+                      <div className="admin-intake-form">
+                        <div className="search-box admin-intake-picker__search">
+                          <Search size={15} aria-hidden="true" />
+                          <input type="search" value={candidateQuery} onChange={event => setCandidateQuery(event.target.value)} placeholder="Name, GPhC or postcode" aria-label="Filter eligible pharmacies" />
+                        </div>
+                        <div className="admin-intake-picker" role="radiogroup" aria-label="Eligible pharmacies">
+                          {candidateRows.length ? candidateRows.map(row => {
+                            const picked = sameId(destination, row.id);
+                            return (
+                              <button
+                                key={row.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={picked}
+                                className={`admin-intake-picker__row${picked ? ' is-on' : ''}`}
+                                onClick={() => setDestination(row.current ? currentDestinationId : row.id)}
+                              >
+                                <span className="admin-intake-picker__radio" aria-hidden="true" />
+                                <span className="admin-intake-picker__name">
+                                  <strong>{row.name}</strong>
+                                  <small>{[row.gphc ? `GPhC ${row.gphc}` : null, row.postcode].filter(Boolean).join(' · ') || 'GPhC and postcode not recorded'}</small>
+                                </span>
+                                <span className="admin-intake-picker__tags">
+                                  {row.current ? <span className="order-stage-pill order-tone--paid">Now with</span> : null}
+                                  {row.sameArea && !row.current ? <span className="order-stage-pill order-tone--curaleaf-review">Same area</span> : null}
+                                  {row.kind ? <span className="order-stage-pill order-tone--neutral">{row.kind}</span> : null}
+                                </span>
+                              </button>
+                            );
+                          }) : <p className="admin-intake-picker__empty">{candidates.length ? 'No pharmacy matches that search.' : 'No eligible pharmacies were found.'}</p>}
+                        </div>
+                        {destination && !sameId(destination, currentDestinationId) ? (
+                          <div className="admin-intake-picker__confirm">
+                            <p><strong>{hasDestination ? 'Moving to' : 'Sending to'} {pickedName}</strong>{hasDestination ? <> from {destinationName}. {destinationName} will stop seeing the enquiry.</> : '.'}</p>
+                            <label>Reason<select className="input" value={reason} onChange={event => setReason(event.target.value as typeof reason)}><option value="patient_preference">Patient preference</option><option value="capacity">Capacity</option><option value="delivery_or_collection">Delivery or collection needs</option><option value="geographic_coverage">Geographic coverage</option><option value="service_compatibility">Service compatibility</option><option value="administrative_correction">Administrative correction</option></select></label>
+                            {movingFromPharmacy ? (
+                              <label>How the patient agreed<select className="input" value={agreementChannel} onChange={event => setAgreementChannel(event.target.value as PatientAgreementChannel | '')} required>
+                                <option value="">Choose how they agreed…</option>
+                                <option value="phone">By phone</option>
+                                <option value="email">By email</option>
+                                <option value="sms">By text message</option>
+                                <option value="in_person">In person</option>
+                                <option value="not_applicable">N/A</option>
+                              </select><small>Needed because it is already with {destinationName}.</small></label>
+                            ) : null}
+                            <label>Private HHH note (optional)<textarea className="input" rows={2} value={allocationNote} onChange={event => setAllocationNote(event.target.value)} /></label>
+                            <div className="admin-intake-actions">
+                              <button type="button" className="btn btn-sm" disabled={busy} onClick={() => { setDestination(currentDestinationId); setAgreementChannel(''); setAllocationNote(''); }}>Cancel</button>
+                              <button type="button" className="btn btn-primary btn-sm" disabled={busy || (movingFromPharmacy && !agreementChannel)} onClick={() => void saveDestination()}>{hasDestination ? 'Move enquiry' : 'Save pharmacy'}</button>
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
-                      {!canRefer ? <p className="admin-v2-intake__decision-hint">{!destinationSaved ? 'Save the pharmacy destination first.' : 'Mark the HHH review as completed first.'}</p> : null}
-                      <label>Onboarding note<textarea className="input" rows={3} value={onboardingNote} onChange={event => setOnboardingNote(event.target.value)} /></label>
-                      <button type="button" className="btn btn-primary" disabled={busy || !canRefer} onClick={() => void decideOnboarding('approved')}><Send size={15} /> {existingClinicAccount ? 'Refer existing Curaleaf patient' : 'Refer and activate patient'}</button>
-                    </>
-                  ) : (
-                    <>
-                      <label>Reason for {referralOutcome === 'rejected' ? 'rejection' : 'decline'}<select className="input" value={declineReason} onChange={event => setDeclineReason(event.target.value as DeclineReason | '')}><option value="">Choose a reason…</option>{DECLINE_REASONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
-                      <p className="admin-v2-intake__decision-hint">The reason stays internal. It chooses which email the patient is sent, and it is never quoted to them.</p>
-                      <label>Onboarding note<textarea className="input" rows={3} value={onboardingNote} onChange={event => setOnboardingNote(event.target.value)} /></label>
-                      <button type="button" className="btn" disabled={busy || !declineReason} onClick={() => void decideOnboarding('declined')}>{referralOutcome === 'rejected' ? 'Reject application' : 'Decline application'}</button>
-                    </>
-                  )}
-
-                  <div className="admin-intake-withdraw">
-                    <div>
-                      <strong>Record withdrawal</strong>
-                      <small>Use this if the patient does not want to continue, including after the first conversation.</small>
-                    </div>
-                    <button type="button" className="btn" disabled={busy} onClick={() => void recordWithdrawal()}>Record withdrawal</button>
+                    </IntakeCard>
                   </div>
-                </IntakeFold>
+                </section>
+
+                <section id="intake-section-review" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-review">
+                  <h3 id="intake-heading-review" className="pharmacy-dashboard__heading">Review</h3>
+                  <IntakeCard icon={ClipboardList} title="HHH review" subtitle="Only HHH sees this. Pharmacies do not." tag={<span className={`order-stage-pill order-tone--${reviewMeta(detail.followUpStatus).tone}`}>{reviewMeta(detail.followUpStatus).label}</span>}>
+                    <div className="admin-intake-review" role="radiogroup" aria-label="HHH review status">
+                      {REVIEW_OPTIONS.map(option => {
+                        const saved = option.id === String(detail.followUpStatus ?? 'not_started');
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            role="radio"
+                            aria-checked={reviewStatus === option.id}
+                            className={`admin-intake-review__option is-${reviewMeta(option.id).tone}${reviewStatus === option.id ? ' is-on' : ''}`}
+                            onClick={() => setReviewStatus(option.id)}
+                          >
+                            <span className="admin-intake-review__dot" aria-hidden="true" />
+                            <strong>{reviewMeta(option.id).label}{saved ? <em>Current</em> : null}</strong>
+                            <small>{option.hint}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="admin-intake-review__footer">
+                      <p className="admin-intake-note">
+                        {reviewStatus === detail.followUpStatus
+                          ? reviewComplete ? 'Review is complete, so the patient can be referred.' : 'Mark it Review complete once the checks are done. That unlocks Referral.'
+                          : `Changing to ${reviewMeta(reviewStatus).label}.`}
+                      </p>
+                      <div className="admin-intake-actions">
+                        {reviewStatus !== detail.followUpStatus ? (
+                          <>
+                            <button type="button" className="btn btn-sm" disabled={busy} onClick={() => setReviewStatus(String(detail.followUpStatus ?? 'not_started') as ReviewStatus)}>Undo</button>
+                            <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => void saveReview()}>Save status</button>
+                          </>
+                        ) : reviewComplete ? (
+                          <button type="button" className="btn btn-sm" onClick={() => goToSection('referral')}>Go to Referral</button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </IntakeCard>
+                </section>
+
+                <section id="intake-section-referral" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-referral">
+                  <h3 id="intake-heading-referral" className="pharmacy-dashboard__heading">Referral</h3>
+                  <IntakeCard icon={Send} title="Decision" tag={<span className={`order-stage-pill order-tone--${canRefer ? 'paid' : 'neutral'}`}>{canRefer ? 'Ready' : 'Waiting'}</span>}>
+                    <div className="admin-intake-outcome" role="radiogroup" aria-label="Referral outcome">
+                      <button type="button" role="radio" aria-checked={referralOutcome === 'complete'} className={referralOutcome === 'complete' ? 'is-on' : ''} onClick={() => chooseOutcome('complete')}>
+                        <strong>Refer</strong>
+                        <small>Mark them referred for the pharmacy.</small>
+                      </button>
+                      <button type="button" role="radio" aria-checked={referralOutcome === 'declined'} className={referralOutcome === 'declined' ? 'is-on' : ''} onClick={() => chooseOutcome('declined')}>
+                        <strong>Decline</strong>
+                        <small>Eligibility or clinical decision.</small>
+                      </button>
+                      <button type="button" role="radio" aria-checked={referralOutcome === 'rejected'} className={referralOutcome === 'rejected' ? 'is-on' : ''} onClick={() => chooseOutcome('rejected')}>
+                        <strong>Reject</strong>
+                        <small>Close the enquiry without a referral.</small>
+                      </button>
+                    </div>
+
+                    {referralOutcome === 'complete' ? (
+                      <div className="admin-intake-form">
+                        <div className="admin-intake-clinic-choice" role="radiogroup" aria-label="Curaleaf account">
+                          <button type="button" role="radio" aria-checked={!existingClinicAccount} className={!existingClinicAccount ? 'is-on' : ''} onClick={() => setExistingClinicAccount(false)}>
+                            <strong>New Curaleaf account</strong>
+                            <small>They register with the clinic. Sends the standard referral email.</small>
+                          </button>
+                          <button type="button" role="radio" aria-checked={existingClinicAccount} className={existingClinicAccount ? 'is-on is-curaleaf' : ''} onClick={() => setExistingClinicAccount(true)}>
+                            <strong>Already with Curaleaf</strong>
+                            <small>They keep their clinic login. Sends the existing-account email. No £50 fee.</small>
+                          </button>
+                        </div>
+                        {!canRefer ? (
+                          <ul className="admin-intake-checklist" aria-label="Before referring">
+                            <li className={destinationSaved ? 'is-done' : ''}>
+                              <CheckCircle2 size={14} aria-hidden="true" />
+                              <span>Pharmacy saved</span>
+                              {destinationSaved ? null : <button type="button" className="btn btn-sm" onClick={() => goToSection('pharmacy')}>Go to Pharmacy</button>}
+                            </li>
+                            <li className={reviewComplete ? 'is-done' : ''}>
+                              <CheckCircle2 size={14} aria-hidden="true" />
+                              <span>Review completed</span>
+                              {reviewComplete ? null : <button type="button" className="btn btn-sm" onClick={() => goToSection('review')}>Go to Review</button>}
+                            </li>
+                          </ul>
+                        ) : null}
+                        <label>Onboarding note<textarea className="input" rows={2} value={onboardingNote} onChange={event => setOnboardingNote(event.target.value)} /></label>
+                        <div className="admin-intake-actions">
+                          <button type="button" className="btn btn-primary btn-sm" disabled={busy || !canRefer} onClick={() => void decideOnboarding('approved')}><Send size={14} /> {existingClinicAccount ? 'Refer existing Curaleaf patient' : 'Refer and activate patient'}</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="admin-intake-form">
+                        <label>Reason for {referralOutcome === 'rejected' ? 'rejection' : 'decline'}<select className="input" value={declineReason} onChange={event => setDeclineReason(event.target.value as DeclineReason | '')}><option value="">Choose a reason…</option>{DECLINE_REASONS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select><small>Never quoted to the patient. It only chooses which email they get.</small></label>
+                        <label>Onboarding note<textarea className="input" rows={2} value={onboardingNote} onChange={event => setOnboardingNote(event.target.value)} /></label>
+                        <div className="admin-intake-actions">
+                          <button type="button" className="btn btn-sm admin-decline-button" disabled={busy || !declineReason} onClick={() => void decideOnboarding('declined')}>{referralOutcome === 'rejected' ? 'Reject application' : 'Decline application'}</button>
+                        </div>
+                      </div>
+                    )}
+                  </IntakeCard>
+                </section>
               </div>
             </article>
           )}
@@ -722,23 +947,53 @@ function IntakeListRow({ record, selected, onSelect }: { record: V2EligibilityQu
   );
 }
 
-function IntakeFold({ id, title, summary, open, onToggle, children }: {
-  id: string;
-  title: string;
-  summary: string;
-  open: boolean;
-  onToggle: () => void;
-  children: ReactNode;
-}) {
+function IntakeCard({ icon: Icon, title, subtitle, tag, children }: { icon: LucideIcon; title: string; subtitle?: string; tag?: ReactNode; children: ReactNode }) {
   return (
-    <section className={`admin-intake-fold${open ? ' is-open' : ''}`}>
-      <h3>
-        <button type="button" className="admin-intake-fold__trigger" aria-expanded={open} aria-controls={id} onClick={onToggle}>
-          <span><strong>{title}</strong><small>{summary}</small></span>
-          <ChevronDown size={16} aria-hidden="true" />
-        </button>
-      </h3>
-      {open ? <div id={id} className="admin-intake-fold__body">{children}</div> : null}
+    <section className="pharmacy-details__card admin-intake-card">
+      <header>
+        <span className="pharmacy-details__icon" aria-hidden="true"><Icon size={15} /></span>
+        {subtitle ? <span className="admin-intake-card__title"><h4>{title}</h4><small>{subtitle}</small></span> : <h4>{title}</h4>}
+        {tag ?? <span aria-hidden="true" />}
+      </header>
+      {children}
     </section>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return <div className="pharmacy-details__row"><dt>{label}</dt><dd>{children}</dd></div>;
+}
+
+/** A detail row whose value can be copied in one click; an empty value reads "Not recorded". */
+function CopyFact({ label, value, flagged = false }: { label: string; value: unknown; flagged?: boolean }) {
+  const text = value == null ? '' : String(value).trim();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      // Clipboard can be blocked by the browser; the value is still selectable.
+    }
+  };
+  return (
+    <div className="pharmacy-details__row admin-intake-copy-row">
+      <dt>{label}</dt>
+      <dd>
+        {text ? (
+          <span className="admin-intake-copy">
+            {flagged ? <mark>{text}</mark> : <span>{text}</span>}
+            <button type="button" className={`admin-intake-copy__btn${copied ? ' is-copied' : ''}`} onClick={() => void copy()} title={copied ? 'Copied' : `Copy ${label.toLowerCase()}`} aria-label={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}>
+              {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+            </button>
+          </span>
+        ) : <span className="pharmacy-details__empty">Not recorded</span>}
+      </dd>
+    </div>
   );
 }
