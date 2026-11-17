@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Building2, Pencil, CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, Stethoscope, User, UserX, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, ShieldAlert, Building2, Pencil, CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, Stethoscope, User, UserX, type LucideIcon } from 'lucide-react';
 import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, markAdminIntakeOpened, updateAdminIntakeConditions, updateAdminIntakeDetails, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason, type PatientAgreementChannel } from '../shared/api';
-import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type DuplicateRecordMatch, type V2EligibilityQueueItem } from '../shared/contracts';
+import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type DuplicateRecordMatch, type ScreeningRule, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { useApp } from '../context/AppContext';
 import { conditionLabel } from '@hhh/domain';
@@ -62,6 +62,7 @@ const previewDedicated: V2EligibilityQueueItem = {
   version: 3, legacy: false, sourceType: 'future_pharmacy_qr', sourceOrganisationId: 'preview-pharmacy',
   assignedOrganisationId: 'preview-pharmacy', postcode: 'NG16 3AA', followUpStatus: 'in_progress',
   nextFollowUpAt: null, destinationLocked: false,
+  screeningFlag: 'TREATMENTS_NOT_TRIED', screeningFlags: ['TREATMENTS_NOT_TRIED', 'PSYCHOSIS_HISTORY'],
 };
 const previewCandidates: Detail[] = [
   { id: 'preview-pharmacy', name: 'Primary Branch', gphcNumber: 'TRAINING-PRIMARY', address: '12 Park Row, Leeds', postcode: 'LS1 5HD', phone: '0113 000 0000', email: 'primary@example.test' },
@@ -80,7 +81,8 @@ function previewDetail(record: V2EligibilityQueueItem): Detail {
     effectiveAssignedOrganisationId: record.assignedOrganisationId,
     dob: '1991-04-12', email: 'preview.patient@example.test', mobile: '07000 000 000',
     conditions: ['chronic-pain', 'insomnia'], primaryCondition: 'chronic-pain',
-    triedTwoTreatments: true, psychosisExclusion: false,
+    // The QR demo enquiry fails both checks, so the screening card has something to show.
+    triedTwoTreatments: !dedicated, psychosisExclusion: dedicated,
     referralConsent: true, dataSharingConsent: true,
   };
 }
@@ -97,6 +99,44 @@ const REVIEW_OPTIONS: Array<{ id: ReviewStatus; hint: string }> = [
 function postcodeArea(value: unknown) {
   const match = /^\s*([a-z]{1,2})\d/i.exec(String(value ?? ''));
   return match ? match[1]!.toUpperCase() : null;
+}
+
+/**
+ * The two screening checks from the eligibility form. A failed check is a flag for
+ * HHH, not a decision: each says what to confirm with the patient, and which decline
+ * reason fits if the answer stands.
+ */
+const SCREENING_CHECKS: Array<{
+  rule: ScreeningRule;
+  question: string;
+  short: string;
+  answer: (detail: Detail) => { text: string; flagged: boolean };
+  guidance: string;
+  declineReason: DeclineReason;
+}> = [
+  {
+    rule: 'TREATMENTS_NOT_TRIED',
+    question: 'Tried two licensed treatments',
+    short: 'Treatments',
+    answer: detail => (detail.triedTwoTreatments ? { text: 'Yes', flagged: false } : { text: 'No', flagged: true }),
+    guidance: 'Curaleaf needs two licensed treatments tried first. Check with the patient: they may have tried some they did not count. If they have not, decline as Eligibility not met.',
+    declineReason: 'ELIGIBILITY_NOT_MET',
+  },
+  {
+    rule: 'PSYCHOSIS_HISTORY',
+    question: 'Psychosis or schizophrenia, self or immediate family',
+    short: 'Psychosis history',
+    answer: detail => (detail.psychosisExclusion ? { text: 'Reported', flagged: true } : { text: 'Not reported', flagged: false }),
+    guidance: 'A personal or immediate-family history usually rules treatment out. Confirm who it applies to before deciding. If it stands, decline as Psychosis or schizophrenia exclusion.',
+    declineReason: 'PSYCHIATRIC_EXCLUSION',
+  },
+];
+
+/** Every failed check, falling back to the single recorded flag from an older API. */
+function screeningFlagsOf(record: { screeningFlags?: ScreeningRule[] | null; screeningFlag?: ScreeningRule | string | null } | null | undefined): ScreeningRule[] {
+  if (!record) return [];
+  if (Array.isArray(record.screeningFlags)) return record.screeningFlags;
+  return record.screeningFlag ? [record.screeningFlag as ScreeningRule] : [];
 }
 
 const isOpenStage = (stage: string) => stage === 'New' || stage === 'Under HHH review';
@@ -407,7 +447,8 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null, onFres
   }, [syncListOverflow, filteredRecords.length, queueFilter, loading]);
 
   const currentDestinationId = String(detail?.effectiveAssignedOrganisationId ?? '');
-  const screeningFlag = String(detail?.screeningFlag ?? '') || null;
+  const screeningFlags = screeningFlagsOf((detail ?? selected) as Parameters<typeof screeningFlagsOf>[0]);
+  const flaggedChecks = SCREENING_CHECKS.filter(check => screeningFlags.includes(check.rule));
   const duplicates = duplicateMatches(detail?.duplicateOf ?? selected?.duplicateOf);
   // Mirrors the server's rule: agreement is needed only when a pharmacy already holds the enquiry.
   const movingFromPharmacy = Boolean(detail?.assignedOrganisationId);
@@ -490,9 +531,13 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null, onFres
   const chooseOutcome = (outcome: ReferralOutcome) => {
     setReferralOutcome(outcome);
     if (outcome === 'complete' || declineReason) return;
-    const flag = String(detail?.screeningFlag ?? '');
-    if (flag === 'TREATMENTS_NOT_TRIED') setDeclineReason('ELIGIBILITY_NOT_MET');
-    if (flag === 'PSYCHOSIS_HISTORY') setDeclineReason('PSYCHIATRIC_EXCLUSION');
+    // Offer the reason for the first failed check; the admin can change it.
+    if (flaggedChecks[0]) setDeclineReason(flaggedChecks[0].declineReason);
+  };
+  const declineForCheck = (reasonCode: DeclineReason) => {
+    setReferralOutcome('declined');
+    setDeclineReason(reasonCode);
+    goToSection('referral');
   };
 
   return (
@@ -706,20 +751,38 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null, onFres
                 <section id="intake-section-eligibility" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-eligibility">
                   <h3 id="intake-heading-eligibility" className="pharmacy-dashboard__heading">Eligibility</h3>
                   <RecordCard
+                    icon={ShieldAlert}
+                    title="Screening checks"
+                    subtitle="A flag does not decide the application. You do."
+                    tag={<span className={`order-stage-pill order-tone--${flaggedChecks.length ? 'warning' : 'paid'}`}>{flaggedChecks.length ? `${flaggedChecks.length} flag${flaggedChecks.length === 1 ? '' : 's'}` : 'All clear'}</span>}
+                  >
+                    <ul className="screening-checks">
+                      {SCREENING_CHECKS.map(check => {
+                        const answer = check.answer(detail);
+                        const flagged = screeningFlags.includes(check.rule) || answer.flagged;
+                        return (
+                          <li key={check.rule} className={flagged ? 'is-flagged' : 'is-clear'}>
+                            <span className="screening-checks__icon" aria-hidden="true">{flagged ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}</span>
+                            <span className="screening-checks__body">
+                              <strong>{check.question}</strong>
+                              <small>Patient answered: <b>{answer.text}</b>{flagged ? ' · Flagged' : ' · Passes'}</small>
+                              {flagged ? <p>{check.guidance}</p> : null}
+                            </span>
+                            {flagged ? (
+                              <button type="button" className="btn btn-sm" onClick={() => declineForCheck(check.declineReason)}>Decline for this reason</button>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </RecordCard>
+
+                  <RecordCard
                     icon={Stethoscope}
-                    title="Form answers"
-                    subtitle={screeningFlag ? 'Screening flag' : 'No flags'}
+                    title="Conditions"
+                    subtitle={detailConditions.length ? `${detailConditions.length} from the patient’s form` : 'None given'}
                     tag={editingConditions ? undefined : <button type="button" className="btn btn-sm" onClick={() => { setConditionError(null); setEditingConditions(true); }}><Pencil size={13} aria-hidden="true" /> Edit conditions</button>}
                   >
-                    {screeningFlag ? (
-                      <p className="banner banner-amber admin-intake-flag" role="status">
-                        <strong>Screening flag.</strong>{' '}
-                        {screeningFlag === 'TREATMENTS_NOT_TRIED'
-                          ? 'The patient answered that they have not tried two licensed treatments.'
-                          : 'The patient reported a psychosis or schizophrenia diagnosis for themselves or immediate family.'}
-                        {' '}This is a flag only. It does not decline the application.
-                      </p>
-                    ) : null}
                     {editingConditions ? (
                       <ConditionEditor
                         conditions={detailConditions}
@@ -735,8 +798,6 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null, onFres
                         <CopyFact label="Primary condition" value={detail.primaryCondition ? conditionLabel(String(detail.primaryCondition)) : null} />
                         <CopyFact label="Conditions" value={detailConditions.length ? detailConditions.map(code => conditionLabel(code)).join(', ') : null} />
                       </>}
-                      <CopyFact label="Two treatments tried" value={detail.triedTwoTreatments ? 'Yes' : 'No or not confirmed'} flagged={!detail.triedTwoTreatments} />
-                      <CopyFact label="Psychosis history" value={detail.psychosisExclusion ? 'Reported' : 'Not reported'} flagged={Boolean(detail.psychosisExclusion)} />
                     </dl>
                   </RecordCard>
                 </section>
@@ -883,6 +944,16 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null, onFres
 
                     {referralOutcome === 'complete' ? (
                       <div className="admin-intake-form">
+                        {flaggedChecks.length ? (
+                          <div className="screening-reminder" role="note">
+                            <AlertTriangle size={15} aria-hidden="true" />
+                            <span>
+                              <strong>Referring with {flaggedChecks.length === 1 ? 'a screening flag' : `${flaggedChecks.length} screening flags`}</strong>
+                              <small>{flaggedChecks.map(check => check.short).join(' and ')}. Make sure you have confirmed {flaggedChecks.length === 1 ? 'it' : 'them'} with the patient.</small>
+                            </span>
+                            <button type="button" className="btn btn-sm" onClick={() => goToSection('eligibility')}>Review checks</button>
+                          </div>
+                        ) : null}
                         <div className="admin-intake-clinic-choice" role="radiogroup" aria-label="Curaleaf account">
                           <button type="button" role="radio" aria-checked={!existingClinicAccount} className={!existingClinicAccount ? 'is-on' : ''} onClick={() => setExistingClinicAccount(false)}>
                             <strong>New Curaleaf account</strong>
@@ -975,7 +1046,12 @@ function IntakeListRow({ record, selected, onSelect }: { record: V2EligibilityQu
       <span className="order-crm-row__identity">
         <strong title={record.patientDisplayName} className={unseen ? 'has-fresh-dot' : undefined}>{unseen ? <><i className="nav-fresh-dot row-fresh-dot" aria-hidden="true" /><span>{compactPatientName(record.patientDisplayName)}</span></> : compactPatientName(record.patientDisplayName)}</strong>
         <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
-        {record.screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : null}
+        {(() => {
+          const flags = screeningFlagsOf(record);
+          if (!flags.length) return null;
+          const label = flags.length > 1 ? `${flags.length} flags` : SCREENING_CHECKS.find(check => check.rule === flags[0])?.short ?? 'Screening flag';
+          return <span className="order-stage-pill order-tone--warning" title={`Screening: ${flags.map(flag => SCREENING_CHECKS.find(check => check.rule === flag)?.short).join(', ')}`}>{label}</span>;
+        })()}
         {record.duplicateOf?.length ? <span className="order-stage-pill order-tone--curaleaf-review" title="Another record looks like the same person">Duplicate · {onboardingStatusLabel(record.duplicateOf[0].stage)}</span> : null}
       </span>
       <span className="order-crm-row__position">

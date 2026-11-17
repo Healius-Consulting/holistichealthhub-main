@@ -21,6 +21,17 @@ export function screeningFlagFor(answers: ScreeningAnswers): ScreeningRule | nul
   return null;
 }
 
+/**
+ * Every check the answers fail, for HHH admin to see in full. The single recorded
+ * rule above stays as it is: it decides which explanation a declined patient gets.
+ */
+export function screeningFlagsFor(answers: ScreeningAnswers): ScreeningRule[] {
+  const flags: ScreeningRule[] = [];
+  if (!answers.triedTwoTreatments) flags.push('TREATMENTS_NOT_TRIED');
+  if (answers.psychiatricExclusion) flags.push('PSYCHOSIS_HISTORY');
+  return flags;
+}
+
 /** The clause used when the patient is told which question decided a decline. */
 export function screeningQuestionClause(rule: ScreeningRule): string {
   return rule === 'TREATMENTS_NOT_TRIED' ? 'the treatments question' : 'the family-history question';

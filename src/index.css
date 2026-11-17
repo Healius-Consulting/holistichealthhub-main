@@ -21937,3 +21937,44 @@ html[data-theme='dark']{ --fee-first: #22a091; --fee-annual: #b87d24; }
 strong.has-fresh-dot{ display: flex !important; align-items: center; gap: 8px; min-width: 0; overflow: visible !important; padding-left: 2px; }
 strong.has-fresh-dot > span{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }
+/* Admin intake: the screening checks, one row per question, flagged rows say what to do. */
+.screening-checks{ display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.screening-checks li{
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+.screening-checks li.is-flagged{ border-color: color-mix(in srgb, #d97706 40%, var(--border)); background: color-mix(in srgb, #fef3c7 55%, var(--bg-surface)); }
+.screening-checks__icon{ display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; }
+.is-clear .screening-checks__icon{ color: #0f6b4c; background: color-mix(in srgb, #0f6b4c 12%, transparent); }
+.is-flagged .screening-checks__icon{ color: #b45309; background: color-mix(in srgb, #d97706 16%, transparent); }
+.screening-checks__body{ display: grid; gap: 3px; min-width: 0; }
+.screening-checks__body strong{ color: var(--text-primary); font-size: 13px; }
+.screening-checks__body small{ color: var(--text-secondary); font-size: 12px; }
+.screening-checks__body small b{ color: var(--text-primary); }
+.screening-checks__body p{ margin: 4px 0 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+.screening-checks li > .btn{ align-self: center; white-space: nowrap; }
+@container (max-width: 520px){
+  .screening-checks li{ grid-template-columns: 28px minmax(0, 1fr); }
+  .screening-checks li > .btn{ grid-column: 2; justify-self: start; }
+}
+.screening-reminder{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  color: #92400e;
+  border: 1px solid color-mix(in srgb, #d97706 40%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, #fef3c7 55%, var(--bg-surface));
+}
+.screening-reminder span{ display: grid; gap: 2px; min-width: 0; }
+.screening-reminder strong{ color: var(--text-primary); font-size: 13px; }
+.screening-reminder small{ color: var(--text-secondary); font-size: 12px; }
+@container (max-width: 520px){ .screening-reminder{ grid-template-columns: auto minmax(0, 1fr); } .screening-reminder .btn{ grid-column: 2; justify-self: start; } }

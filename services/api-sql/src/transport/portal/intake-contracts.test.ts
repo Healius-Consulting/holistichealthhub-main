@@ -33,6 +33,8 @@ describe('SQL admin intake projections', () => {
 
   it('marks an enquiry new to HHH until an admin opens it', () => {
     assert.equal(toAdminIntakeQueueItem(submission).hhhOpened, false);
+    assert.deepEqual(toAdminIntakeQueueItem(submission).screeningFlags, []);
+    assert.deepEqual(toAdminIntakeQueueItem({ ...submission, triedTwoTreatments: false, psychiatricExclusion: true }).screeningFlags, ['TREATMENTS_NOT_TRIED', 'PSYCHOSIS_HISTORY']);
     assert.equal(toAdminIntakeQueueItem({ ...submission, hhhOpenedAt: '2026-08-17T11:00:00.000Z' }).hhhOpened, true);
   });
 

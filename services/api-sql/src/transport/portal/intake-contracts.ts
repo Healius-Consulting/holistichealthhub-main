@@ -1,6 +1,7 @@
 import type { DuplicateRecordMatch } from '../../domain/eligibility/duplicates.js';
 import type { PlatformSubmissionRecord, SubmissionConditionRecord } from '../../repositories/ports/intake.port.js';
 import { portalSourceType } from './intake-source.js';
+import { screeningFlagsFor } from '../../domain/eligibility/screening.js';
 
 function lower(value: string) {
   return value.toLowerCase();
@@ -54,6 +55,8 @@ export function toAdminIntakeQueueItem(record: PlatformSubmissionRecord, duplica
     destinationLocked: false,
     /** Which screening check the answers failed, if any; the admin decides what it means. */
     screeningFlag: record.declineRule ?? null,
+    /** Every check the answers fail, in the order they are asked; empty when both pass. */
+    screeningFlags: screeningFlagsFor({ triedTwoTreatments: record.triedTwoTreatments, psychiatricExclusion: record.psychiatricExclusion }),
     /** Other records that look like the same person, so a re-submitted form is recognised at a glance. */
     duplicateOf,
   };

@@ -205,6 +205,8 @@ export interface V2EligibilityQueueItem {
   destinationLocked?: boolean;
   /** Which screening check the answers failed at submission, for the admin to weigh. */
   screeningFlag?: ScreeningRule | null;
+  /** Every check the answers fail; the single flag above is only the first. */
+  screeningFlags?: ScreeningRule[];
   /** Other records that look like the same person, patient row first. */
   duplicateOf?: DuplicateRecordMatch[];
 }
