@@ -151,6 +151,7 @@ const LIST_PLATFORM_SUBMISSIONS_GQL = `
       pharmacyAccessStatus
       followUpStatus
       pharmacyReviewStatus
+      hhhOpenedAt
       outcomeStatus
       onboardingDecision
       existingClinicAccount
