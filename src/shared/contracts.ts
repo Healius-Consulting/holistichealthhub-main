@@ -678,6 +678,11 @@ export interface PatientRegisterExportRow {
   /** From the application's answers, so a referred patient's conditions survive leaving the intake queue. */
   conditions?: string[];
   primaryCondition?: string | null;
+  firstName?: string;
+  surname?: string;
+  postcode?: string;
+  /** True for a patient record HHH can edit; false for a closed application. */
+  editable?: boolean;
 }
 
 export interface PatientRegisterScopeCount {

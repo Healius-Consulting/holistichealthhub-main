@@ -10,6 +10,8 @@ import { assertPlatformScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { buildPatientRegister, type PatientRegisterFilters } from './patient-register.js';
 import { rewritePatientConditions } from '../../application/eligibility/rewrite-patient-conditions.js';
+import { assertNoIdentityClash, changedPatientFields, normalisePatientDetails, patientDetailsInputSchema } from '../../application/patient-details/patient-details.js';
+import { sha256 } from '../../security/session-utils.js';
 
 const organisationIdSchema = z.string().regex(/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
 const filtersSchema = z.object({
@@ -138,6 +140,51 @@ export function createAdminPatientRouter(): Router {
         primaryConditionCode: result.primaryConditionCode,
         changed: result.changed,
       });
+    } catch (error) { next(error); }
+  });
+
+  /*
+   * HHH correcting a patient's own details. Same rules as the public form; the
+   * email and date of birth also move the record's duplicate-check identity.
+   * Curaleaf keeps its own copy, which this does not change.
+   */
+  router.patch('/portal/admin/patients/:patientId/details', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const { patientId } = adminConditionParamsSchema.parse(req.params);
+      const { organisationId, ...rest } = patientDetailsInputSchema.extend({ organisationId: organisationIdSchema }).parse(req.body);
+      const patient = await patientRepo.findPatientById(organisationId, patientId);
+      if (!patient) throw new HttpError(404, 'Patient record not found.', 'NOT_FOUND');
+      const details = normalisePatientDetails(rest);
+      const changed = changedPatientFields(patient, details);
+      if (changed.length) {
+        if (changed.includes('email') || changed.includes('dob')) {
+          assertNoIdentityClash(patient.id, details, await patientRepo.listTenantPatients(patient.organisationId, 5000));
+        }
+        const saved = await patientRepo.updatePatientDetails({
+          id: patient.id,
+          organisationId: patient.organisationId,
+          expectedVersion: patient.version,
+          ...details,
+          emailHash: sha256(details.email),
+        });
+        if (!saved) throw new HttpError(409, 'This patient changed while you were editing. Refresh and try again.', 'VERSION_CONFLICT');
+        await identityRepo.appendAudit({
+          organisationId: patient.organisationId,
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          event: 'patient.details_updated',
+          recordType: 'Patient',
+          recordId: patient.id,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: 'admin',
+          // Which fields, never their values: the audit log is not a second copy of the record.
+          details: { fields: changed },
+        });
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ patientId: patient.id, ...details, changed });
     } catch (error) { next(error); }
   });
 

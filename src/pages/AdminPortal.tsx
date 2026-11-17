@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   Building2,
@@ -13,6 +14,7 @@ import {
   
   
   LockKeyhole,
+  Package,
   MailPlus,
   LogOut,
   
@@ -25,6 +27,8 @@ import {
   
   ShieldCheck,
   ShieldOff,
+  SlidersHorizontal,
+  Ghost,
   TrendingUp,
   
   UserPlus,
@@ -54,6 +58,7 @@ import { PharmacySummary } from './admin/PharmacySummary';
 import { performancePeriodStart, type PerformancePeriod } from '../utils/performancePeriod';
 import { PharmacyDetails } from './admin/PharmacyDetails';
 import { LOCAL_PREVIEW_NEW_PHARMACIES } from '../dev/localPharmacyRequests';
+import { ledgerDemoEvents } from '../dev/localAdminLedger';
 import { isLocalPortalPreview, withLocationSearch } from '../dev/localPortalPreview';
 import { useModalFocus } from '../accessibility/useModalFocus';
 import WorkspaceNavigation, { type WorkspaceNavGroup } from '../components/WorkspaceNavigation';
@@ -70,10 +75,22 @@ import { appPathPrefix } from '../auth/surface-path';
 import { surfaceRelativePath, surfaceRoutePath } from '../routing/surfaceRoute';
 import { ADMIN_REQUESTS_PATH, ADMIN_VIEW_PATHS, parseAdminRelativePath, type AdminView } from '@hhh/domain/portal-route';
 import AdminIntakeV2 from '../components/AdminIntakeV2';
+import { PatientDetailsForm } from './admin/PatientDetailsForm';
+import { FeeChart } from './admin/FeeChart';
+import { CopyFact, Fact, RecordCard, RecordSectionNav, useRecordSections, type RecordSection } from '../components/admin/RecordParts';
 import CuraleafConnectionPanel from '../components/CuraleafConnectionPanel';
 
 type OverviewManagePanel = 'summary' | 'identity' | 'staff' | 'curaleaf';
 type AdminDialogFocus = 'list' | 'invite';
+
+/** The patient record is one page; these are its sections, in order. */
+const PATIENT_SECTIONS: RecordSection<'overview' | 'patient' | 'conditions' | 'fees' | 'orders'>[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'patient', label: 'Patient' },
+  { id: 'conditions', label: 'Conditions' },
+  { id: 'fees', label: 'Fees' },
+  { id: 'orders', label: 'Orders' },
+];
 
 /** The pharmacy record is one page; these are its sections, in order. */
 const PHARMACY_SECTIONS: { id: OverviewManagePanel; label: string }[] = [
@@ -916,7 +933,20 @@ export default function AdminPortal() {
   const [openIntakeCount, setOpenIntakeCount] = useState<number | null>(null);
   const [openIntakeStatus, setOpenIntakeStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [selectedRegisterPatient, setSelectedRegisterPatient] = useState<PatientRegisterExportRow | null>(null);
+  const selectedRegisterKey = selectedRegisterPatient ? registerRowKey(selectedRegisterPatient) : null;
+  useEffect(() => { setEditingPatientDetails(false); }, [selectedRegisterKey]);
+  const { activeSection: patientSection, goToSection: goToPatientSection } = useRecordSections(PATIENT_SECTIONS, {
+    prefix: 'patient-section',
+    navSelector: '.admin-patient-nav',
+    enabled: view === 'patients' && Boolean(selectedRegisterPatient),
+    resetKey: selectedRegisterPatient ? registerRowKey(selectedRegisterPatient) : null,
+  });
   const [editingAdminConditions, setEditingAdminConditions] = useState(false);
+  const [editingPatientDetails, setEditingPatientDetails] = useState(false);
+  const [patientFiltersOpen, setPatientFiltersOpen] = useState(false);
+  // Each admin page renders its headline figures into the page header through this slot.
+  const [headerSummary, setHeaderSummary] = useState<HTMLDivElement | null>(null);
+  const [registerEdits, setRegisterEdits] = useState<Record<string, Partial<PatientRegisterExportRow>>>({});
   const [savingAdminConditions, setSavingAdminConditions] = useState(false);
   const [adminConditionError, setAdminConditionError] = useState<string | null>(null);
 
@@ -1243,6 +1273,8 @@ export default function AdminPortal() {
         }
       });
 
+    // Demo fees at the live demo pharmacy, so the preview has a ledger to show.
+    events.push(...ledgerDemoEvents());
     return events.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
   }, [state.crm, state.organisations, state.submissions]);
 
@@ -1482,8 +1514,14 @@ export default function AdminPortal() {
       // The server row carries the patient's eligibility answers; re-shaping the row must not drop them.
       conditions: 'conditions' in patient ? patient.conditions : undefined,
       primaryCondition: 'primaryCondition' in patient ? patient.primaryCondition : undefined,
+      firstName: 'firstName' in patient ? patient.firstName : undefined,
+      surname: 'surname' in patient ? patient.surname : undefined,
+      postcode: 'postcode' in patient ? patient.postcode : undefined,
+      editable: 'editable' in patient ? patient.editable : !patient.id.startsWith('sub-'),
+      // Details HHH saved since the register loaded, so the list and record show them at once.
+      ...registerEdits[registerRowKey({ organisationId: patient.organisationId, id: patient.id })],
     };
-  }, [state.organisations]);
+  }, [registerEdits, state.organisations]);
 
   useEffect(() => {
     if (view !== 'patients') return;
@@ -1838,6 +1876,7 @@ export default function AdminPortal() {
 
     return (
       <div className="page-body order-crm patient-crm admin-overview-crm">
+        {headerSummary ? createPortal(
         <section className="order-crm-summary" aria-label="Pharmacy portfolio summary">
           <div className="order-crm-summary__tiles">
             <article className="order-crm-metric">
@@ -1879,9 +1918,12 @@ export default function AdminPortal() {
               </span>
             </article>
           </div>
-        </section>
+        </section>,
+          headerSummary,
+        ) : null}
 
-        <section className="order-crm-controls">
+        <section className="order-crm-controls admin-filter-bar">
+          <div className="admin-filter-bar__top">
           <div className="order-crm-search">
             <Search size={15} />
             <input
@@ -1891,6 +1933,10 @@ export default function AdminPortal() {
               placeholder="Search pharmacy name or GPhC number"
               aria-label="Search pharmacies"
             />
+          </div>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowOnboarding(true)}>
+              <Plus size={14} /> Onboard pharmacy (Legacy)
+            </button>
           </div>
           <div className="order-crm-filters" role="group" aria-label="Filter pharmacies">
             {([
@@ -1910,9 +1956,6 @@ export default function AdminPortal() {
                 <span>{filter.label}</span><strong>{filter.count}</strong>
               </button>
             ))}
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowOnboarding(true)}>
-              <Plus size={14} /> Onboard pharmacy (Legacy)
-            </button>
           </div>
         </section>
 
@@ -2294,7 +2337,7 @@ export default function AdminPortal() {
     };
     return (
       <>
-        <AdminIntakeV2 onOpenRecord={openRegisterRecord} />
+        <AdminIntakeV2 onOpenRecord={openRegisterRecord} summarySlot={headerSummary} />
         <section className="integration-boundary card"><ShieldCheck size={20} /><div><strong>HHH referral boundary</strong><p>The current assigned pharmacy can see this enquiry. Completing referral above marks them referred for that pharmacy. This does not diagnose, prescribe, replace a doctor’s prescription, or replace the pharmacy’s legal and professional checks before dispensing.</p></div></section>
         <section className="card admin-referral-section">
           <div className="admin-directory-head"><div><p className="section-label">Legacy compatibility</p><h2>Previous-form applications</h2><p>Only schema-v1 applications use this older workflow. New main-site and dedicated-link cases are managed in the HHH intake workspace above.</p></div><span className="pill pill-amber">{pending.length} waiting</span></div>
@@ -2324,7 +2367,7 @@ export default function AdminPortal() {
     setView('patients');
   };
 
-  const renderReferrals = () => <AdminIntakeV2 onOpenRecord={openRegisterRecord} />;
+  const renderReferrals = () => <AdminIntakeV2 onOpenRecord={openRegisterRecord} summarySlot={headerSummary} />;
 
   const renderPatients = () => {
     const activeCount = stageCounts['HHH approved'] ?? 0;
@@ -2347,6 +2390,33 @@ export default function AdminPortal() {
       ? patientOrderActivity(state.orders, selectedRegisterPatient.organisationId, orderPatientId)
       : { count: 0, dates: [], uniqueDays: [] };
     const selectedTone = selectedRegisterPatient ? stageTone(selectedRegisterPatient.stage) : 'info';
+    const selectedPharmacy = selectedRegisterPatient
+      ? state.organisations.find(item => item.id.replaceAll('-', '').toLowerCase() === selectedRegisterPatient.organisationId.replaceAll('-', '').toLowerCase()) ?? null
+      : null;
+    const selectedPharmacyPostcode = selectedPharmacy?.postcode?.trim() || null;
+    const firstDispenseFees = selectedFees.filter(event => event.kind === 'new-referral');
+    const annualFees = selectedFees.filter(event => event.kind === 'annual-patient');
+    const selectedRetention = selectedRegisterPatient
+      ? clinicRetention(state.orders, selectedRegisterPatient.organisationId, orderPatientId, retentionWindows)
+      : null;
+    // A closed application has no patient row to edit; only patient records can be corrected.
+    const selectedCanEditDetails = Boolean(selectedRegisterPatient && selectedRegisterPatient.editable !== false && !selectedRegisterPatient.id.startsWith('sub-'));
+    const selectedNameParts = (selectedRegisterPatient?.name ?? '').trim().split(/\s+/);
+    const selectedDetailsDraft = {
+      firstName: selectedRegisterPatient?.firstName ?? (selectedNameParts.length > 1 ? selectedNameParts.slice(0, -1).join(' ') : selectedNameParts[0] ?? ''),
+      surname: selectedRegisterPatient?.surname ?? (selectedNameParts.length > 1 ? selectedNameParts.at(-1)! : ''),
+      dob: selectedRegisterPatient?.dob ?? '',
+      email: selectedRegisterPatient?.email ?? '',
+      mobile: selectedRegisterPatient?.mobile ?? '',
+      postcode: selectedRegisterPatient?.postcode ?? '',
+    };
+    const openSelectedLedger = () => {
+      if (!selectedRegisterPatient) return;
+      setFinanceOrganisationId(selectedRegisterPatient.organisationId);
+      setFinancePatientKey(selectedFees[0]?.patientKey ?? 'all');
+      setFinancePeriod('all');
+      setView('finance');
+    };
     // Only a real patient row can be rewritten. A register entry that is still
     // only an intake submission has no patient record to edit yet.
     const adminConditionPatientId = selectedCrm?.id
@@ -2357,6 +2427,8 @@ export default function AdminPortal() {
     const adminConditions = [selectedCrm?.conditions, selectedIntake?.conditions, selectedRegisterPatient?.conditions]
       .find(candidate => candidate && candidate.length > 0) ?? [];
     const adminPrimaryCondition = selectedCrm?.primaryCondition ?? selectedIntake?.primaryCondition ?? selectedRegisterPatient?.primaryCondition ?? adminConditions[0] ?? '';
+    // Pharmacy and dates live behind Filters; the button shows how many are set. Test patients are the ghost toggle.
+    const extraFilterCount = [patientOrganisationId !== 'all', Boolean(patientFrom), Boolean(patientTo)].filter(Boolean).length;
     const filtersActive = Boolean(query.trim() || patientOrganisationId !== 'all' || patientStatus !== 'all' || patientFrom || patientTo || !hideTestPatients);
     // One sentence that says what the list holds, so nobody has to work it
     // out from the state of six controls.
@@ -2373,6 +2445,7 @@ export default function AdminPortal() {
 
     return (
       <div className="page-body order-crm patient-crm admin-register-crm">
+        {headerSummary ? createPortal(
         <section className="order-crm-summary" aria-label="Patient register summary">
           <div className="order-crm-summary__tiles">
             <article className="order-crm-metric">
@@ -2396,20 +2469,51 @@ export default function AdminPortal() {
               </span>
             </article>
           </div>
-        </section>
+        </section>,
+          headerSummary,
+        ) : null}
 
-        <section className="order-crm-controls">
-          <div className="order-crm-search">
-            <Search size={15} />
-            <input
-              type="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search patient, date of birth or pharmacy"
-              aria-label="Search the patient register"
-            />
+        <section className="order-crm-controls admin-filter-bar">
+          <div className="admin-filter-bar__top">
+            <div className="order-crm-search">
+              <Search size={15} />
+              <input
+                type="search"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search patient, date of birth or pharmacy"
+                aria-label="Search the patient register"
+              />
+            </div>
+            <button
+              type="button"
+              className={`btn btn-sm admin-filter-bar__ghost${hideTestPatients ? '' : ' is-on'}`}
+              aria-pressed={!hideTestPatients}
+              aria-label={hideTestPatients ? 'Show test patients' : 'Hide test patients'}
+              title={hideTestPatients ? 'Test patients are hidden. Click to show them.' : 'Test patients are shown. Click to hide them.'}
+              onClick={() => setHideTestPatients(value => !value)}
+            >
+              <Ghost size={15} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm admin-filter-bar__filters${extraFilterCount ? ' is-on' : ''}`}
+              aria-expanded={patientFiltersOpen}
+              aria-controls="admin-register-more-filters"
+              onClick={() => setPatientFiltersOpen(open => !open)}
+            >
+              <SlidersHorizontal size={14} aria-hidden="true" /> Filters{extraFilterCount ? <b>{extraFilterCount}</b> : null}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => void exportPatients()}
+              disabled={patientExportBusy || patientRegisterLoading || (!isLocalPortalPreview && !serverPatientRegister)}
+            >
+              <Download size={14} /> {patientExportBusy ? 'Preparing…' : patientRegisterLoading ? 'Loading…' : 'Export CSV'}
+            </button>
           </div>
-          <div className="order-crm-filters" role="group" aria-label="Filter the patient register">
+          <div className="order-crm-filters" role="group" aria-label="Filter the patient register by stage">
             <button type="button" className={patientStatus === 'all' ? 'active' : ''} aria-pressed={patientStatus === 'all'} onClick={() => setPatientStatus('all')}>
               <span>All stages</span><strong>{scopeTotal}</strong>
             </button>
@@ -2418,39 +2522,31 @@ export default function AdminPortal() {
                 <span>{onboardingStatusLabel(stage)}</span><strong>{stageCounts[stage] ?? 0}</strong>
               </button>
             ))}
-            <label className="admin-register-crm__select">
-              <small>Pharmacy</small>
-              <select value={patientOrganisationId} onChange={event => setPatientOrganisationId(event.target.value)} aria-label="Filter by pharmacy">
-                <option value="all">All pharmacies</option>
-                {state.organisations.map(organisation => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}
-              </select>
-            </label>
-            <label className="admin-register-crm__date">
-              <small>Last updated from</small>
-              <input type="date" value={patientFrom} max={patientTo || undefined} onChange={event => setPatientFrom(event.target.value)} aria-label="Last updated from" />
-            </label>
-            <label className="admin-register-crm__date">
-              <small>Last updated to</small>
-              <input type="date" value={patientTo} min={patientFrom || undefined} onChange={event => setPatientTo(event.target.value)} aria-label="Last updated to" />
-            </label>
-            <label className="admin-register-crm__toggle">
-              <input type="checkbox" checked={hideTestPatients} onChange={event => setHideTestPatients(event.target.checked)} />
-              <span>Hide test patients</span>
-            </label>
-            {filtersActive ? (
-              <button type="button" onClick={() => { setQuery(''); setPatientOrganisationId('all'); setPatientStatus('all'); setPatientFrom(''); setPatientTo(''); setHideTestPatients(true); }}>
-                Clear filters
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => void exportPatients()}
-              disabled={patientExportBusy || patientRegisterLoading || (!isLocalPortalPreview && !serverPatientRegister)}
-            >
-              <Download size={14} /> {patientExportBusy ? 'Preparing CSV…' : patientRegisterLoading ? 'Loading scope…' : 'Export CSV'}
-            </button>
           </div>
+          {patientFiltersOpen ? (
+            <div id="admin-register-more-filters" className="admin-filter-bar__more" role="group" aria-label="More filters">
+              <label className="admin-register-crm__select">
+                <small>Pharmacy</small>
+                <select value={patientOrganisationId} onChange={event => setPatientOrganisationId(event.target.value)} aria-label="Filter by pharmacy">
+                  <option value="all">All pharmacies</option>
+                  {state.organisations.map(organisation => <option key={organisation.id} value={organisation.id}>{organisation.name}</option>)}
+                </select>
+              </label>
+              <label className="admin-register-crm__date">
+                <small>Last updated from</small>
+                <input type="date" value={patientFrom} max={patientTo || undefined} onChange={event => setPatientFrom(event.target.value)} aria-label="Last updated from" />
+              </label>
+              <label className="admin-register-crm__date">
+                <small>Last updated to</small>
+                <input type="date" value={patientTo} min={patientFrom || undefined} onChange={event => setPatientTo(event.target.value)} aria-label="Last updated to" />
+              </label>
+              {filtersActive ? (
+                <button type="button" className="btn btn-sm admin-filter-bar__clear" onClick={() => { setQuery(''); setPatientOrganisationId('all'); setPatientStatus('all'); setPatientFrom(''); setPatientTo(''); setHideTestPatients(true); }}>
+                  Clear all
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </section>
         <p className="admin-register-crm__scope" aria-live="polite">
           {patientRegisterLoading && !isLocalPortalPreview
@@ -2484,7 +2580,7 @@ export default function AdminPortal() {
                   <div className="order-crm-empty">
                     <Users size={26} />
                     <strong>No {stageNoun}s match</strong>
-                    <span>Try another search, pharmacy, stage or date range{hideTestPatients ? ', or show test patients' : ''}.</span>
+                    <span>Try another search, stage or filter{hideTestPatients ? ', or use the ghost button to show test patients' : ''}.</span>
                   </div>
                 ) : displayedPatients.map(patient => {
                   const row = toRegisterRow(patient);
@@ -2535,28 +2631,10 @@ export default function AdminPortal() {
                       <div className="order-crm-record__titles">
                         <strong>{selectedRegisterPatient.name}</strong>
                         <span className="order-crm-record__ref">DOB {formatPatientDob(selectedRegisterPatient.dob)}</span>
-                        <em>{selectedRegisterPatient.pharmacyName}{selectedRegisterPatient.gphcNumber ? ` · GPhC ${selectedRegisterPatient.gphcNumber}` : ''}</em>
+                        <em>{selectedRegisterPatient.pharmacyName}{selectedPharmacyPostcode ? ` · ${selectedPharmacyPostcode}` : ''}</em>
                       </div>
                     </div>
                     <span className={`order-stage-pill order-tone--${selectedTone}`}>{onboardingStatusLabel(selectedRegisterPatient.stage)}</span>
-                    {(() => {
-                      const retention = clinicRetention(state.orders, selectedRegisterPatient.organisationId, orderPatientId, retentionWindows);
-                      if (!retention) return null;
-                      return (
-                        <section className="patient-chart-card" aria-label="Retention status">
-                          <p className="section-label">Inferred from prescriptions</p>
-                          <strong>{retention.status}</strong>
-                          <p>Reconcile this with the clinic’s own appointment records before anything is invoiced. Windows met: {retention.met.join(', ') || 'none yet'}.</p>
-                          <label>One-month window ends on day
-                            <input type="number" min="21" value={retentionWindows.w2EndDay} onChange={event => {
-                              const next = { ...retentionWindows, w2EndDay: Number(event.target.value) };
-                              setRetentionWindows(next);
-                              localStorage.setItem('hhh.retention.windows', JSON.stringify(next));
-                            }} />
-                          </label>
-                        </section>
-                      );
-                    })()}
                   </div>
                   <div className="order-crm-record__toolbar">
                     <div className="order-crm-record__value">
@@ -2565,167 +2643,182 @@ export default function AdminPortal() {
                       <span className="order-crm-record__opened">{selectedFees.length ? `${selectedFees.length} fee event${selectedFees.length === 1 ? '' : 's'}` : 'No fee events yet'}</span>
                     </div>
                     <div className="order-crm-record__actions" role="group" aria-label="Patient record actions">
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        onClick={() => {
-                          const feeMatch = selectedFees[0];
-                          setFinanceOrganisationId(selectedRegisterPatient.organisationId);
-                          setFinancePatientKey(feeMatch?.patientKey ?? 'all');
-                          setFinancePeriod('all');
-                          setView('finance');
-                        }}
-                      >
-                        Open ledger
-                      </button>
+                      <button type="button" className="btn btn-sm" onClick={openSelectedLedger}>Open ledger</button>
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => openPharmacyOnOverview(selectedRegisterPatient.organisationId, 'identity')}>Manage pharmacy</button>
                     </div>
                   </div>
                 </header>
 
-                <div className="patient-crm-detail__body">
-                  <div className="admin-overview-crm__facts">
-                    <article>
-                      <small>Last recorded</small>
-                      <strong>{selectedRegisterPatient.date ? new Date(selectedRegisterPatient.date).toLocaleDateString('en-GB', { timeZone: 'Europe/London' }) : '—'}</strong>
-                    </article>
-                    <article>
-                      <small>First dispenses</small>
-                      <strong>{financeReady ? referralFeeFormatter.format(selectedFees.filter(event => event.kind === 'new-referral').reduce((sum, event) => sum + event.amount, 0)) : '—'}</strong>
-                      <em>{selectedFees.filter(event => event.kind === 'new-referral').length} × £50</em>
-                    </article>
-                    <article>
-                      <small>Annual fees</small>
-                      <strong>{financeReady ? referralFeeFormatter.format(selectedFees.filter(event => event.kind === 'annual-patient').reduce((sum, event) => sum + event.amount, 0)) : '—'}</strong>
-                      <em>{selectedFees.filter(event => event.kind === 'annual-patient').length} × £40</em>
-                    </article>
-                    <article>
-                      <small>Intake</small>
-                      <strong>{selectedIntake?.source ?? (selectedCrm ? 'Record' : 'Register')}</strong>
-                      <em>{selectedIntake ? onboardingStatusLabel(selectedIntake.status) : selectedCrm ? onboardingStatusLabel(selectedCrm.status) : 'Not in queue'}</em>
-                    </article>
-                  </div>
+                <RecordSectionNav sections={PATIENT_SECTIONS} active={patientSection} onSelect={goToPatientSection} className="admin-patient-nav" label={`${selectedRegisterPatient.name} sections`} />
 
-                  <section className="admin-register-crm__panel">
-                    <h3>Attribution and intake</h3>
-                    <dl className="admin-register-crm__facts-list">
-                      <div>
-                        <dt>Date of birth</dt>
-                        <dd>{formatPatientDob(selectedRegisterPatient.dob)}</dd>
+                <div className="patient-crm-detail__body pharmacy-dashboard admin-intake-record">
+                  <section id="patient-section-overview" className="pharmacy-dashboard__section" aria-label="Overview">
+                    <div className="pharmacy-summary__metrics admin-patient-glance">
+                      <div className="pharmacy-summary__metric">
+                        <small>Stage</small>
+                        <strong>{onboardingStatusLabel(selectedRegisterPatient.stage)}</strong>
+                        <span>{selectedIntake ? `Came in through ${selectedIntake.source}` : selectedCrm ? 'Patient record' : 'Register entry'}</span>
                       </div>
-                      <div>
-                        <dt>Email</dt>
-                        <dd>{selectedRegisterPatient.email || 'Not recorded'}</dd>
+                      <div className="pharmacy-summary__metric">
+                        <small>Last recorded</small>
+                        <strong>{selectedRegisterPatient.date ? formatUkDayDate(londonDateKey(selectedRegisterPatient.date) ?? '') : 'None'}</strong>
+                        <span>Latest change on the record</span>
                       </div>
-                      <div>
-                        <dt>Mobile</dt>
-                        <dd>{selectedRegisterPatient.mobile || 'Not recorded'}</dd>
+                      <div className="pharmacy-summary__metric">
+                        <small>Referral fees</small>
+                        <strong>{financeReady ? referralFeeFormatter.format(selectedFeeTotal) : '…'}</strong>
+                        <span>{firstDispenseFees.length} × £50 · {annualFees.length} × £40</span>
                       </div>
-                      <div>
-                        <dt>Current pharmacy</dt>
-                        <dd>{selectedRegisterPatient.pharmacyName}</dd>
+                      <div className="pharmacy-summary__metric">
+                        <small>Orders</small>
+                        <strong>{orderActivity.count}</strong>
+                        <span>{orderActivity.count ? `Last ${londonDayLabel(orderActivity.dates[0])}` : 'None placed yet'}</span>
                       </div>
-                      <div>
-                        <dt>GPhC</dt>
-                        <dd>{selectedRegisterPatient.gphcNumber || 'Not recorded'}</dd>
-                      </div>
-                      <div>
-                        <dt>Current outcome</dt>
-                        <dd>{onboardingStatusLabel(selectedRegisterPatient.stage)}</dd>
-                      </div>
-                    </dl>
+                    </div>
+                    {selectedRetention ? (
+                      <RecordCard icon={TrendingUp} title="Retention" subtitle="Inferred from prescriptions" tag={<span className="order-stage-pill order-tone--info">{selectedRetention.status}</span>}>
+                        <p className="admin-intake-note">Check this against the clinic’s own appointment records before anything is invoiced. Windows met: {selectedRetention.met.join(', ') || 'none yet'}.</p>
+                        <label className="admin-intake-form admin-patient-window">One-month window ends on day
+                          <input className="input" type="number" min="21" value={retentionWindows.w2EndDay} onChange={event => {
+                            const next = { ...retentionWindows, w2EndDay: Number(event.target.value) };
+                            setRetentionWindows(next);
+                            localStorage.setItem('hhh.retention.windows', JSON.stringify(next));
+                          }} />
+                        </label>
+                      </RecordCard>
+                    ) : null}
+                  </section>
+
+                  <section id="patient-section-patient" className="pharmacy-dashboard__section" aria-labelledby="patient-heading-patient">
+                    <h3 id="patient-heading-patient" className="pharmacy-dashboard__heading">Patient</h3>
+                    <div className="pharmacy-details">
+                      <RecordCard
+                        icon={UserCheck}
+                        title="Contact"
+                        subtitle={editingPatientDetails ? 'Editing the patient’s details' : undefined}
+                        tag={selectedCanEditDetails && !editingPatientDetails
+                          ? <button type="button" className="btn btn-sm" onClick={() => setEditingPatientDetails(true)}><Pencil size={13} /> Edit</button>
+                          : undefined}
+                      >
+                        {editingPatientDetails && selectedCanEditDetails ? (
+                          <PatientDetailsForm
+                            key={selectedRegisterKey ?? ''}
+                            patientId={selectedRegisterPatient.id}
+                            organisationId={selectedRegisterPatient.organisationId}
+                            initial={selectedDetailsDraft}
+                            onCancel={() => setEditingPatientDetails(false)}
+                            onSaved={(saved, changed) => {
+                              const update: Partial<PatientRegisterExportRow> = { ...saved, name: `${saved.firstName} ${saved.surname}`.trim() };
+                              setRegisterEdits(current => ({ ...current, [registerRowKey(selectedRegisterPatient)]: { ...current[registerRowKey(selectedRegisterPatient)], ...update } }));
+                              setSelectedRegisterPatient(current => current ? { ...current, ...update } : current);
+                              setEditingPatientDetails(false);
+                              dispatch({ type: 'ADD_TOAST', toastType: 'success', dedupeKey: 'patient-details', message: changed.length ? `${update.name}’s details are updated.` : 'Nothing changed.' });
+                            }}
+                          />
+                        ) : (
+                          <dl className="pharmacy-details__list">
+                            <CopyFact label="Name" value={selectedRegisterPatient.name} />
+                            <CopyFact label="Date of birth" value={selectedRegisterPatient.dob ? formatPatientDob(selectedRegisterPatient.dob) : null} />
+                            <CopyFact label="Email" value={selectedRegisterPatient.email} />
+                            <CopyFact label="Mobile" value={selectedRegisterPatient.mobile} />
+                            <CopyFact label="Postcode" value={selectedRegisterPatient.postcode} />
+                          </dl>
+                        )}
+                        {!selectedCanEditDetails ? <p className="admin-intake-note">This is a closed application, so its details cannot be edited.</p> : null}
+                      </RecordCard>
+                      <RecordCard
+                        icon={Building2}
+                        title={selectedRegisterPatient.pharmacyName}
+                        subtitle={[selectedRegisterPatient.gphcNumber ? `GPhC ${selectedRegisterPatient.gphcNumber}` : null, selectedPharmacyPostcode].filter(Boolean).join(' · ') || 'Attributed pharmacy'}
+                        tag={<button type="button" className="btn btn-sm" onClick={() => openPharmacyOnOverview(selectedRegisterPatient.organisationId, 'identity')}>Manage</button>}
+                      >
+                        <dl className="pharmacy-details__list">
+                          <CopyFact label="GPhC" value={selectedRegisterPatient.gphcNumber} />
+                          <CopyFact label="Postcode" value={selectedPharmacyPostcode} />
+                          <CopyFact label="Phone" value={selectedPharmacy?.pharmacyPhone || selectedPharmacy?.mainContactPhone} />
+                          <CopyFact label="Email" value={selectedPharmacy?.pharmacyEmail || selectedPharmacy?.mainContactEmail} />
+                        </dl>
+                      </RecordCard>
+                    </div>
                   </section>
 
                   {/* Admin edits go through the same service as the pharmacy's own
                       Edit conditions, so the register and the Portal cannot end up
                       showing a patient two different condition lists. */}
-                  <section className="admin-register-crm__panel">
-                    <h3>Conditions</h3>
-                    {!adminConditionPatientId ? (
-                      // Still an application: show what the patient answered, read-only.
-                      // Editing starts once referral creates the patient row that owns them.
-                      <>
-                        {adminConditions.length ? (
-                          <ConditionList conditions={adminConditions} primaryCondition={adminPrimaryCondition || adminConditions[0]} />
-                        ) : (
-                          <p>No conditions were given on this application.</p>
-                        )}
-                        <p>These are the patient’s own eligibility answers. They can be edited once the referral creates the patient record.</p>
-                      </>
-                    ) : editingAdminConditions ? (
-                      <ConditionEditor
-                        conditions={adminConditions}
-                        primaryCondition={adminPrimaryCondition}
-                        saving={savingAdminConditions}
-                        error={adminConditionError}
-                        onCancel={() => { setEditingAdminConditions(false); setAdminConditionError(null); }}
-                        onSave={(conditionCodes, primaryConditionCode) => void saveAdminConditions(
-                          adminConditionPatientId,
-                          selectedRegisterPatient.organisationId,
-                          conditionCodes,
-                          primaryConditionCode,
-                        )}
-                      />
-                    ) : (
-                      <>
-                        {adminConditions.length ? (
-                          <ConditionList conditions={adminConditions} primaryCondition={adminPrimaryCondition || adminConditions[0]} />
-                        ) : (
-                          <p>No conditions recorded for this patient.</p>
-                        )}
-                        <button
-                          type="button"
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => { setAdminConditionError(null); setEditingAdminConditions(true); }}
-                        >
-                          Edit conditions
-                        </button>
-                      </>
-                    )}
+                  <section id="patient-section-conditions" className="pharmacy-dashboard__section" aria-labelledby="patient-heading-conditions">
+                    <h3 id="patient-heading-conditions" className="pharmacy-dashboard__heading">Conditions</h3>
+                    <RecordCard
+                      icon={ClipboardCheck}
+                      title={adminConditions.length ? `${adminConditions.length} condition${adminConditions.length === 1 ? '' : 's'}` : 'No conditions'}
+                      subtitle={adminConditionPatientId ? 'Shared with the pharmacy’s own record' : 'From the patient’s eligibility answers'}
+                      tag={adminConditionPatientId && !editingAdminConditions
+                        ? <button type="button" className="btn btn-sm" onClick={() => { setAdminConditionError(null); setEditingAdminConditions(true); }}><Pencil size={13} /> Edit</button>
+                        : undefined}
+                    >
+                      {adminConditionPatientId && editingAdminConditions ? (
+                        <ConditionEditor
+                          conditions={adminConditions}
+                          primaryCondition={adminPrimaryCondition}
+                          saving={savingAdminConditions}
+                          error={adminConditionError}
+                          onCancel={() => { setEditingAdminConditions(false); setAdminConditionError(null); }}
+                          onSave={(conditionCodes, primaryConditionCode) => void saveAdminConditions(
+                            adminConditionPatientId,
+                            selectedRegisterPatient.organisationId,
+                            conditionCodes,
+                            primaryConditionCode,
+                          )}
+                        />
+                      ) : adminConditions.length ? (
+                        <ConditionList conditions={adminConditions} primaryCondition={adminPrimaryCondition || adminConditions[0]} />
+                      ) : (
+                        <p className="admin-intake-note">{adminConditionPatientId ? 'No conditions recorded for this patient.' : 'No conditions were given on this application.'}</p>
+                      )}
+                      {!adminConditionPatientId ? <p className="admin-intake-note">They can be edited once the referral creates the patient record.</p> : null}
+                    </RecordCard>
                   </section>
 
-                  <section className="admin-register-crm__panel">
-                    <h3>Fee history</h3>
-                    {selectedFees.length === 0 ? (
-                      <p>No first-dispense or annual fees are recorded for this patient.</p>
-                    ) : (
-                      <ol className="admin-register-crm__events">
-                        {selectedFees.map(event => (
-                          <li key={event.id}>
-                            <span>
-                              <strong>{event.kind === 'new-referral' ? 'First collected dispense' : event.anniversary ? `Annual fee · year ${event.anniversary}` : 'Annual patient fee'}</strong>
-                              <small>{event.occurredAt.toLocaleDateString('en-GB', { timeZone: 'Europe/London' })} · {event.pharmacyName}</small>
-                            </span>
-                            <b>{referralFeeFormatter.format(event.amount)}</b>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
+                  <section id="patient-section-fees" className="pharmacy-dashboard__section" aria-labelledby="patient-heading-fees">
+                    <h3 id="patient-heading-fees" className="pharmacy-dashboard__heading">Fees</h3>
+                    <RecordCard
+                      icon={PoundSterling}
+                      title={financeReady ? referralFeeFormatter.format(selectedFeeTotal) : 'Loading'}
+                      subtitle="First collected dispense £50 · each active anniversary £40"
+                      tag={<button type="button" className="btn btn-sm" onClick={openSelectedLedger}>Open ledger</button>}
+                    >
+                      {selectedFees.length === 0 ? (
+                        <p className="admin-intake-note">No fees yet. The first one accrues when the patient collects their first dispense.</p>
+                      ) : (
+                        <ol className="admin-register-crm__events admin-patient-fees">
+                          {selectedFees.map(event => (
+                            <li key={event.id}>
+                              <span>
+                                <strong>{event.kind === 'new-referral' ? 'First collected dispense' : event.anniversary ? `Annual fee · year ${event.anniversary}` : 'Annual patient fee'}</strong>
+                                <small>{event.occurredAt.toLocaleDateString('en-GB', { timeZone: 'Europe/London' })} · {event.pharmacyName}</small>
+                              </span>
+                              <b>{referralFeeFormatter.format(event.amount)}</b>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                    </RecordCard>
                   </section>
 
-                  <section className="admin-register-crm__panel">
-                    <h3>Order activity</h3>
-                    {orderActivity.count === 0 ? (
-                      <p>No placed orders recorded for this patient.</p>
-                    ) : (
-                      <>
-                        <dl className="admin-register-crm__facts-list">
-                          <div>
-                            <dt>Orders placed</dt>
-                            <dd>{orderActivity.count}</dd>
-                          </div>
-                          <div>
-                            <dt>Last ordered</dt>
-                            <dd>{londonDayLabel(orderActivity.dates[0])}</dd>
-                          </div>
-                        </dl>
-                        <p className="admin-register-crm__order-dates">
-                          {(orderActivity.uniqueDays ?? []).slice(0, 8).join(' · ')}
-                          {(orderActivity.uniqueDays ?? []).length > 8 ? ` · ${(orderActivity.uniqueDays ?? []).length - 8} earlier` : ''}
-                        </p>
-                      </>
-                    )}
-                    <p className="admin-overview-crm__note">HHH admin does not show what was ordered.</p>
+                  <section id="patient-section-orders" className="pharmacy-dashboard__section" aria-labelledby="patient-heading-orders">
+                    <h3 id="patient-heading-orders" className="pharmacy-dashboard__heading">Orders</h3>
+                    <RecordCard icon={Package} title={orderActivity.count ? `${orderActivity.count} order${orderActivity.count === 1 ? '' : 's'} placed` : 'No orders yet'} subtitle="HHH sees when orders were placed, not what was ordered">
+                      {orderActivity.count ? (
+                        <>
+                          <dl className="pharmacy-details__list">
+                            <Fact label="Last ordered">{londonDayLabel(orderActivity.dates[0])}</Fact>
+                          </dl>
+                          <ul className="admin-patient-days" aria-label="Order days">
+                            {(orderActivity.uniqueDays ?? []).slice(0, 12).map(day => <li key={day}>{day}</li>)}
+                            {(orderActivity.uniqueDays ?? []).length > 12 ? <li>+{(orderActivity.uniqueDays ?? []).length - 12} earlier</li> : null}
+                          </ul>
+                        </>
+                      ) : <p className="admin-intake-note">The pharmacy has not placed an order for this patient.</p>}
+                    </RecordCard>
                   </section>
                 </div>
               </article>
@@ -2752,9 +2845,23 @@ export default function AdminPortal() {
       ? state.organisations.find(organisation => organisation.id === selectedFinancePatient.organisationId)
       : null;
     const periodLabel = financePeriod === 'month' ? financeMonth : financePeriod === 'year' ? financeYear : 'All time';
+    // The next £40 falls on the next anniversary of the first collected dispense.
+    const selectedFirstEver = selectedFinancePatient
+      ? referralFeeEvents.find(event => event.patientKey === selectedFinancePatient.key && event.kind === 'new-referral')?.occurredAt ?? null
+      : null;
+    const selectedNextAnniversary = (() => {
+      if (!selectedFirstEver) return null;
+      const today = new Date();
+      for (let years = 1; years <= 100; years += 1) {
+        const next = referralAnniversary(selectedFirstEver, years);
+        if (next > today) return next;
+      }
+      return null;
+    })();
 
     return (
       <div className="page-body order-crm patient-crm admin-finance-crm">
+        {headerSummary ? createPortal(
         <section className="order-crm-summary" aria-label="Referral finance summary">
           <div className="order-crm-summary__tiles">
             <article className="order-crm-metric">
@@ -2790,20 +2897,34 @@ export default function AdminPortal() {
               </span>
             </article>
           </div>
-        </section>
+        </section>,
+          headerSummary,
+        ) : null}
 
-        <section className="order-crm-controls">
-          <div className="order-crm-search">
-            <Search size={15} />
-            <input
-              type="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="Search earning patient or pharmacy"
-              aria-label="Search earning patients"
-            />
+        <section className="order-crm-controls admin-filter-bar">
+          <div className="admin-filter-bar__top admin-filter-bar__top--finance">
+            <div className="order-crm-search">
+              <Search size={15} />
+              <input
+                type="search"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search earning patient or pharmacy"
+                aria-label="Search earning patients"
+              />
+            </div>
+            <label className="admin-filter-bar__select">
+              <span className="sr-only">Pharmacy</span>
+              <select id="finance-pharmacy" className="input" value={financeOrganisationId} onChange={event => setFinanceOrganisationId(event.target.value)} aria-label="Filter by pharmacy">
+                <option value="all">All pharmacies</option>
+                {state.organisations.filter(organisation => !isTrainingDirectoryPharmacy(organisation)).map(organisation => <option value={organisation.id} key={organisation.id}>{organisation.tradingName}</option>)}
+              </select>
+            </label>
+            <button type="button" className="btn btn-sm" onClick={() => setAdminFinanceRefresh(value => value + 1)} disabled={adminFinanceLoading}>
+              <RefreshCw size={13} className={adminFinanceLoading ? 'spin' : ''} /> Refresh
+            </button>
           </div>
-          <div className="order-crm-filters" role="group" aria-label="Filter referral finance">
+          <div className="order-crm-filters" role="group" aria-label="Reporting period">
             {([
               { id: 'all' as const, label: 'All time' },
               { id: 'month' as const, label: 'Month' },
@@ -2819,29 +2940,22 @@ export default function AdminPortal() {
                 <span>{period.label}</span>
               </button>
             ))}
-            <label className="admin-register-crm__select">
-              <span className="sr-only">Pharmacy</span>
-              <select id="finance-pharmacy" value={financeOrganisationId} onChange={event => setFinanceOrganisationId(event.target.value)} aria-label="Filter by pharmacy">
-                <option value="all">All pharmacies</option>
-                {state.organisations.filter(organisation => !isTrainingDirectoryPharmacy(organisation)).map(organisation => <option value={organisation.id} key={organisation.id}>{organisation.tradingName}</option>)}
-              </select>
-            </label>
-            {financePeriod === 'month' ? (
-              <label className="admin-register-crm__date">
-                <span className="sr-only">Month</span>
-                <input id="finance-month" type="month" value={financeMonth} onChange={event => setFinanceMonth(event.target.value)} aria-label="Reporting month" />
-              </label>
-            ) : null}
-            {financePeriod === 'year' ? (
-              <label className="admin-register-crm__date">
-                <span className="sr-only">Year</span>
-                <input id="finance-year" type="number" min="2000" max="2200" step="1" value={financeYear} onChange={event => setFinanceYear(event.target.value)} aria-label="Reporting year" />
-              </label>
-            ) : null}
-            <button type="button" className="btn btn-sm" onClick={() => setAdminFinanceRefresh(value => value + 1)} disabled={adminFinanceLoading}>
-              <RefreshCw size={13} className={adminFinanceLoading ? 'spin' : ''} /> Refresh
-            </button>
           </div>
+          {financePeriod !== 'all' ? (
+            <div className="admin-filter-bar__more" role="group" aria-label="Reporting period detail">
+              {financePeriod === 'month' ? (
+                <label className="admin-register-crm__date">
+                  <small>Month</small>
+                  <input id="finance-month" type="month" value={financeMonth} onChange={event => setFinanceMonth(event.target.value)} aria-label="Reporting month" />
+                </label>
+              ) : (
+                <label className="admin-register-crm__date">
+                  <small>Year</small>
+                  <input id="finance-year" type="number" min="2000" max="2200" step="1" value={financeYear} onChange={event => setFinanceYear(event.target.value)} aria-label="Reporting year" />
+                </label>
+              )}
+            </div>
+          ) : null}
         </section>
 
         {adminFinanceError ? (
@@ -2850,6 +2964,16 @@ export default function AdminPortal() {
             <span><strong>Referral finance is temporarily unavailable</strong><small>{adminFinanceError}</small></span>
             <button className="btn btn-sm" type="button" onClick={() => setAdminFinanceRefresh(value => value + 1)}>Try again</button>
           </div>
+        ) : null}
+
+        {financeReady ? (
+          <FeeChart
+            events={filteredReferralFeeEvents}
+            period={financePeriod}
+            month={financeMonth}
+            year={financeYear}
+            formatMoney={amount => referralFeeFormatter.format(amount)}
+          />
         ) : null}
 
         <div className="order-crm-workspace">
@@ -2946,54 +3070,62 @@ export default function AdminPortal() {
                   </div>
                 </header>
 
-                <div className="patient-crm-detail__body">
-                  <div className="admin-overview-crm__facts">
-                    <article>
-                      <small>First dispenses</small>
+                <div className="patient-crm-detail__body pharmacy-dashboard admin-intake-record">
+                  <div className="pharmacy-summary__metrics admin-patient-glance">
+                    <div className="pharmacy-summary__metric">
+                      <small>First dispense</small>
                       <strong>{referralFeeFormatter.format(selectedFirst.reduce((sum, event) => sum + event.amount, 0))}</strong>
-                      <em>{selectedFirst.length} × £50</em>
-                    </article>
-                    <article>
+                      <span>{selectedFirst.length ? `Collected ${formatUkDayDate(londonDateKey(selectedFirst[0]!.occurredAt) ?? '')}` : 'Not in this period'}</span>
+                    </div>
+                    <div className="pharmacy-summary__metric">
                       <small>Annual fees</small>
                       <strong>{referralFeeFormatter.format(selectedAnnual.reduce((sum, event) => sum + event.amount, 0))}</strong>
-                      <em>{selectedAnnual.length} × £40</em>
-                    </article>
-                    <article>
-                      <small>Events</small>
-                      <strong>{selectedFinanceEvents.length}</strong>
-                      <em>{periodLabel}</em>
-                    </article>
-                    <article>
-                      <small>Pharmacy</small>
-                      <strong>{selectedFinancePatient.pharmacyName}</strong>
-                    </article>
+                      <span>{selectedAnnual.length} × £40</span>
+                    </div>
+                    <div className="pharmacy-summary__metric">
+                      <small>Next anniversary</small>
+                      <strong>{selectedNextAnniversary ? formatUkDayDate(londonDateKey(selectedNextAnniversary) ?? '') : 'None'}</strong>
+                      <span>{selectedNextAnniversary ? '£40 if still active' : 'No first dispense in view'}</span>
+                    </div>
+                    <div className="pharmacy-summary__metric">
+                      <small>Period</small>
+                      <strong>{periodLabel}</strong>
+                      <span>{selectedFinanceEvents.length} event{selectedFinanceEvents.length === 1 ? '' : 's'}</span>
+                    </div>
                   </div>
 
-                  <section className="admin-register-crm__panel">
-                    <h3>Fee events</h3>
+                  <RecordCard icon={PoundSterling} title="Fee events" subtitle="Newest first" tag={<span className="order-stage-pill order-tone--paid">{referralFeeFormatter.format(selectedFinancePatient.total)}</span>}>
                     {selectedFinanceEvents.length === 0 ? (
-                      <p>No fee events remain for this patient after the current filters.</p>
+                      <p className="admin-intake-note">No fee events remain for this patient after the current filters.</p>
                     ) : (
-                      <ol className="admin-register-crm__events">
+                      <ol className="fee-timeline">
                         {selectedFinanceEvents.map(event => (
-                          <li key={event.id}>
+                          <li key={event.id} className={event.kind === 'new-referral' ? 'is-first' : 'is-annual'}>
+                            <i aria-hidden="true" />
                             <span>
                               <strong>{event.kind === 'new-referral' ? 'First collected dispense' : event.anniversary ? `Annual fee · year ${event.anniversary}` : 'Annual patient fee'}</strong>
-                              <small>{event.occurredAt.toLocaleDateString('en-GB', { timeZone: 'Europe/London' })} · {event.pharmacyName}</small>
+                              <small>{event.occurredAt.toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short', year: 'numeric' })} · {event.pharmacyName}</small>
                             </span>
                             <b>{referralFeeFormatter.format(event.amount)}</b>
                           </li>
                         ))}
                       </ol>
                     )}
-                  </section>
+                  </RecordCard>
 
-                  <p className="admin-overview-crm__note">Referral fees accrue on the first collected dispense (£50) and each active anniversary (£40). This is an operational ledger, not an invoice or payment-receipt register.</p>
+                  <RecordCard
+                    icon={Building2}
+                    title={selectedFinancePatient.pharmacyName}
+                    subtitle={[selectedPharmacy?.gphcNumber ? `GPhC ${selectedPharmacy.gphcNumber}` : null, selectedPharmacy?.postcode].filter(Boolean).join(' · ') || 'Attributed pharmacy'}
+                    tag={<button type="button" className="btn btn-sm" onClick={() => openPharmacyOnOverview(selectedFinancePatient.organisationId, 'identity')}>Manage</button>}
+                  >
+                    <dl className="pharmacy-details__list">
+                      <CopyFact label="Patient email" value={selectedFinancePatient.email} />
+                      <CopyFact label="GPhC" value={selectedPharmacy?.gphcNumber} />
+                    </dl>
+                  </RecordCard>
 
-                  <section className="admin-register-crm__panel admin-register-crm__later">
-                    <h3>Invoices and settlements</h3>
-                    <p>Not in the current finance contract. When the server returns invoice, settlement or payout fields, they will appear in this pane.</p>
-                  </section>
+                  <p className="admin-intake-note">Fees accrue on the first collected dispense (£50) and each active anniversary (£40). This is an operational ledger, not an invoice or payment record. Invoices and settlements will appear here once the server provides them.</p>
                 </div>
               </article>
             )}
@@ -3015,7 +3147,7 @@ export default function AdminPortal() {
       <a className="skip-link" href="#admin-main-content">Skip to main content</a>
       <AdminHeader view={view} pending={pendingAdminDecisions} pharmacyRequests={pharmacyRequests.pending.length} setView={next => { setView(next); setQuery(''); }} onViewAdmins={() => { setAdminDialogFocus('list'); setShowAdminDialog(true); }} />
       <div className="app-main">
-        <WorkspacePageHeader section="HHH operations" context={pageMeta[view].title} title={pageMeta[view].title} commandLabel="Find anything" onSectionClick={() => { setView('overview'); setQuery(''); }} backAction={view !== 'overview' ? { label: 'Return to pharmacies', onClick: () => { setView('overview'); setQuery(''); } } : undefined} contextControl={<div className="header-context"><span>Access</span><span className="tenant-status tenant-status--live">Admin</span></div>} />
+        <WorkspacePageHeader summary={<div ref={setHeaderSummary} className="admin-header-summary" />} section="HHH operations" context={pageMeta[view].title} title={pageMeta[view].title} commandLabel="Find anything" onSectionClick={() => { setView('overview'); setQuery(''); }} backAction={view !== 'overview' ? { label: 'Return to pharmacies', onClick: () => { setView('overview'); setQuery(''); } } : undefined} contextControl={<div className="header-context"><span>Access</span><span className="tenant-status tenant-status--live">Admin</span></div>} />
         <div id="admin-main-content" className="page-container admin-content" tabIndex={-1}>
           {view === 'overview' && renderOverview()}
           {view === 'referrals' && renderReferrals()}

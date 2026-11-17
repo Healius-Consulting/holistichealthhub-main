@@ -59,6 +59,7 @@ describe('patient finance', () => {
         status = data.status;
         updates.push({ status: data.status });
       },
+      updatePatientDetails: async () => true,
     };
     const patientFinanceRepo: PatientFinanceRepositoryPort = {
       findDispenseEvent: async () => null,
@@ -93,6 +94,7 @@ describe('patient finance', () => {
       listActivePatients: async () => [],
       findPatientById: async () => patient({ status: 'ACTIVE' }),
       updatePatientStatus: async () => undefined,
+      updatePatientDetails: async () => true,
     };
     const patientFinanceRepo: PatientFinanceRepositoryPort = {
       findDispenseEvent: async (_orderId, dispenseKey) => dispenses.includes(dispenseKey) ? { id: 'd1', orderId: 'order-1', dispenseKey } : null,
@@ -156,6 +158,7 @@ describe('patient finance', () => {
         },
       }),
       updatePatientStatus: async () => undefined,
+      updatePatientDetails: async () => true,
     };
     const patientFinanceRepo: PatientFinanceRepositoryPort = {
       findDispenseEvent: async () => null,

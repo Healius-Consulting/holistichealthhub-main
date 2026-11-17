@@ -5,6 +5,7 @@ import type { CuraleafCancellationState, OrderCancellationState, OrderDraftRecor
 import { activeRedoPriceResolution } from '../shared/contracts';
 import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmacyPatientDirectory';
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
+import { ledgerDemoPatients } from '../dev/localAdminLedger';
 import { ORGANISATIONS, isOpenPharmacyWorkspace, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace, usesSandboxDummyPack } from '../training/workspace';
 import { parseCatalogueCache, serialiseCatalogueCache, shouldDiscardCatalogueCache } from '../utils/catalogueCache';
 import { curaleafCatalogueEstate, type CuraleafCatalogueEstate } from '../utils/catalogueEstate';
@@ -1169,6 +1170,13 @@ const previewOrganisationId = previewStaffSession?.organisationId ?? (isLocalPor
 const previewTraining = isLocalPortalPreview && localPortalPreview === 'pharmacy' && previewOrganisationId
   ? trainingWorkspace(previewOrganisationId)
   : null;
+// HHH admin preview: a few pharmacies' demo patients, so the Patients register has records to show.
+const previewAdminCrm = isLocalPortalPreview && localPortalPreview === 'admin'
+  ? [
+    ...ORGANISATIONS.slice(0, 3).flatMap(organisation => trainingWorkspace(organisation.id).crm.map(patient => ({ ...patient, id: `${organisation.id}:${patient.id}` }))),
+    ...ledgerDemoPatients(),
+  ]
+  : [];
 
 const initialState: AppState = {
   screen: urlParams?.has('patient') ? 'patients' : 'home',
@@ -1183,7 +1191,7 @@ const initialState: AppState = {
   catalogueRefreshNonce: 0,
   patientDirectoryRefreshNonce: 0,
   patientDirectoryRefreshing: false,
-  crm: previewTraining?.crm ?? [],
+  crm: previewTraining?.crm ?? previewAdminCrm,
   submissions: [],
   enquiries: previewTraining?.enquiries ?? [],
   orders: previewTraining?.orders ?? [],

@@ -21669,3 +21669,189 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
 /* Intake header: the destination pharmacy's postcode under its name, copyable. */
 .admin-intake-header-postcode{ align-items: center; color: var(--text-secondary); font-size: 13px; font-weight: 700; letter-spacing: .02em; }
 .admin-intake-header-postcode .admin-intake-copy__btn{ margin-top: 0; }
+/* Admin patient record: the same one-page layout as the intake record. */
+.admin-register-crm .order-crm-detail{ overflow: clip; }
+.admin-register-crm .order-crm-detail,
+.admin-register-crm .order-crm-record,
+.admin-record-nav{ min-width: 0; max-width: 100%; }
+.admin-patient-glance.pharmacy-summary__metrics{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.admin-patient-glance .pharmacy-summary__metric strong{ font-size: 17px; overflow-wrap: anywhere; }
+@container (max-width: 640px){ .admin-patient-glance.pharmacy-summary__metrics{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.admin-patient-window{ grid-template-columns: minmax(0, 1fr) 96px; align-items: center; }
+.admin-patient-days{ display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-patient-days li{ padding: 3px 9px; color: var(--text-secondary); font-size: 12px; font-weight: 600; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 999px; }
+.admin-patient-fees{ margin: 0; }
+/* Patient details edit form: two columns of fields inside the Contact card. */
+.admin-patient-edit__grid{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+@container (max-width: 380px){ .admin-patient-edit__grid{ grid-template-columns: minmax(0, 1fr); } }
+/* Admin filter bars: search and actions on one line, the filter chips under it at full width. */
+.admin-filter-bar{ display: grid; gap: 10px; }
+.admin-filter-bar__top{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.admin-filter-bar__top > .order-crm-search{ flex: 1 1 200px; }
+.admin-filter-bar__top > :not(.order-crm-search){ flex: 0 0 auto; }
+.admin-filter-bar__top .order-crm-search{ min-width: 0; }
+.admin-filter-bar__top .btn{ display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.admin-filter-bar__filters b{ display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; color: #fff; font-size: 11px; background: var(--tenant-primary, #0f766e); border-radius: 999px; }
+.admin-filter-bar__filters.is-on{ border-color: color-mix(in srgb, var(--tenant-primary) 45%, var(--border)); }
+.admin-filter-bar__more{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.admin-filter-bar__clear{ margin-left: auto; }
+@media (max-width: 640px){
+  .admin-filter-bar__top > .order-crm-search{ flex-basis: 150px; }
+  .admin-filter-bar .order-crm-filters{ flex-wrap: nowrap; overflow-x: auto; }
+  .admin-filter-bar__more > *{ flex: 1 1 140px; }
+}
+/* Test patients: a ghost toggle. Faint when they are hidden, solid when shown. */
+.admin-filter-bar__ghost{ width: 34px; padding: 0; justify-content: center; color: var(--text-tertiary); }
+.admin-filter-bar__ghost svg{ opacity: .8; }
+.admin-filter-bar__ghost.is-on{ color: var(--tenant-primary-strong, #0f766e); background: var(--tenant-primary-soft, #e6f4f1); border-color: color-mix(in srgb, var(--tenant-primary) 45%, var(--border)); }
+.admin-filter-bar__ghost.is-on svg{ opacity: 1; }
+
+/* Stage chips share the full width; on a phone they keep their size and scroll sideways. */
+.admin-filter-bar .order-crm-filters{ display: flex; flex-wrap: nowrap; gap: 6px; }
+.admin-filter-bar .order-crm-filters > button{ flex: 1 1 0; justify-content: center; min-width: 0; }
+@media (max-width: 640px){
+  .admin-filter-bar .order-crm-filters{
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    margin-inline: -2px;
+    padding: 2px;
+  }
+  .admin-filter-bar .order-crm-filters::-webkit-scrollbar{ display: none; }
+  .admin-filter-bar .order-crm-filters > button{ flex: 0 0 auto; scroll-snap-align: start; }
+}
+/* Admin pages: the headline figures sit in the page header as one strip, not a row of cards. */
+.workspace-page-header.has-summary{ flex-wrap: wrap; height: auto; min-height: 0; row-gap: 14px; padding-bottom: 14px; }
+.workspace-page-header__summary{ flex: 0 0 100%; min-width: 0; }
+.workspace-page-header__summary:has(.admin-header-summary:empty){ display: none; }
+.admin-header-summary .order-crm-summary{ margin: 0; }
+.admin-header-summary .order-crm-summary__tiles{
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+.admin-header-summary .order-crm-metric{
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px 16px 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.admin-header-summary .order-crm-metric:first-child{ padding-left: 0; }
+.admin-header-summary .order-crm-metric + .order-crm-metric{ border-left: 1px solid var(--border); }
+.admin-header-summary .order-crm-metric__icon{ width: 28px; height: 28px; border-radius: 7px; }
+.admin-header-summary .order-crm-metric__icon svg{ width: 14px; height: 14px; }
+.admin-header-summary .order-crm-metric strong{ display: inline; margin: 0 8px 0 0; font-size: 18px; }
+.admin-header-summary .order-crm-metric small{ display: block; margin-bottom: 1px; }
+.admin-header-summary .order-crm-metric em{ display: inline; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-header-summary .order-crm-metric > span:last-child{ min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 760px){
+  .admin-header-summary .order-crm-summary__tiles{ display: flex; overflow-x: auto; scrollbar-width: none; }
+  .admin-header-summary .order-crm-summary__tiles::-webkit-scrollbar{ display: none; }
+  .admin-header-summary .order-crm-metric{ flex: 0 0 auto; padding-right: 16px; }
+  .admin-header-summary .order-crm-metric em{ display: none; }
+}
+/* On a phone the header stacks in one column; the strip goes last, under the actions. */
+@media (max-width: 760px){
+  .workspace-page-header.has-summary{ flex-wrap: nowrap; }
+  .workspace-page-header.has-summary .workspace-page-header__summary{ flex: 0 0 auto; width: 100%; }
+}
+
+.admin-filter-bar__select select{ min-height: 36px; max-width: 240px; padding-block: 0; font-size: 13px; }
+@media (max-width: 640px){
+  .admin-filter-bar__top > .admin-filter-bar__select{ flex: 1 1 140px; }
+  .admin-filter-bar__select select{ max-width: none; width: 100%; }
+}
+@media (max-width: 640px){
+  /* Buttons that wrap onto their own line fill it, so nothing sits stranded at one end. */
+  .admin-filter-bar__top > .btn:not(.admin-filter-bar__ghost){ flex: 1 0 auto; justify-content: center; }
+}
+@media (max-width: 640px){
+  /* Chips grow to fill the row when they fit, and only scroll when they do not. */
+  .admin-filter-bar .order-crm-filters > button{ flex: 1 0 auto; }
+  /* Finance: the search gets its own line; pharmacy and Refresh share the next. */
+  .admin-filter-bar__top--finance > .order-crm-search{ flex-basis: 100%; }
+}
+/* Finance: fees over time. Colours validated for colour-blind separation on each surface. */
+:root{ --fee-first: #008f7e; --fee-annual: #b06d10; }
+html[data-theme='dark']{ --fee-first: #22a091; --fee-annual: #b87d24; }
+.fee-chart{
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 18px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface);
+}
+.fee-chart__head{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.fee-chart__head > div{ display: grid; gap: 1px; margin-right: auto; }
+.fee-chart__head h3{ margin: 0; color: var(--text-primary); font-size: 14px; font-weight: 700; }
+.fee-chart__head small{ color: var(--text-tertiary); font-size: 12px; font-weight: 600; }
+.fee-chart__legend{ display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; padding: 0; list-style: none; color: var(--text-secondary); font-size: 12.5px; font-weight: 600; }
+.fee-chart__legend li{ display: inline-flex; align-items: center; gap: 6px; }
+.fee-chart__legend b{ color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.fee-chart__swatch{ display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.fee-chart__swatch.is-first{ background: var(--fee-first); }
+.fee-chart__swatch.is-annual{ background: var(--fee-annual); }
+.fee-chart__plot{ position: relative; min-width: 0; }
+.fee-chart__plot svg{ display: block; width: 100%; height: 220px; overflow: visible; }
+.fee-chart__grid{ stroke: var(--border); stroke-width: 1; }
+.fee-chart__tick{ fill: var(--text-tertiary); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fee-chart__bar.is-first{ fill: var(--fee-first); }
+.fee-chart__bar.is-annual{ fill: var(--fee-annual); }
+.fee-chart g:not(.is-hover) .fee-chart__bar{ transition: opacity .15s; }
+.fee-chart__plot:has(g.is-hover) g:not(.is-hover) .fee-chart__bar{ opacity: .45; }
+.fee-chart__hit{ fill: transparent; cursor: default; outline: none; }
+.fee-chart__hit:focus-visible{ stroke: var(--tenant-primary); stroke-width: 2; }
+.fee-chart__tip{
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  gap: 3px;
+  min-width: 190px;
+  padding: 9px 11px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 8px 22px rgba(18, 35, 30, .12);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.fee-chart__tip strong{ color: var(--text-primary); font-size: 12.5px; }
+.fee-chart__tip span{ display: flex; align-items: center; gap: 6px; }
+.fee-chart__tip b{ margin-left: auto; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.fee-chart__tip-total{ padding-top: 4px; border-top: 1px solid var(--border); }
+.fee-chart__table{ overflow-x: auto; }
+.fee-chart__table table{ width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fee-chart__table th, .fee-chart__table td{ padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.fee-chart__table th:first-child{ text-align: left; }
+.fee-chart__table thead th{ color: var(--text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.admin-finance-crm > .fee-chart{ margin-bottom: 12px; }
+
+/* A patient's fee events as a timeline: a coloured dot per fee, joined by a rail. */
+.fee-timeline{ position: relative; display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.fee-timeline li{ position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 9px 0; }
+.fee-timeline li + li{ border-top: 1px solid var(--border); }
+.fee-timeline li i{ width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg-elevated); }
+.fee-timeline li.is-first i{ background: var(--fee-first); }
+.fee-timeline li.is-annual i{ background: var(--fee-annual); }
+.fee-timeline span{ display: grid; gap: 1px; min-width: 0; }
+.fee-timeline strong{ color: var(--text-primary); font-size: 13px; }
+.fee-timeline small{ color: var(--text-tertiary); font-size: 12px; }
+.fee-timeline b{ color: var(--text-primary); font-size: 13px; font-variant-numeric: tabular-nums; }

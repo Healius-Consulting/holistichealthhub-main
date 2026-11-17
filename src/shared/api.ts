@@ -362,6 +362,16 @@ export function updatePatientConditions(patientId: string, input: { conditionCod
 }
 
 /** The admin twin of {@link updatePatientConditions}; the register is cross-tenant. */
+export type AdminPatientDetails = { firstName: string; surname: string; dob: string; email: string; mobile: string; postcode: string };
+
+/** HHH correcting a patient's own details. Returns the saved, normalised values and which fields changed. */
+export function updateAdminPatientDetails(patientId: string, input: AdminPatientDetails & { organisationId: string }) {
+  return apiRequest<AdminPatientDetails & { patientId: string; changed: string[] }>(`/v1/portal/admin/patients/${encodeURIComponent(patientId)}/details`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
 export function updateAdminPatientConditions(patientId: string, input: { organisationId: string; conditionCodes: string[]; primaryConditionCode: string }) {
   return apiRequest<{
     patientId: string;

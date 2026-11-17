@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Building2, Check, CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, Stethoscope, User, UserX, type LucideIcon } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Building2, CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, Stethoscope, User, UserX, type LucideIcon } from 'lucide-react';
 import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason, type PatientAgreementChannel } from '../shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type DuplicateRecordMatch, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { useApp } from '../context/AppContext';
+import { CopyButton, CopyFact, Fact, RecordCard, RecordSectionNav, useRecordSections } from './admin/RecordParts';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
@@ -23,18 +25,6 @@ const INTAKE_SECTIONS: { id: IntakeSection; label: string }[] = [
   { id: 'review', label: 'Review' },
   { id: 'referral', label: 'Referral' },
 ];
-const INTAKE_NAV = '.admin-intake-nav';
-
-/** Scroll the admin page so a section starts just below the pinned section bar. */
-function scrollToIntakeSection(section: IntakeSection, smooth: boolean) {
-  const container = document.getElementById('admin-main-content');
-  const target = document.getElementById(`intake-section-${section}`);
-  if (!container || !target) return;
-  const barHeight = document.querySelector<HTMLElement>(INTAKE_NAV)?.offsetHeight ?? 0;
-  const offset = target.getBoundingClientRect().top - container.getBoundingClientRect().top - barHeight - 16;
-  container.scrollTo({ top: container.scrollTop + offset, behavior: smooth ? 'smooth' : 'auto' });
-}
-
 const assignmentReasons = ['patient_preference', 'capacity', 'delivery_or_collection', 'geographic_coverage', 'service_compatibility', 'administrative_correction'] as const;
 const words = (value: unknown) => String(value ?? '').replaceAll('_', ' ');
 const dateTime = (value: unknown) => formatUkDateTime(value == null ? null : String(value), 'Not recorded');
@@ -120,9 +110,11 @@ function reviewMeta(status: unknown) {
 interface AdminIntakeV2Props {
   /** Opens a record that lives outside the intake queue — a patient row or a closed application — in the register. */
   onOpenRecord?: (match: DuplicateRecordMatch) => void;
+  /** Where the page header shows this page's headline figures. */
+  summarySlot?: HTMLElement | null;
 }
 
-export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {}) {
+export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: AdminIntakeV2Props = {}) {
   const { state: appState } = useApp();
   const [general, setGeneral] = useState<V2EligibilityQueueItem[]>([]);
   const [referrals, setReferrals] = useState<V2EligibilityQueueItem[]>([]);
@@ -141,10 +133,6 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
   const [withdrawNote, setWithdrawNote] = useState('');
   const [declineReason, setDeclineReason] = useState<DeclineReason | ''>('');
   const [existingClinicAccount, setExistingClinicAccount] = useState(false);
-  const [activeSection, setActiveSection] = useState<IntakeSection>('patient');
-  // A section-bar jump lets the highlight run through the sections it passes,
-  // then settles on the one that was picked.
-  const pendingSectionRef = useRef<IntakeSection | null>(null);
   const [referralOutcome, setReferralOutcome] = useState<ReferralOutcome>('complete');
   const [reviewStatus, setReviewStatus] = useState<ReviewStatus>('not_started');
   const [queueQuery, setQueueQuery] = useState('');
@@ -156,53 +144,13 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
   const listRowsRef = useRef<HTMLDivElement>(null);
   const [listOverflow, setListOverflow] = useState({ top: false, bottom: false });
 
-  /** The section bar scrolls to a part of the record; it marks the target once the scroll settles. */
-  const goToSection = useCallback((section: IntakeSection) => {
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const container = document.getElementById('admin-main-content');
-    const before = container?.scrollTop ?? 0;
-    if (reduce) { pendingSectionRef.current = null; setActiveSection(section); }
-    else pendingSectionRef.current = section;
-    scrollToIntakeSection(section, !reduce);
-    // Already in place means no scroll events to settle on, so mark it once the click lands.
-    window.setTimeout(() => {
-      if (pendingSectionRef.current === section && (container?.scrollTop ?? 0) === before) { setActiveSection(section); pendingSectionRef.current = null; }
-    }, 150);
-  }, []);
-
   const recordReady = Boolean(selected && detail && !detailLoading);
-  // Mark the section under the pinned bar as the admin scrolls the record.
-  useEffect(() => {
-    const container = document.getElementById('admin-main-content');
-    if (!container || !recordReady) return;
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const bar = document.querySelector<HTMLElement>(INTAKE_NAV);
-      if (!bar) return;
-      const line = bar.getBoundingClientRect().bottom + 40;
-      let current: IntakeSection = 'patient';
-      for (const section of INTAKE_SECTIONS) {
-        const el = document.getElementById(`intake-section-${section.id}`);
-        if (el && el.getBoundingClientRect().top <= line) current = section.id;
-      }
-      // At the very bottom the last section is the one being read, even if short.
-      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 2) current = INTAKE_SECTIONS[INTAKE_SECTIONS.length - 1]!.id;
-      setActiveSection(current);
-    };
-    let settle = 0;
-    const onScroll = () => {
-      if (!frame) frame = window.requestAnimationFrame(update);
-      window.clearTimeout(settle);
-      settle = window.setTimeout(() => {
-        if (pendingSectionRef.current) setActiveSection(pendingSectionRef.current);
-        pendingSectionRef.current = null;
-      }, 120);
-    };
-    container.addEventListener('scroll', onScroll, { passive: true });
-    update();
-    return () => { container.removeEventListener('scroll', onScroll); window.clearTimeout(settle); if (frame) window.cancelAnimationFrame(frame); };
-  }, [recordReady, selected?.id]);
+  const { activeSection, goToSection, reset: resetSections } = useRecordSections(INTAKE_SECTIONS, {
+    prefix: 'intake-section',
+    navSelector: '.admin-intake-nav',
+    enabled: recordReady,
+    resetKey: selected?.id,
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -248,8 +196,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
     setWithdrawNote('');
     setExistingClinicAccount(false);
     setReferralOutcome('complete');
-    setActiveSection('patient');
-    pendingSectionRef.current = null;
+    resetSections();
     setMessage('');
     try {
       if (isLocalPortalPreview) {
@@ -498,6 +445,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
 
   return (
     <div className="page-body order-crm patient-crm admin-intake-crm">
+      {summarySlot ? createPortal(
       <section className="order-crm-summary" aria-label="HHH intake summary">
         <div className="order-crm-summary__tiles">
           <SummaryMetric label="Open" value={String(allRecords.length)} detail="Enquiries awaiting HHH referral" icon={Inbox} tone="primary" />
@@ -505,9 +453,11 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
           <SummaryMetric label="QR links" value={String(referrals.length)} detail="Pharmacy dedicated links" icon={QrCode} tone="primary" />
           <SummaryMetric label="In review" value={String(inProgressCount)} detail="Follow-up due or in progress" icon={ClipboardList} tone="warning" />
         </div>
-      </section>
+      </section>,
+        summarySlot,
+      ) : null}
 
-      <section className="order-crm-controls">
+      <section className="order-crm-controls admin-filter-bar">
         <div className="order-crm-search">
           <Search size={15} />
           <input
@@ -617,19 +567,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                 </div>
               </header>
 
-              <nav className="pharmacy-dashboard__nav admin-intake-nav" aria-label={`${selected.patientDisplayName} sections`}>
-                {INTAKE_SECTIONS.map(section => (
-                  <button
-                    key={section.id}
-                    type="button"
-                    className={activeSection === section.id ? 'is-active' : undefined}
-                    aria-current={activeSection === section.id ? 'location' : undefined}
-                    onClick={() => goToSection(section.id)}
-                  >
-                    {section.label}
-                  </button>
-                ))}
-              </nav>
+              <RecordSectionNav sections={INTAKE_SECTIONS} active={activeSection} onSelect={goToSection} className="admin-intake-nav" label={`${selected.patientDisplayName} sections`} />
 
               <div className="patient-crm-detail__body pharmacy-dashboard admin-intake-record">
                 {withdrawOpen ? (
@@ -668,28 +606,28 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                     </section>
                   ) : null}
                   <div className="pharmacy-details">
-                    <IntakeCard icon={User} title="Contact">
+                    <RecordCard icon={User} title="Contact">
                       <dl className="pharmacy-details__list">
                         <CopyFact label="Date of birth" value={detail.dob == null ? null : formatPatientDob(String(detail.dob))} />
                         <CopyFact label="Postcode" value={detail.postcode} />
                         <CopyFact label="Email" value={detail.email} />
                         <CopyFact label="Mobile" value={detail.mobile} />
                       </dl>
-                    </IntakeCard>
-                    <IntakeCard icon={Inbox} title="Enquiry">
+                    </RecordCard>
+                    <RecordCard icon={Inbox} title="Enquiry">
                       <dl className="pharmacy-details__list">
                         <Fact label="Case reference">{selected.caseReference}</Fact>
                         <Fact label="Came in through">{isWebsite(selected) ? 'Main HHH website' : <>QR link<small>{sourceName}</small></>}</Fact>
                         <Fact label="Submitted">{dateTime(selected.submittedAt)}</Fact>
                         <Fact label="Consent">{detail.referralConsent && detail.dataSharingConsent ? 'Referral and data sharing' : <mark>Not fully given</mark>}</Fact>
                       </dl>
-                    </IntakeCard>
+                    </RecordCard>
                   </div>
                 </section>
 
                 <section id="intake-section-eligibility" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-eligibility">
                   <h3 id="intake-heading-eligibility" className="pharmacy-dashboard__heading">Eligibility</h3>
-                  <IntakeCard icon={Stethoscope} title="Form answers" tag={screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : <span className="order-stage-pill order-tone--paid">No flags</span>}>
+                  <RecordCard icon={Stethoscope} title="Form answers" tag={screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : <span className="order-stage-pill order-tone--paid">No flags</span>}>
                     {screeningFlag ? (
                       <p className="banner banner-amber admin-intake-flag" role="status">
                         <strong>Screening flag.</strong>{' '}
@@ -705,13 +643,13 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                       <CopyFact label="Two treatments tried" value={detail.triedTwoTreatments ? 'Yes' : 'No or not confirmed'} flagged={!detail.triedTwoTreatments} />
                       <CopyFact label="Psychosis history" value={detail.psychosisExclusion ? 'Reported' : 'Not reported'} flagged={Boolean(detail.psychosisExclusion)} />
                     </dl>
-                  </IntakeCard>
+                  </RecordCard>
                 </section>
 
                 <section id="intake-section-pharmacy" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-pharmacy">
                   <h3 id="intake-heading-pharmacy" className="pharmacy-dashboard__heading">Pharmacy</h3>
                   <div className="pharmacy-details">
-                    <IntakeCard
+                    <RecordCard
                       icon={Building2}
                       title={destinationPharmacy?.name ?? 'No pharmacy yet'}
                       subtitle={destinationPharmacy ? [destinationPharmacy.gphc ? `GPhC ${destinationPharmacy.gphc}` : null, destinationPharmacy.postcode].filter(Boolean).join(' · ') || 'GPhC and postcode not recorded' : 'Choose one to send the enquiry to'}
@@ -729,8 +667,8 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                         <Fact label="Came from">{sourceName}</Fact>
                       </dl>
                       <p className="admin-intake-note">The pharmacy it is with can see this enquiry until you refer it or move it. {HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL} is always available as a holding place.</p>
-                    </IntakeCard>
-                    <IntakeCard icon={RefreshCw} title={hasDestination ? 'Move to another pharmacy' : 'Choose a pharmacy'} subtitle={`${candidateRows.length} of ${candidates.length} eligible${patientArea ? ` · ${patientArea} area first` : ''}`}>
+                    </RecordCard>
+                    <RecordCard icon={RefreshCw} title={hasDestination ? 'Move to another pharmacy' : 'Choose a pharmacy'} subtitle={`${candidateRows.length} of ${candidates.length} eligible${patientArea ? ` · ${patientArea} area first` : ''}`}>
                       <div className="admin-intake-form">
                         <div className="search-box admin-intake-picker__search">
                           <Search size={15} aria-hidden="true" />
@@ -784,13 +722,13 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                           </div>
                         ) : null}
                       </div>
-                    </IntakeCard>
+                    </RecordCard>
                   </div>
                 </section>
 
                 <section id="intake-section-review" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-review">
                   <h3 id="intake-heading-review" className="pharmacy-dashboard__heading">Review</h3>
-                  <IntakeCard icon={ClipboardList} title="HHH review" subtitle="Only HHH sees this. Pharmacies do not." tag={<span className={`order-stage-pill order-tone--${reviewMeta(detail.followUpStatus).tone}`}>{reviewMeta(detail.followUpStatus).label}</span>}>
+                  <RecordCard icon={ClipboardList} title="HHH review" subtitle="Only HHH sees this. Pharmacies do not." tag={<span className={`order-stage-pill order-tone--${reviewMeta(detail.followUpStatus).tone}`}>{reviewMeta(detail.followUpStatus).label}</span>}>
                     <div className="admin-intake-review" role="radiogroup" aria-label="HHH review status">
                       {REVIEW_OPTIONS.map(option => {
                         const saved = option.id === String(detail.followUpStatus ?? 'not_started');
@@ -827,12 +765,12 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                         ) : null}
                       </div>
                     </div>
-                  </IntakeCard>
+                  </RecordCard>
                 </section>
 
                 <section id="intake-section-referral" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-referral">
                   <h3 id="intake-heading-referral" className="pharmacy-dashboard__heading">Referral</h3>
-                  <IntakeCard icon={Send} title="Decision" tag={<span className={`order-stage-pill order-tone--${canRefer ? 'paid' : 'neutral'}`}>{canRefer ? 'Ready' : 'Waiting'}</span>}>
+                  <RecordCard icon={Send} title="Decision" tag={<span className={`order-stage-pill order-tone--${canRefer ? 'paid' : 'neutral'}`}>{canRefer ? 'Ready' : 'Waiting'}</span>}>
                     <div className="admin-intake-outcome" role="radiogroup" aria-label="Referral outcome">
                       <button type="button" role="radio" aria-checked={referralOutcome === 'complete'} className={referralOutcome === 'complete' ? 'is-on' : ''} onClick={() => chooseOutcome('complete')}>
                         <strong>Refer</strong>
@@ -888,7 +826,7 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                         </div>
                       </div>
                     )}
-                  </IntakeCard>
+                  </RecordCard>
                 </section>
               </div>
             </article>
@@ -949,63 +887,5 @@ function IntakeListRow({ record, selected, onSelect }: { record: V2EligibilityQu
         <small>{record.caseReference} · {shortDate(record.submittedAt)}</small>
       </span>
     </button>
-  );
-}
-
-function IntakeCard({ icon: Icon, title, subtitle, tag, children }: { icon: LucideIcon; title: string; subtitle?: string; tag?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="pharmacy-details__card admin-intake-card">
-      <header>
-        <span className="pharmacy-details__icon" aria-hidden="true"><Icon size={15} /></span>
-        {subtitle ? <span className="admin-intake-card__title"><h4>{title}</h4><small>{subtitle}</small></span> : <h4>{title}</h4>}
-        {tag ?? <span aria-hidden="true" />}
-      </header>
-      {children}
-    </section>
-  );
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="pharmacy-details__row"><dt>{label}</dt><dd>{children}</dd></div>;
-}
-
-/** A small button that copies a value and shows a tick for a moment. */
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 1500);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      // Clipboard can be blocked by the browser; the value is still selectable.
-    }
-  };
-  return (
-    <button type="button" className={`admin-intake-copy__btn${copied ? ' is-copied' : ''}`} onClick={() => void copy()} title={copied ? 'Copied' : `Copy ${label.toLowerCase()}`} aria-label={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}>
-      {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
-    </button>
-  );
-}
-
-/** A detail row whose value can be copied in one click; an empty value reads "Not recorded". */
-function CopyFact({ label, value, flagged = false }: { label: string; value: unknown; flagged?: boolean }) {
-  const text = value == null ? '' : String(value).trim();
-  return (
-    <div className="pharmacy-details__row admin-intake-copy-row">
-      <dt>{label}</dt>
-      <dd>
-        {text ? (
-          <span className="admin-intake-copy">
-            {flagged ? <mark>{text}</mark> : <span>{text}</span>}
-            <CopyButton text={text} label={label} />
-          </span>
-        ) : <span className="pharmacy-details__empty">Not recorded</span>}
-      </dd>
-    </div>
   );
 }

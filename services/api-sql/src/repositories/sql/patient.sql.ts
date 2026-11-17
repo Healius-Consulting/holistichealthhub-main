@@ -149,6 +149,47 @@ const UPDATE_PATIENT_STATUS_GQL = `
   }
 `;
 
+// The identity row (email hash + date of birth) is what stops one person being
+// two patients at a pharmacy, so it moves with the details in one transaction.
+const UPDATE_PATIENT_DETAILS_GQL = `
+  mutation UpdatePatientDetails(
+    $id: UUID!
+    $organisationId: UUID!
+    $expectedVersion: Int!
+    $newVersion: Int!
+    $firstName: String!
+    $surname: String!
+    $dob: Date!
+    $email: String!
+    $emailHash: String!
+    $mobile: String!
+    $postcode: String!
+  ) @transaction {
+    updated: patient_updateMany(
+      where: {
+        id: { eq: $id }
+        organisationId: { eq: $organisationId }
+        version: { eq: $expectedVersion }
+        archivedAt: { isNull: true }
+      }
+      data: {
+        firstName: $firstName
+        surname: $surname
+        dob: $dob
+        email: $email
+        mobile: $mobile
+        postcode: $postcode
+        version: $newVersion
+        updatedAt_expr: "request.time"
+      }
+    ) @check(expr: "this == 1", message: "PATIENT_VERSION_CONFLICT")
+    patientIdentity_updateMany(
+      where: { patientId: { eq: $id } }
+      data: { emailHash: $emailHash, dob: $dob }
+    )
+  }
+`;
+
 export class SqlPatientRepository implements PatientRepositoryPort {
   async listTenantPatients(organisationId: string, limit = 500): Promise<PatientRecord[]> {
     const result = await dataConnect.executeGraphql<{ patients: RawPatient[] }, any>(
@@ -200,5 +241,33 @@ export class SqlPatientRepository implements PatientRepositoryPort {
         statusChangedAt: data.statusChangedAt ?? new Date().toISOString(),
       },
     });
+  }
+
+  async updatePatientDetails(data: {
+    id: string;
+    organisationId: string;
+    expectedVersion: number;
+    firstName: string;
+    surname: string;
+    dob: string;
+    email: string;
+    emailHash: string;
+    mobile: string;
+    postcode: string;
+  }): Promise<boolean> {
+    try {
+      await dataConnect.executeGraphql(UPDATE_PATIENT_DETAILS_GQL, {
+        variables: {
+          ...data,
+          id: asUuid(data.id),
+          organisationId: asUuid(data.organisationId),
+          newVersion: data.expectedVersion + 1,
+        },
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('PATIENT_VERSION_CONFLICT')) return false;
+      throw error;
+    }
   }
 }

@@ -39,6 +39,12 @@ export interface PatientRegisterRow {
    */
   conditions: string[];
   primaryCondition: string | null;
+  /** The name in its two parts and the postcode, so HHH can edit a patient's details. */
+  firstName: string;
+  surname: string;
+  postcode: string;
+  /** True for a patient record; false for a closed application, which cannot be edited. */
+  editable: boolean;
 }
 
 function londonDateKey(value: string | null) {
@@ -88,6 +94,10 @@ export function buildPatientRegister(
       primaryCondition: primaryConditionCode(conditions),
       id: patient.id,
       name: `${patient.firstName} ${patient.surname}`.trim(),
+      firstName: patient.firstName,
+      surname: patient.surname,
+      postcode: patient.postcode,
+      editable: true,
       email: patient.email,
       mobile: patient.mobile,
       dob: patient.dob,
@@ -119,6 +129,10 @@ export function buildPatientRegister(
       primaryCondition: primaryConditionCode(conditions),
       id: `sub-${submission.id}`,
       name: `${submission.firstName} ${submission.surname}`.trim(),
+      firstName: submission.firstName,
+      surname: submission.surname,
+      postcode: submission.postcode ?? '',
+      editable: false,
       email: submission.email,
       mobile: submission.mobile,
       dob: submission.dob,

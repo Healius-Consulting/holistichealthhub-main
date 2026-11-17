@@ -13,9 +13,11 @@ interface WorkspacePageHeaderProps {
   commandLabel?: string;
   onSectionClick?: () => void;
   backAction?: { label: string; onClick: () => void };
+  /** A strip under the title row, such as a page's headline figures. */
+  summary?: ReactNode;
 }
 
-export default function WorkspacePageHeader({ section, context, title, contextControl, actions, identity, commandLabel = 'Quick find', onSectionClick, backAction }: WorkspacePageHeaderProps) {
+export default function WorkspacePageHeader({ section, context, title, contextControl, actions, identity, commandLabel = 'Quick find', onSectionClick, backAction, summary }: WorkspacePageHeaderProps) {
   const toolbar = (
     <div className="app-header__actions">
       {actions}
@@ -26,7 +28,7 @@ export default function WorkspacePageHeader({ section, context, title, contextCo
   );
 
   return (
-    <header className="app-header workspace-page-header">
+    <header className={`app-header workspace-page-header${summary ? ' has-summary' : ''}`}>
       <div className="brand-text">
         <div className="app-header__eyebrow">
           {backAction && <button type="button" className="workspace-back-button" onClick={backAction.onClick} aria-label={backAction.label}><ArrowLeft size={12} /> Back</button>}
@@ -42,6 +44,7 @@ export default function WorkspacePageHeader({ section, context, title, contextCo
           <div className="workspace-page-header__identity">{identity}</div>
         </div>
       ) : toolbar}
+      {summary ? <div className="workspace-page-header__summary">{summary}</div> : null}
     </header>
   );
 }

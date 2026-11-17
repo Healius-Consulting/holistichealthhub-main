@@ -48,4 +48,17 @@ export interface PatientRepositoryPort {
     activatedAt?: string | null;
     statusChangedAt?: string | null;
   }): Promise<void>;
+  /** Rewrite the patient's own details if the row is still at `expectedVersion`; false means it changed underneath. */
+  updatePatientDetails(data: {
+    id: string;
+    organisationId: string;
+    expectedVersion: number;
+    firstName: string;
+    surname: string;
+    dob: string;
+    email: string;
+    emailHash: string;
+    mobile: string;
+    postcode: string;
+  }): Promise<boolean>;
 }

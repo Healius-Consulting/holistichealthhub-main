@@ -156,6 +156,7 @@ describe('portal order handout', () => {
       listActivePatients: async () => [],
       findPatientById: async () => patient(),
       updatePatientStatus: async () => undefined,
+      updatePatientDetails: async () => true,
     };
     const patientFinanceRepo: PatientFinanceRepositoryPort = {
       findDispenseEvent: async () => null,
@@ -210,6 +211,7 @@ describe('portal order handout', () => {
       listActivePatients: async () => [],
       findPatientById: async () => patient(),
       updatePatientStatus: async () => undefined,
+      updatePatientDetails: async () => true,
     };
     const patientFinanceRepo: PatientFinanceRepositoryPort = {
       findDispenseEvent: async () => null,
