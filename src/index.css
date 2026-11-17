@@ -21666,3 +21666,6 @@ html[data-reduced-motion='true'] .rx-order-summary-rail__continue.is-ready{
   .admin-intake-picker__row{ grid-template-columns: 16px minmax(0, 1fr); }
   .admin-intake-picker__tags{ grid-column: 2; justify-content: flex-start; }
 }
+/* Intake header: the destination pharmacy's postcode under its name, copyable. */
+.admin-intake-header-postcode{ align-items: center; color: var(--text-secondary); font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+.admin-intake-header-postcode .admin-intake-copy__btn{ margin-top: 0; }

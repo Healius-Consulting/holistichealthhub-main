@@ -600,7 +600,13 @@ export default function AdminIntakeV2({ onOpenRecord }: AdminIntakeV2Props = {})
                 <div className="order-crm-record__toolbar">
                   <div className="order-crm-record__value">
                     <small>Destination</small>
-                    <strong>{destinationSaved ? destinationName : 'Pending'}</strong>
+                    <strong>{hasDestination ? destinationName : 'Pending'}</strong>
+                    {hasDestination && destinationPharmacy?.postcode ? (
+                      <span className="admin-intake-copy admin-intake-header-postcode">
+                        <span>{destinationPharmacy.postcode}</span>
+                        <CopyButton text={destinationPharmacy.postcode} label="Pharmacy postcode" />
+                      </span>
+                    ) : null}
                     <span className="order-crm-record__opened">{reviewComplete ? 'Review complete' : 'Review still open'}</span>
                   </div>
                   <div className="order-crm-record__actions" role="group" aria-label="Enquiry actions">
@@ -963,9 +969,8 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   return <div className="pharmacy-details__row"><dt>{label}</dt><dd>{children}</dd></div>;
 }
 
-/** A detail row whose value can be copied in one click; an empty value reads "Not recorded". */
-function CopyFact({ label, value, flagged = false }: { label: string; value: unknown; flagged?: boolean }) {
-  const text = value == null ? '' : String(value).trim();
+/** A small button that copies a value and shows a tick for a moment. */
+function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -981,15 +986,23 @@ function CopyFact({ label, value, flagged = false }: { label: string; value: unk
     }
   };
   return (
+    <button type="button" className={`admin-intake-copy__btn${copied ? ' is-copied' : ''}`} onClick={() => void copy()} title={copied ? 'Copied' : `Copy ${label.toLowerCase()}`} aria-label={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}>
+      {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+    </button>
+  );
+}
+
+/** A detail row whose value can be copied in one click; an empty value reads "Not recorded". */
+function CopyFact({ label, value, flagged = false }: { label: string; value: unknown; flagged?: boolean }) {
+  const text = value == null ? '' : String(value).trim();
+  return (
     <div className="pharmacy-details__row admin-intake-copy-row">
       <dt>{label}</dt>
       <dd>
         {text ? (
           <span className="admin-intake-copy">
             {flagged ? <mark>{text}</mark> : <span>{text}</span>}
-            <button type="button" className={`admin-intake-copy__btn${copied ? ' is-copied' : ''}`} onClick={() => void copy()} title={copied ? 'Copied' : `Copy ${label.toLowerCase()}`} aria-label={copied ? `${label} copied` : `Copy ${label.toLowerCase()}`}>
-              {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
-            </button>
+            <CopyButton text={text} label={label} />
           </span>
         ) : <span className="pharmacy-details__empty">Not recorded</span>}
       </dd>
