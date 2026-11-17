@@ -15,6 +15,7 @@ import { buildPharmacyLedgerRows } from '../../application/finance/pharmacy-ledg
 import { rewritePatientConditions } from '../../application/eligibility/rewrite-patient-conditions.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertTenantScope } from '../../security/request-context.js';
+import { uuidParam } from './uuid-param.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { buildPharmacyPatientDirectory, buildSqlPharmacyOverview, toPortalOrganisation, toPortalPatient, toPortalPendingEnquiry } from './pharmacy-contracts.js';
 
@@ -108,6 +109,18 @@ export function createPortalPharmacyRouter(): Router {
       const { pendingEnquiries } = await operationalRecords(scope.organisationId);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(pendingEnquiries.map(toPortalPendingEnquiry));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /* Someone at the pharmacy opened a new enquiry: its "new" dot clears for the whole team. */
+  router.post('/portal/enquiries/:enquiryId/opened', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      const { enquiryId } = z.object({ enquiryId: uuidParam }).parse(req.params);
+      await intakeRepo.markPharmacyOpened(enquiryId, scope.organisationId);
+      res.status(204).end();
     } catch (error) {
       next(error);
     }

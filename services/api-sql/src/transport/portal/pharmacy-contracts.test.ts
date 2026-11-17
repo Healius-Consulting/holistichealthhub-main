@@ -975,6 +975,18 @@ describe('SQL pharmacy compatibility contracts', () => {
     assert.equal(mapped.heardAbout, 'Poster');
   });
 
+  it('marks an enquiry new until someone at the pharmacy opens it', () => {
+    const base = {
+      id: '12345678-1234-4123-8123-123456789012', submittedAt: '2026-08-17T09:15:00.000Z', followUpStatus: 'NOT_STARTED',
+      sourceType: 'PHARMACY_QR' as const, firstName: 'Avery', surname: 'Morgan', dob: '1991-04-12',
+      email: 'avery@example.test', mobile: '07000000000', postcode: 'NG16 3AA',
+    };
+    assert.equal(toPortalPendingEnquiry({ ...base, pharmacyReviewStatus: 'NOT_OPENED' }).opened, false);
+    assert.equal(toPortalPendingEnquiry({ ...base, pharmacyReviewStatus: 'OPENED' }).opened, true);
+    // An older API without the field never shows every enquiry as new.
+    assert.equal(toPortalPendingEnquiry(base).opened, true);
+  });
+
   it('maps an in-progress HHH review enquiry', () => {
     const mapped = toPortalPendingEnquiry({
       id: '12345678-1234-4123-8123-123456789012',

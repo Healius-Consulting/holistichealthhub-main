@@ -35,6 +35,8 @@ export function toAdminIntakeQueueItem(record: PlatformSubmissionRecord, duplica
     displayStatus: sqlIntakeDisplayStatus(record),
     assignmentStatus: lower(record.assignmentStatus),
     pharmacyReviewStatus: lower(record.pharmacyReviewStatus),
+    /** False until an HHH admin opens it; drives the "new" dot in the admin queue. */
+    hhhOpened: Boolean(record.hhhOpenedAt),
     outcomeStatus: lower(record.outcomeStatus),
     version: record.assignmentVersion,
     legacy: record.sourceType === 'LEGACY_PHARMACY_QR',

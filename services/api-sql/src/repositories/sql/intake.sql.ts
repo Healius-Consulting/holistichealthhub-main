@@ -44,6 +44,7 @@ const GET_SUBMISSION_BY_ID_GQL = `
       pharmacyAccessStatus
       followUpStatus
       pharmacyReviewStatus
+      hhhOpenedAt
       outcomeStatus
       onboardingDecision
       existingClinicAccount
@@ -82,6 +83,7 @@ const LIST_TENANT_PENDING_ENQUIRIES_GQL = `
       id
       submittedAt
       followUpStatus
+      pharmacyReviewStatus
       sourceType
       firstName
       surname
@@ -308,6 +310,59 @@ const DELETE_PATIENT_CONDITION_GQL = `
   }
 `;
 
+// HHH correcting the details a patient typed on an enquiry still in the queue.
+const UPDATE_SUBMISSION_DETAILS_GQL = `
+  mutation UpdateSubmissionDetails(
+    $id: UUID!
+    $firstName: String!
+    $surname: String!
+    $dob: Date!
+    $email: String!
+    $emailHash: String!
+    $mobile: String!
+    $postcode: String!
+  ) {
+    updated: eligibilitySubmission_updateMany(
+      where: { id: { eq: $id }, outcomeStatus: { eq: OPEN }, pharmacyAccessStatus: { eq: WITHHELD } }
+      data: {
+        firstName: $firstName
+        surname: $surname
+        dob: $dob
+        email: $email
+        emailHash: $emailHash
+        mobile: $mobile
+        postcode: $postcode
+        updatedAt_expr: "request.time"
+      }
+    ) @check(expr: "this == 1", message: "INTAKE_STATE_CONFLICT") @redact
+  }
+`;
+
+// The pharmacy holding an open enquiry has looked at it. Only the first look counts.
+const MARK_PHARMACY_OPENED_GQL = `
+  mutation MarkPharmacyOpened($id: UUID!, $organisationId: UUID!) {
+    eligibilitySubmission_updateMany(
+      where: {
+        id: { eq: $id }
+        assignedOrganisationId: { eq: $organisationId }
+        pharmacyReviewStatus: { eq: NOT_OPENED }
+        outcomeStatus: { eq: OPEN }
+      }
+      data: { pharmacyReviewStatus: OPENED }
+    )
+  }
+`;
+
+// An HHH admin has looked at the enquiry. Only the first look is recorded.
+const MARK_HHH_OPENED_GQL = `
+  mutation MarkHhhOpened($id: UUID!) {
+    eligibilitySubmission_updateMany(
+      where: { id: { eq: $id }, hhhOpenedAt: { isNull: true } }
+      data: { hhhOpenedAt_expr: "request.time" }
+    )
+  }
+`;
+
 const REASSIGN_SUBMISSION_GQL = `
   mutation ReassignPendingSubmission(
     $id: UUID!
@@ -331,6 +386,8 @@ const REASSIGN_SUBMISSION_GQL = `
       data: {
         assignedOrganisationId: $newOrganisationId
         assignmentStatus: PROVISIONAL
+        # A different pharmacy now holds it, so it is new to them.
+        pharmacyReviewStatus: NOT_OPENED
         assignmentVersion: $newAssignmentVersion
         assignmentReason: $reasonCode
         privateAllocationNote: $note
@@ -638,6 +695,22 @@ export class SqlIntakeRepository implements IntakeRepositoryPort {
       { variables: { organisationId: asUuid(organisationId), limit } }
     );
     return result.data.eligibilitySubmissions ?? [];
+  }
+
+  async updateSubmissionDetails(input: { id: string; firstName: string; surname: string; dob: string; email: string; emailHash: string; mobile: string; postcode: string }): Promise<void> {
+    try {
+      await dataConnect.executeGraphql(UPDATE_SUBMISSION_DETAILS_GQL, { variables: { ...input, id: asUuid(input.id) } });
+    } catch (error) {
+      rethrowMutationError(error);
+    }
+  }
+
+  async markPharmacyOpened(id: string, organisationId: string): Promise<void> {
+    await dataConnect.executeGraphql(MARK_PHARMACY_OPENED_GQL, { variables: { id: asUuid(id), organisationId: asUuid(organisationId) } });
+  }
+
+  async markHhhOpened(id: string): Promise<void> {
+    await dataConnect.executeGraphql(MARK_HHH_OPENED_GQL, { variables: { id: asUuid(id) } });
   }
 
   async markReviewRequested(id: string, note?: string | null): Promise<void> {

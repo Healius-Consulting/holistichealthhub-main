@@ -178,6 +178,8 @@ export interface V2IntakeReceipt {
 
 export interface V2EligibilityQueueItem {
   id: string;
+  /** False until an HHH admin opens it; drives the "new" dot. Missing means opened. */
+  hhhOpened?: boolean;
   caseReference: string;
   patientDisplayName: string;
   submittedAt: string;
@@ -626,6 +628,8 @@ export interface PortalPendingEnquiryRecord {
   caseReference: string;
   /** Open: New enquiry, then In progress once HHH records a review status. Closed: Declined or Withdrawn. */
   displayStatus: 'New enquiry' | 'In progress' | 'Declined' | 'Withdrawn';
+  /** False until someone at the pharmacy opens it; drives the "new" dot. Missing means opened. */
+  opened?: boolean;
   sourceType: 'general_hhh_website' | 'future_pharmacy_qr' | 'legacy_pharmacy_qr';
   firstName: string;
   surname: string;

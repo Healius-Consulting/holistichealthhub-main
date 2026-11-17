@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Building2, CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, Stethoscope, User, UserX, type LucideIcon } from 'lucide-react';
-import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason, type PatientAgreementChannel } from '../shared/api';
+import { Building2, Pencil, CheckCircle2, ClipboardList, Copy, Globe, Inbox, LoaderCircle, QrCode, RefreshCw, Search, Send, Stethoscope, User, UserX, type LucideIcon } from 'lucide-react';
+import { DECLINE_REASONS, decideV2ProgrammeOnboarding, getAdminGeneralIntake, markAdminIntakeOpened, updateAdminIntakeConditions, updateAdminIntakeDetails, getAdminIntakeDetail, getAdminPharmacyReferralIntake, getAssignmentCandidates, reassignIntake, updateIntakeFollowUp, withdrawV2Intake, type DeclineReason, type PatientAgreementChannel } from '../shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, workspaceClassificationLabel, type DuplicateRecordMatch, type V2EligibilityQueueItem } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { useApp } from '../context/AppContext';
+import { conditionLabel } from '@hhh/domain';
 import { CopyButton, CopyFact, Fact, RecordCard, RecordSectionNav, useRecordSections } from './admin/RecordParts';
+import { PatientDetailsForm } from '../pages/admin/PatientDetailsForm';
+import ConditionEditor from './ConditionEditor';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
 import { compactPatientName } from '../utils/patientName';
 import { formatPatientDob } from '../utils/patientDob';
@@ -43,7 +46,7 @@ const REVIEW_META: Record<string, { label: string; tone: string }> = {
 
 const previewGeneral: V2EligibilityQueueItem = {
   id: 'preview-general', caseReference: 'HHH-PREVIEW-001', patientDisplayName: 'Avery Morgan',
-  submittedAt: '2026-08-16T08:40:00.000Z', displayStatus: 'Awaiting HHH referral',
+  submittedAt: '2026-08-16T08:40:00.000Z', displayStatus: 'Awaiting HHH referral', hhhOpened: false,
   assignmentStatus: 'awaiting_hhh_allocation', pharmacyReviewStatus: 'not_opened', outcomeStatus: 'open',
   version: 2, legacy: false, sourceType: 'general_hhh_website', assignedOrganisationId: null,
   postcode: 'SW1A 1AA', followUpStatus: 'in_progress', nextFollowUpAt: null, destinationLocked: false,
@@ -76,7 +79,7 @@ function previewDetail(record: V2EligibilityQueueItem): Detail {
     assignedOrganisationName: dedicated ? 'Primary Branch' : null,
     effectiveAssignedOrganisationId: record.assignedOrganisationId,
     dob: '1991-04-12', email: 'preview.patient@example.test', mobile: '07000 000 000',
-    conditions: ['chronic_pain', 'sleep_disorders'], primaryCondition: 'chronic_pain',
+    conditions: ['chronic-pain', 'insomnia'], primaryCondition: 'chronic-pain',
     triedTwoTreatments: true, psychosisExclusion: false,
     referralConsent: true, dataSharingConsent: true,
   };
@@ -112,9 +115,11 @@ interface AdminIntakeV2Props {
   onOpenRecord?: (match: DuplicateRecordMatch) => void;
   /** Where the page header shows this page's headline figures. */
   summarySlot?: HTMLElement | null;
+  /** How many enquiries no HHH admin has opened yet, for the nav dot. */
+  onFreshChange?: (count: number) => void;
 }
 
-export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: AdminIntakeV2Props = {}) {
+export default function AdminIntakeV2({ onOpenRecord, summarySlot = null, onFreshChange }: AdminIntakeV2Props = {}) {
   const { state: appState } = useApp();
   const [general, setGeneral] = useState<V2EligibilityQueueItem[]>([]);
   const [referrals, setReferrals] = useState<V2EligibilityQueueItem[]>([]);
@@ -130,6 +135,10 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
   const [agreementChannel, setAgreementChannel] = useState<PatientAgreementChannel | ''>('');
   const [onboardingNote, setOnboardingNote] = useState('');
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [editingConditions, setEditingConditions] = useState(false);
+  const [conditionSaving, setConditionSaving] = useState(false);
+  const [conditionError, setConditionError] = useState<string | null>(null);
   const [withdrawNote, setWithdrawNote] = useState('');
   const [declineReason, setDeclineReason] = useState<DeclineReason | ''>('');
   const [existingClinicAccount, setExistingClinicAccount] = useState(false);
@@ -186,6 +195,14 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
   };
 
   const open = async (record: V2EligibilityQueueItem) => {
+    if (record.hhhOpened === false) {
+      // Opening it clears the "new" dot for every admin; best effort, the next load retries.
+      const seen = (item: V2EligibilityQueueItem) => (item.id === record.id ? { ...item, hhhOpened: true } : item);
+      setGeneral(current => current.map(seen));
+      setReferrals(current => current.map(seen));
+      record = { ...record, hhhOpened: true };
+      if (!isLocalPortalPreview) void markAdminIntakeOpened(record.id).catch(() => undefined);
+    }
     setSelected(record);
     setDetail(null);
     setDetailLoading(true);
@@ -194,6 +211,9 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
     setOnboardingNote('');
     setWithdrawOpen(false);
     setWithdrawNote('');
+    setEditingDetails(false);
+    setEditingConditions(false);
+    setConditionError(null);
     setExistingClinicAccount(false);
     setReferralOutcome('complete');
     resetSections();
@@ -358,6 +378,10 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
   const qrRows = filteredRecords.filter(record => !isWebsite(record));
   const inProgressCount = allRecords.filter(record => ['due', 'attempted', 'in_progress'].includes(String(record.followUpStatus || ''))).length;
 
+  useEffect(() => {
+    if (!loading) onFreshChange?.([...general, ...referrals].filter(record => record.hhhOpened === false).length);
+  }, [general, referrals, loading, onFreshChange]);
+
   const syncListOverflow = useCallback(() => {
     const el = listRowsRef.current;
     if (!el) {
@@ -388,6 +412,34 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
   // Mirrors the server's rule: agreement is needed only when a pharmacy already holds the enquiry.
   const movingFromPharmacy = Boolean(detail?.assignedOrganisationId);
   const destinationSaved = Boolean(currentDestinationId) && sameId(destination, currentDestinationId);
+  const detailConditions = Array.isArray(detail?.conditions) ? (detail!.conditions as unknown[]).map(String) : [];
+  const nameParts = (selected?.patientDisplayName ?? '').trim().split(/\s+/);
+  const detailsDraft = {
+    firstName: String(detail?.firstName ?? selected?.firstName ?? (nameParts.length > 1 ? nameParts.slice(0, -1).join(' ') : nameParts[0] ?? '')),
+    surname: String(detail?.surname ?? selected?.surname ?? (nameParts.length > 1 ? nameParts.at(-1) : '')),
+    dob: String(detail?.dob ?? ''),
+    email: String(detail?.email ?? ''),
+    mobile: String(detail?.mobile ?? ''),
+    postcode: String(detail?.postcode ?? selected?.postcode ?? ''),
+  };
+  const saveConditions = async (conditionCodes: string[], primaryConditionCode: string) => {
+    if (!selected) return;
+    setConditionSaving(true);
+    setConditionError(null);
+    try {
+      const saved = isLocalPortalPreview
+        ? { conditionCodes, primaryConditionCode }
+        : await updateAdminIntakeConditions(selected.id, { conditionCodes, primaryConditionCode });
+      setDetail(current => (current ? { ...current, conditions: saved.conditionCodes, primaryCondition: saved.primaryConditionCode } : current));
+      setEditingConditions(false);
+      setMessage('Conditions updated.');
+    } catch (cause) {
+      setConditionError(cause instanceof Error ? cause.message : 'The conditions could not be saved.');
+    } finally {
+      setConditionSaving(false);
+    }
+  };
+
   // Whether the enquiry is already saved with a pharmacy, regardless of an unsaved pick.
   const hasDestination = Boolean(currentDestinationId);
   const reviewComplete = detail?.followUpStatus === 'completed';
@@ -606,13 +658,39 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
                     </section>
                   ) : null}
                   <div className="pharmacy-details">
-                    <RecordCard icon={User} title="Contact">
-                      <dl className="pharmacy-details__list">
-                        <CopyFact label="Date of birth" value={detail.dob == null ? null : formatPatientDob(String(detail.dob))} />
-                        <CopyFact label="Postcode" value={detail.postcode} />
-                        <CopyFact label="Email" value={detail.email} />
-                        <CopyFact label="Mobile" value={detail.mobile} />
-                      </dl>
+                    <RecordCard
+                      icon={User}
+                      title="Contact"
+                      subtitle={editingDetails ? 'Editing what the patient typed' : undefined}
+                      tag={editingDetails ? undefined : <button type="button" className="btn btn-sm" onClick={() => setEditingDetails(true)}><Pencil size={13} aria-hidden="true" /> Edit</button>}
+                    >
+                      {editingDetails ? (
+                        <PatientDetailsForm
+                          key={selected.id}
+                          initial={detailsDraft}
+                          note="Fixes what the patient typed on the form. The pharmacy sees the change straight away."
+                          save={details => updateAdminIntakeDetails(selected.id, details)}
+                          onCancel={() => setEditingDetails(false)}
+                          onSaved={(saved, changed) => {
+                            const name = `${saved.firstName} ${saved.surname}`.trim();
+                            setDetail(current => (current ? { ...current, ...saved } : current));
+                            const rename = (item: V2EligibilityQueueItem) => (item.id === selected.id ? { ...item, patientDisplayName: name, postcode: saved.postcode, firstName: saved.firstName, surname: saved.surname } : item);
+                            setGeneral(current => current.map(rename));
+                            setReferrals(current => current.map(rename));
+                            setSelected(current => (current ? rename(current) : current));
+                            setEditingDetails(false);
+                            setMessage(changed.length ? `${name}’s details are updated.` : 'Nothing changed.');
+                          }}
+                        />
+                      ) : (
+                        <dl className="pharmacy-details__list">
+                          <CopyFact label="Name" value={selected.patientDisplayName} />
+                          <CopyFact label="Date of birth" value={detail.dob == null ? null : formatPatientDob(String(detail.dob))} />
+                          <CopyFact label="Postcode" value={detail.postcode} />
+                          <CopyFact label="Email" value={detail.email} />
+                          <CopyFact label="Mobile" value={detail.mobile} />
+                        </dl>
+                      )}
                     </RecordCard>
                     <RecordCard icon={Inbox} title="Enquiry">
                       <dl className="pharmacy-details__list">
@@ -627,7 +705,12 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
 
                 <section id="intake-section-eligibility" className="pharmacy-dashboard__section" aria-labelledby="intake-heading-eligibility">
                   <h3 id="intake-heading-eligibility" className="pharmacy-dashboard__heading">Eligibility</h3>
-                  <RecordCard icon={Stethoscope} title="Form answers" tag={screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : <span className="order-stage-pill order-tone--paid">No flags</span>}>
+                  <RecordCard
+                    icon={Stethoscope}
+                    title="Form answers"
+                    subtitle={screeningFlag ? 'Screening flag' : 'No flags'}
+                    tag={editingConditions ? undefined : <button type="button" className="btn btn-sm" onClick={() => { setConditionError(null); setEditingConditions(true); }}><Pencil size={13} aria-hidden="true" /> Edit conditions</button>}
+                  >
                     {screeningFlag ? (
                       <p className="banner banner-amber admin-intake-flag" role="status">
                         <strong>Screening flag.</strong>{' '}
@@ -637,9 +720,21 @@ export default function AdminIntakeV2({ onOpenRecord, summarySlot = null }: Admi
                         {' '}This is a flag only. It does not decline the application.
                       </p>
                     ) : null}
+                    {editingConditions ? (
+                      <ConditionEditor
+                        conditions={detailConditions}
+                        primaryCondition={String(detail.primaryCondition || detailConditions[0] || '')}
+                        saving={conditionSaving}
+                        error={conditionError}
+                        onCancel={() => { setEditingConditions(false); setConditionError(null); }}
+                        onSave={(conditionCodes, primaryConditionCode) => void saveConditions(conditionCodes, primaryConditionCode)}
+                      />
+                    ) : null}
                     <dl className="pharmacy-details__list">
-                      <CopyFact label="Primary condition" value={detail.primaryCondition ? words(detail.primaryCondition) : null} />
-                      <CopyFact label="Conditions" value={Array.isArray(detail.conditions) && detail.conditions.length ? detail.conditions.map(words).join(', ') : null} />
+                      {editingConditions ? null : <>
+                        <CopyFact label="Primary condition" value={detail.primaryCondition ? conditionLabel(String(detail.primaryCondition)) : null} />
+                        <CopyFact label="Conditions" value={detailConditions.length ? detailConditions.map(code => conditionLabel(code)).join(', ') : null} />
+                      </>}
                       <CopyFact label="Two treatments tried" value={detail.triedTwoTreatments ? 'Yes' : 'No or not confirmed'} flagged={!detail.triedTwoTreatments} />
                       <CopyFact label="Psychosis history" value={detail.psychosisExclusion ? 'Reported' : 'Not reported'} flagged={Boolean(detail.psychosisExclusion)} />
                     </dl>
@@ -866,18 +961,19 @@ function IntakeListGroup({ label, detail, records, selectedId, onSelect }: {
 
 function IntakeListRow({ record, selected, onSelect }: { record: V2EligibilityQueueItem; selected: boolean; onSelect: () => void }) {
   const meta = reviewMeta(record.followUpStatus);
+  const unseen = record.hhhOpened === false;
   const SourceIcon = isWebsite(record) ? Globe : QrCode;
   return (
     <button
       type="button"
       className={`order-crm-row order-crm-row--${meta.tone}${selected ? ' selected' : ''}`}
       aria-pressed={selected}
-      aria-label={`${compactPatientName(record.patientDisplayName)}, ${meta.label}`}
+      aria-label={`${compactPatientName(record.patientDisplayName)}, ${unseen ? 'new, not yet opened, ' : ''}${meta.label}`}
       onClick={onSelect}
     >
       <span className={`order-crm-row__stage order-tone--${meta.tone}`}><SourceIcon size={15} aria-hidden="true" /></span>
       <span className="order-crm-row__identity">
-        <strong title={record.patientDisplayName}>{compactPatientName(record.patientDisplayName)}</strong>
+        <strong title={record.patientDisplayName} className={unseen ? 'has-fresh-dot' : undefined}>{unseen ? <><i className="nav-fresh-dot row-fresh-dot" aria-hidden="true" /><span>{compactPatientName(record.patientDisplayName)}</span></> : compactPatientName(record.patientDisplayName)}</strong>
         <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
         {record.screeningFlag ? <span className="order-stage-pill order-tone--warning">Screening flag</span> : null}
         {record.duplicateOf?.length ? <span className="order-stage-pill order-tone--curaleaf-review" title="Another record looks like the same person">Duplicate · {onboardingStatusLabel(record.duplicateOf[0].stage)}</span> : null}

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { describeApiError, updateAdminPatientDetails, type AdminPatientDetails } from '../../shared/api';
+import { describeApiError, type AdminPatientDetails } from '../../shared/api';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 
 /**
@@ -7,10 +7,11 @@ import { isLocalPortalPreview } from '../../dev/localPortalPreview';
  * applies the same rules as the public form (adult, valid email and UK postcode)
  * and moves the duplicate check with the email and date of birth.
  */
-export function PatientDetailsForm({ patientId, organisationId, initial, onCancel, onSaved }: {
-  patientId: string;
-  organisationId: string;
+export function PatientDetailsForm({ save, initial, onCancel, onSaved, note }: {
+  /** Sends the edit to the server and returns the saved, normalised values. */
+  save: (details: AdminPatientDetails) => Promise<AdminPatientDetails & { changed: string[] }>;
   initial: AdminPatientDetails;
+  note?: string;
   onCancel: () => void;
   onSaved: (saved: AdminPatientDetails, changed: string[]) => void;
 }) {
@@ -32,7 +33,7 @@ export function PatientDetailsForm({ patientId, organisationId, initial, onCance
         onSaved(saved, changed);
         return;
       }
-      const result = await updateAdminPatientDetails(patientId, { organisationId, ...draft });
+      const result = await save(draft);
       onSaved({ firstName: result.firstName, surname: result.surname, dob: result.dob, email: result.email, mobile: result.mobile, postcode: result.postcode }, result.changed);
     } catch (cause) {
       setError(describeApiError(cause, 'The patient details could not be saved.'));
@@ -67,7 +68,7 @@ export function PatientDetailsForm({ patientId, organisationId, initial, onCance
         {field('email', 'Email', { type: 'email', inputMode: 'email' })}
         {field('mobile', 'Mobile', { type: 'tel', inputMode: 'tel' })}
       </div>
-      <p className="admin-intake-note">Changes show for the pharmacy straight away. Curaleaf keeps its own copy, so update it there too if the clinic needs it.</p>
+      <p className="admin-intake-note">{note ?? 'Changes show for the pharmacy straight away. Curaleaf keeps its own copy, so update it there too if the clinic needs it.'}</p>
       {error ? <p className="admin-activation__error" role="alert">{error}</p> : null}
       <div className="admin-intake-actions">
         <button type="button" className="btn btn-sm" disabled={busy} onClick={onCancel}>Cancel</button>

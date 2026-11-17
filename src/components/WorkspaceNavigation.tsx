@@ -8,6 +8,8 @@ export interface WorkspaceNavItem<Key extends string = string> {
   shortLabel?: string;
   icon: ReactNode;
   count?: number;
+  /** New items nobody has opened yet. Shown as a pulsing dot (and "N new" when the rail is open). */
+  fresh?: number;
 }
 
 export interface WorkspaceNavGroup<Key extends string = string> {
@@ -101,8 +103,13 @@ export default function WorkspaceNavigation<Key extends string>({
       aria-label={collapsed ? item.label : undefined}
       title={item.label}
     >
-      <span className="sidebar-item-content">{item.icon}<span>{item.label}</span></span>
-      {item.count ? <span className="nav-queue-count" aria-label={`${item.count} items`}>{item.count}</span> : null}
+      <span className="sidebar-item-content">
+        <span className="sidebar-item-icon">{item.icon}{item.fresh ? <i className="nav-fresh-dot" aria-hidden="true" /> : null}</span>
+        <span>{item.label}</span>
+      </span>
+      {item.fresh ? (
+        <span className="nav-fresh-count" aria-label={`${item.fresh} new, not yet opened`}><i className="nav-fresh-dot" aria-hidden="true" />{item.fresh} new</span>
+      ) : item.count ? <span className="nav-queue-count" aria-label={`${item.count} items`}>{item.count}</span> : null}
     </button>
   );
 
@@ -177,8 +184,11 @@ export default function WorkspaceNavigation<Key extends string>({
       <nav className="mobile-bottom-nav" aria-label={`${ariaLabel} mobile navigation`}>
         {mobilePrimary.map(item => (
           <button type="button" key={item.key} className={activeKey === item.key ? 'active' : ''} aria-current={activeKey === item.key ? 'page' : undefined} onClick={() => navigate(item.key)}>
-            <span className="mobile-nav-icon">{item.icon}{item.count ? <i aria-label={`${item.count} items`}>{item.count}</i> : null}</span>
-            <span>{item.shortLabel ?? item.label}</span>
+            <span className="mobile-nav-icon">
+              {item.icon}
+              {item.fresh ? <b className="nav-fresh-dot" aria-hidden="true" /> : item.count ? <i aria-label={`${item.count} items`}>{item.count}</i> : null}
+            </span>
+            <span>{item.shortLabel ?? item.label}{item.fresh ? <span className="sr-only">, {item.fresh} new</span> : null}</span>
           </button>
         ))}
         <button type="button" className={mobileMenuOpen || mobileMoreActive ? 'active' : ''} aria-expanded={mobileMenuOpen} aria-controls="mobile-more-menu" onClick={() => setMobileMenuOpen(open => !open)}>
@@ -192,7 +202,7 @@ export default function WorkspaceNavigation<Key extends string>({
           <section id="mobile-more-menu" className="mobile-more-sheet" ref={mobileMenuRef} role="dialog" aria-modal="true" aria-labelledby="mobile-more-title" tabIndex={-1}>
             <header><span><small>{brand.title}</small><strong id="mobile-more-title">{moreTitle}</strong></span><button type="button" className="icon-button" aria-label="Close more navigation" onClick={() => setMobileMenuOpen(false)}><X size={17} /></button></header>
             <div className="mobile-more-grid">
-              {mobileMore.map(item => <button type="button" key={item.key} className={activeKey === item.key ? 'active' : ''} aria-current={activeKey === item.key ? 'page' : undefined} onClick={() => navigate(item.key)}><span>{item.icon}</span><strong>{item.label}</strong><small>{item.count ? `${item.count} waiting` : 'Open workspace'}</small></button>)}
+              {mobileMore.map(item => <button type="button" key={item.key} className={activeKey === item.key ? 'active' : ''} aria-current={activeKey === item.key ? 'page' : undefined} onClick={() => navigate(item.key)}><span>{item.icon}</span><strong>{item.label}</strong><small>{item.fresh ? `${item.fresh} new` : item.count ? `${item.count} waiting` : 'Open workspace'}</small></button>)}
             </div>
             <footer>
               {footerAction ? (

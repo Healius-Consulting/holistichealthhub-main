@@ -15,6 +15,8 @@ export default function Navigation() {
   const isAdminViewingClient = state.staffSession?.role === 'admin';
   const staffName = state.staffSession?.name || 'Staff User';
   const staffInitials = staffName.split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
+  // New enquiries nobody at the pharmacy has opened yet: a pulsing dot on Patients.
+  const freshEnquiries = state.enquiries.filter(enquiry => enquiry.organisationId === organisation.id && enquiry.opened === false && !enquiry.closedAt).length;
   const counts: Partial<Record<Screen, number>> = {
     create: tenantOrders.filter(o => o.payment.status === 'none' && o.prescriptions.some(r => r.items.length > 0)).length,
     orders: tenantOrders.filter(o => o.payment.status !== 'none' && o.prescriptions.some(r => r.status !== 'collected')).length,
@@ -27,7 +29,7 @@ export default function Navigation() {
         { key: 'home', label: 'Overview', icon: <Home size={17} /> },
         { key: 'create', label: 'Create order', shortLabel: 'Create', icon: <FilePlus size={17} />, count: counts.create },
         { key: 'orders', label: 'Orders', shortLabel: 'Orders', icon: <Package size={17} />, count: counts.orders },
-        { key: 'patients', label: 'Patients', shortLabel: 'Patients', icon: <Users size={17} />, count: counts.patients },
+        { key: 'patients', label: 'Patients', shortLabel: 'Patients', icon: <Users size={17} />, count: counts.patients, fresh: freshEnquiries },
       ],
     },
     {

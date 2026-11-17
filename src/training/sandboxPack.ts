@@ -118,6 +118,7 @@ function sandboxEnquiry(organisationId: string, now: Date): PortalPendingEnquiry
     submittedAt: daysAgo(1, now).toISOString(),
     caseReference: 'SBX-ENQ-01',
     displayStatus: 'New enquiry',
+    opened: false,
     sourceType: 'future_pharmacy_qr',
     firstName: 'Alex',
     surname: 'Hart',

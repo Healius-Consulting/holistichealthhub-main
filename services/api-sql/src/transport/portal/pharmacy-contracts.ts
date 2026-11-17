@@ -221,6 +221,8 @@ export function toPortalPendingEnquiry(record: TenantPendingEnquiryRecord) {
     submittedAt: record.submittedAt,
     caseReference: sqlIntakeCaseReference(record.id, record.submittedAt),
     displayStatus: pendingEnquiryDisplayStatus(record.followUpStatus),
+    /** False until someone at the pharmacy opens it; drives the "new" dot. */
+    opened: record.pharmacyReviewStatus ? record.pharmacyReviewStatus !== 'NOT_OPENED' : true,
     sourceType: sourceType ?? 'legacy_pharmacy_qr' as const,
     firstName: record.firstName,
     surname: record.surname,

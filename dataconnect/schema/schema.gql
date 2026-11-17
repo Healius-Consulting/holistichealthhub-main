@@ -558,6 +558,8 @@ type EligibilitySubmission @table {
   pharmacyAccessStatus: AccessStatus! @default(value: WITHHELD)
   followUpStatus: FollowUpStatus! @default(value: NOT_STARTED)
   pharmacyReviewStatus: ReviewStatus! @default(value: NOT_OPENED)
+  # When an HHH admin first opened the enquiry; null keeps the queue's "new" dot on.
+  hhhOpenedAt: Timestamp
   outcomeStatus: OutcomeStatus! @default(value: OPEN)
   onboardingDecision: OnboardingDecision! @default(value: PENDING)
   """

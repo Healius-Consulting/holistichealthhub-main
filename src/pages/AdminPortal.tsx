@@ -49,7 +49,7 @@ import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboa
 import { attributedCareLabel, attributedClosedNote, attributedCountForOrganisation, attributedInCare, attributedPatientCounts, attributedStagesForOrganisation, portfolioAttributedCount, splitAttributedRecords } from '../utils/attributedPatients';
 import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
-import { type ActivatedPharmacyOnboarding, completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason } from '../shared/api';
+import { type ActivatedPharmacyOnboarding, completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, updateAdminPatientDetails, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason } from '../shared/api';
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation } from '../shared/contracts';
 import { PharmacyRequestRecord, PharmacyRequestRow, usePharmacyRequests } from './admin/PharmacyRequests';
 import { formatRequestDate } from './admin/requestFormat';
@@ -340,14 +340,14 @@ function tenantFromActivation(organisation: ActivatedPharmacyOnboarding): Pharma
 }
 
 
-function AdminHeader({ view, setView, pending = 0, pharmacyRequests = 0, onViewAdmins }: { view: AdminView; setView: (view: AdminView) => void; pending?: number; pharmacyRequests?: number; onViewAdmins: () => void }) {
+function AdminHeader({ view, setView, pending = 0, freshIntake = 0, pharmacyRequests = 0, onViewAdmins }: { view: AdminView; setView: (view: AdminView) => void; pending?: number; freshIntake?: number; pharmacyRequests?: number; onViewAdmins: () => void }) {
   const { signOutStaff } = useAuth();
   const { state } = useApp();
   const staffName = state.staffSession?.name || 'HHH Administrator';
   const groups: WorkspaceNavGroup<AdminView>[] = [
     { label: 'Administration', items: [
       { key: 'overview', label: 'Overview', icon: <LayoutDashboard size={17} />, count: pharmacyRequests },
-      { key: 'referrals', label: 'Patient intake', icon: <UserCheck size={17} />, count: pending },
+      { key: 'referrals', label: 'Patient intake', icon: <UserCheck size={17} />, count: pending, fresh: freshIntake },
       { key: 'patients', label: 'Patients', icon: <Users size={17} /> },
       { key: 'finance', label: 'Finance', icon: <PoundSterling size={17} /> },
     ] },
@@ -946,6 +946,18 @@ export default function AdminPortal() {
   const [patientFiltersOpen, setPatientFiltersOpen] = useState(false);
   // Each admin page renders its headline figures into the page header through this slot.
   const [headerSummary, setHeaderSummary] = useState<HTMLDivElement | null>(null);
+  // New enquiries no HHH admin has opened: the pulsing dot on Patient intake.
+  const [freshIntakeCount, setFreshIntakeCount] = useState(isLocalPortalPreview ? 1 : 0);
+  useEffect(() => {
+    if (isLocalPortalPreview) return;
+    let cancelled = false;
+    void Promise.all([getAdminGeneralIntake(), getAdminPharmacyReferralIntake()])
+      .then(([general, referrals]) => {
+        if (!cancelled) setFreshIntakeCount([...general.records, ...referrals.records].filter(record => record.hhhOpened === false).length);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [view]);
   const [registerEdits, setRegisterEdits] = useState<Record<string, Partial<PatientRegisterExportRow>>>({});
   const [savingAdminConditions, setSavingAdminConditions] = useState(false);
   const [adminConditionError, setAdminConditionError] = useState<string | null>(null);
@@ -1439,6 +1451,7 @@ export default function AdminPortal() {
       .then(([general, referrals]) => {
         if (cancelled) return;
         setOpenIntakeCount(general.records.length + referrals.records.length);
+        setFreshIntakeCount([...general.records, ...referrals.records].filter(record => record.hhhOpened === false).length);
         setOpenIntakeStatus('ready');
       })
       .catch(() => {
@@ -2337,7 +2350,7 @@ export default function AdminPortal() {
     };
     return (
       <>
-        <AdminIntakeV2 onOpenRecord={openRegisterRecord} summarySlot={headerSummary} />
+        <AdminIntakeV2 onOpenRecord={openRegisterRecord} summarySlot={headerSummary} onFreshChange={setFreshIntakeCount} />
         <section className="integration-boundary card"><ShieldCheck size={20} /><div><strong>HHH referral boundary</strong><p>The current assigned pharmacy can see this enquiry. Completing referral above marks them referred for that pharmacy. This does not diagnose, prescribe, replace a doctor’s prescription, or replace the pharmacy’s legal and professional checks before dispensing.</p></div></section>
         <section className="card admin-referral-section">
           <div className="admin-directory-head"><div><p className="section-label">Legacy compatibility</p><h2>Previous-form applications</h2><p>Only schema-v1 applications use this older workflow. New main-site and dedicated-link cases are managed in the HHH intake workspace above.</p></div><span className="pill pill-amber">{pending.length} waiting</span></div>
@@ -2367,7 +2380,7 @@ export default function AdminPortal() {
     setView('patients');
   };
 
-  const renderReferrals = () => <AdminIntakeV2 onOpenRecord={openRegisterRecord} summarySlot={headerSummary} />;
+  const renderReferrals = () => <AdminIntakeV2 onOpenRecord={openRegisterRecord} summarySlot={headerSummary} onFreshChange={setFreshIntakeCount} />;
 
   const renderPatients = () => {
     const activeCount = stageCounts['HHH approved'] ?? 0;
@@ -2703,8 +2716,7 @@ export default function AdminPortal() {
                         {editingPatientDetails && selectedCanEditDetails ? (
                           <PatientDetailsForm
                             key={selectedRegisterKey ?? ''}
-                            patientId={selectedRegisterPatient.id}
-                            organisationId={selectedRegisterPatient.organisationId}
+                            save={details => updateAdminPatientDetails(selectedRegisterPatient.id, { organisationId: selectedRegisterPatient.organisationId, ...details })}
                             initial={selectedDetailsDraft}
                             onCancel={() => setEditingPatientDetails(false)}
                             onSaved={(saved, changed) => {
@@ -3145,7 +3157,7 @@ export default function AdminPortal() {
   return (
     <div className={`app-shell admin-shell unified-admin-shell admin-view-${view}`}>
       <a className="skip-link" href="#admin-main-content">Skip to main content</a>
-      <AdminHeader view={view} pending={pendingAdminDecisions} pharmacyRequests={pharmacyRequests.pending.length} setView={next => { setView(next); setQuery(''); }} onViewAdmins={() => { setAdminDialogFocus('list'); setShowAdminDialog(true); }} />
+      <AdminHeader view={view} pending={pendingAdminDecisions} freshIntake={freshIntakeCount} pharmacyRequests={pharmacyRequests.pending.length} setView={next => { setView(next); setQuery(''); }} onViewAdmins={() => { setAdminDialogFocus('list'); setShowAdminDialog(true); }} />
       <div className="app-main">
         <WorkspacePageHeader summary={<div ref={setHeaderSummary} className="admin-header-summary" />} section="HHH operations" context={pageMeta[view].title} title={pageMeta[view].title} commandLabel="Find anything" onSectionClick={() => { setView('overview'); setQuery(''); }} backAction={view !== 'overview' ? { label: 'Return to pharmacies', onClick: () => { setView('overview'); setQuery(''); } } : undefined} contextControl={<div className="header-context"><span>Access</span><span className="tenant-status tenant-status--live">Admin</span></div>} />
         <div id="admin-main-content" className="page-container admin-content" tabIndex={-1}>

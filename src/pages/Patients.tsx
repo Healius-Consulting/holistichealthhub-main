@@ -1,6 +1,6 @@
 import { formatUkDate, formatUkDateTime } from '../utils/ukDates';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowDownWideNarrow, ArrowUpNarrowWide, CheckCircle, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, RefreshCw, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
+import { SlidersHorizontal, AlertTriangle, ArrowDownWideNarrow, ArrowUpNarrowWide, CheckCircle, History, Stethoscope, UserRound, ChevronDown, ChevronRight, Clock3, Inbox, Lock, Mail, MapPin, Package, Pencil, Phone, Plus, RefreshCw, Search, Users, X, XCircle, type LucideIcon } from 'lucide-react';
 import { PATIENT_PRICE_LABEL, WHOLESALE_LABEL, formatMargin, getUnresolvedReason, marginPercent, marginToneClass, orderReference, useApp, money, orderRevenue, RX_STATUS_LABELS } from '../context/AppContext';
 import type { CRMPatient, EligibilitySubmission, PatientOrder, PendingEnquiry } from '../context/AppContext';
 import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboardingStatus';
@@ -10,8 +10,9 @@ import { conditionLabel } from '@hhh/domain';
 import RecordDialog, { allocateRecordLayer } from '../components/RecordDialog';
 import ConditionList from '../components/ConditionList';
 import ConditionEditor from '../components/ConditionEditor';
-import { updatePatientConditions } from '../shared/api';
+import { markEnquiryOpened, updatePatientConditions } from '../shared/api';
 import MedicineLabel from '../components/MedicineLabel';
+import { CopyFact, Fact, RecordCard } from '../components/admin/RecordParts';
 import { canCreateOrderForPatient } from '../utils/patientOrderEligibility';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { isOpenPharmacyWorkspace, isTrainingSandboxPatient } from '../training/workspace';
@@ -32,8 +33,6 @@ import {
   type PatientDirectoryFilter,
 } from '../utils/patientDirectoryNavigation';
 import {
-  clampDateInput,
-  settleDateInput,
   comparePatientSortValues,
   directoryStatusMatchesChip,
   enquiryDirectoryStatus,
@@ -46,7 +45,6 @@ import {
   patientCrmGroup,
   patientCrmRecordKey,
   patientCrmStatusMeta,
-  referralPeriodApplies,
   type PatientCrmIcon,
   type PatientDirectoryChip,
   type PatientDirectoryStatus,
@@ -56,6 +54,9 @@ import {
 /** Placeholders keep every row present so a gap reads as "we do not hold this". */
 const NOT_RECORDED = 'Not recorded';
 const EMPTY_FIELD = '—';
+/** A blank form answer: shown, because a missing detail is itself information, but muted. */
+const notAnswered = <span className="pharmacy-details__empty">Not answered</span>;
+const notRecorded = <span className="pharmacy-details__empty">{NOT_RECORDED}</span>;
 
 /**
  * Older eligibility records often stored the postcode as the whole address, which
@@ -337,9 +338,6 @@ export default function Patients() {
     return initial ? [{ key: initial, layer: allocateRecordLayer() }] : [];
   });
   const [statusChip, setStatusChip] = useState<PatientDirectoryChip>('all');
-  const [referredPeriod, setReferredPeriod] = useState<'this-month' | 'last-month' | 'last-3' | 'all-time' | 'custom'>('all-time');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
   const [sortBy, setSortBy] = useState<PatientSortKey>('name');
   const [sortDirection, setSortDirection] = useState<PatientSortDirection>(PATIENT_SORT_DEFAULT_DIRECTION.name);
   const changeSort = (key: PatientSortKey) => {
@@ -433,29 +431,7 @@ export default function Patients() {
     });
   }, [enquiries, patients]);
 
-  const filtered = useMemo(() => {
-    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-    const year = Number(today.slice(0, 4));
-    const month = Number(today.slice(5, 7));
-    const pad = (value: number) => String(value).padStart(2, '0');
-    const startOf = (y: number, m: number) => `${y}-${pad(m)}-01`;
-    const matchesPeriod = (record: CrmRecord) => {
-      if (!referralPeriodApplies(statusChip) || referredPeriod === 'all-time') return true;
-      const raw = record.patient?.crmPatient?.referredAt;
-      if (!raw) return false;
-      const day = raw.slice(0, 10);
-      if (referredPeriod === 'custom') return (!customFrom || day >= customFrom) && (!customTo || day <= customTo);
-      if (referredPeriod === 'this-month') return day >= startOf(year, month) && day <= today;
-      if (referredPeriod === 'last-month') {
-        const previous = new Date(Date.UTC(year, month - 2, 1));
-        const lastDay = new Date(Date.UTC(previous.getUTCFullYear(), previous.getUTCMonth() + 1, 0)).getUTCDate();
-        const from = `${previous.getUTCFullYear()}-${pad(previous.getUTCMonth() + 1)}-01`;
-        const to = `${previous.getUTCFullYear()}-${pad(previous.getUTCMonth() + 1)}-${pad(lastDay)}`;
-        return day >= from && day <= to;
-      }
-      const start = new Date(Date.UTC(year, month - 3, 1));
-      return day >= `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-01` && day <= today;
-    };
+  const { rows: filtered, chipCounts } = useMemo(() => {
     const statusOf = (record: CrmRecord): PatientDirectoryStatus | null => {
       if (record.kind === 'enquiry') return record.enquiry ? enquiryDirectoryStatus(record.enquiry.displayStatus) : null;
       if (record.patient?.crmPatient?.commercialStatus) return record.patient.crmPatient.commercialStatus;
@@ -464,9 +440,14 @@ export default function Patients() {
       if (record.journey === 'active') return 'Active';
       return null;
     };
-    return records
+    const searched = records
       .map(record => ({ record, status: statusOf(record) }))
-      .filter(item => item.status && directoryStatusMatchesChip(item.status, statusChip) && matchesPeriod(item.record) && recordMatchesQuery(item.record, search))
+      .filter(item => item.status && recordMatchesQuery(item.record, search));
+    // Each tab's count honours the search.
+    const counts = Object.fromEntries(PATIENT_DIRECTORY_CHIPS.map(chip => [chip, searched.filter(item =>
+      directoryStatusMatchesChip(item.status!, chip)).length])) as Record<PatientDirectoryChip, number>;
+    const rows = searched
+      .filter(item => directoryStatusMatchesChip(item.status!, statusChip))
       .sort((left, right) => {
         const sortValue = (record: CrmRecord) => {
           if (sortBy === 'referral') return String(record.patient?.crmPatient?.referredAt || '');
@@ -476,12 +457,30 @@ export default function Patients() {
         return comparePatientSortValues(sortValue(left.record), sortValue(right.record), sortDirection)
           || left.record.name.localeCompare(right.record.name, 'en', { sensitivity: 'base' });
       });
-  }, [customFrom, customTo, records, referredPeriod, search, sortBy, sortDirection, statusChip]);
+    return { rows, chipCounts: counts };
+  }, [records, search, sortBy, sortDirection, statusChip]);
+  const freshEnquiryCount = records.filter(record => record.enquiry?.opened === false && !record.enquiry.closedAt).length;
+  const [hubFiltersOpen, setHubFiltersOpen] = useState(false);
 
   // Nothing is auto-selected any more: the list is the view, the dialog is opt-in.
   const topOpenPatient = openPatients.reduce<(typeof openPatients)[number] | null>((top, entry) => !top || entry.layer > top.layer ? entry : top, null);
   const selectedKey = topOpenPatient?.key ?? null;
   const selected = records.find(record => record.key === selectedKey) ?? null;
+
+  // Opening a new enquiry clears its "new" dot for the whole pharmacy team.
+  const markedOpenedRef = useRef(new Set<string>());
+  useEffect(() => {
+    for (const entry of openPatients) {
+      const enquiry = records.find(record => record.key === entry.key)?.enquiry;
+      if (!enquiry || enquiry.opened !== false || markedOpenedRef.current.has(enquiry.id)) continue;
+      markedOpenedRef.current.add(enquiry.id);
+      dispatch({ type: 'MARK_ENQUIRY_OPENED', enquiryId: enquiry.id });
+      if (!isLocalPortalPreview && !isTrainingSandboxEnquiryId(enquiry.id)) {
+        // Best effort: if it fails, the dot comes back on the next refresh and the next open retries.
+        void markEnquiryOpened(enquiry.id).catch(() => markedOpenedRef.current.delete(enquiry.id));
+      }
+    }
+  }, [dispatch, openPatients, records]);
 
   const openPatientFromBoard = (key: string) => {
     setOpenPatients([{ key, layer: allocateRecordLayer() }]);
@@ -530,7 +529,6 @@ export default function Patients() {
     }
     if (target?.kind === 'patient-list') {
       setStatusChip(target.status === 'referred' ? 'Referred' : target.status === 'active' ? 'Active' : target.status === 'inactive' ? 'Inactive' : 'Declined');
-      setReferredPeriod(target.period === 'this-month' ? 'this-month' : 'all-time');
       setSearch('');
       dispatch({ type: 'CLEAR_NAVIGATION_TARGET' });
       return;
@@ -574,107 +572,21 @@ export default function Patients() {
     dispatch({ type: 'SET_SCREEN', screen: 'create' });
   };
 
-  const filtersSet = statusChip !== 'all' || referredPeriod !== 'all-time' || search.trim() !== '';
+  const filtersSet = statusChip !== 'all' || search.trim() !== '';
   const clearFilters = () => {
     setStatusChip('all');
-    setReferredPeriod('all-time');
-    setCustomFrom('');
-    setCustomTo('');
     setSearch('');
   };
   const refreshing = state.patientDirectoryRefreshing;
-  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   const SortIcon = sortDirection === 'asc' ? ArrowUpNarrowWide : ArrowDownWideNarrow;
   const sortDirectionText = patientSortDirectionLabel(sortBy, sortDirection);
+  // What sits behind "Sort & filter" and differs from the default: the count on its button.
+  const hubFilterCount = sortBy !== 'name' || sortDirection !== 'asc' ? 1 : 0;
 
   return (
     <div className="page-body order-crm patient-crm pharmacy-patients">
-      <section className="order-crm-controls patient-hub-controls">
-        <div className="patient-hub-toolbar">
-          <HubSelect
-            label="Referred"
-            value={referredPeriod}
-            options={[
-              { value: 'this-month', label: 'This month' },
-              { value: 'last-month', label: 'Last month' },
-              { value: 'last-3', label: 'Last 3 months' },
-              { value: 'all-time', label: 'All time' },
-              { value: 'custom', label: 'Custom range' },
-            ]}
-            onChange={setReferredPeriod}
-          />
-          {referredPeriod === 'custom' ? (
-            <div className="patient-hub-range" role="group" aria-label="Referral date range">
-              <label className="patient-hub-date">
-                <span>From</span>
-                <input
-                  type="date"
-                  value={customFrom}
-                  min={REFERRAL_RANGE_START}
-                  max={customTo || today}
-                  onChange={event => {
-                    const next = clampDateInput(event.target.value, customTo || today);
-                    if (next !== null) setCustomFrom(next);
-                  }}
-                  onBlur={() => setCustomFrom(current => settleDateInput(current, REFERRAL_RANGE_START, customTo || today))}
-                />
-              </label>
-              <label className="patient-hub-date">
-                <span>To</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  min={customFrom || REFERRAL_RANGE_START}
-                  max={today}
-                  onChange={event => {
-                    const next = clampDateInput(event.target.value, today);
-                    if (next !== null) setCustomTo(next);
-                  }}
-                  onBlur={() => setCustomTo(current => settleDateInput(current, customFrom || REFERRAL_RANGE_START, today))}
-                />
-              </label>
-            </div>
-          ) : null}
-          <div className="patient-hub-sort">
-            <HubSelect
-              label="Sort"
-              value={sortBy}
-              options={[
-                { value: 'name', label: 'Name' },
-                { value: 'referral', label: 'Referral date' },
-                { value: 'payment', label: 'Last payment date' },
-              ]}
-              onChange={changeSort}
-            />
-            <button
-              type="button"
-              className="patient-hub-sort__direction"
-              onClick={() => setSortDirection(current => current === 'asc' ? 'desc' : 'asc')}
-              aria-label={`Sort order: ${sortDirectionText}. Switch to ${patientSortDirectionLabel(sortBy, sortDirection === 'asc' ? 'desc' : 'asc')}`}
-              title={sortDirectionText}
-            >
-              <SortIcon size={15} aria-hidden="true" />
-              <span>{sortDirectionText}</span>
-            </button>
-          </div>
-          <div className="patient-hub-toolbar__actions">
-            {filtersSet ? (
-              <button type="button" className="patient-hub-action" onClick={clearFilters}>
-                <X size={14} aria-hidden="true" /> Clear filters
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="patient-hub-action"
-              onClick={() => dispatch({ type: 'REQUEST_PATIENT_DIRECTORY_REFRESH' })}
-              disabled={refreshing}
-              aria-label="Refresh patient list"
-            >
-              <RefreshCw size={14} aria-hidden="true" className={refreshing ? 'is-spinning' : undefined} /> {refreshing ? 'Refreshing' : 'Refresh'}
-            </button>
-          </div>
-        </div>
-        <div className="patient-hub-filterline">
+      <section className="order-crm-controls admin-filter-bar patient-hub-bar">
+        <div className="admin-filter-bar__top">
           <div className="order-crm-search">
             <Search size={15} />
             <input
@@ -685,20 +597,70 @@ export default function Patients() {
               aria-label="Search patients"
             />
           </div>
-          <div className="crm-view-switch" role="group" aria-label="Patient status">
-            {PATIENT_DIRECTORY_CHIPS.map(chip => (
-              <button
-                key={chip}
-                type="button"
-                aria-pressed={statusChip === chip}
-                className={statusChip === chip ? 'is-on' : ''}
-                onClick={() => setStatusChip(chip)}
-              >
-                {chip === 'all' ? 'All' : chip}
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            className={`btn btn-sm admin-filter-bar__filters${hubFilterCount ? ' is-on' : ''}`}
+            aria-expanded={hubFiltersOpen}
+            aria-controls="patient-hub-more-filters"
+            onClick={() => setHubFiltersOpen(open => !open)}
+          >
+            <SlidersHorizontal size={14} aria-hidden="true" /> Sort & filter{hubFilterCount ? <b>{hubFilterCount}</b> : null}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => dispatch({ type: 'REQUEST_PATIENT_DIRECTORY_REFRESH' })}
+            disabled={refreshing}
+            aria-label="Refresh patient list"
+          >
+            <RefreshCw size={14} aria-hidden="true" className={refreshing ? 'is-spinning' : undefined} /> {refreshing ? 'Refreshing' : 'Refresh'}
+          </button>
         </div>
+        <div className="order-crm-filters" role="group" aria-label="Patient status">
+          {PATIENT_DIRECTORY_CHIPS.map(chip => (
+            <button
+              key={chip}
+              type="button"
+              aria-pressed={statusChip === chip}
+              className={statusChip === chip ? 'active' : ''}
+              onClick={() => setStatusChip(chip)}
+            >
+              {chip === 'Enquiries' && freshEnquiryCount ? <i className="nav-fresh-dot" aria-hidden="true" /> : null}
+              <span>{chip === 'all' ? 'All' : chip}{chip === 'Enquiries' && freshEnquiryCount ? <span className="sr-only">, {freshEnquiryCount} new</span> : null}</span><strong>{chipCounts[chip]}</strong>
+            </button>
+          ))}
+        </div>
+        {hubFiltersOpen ? (
+          <div id="patient-hub-more-filters" className="admin-filter-bar__more patient-hub-bar__more" role="group" aria-label="Sort and filter">
+            <div className="patient-hub-sort">
+              <HubSelect
+                label="Sort"
+                value={sortBy}
+                options={[
+                  { value: 'name', label: 'Name' },
+                  { value: 'referral', label: 'Referral date' },
+                  { value: 'payment', label: 'Last payment date' },
+                ]}
+                onChange={changeSort}
+              />
+              <button
+                type="button"
+                className="patient-hub-sort__direction"
+                onClick={() => setSortDirection(current => current === 'asc' ? 'desc' : 'asc')}
+                aria-label={`Sort order: ${sortDirectionText}. Switch to ${patientSortDirectionLabel(sortBy, sortDirection === 'asc' ? 'desc' : 'asc')}`}
+                title={sortDirectionText}
+              >
+                <SortIcon size={15} aria-hidden="true" />
+                <span>{sortDirectionText}</span>
+              </button>
+            </div>
+            {filtersSet ? (
+              <button type="button" className="btn btn-sm admin-filter-bar__clear" onClick={clearFilters}>
+                <X size={14} aria-hidden="true" /> Clear all
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       {filtered.length ? (
@@ -754,7 +716,6 @@ export default function Patients() {
   );
 }
 
-const REFERRAL_RANGE_START = '2020-01-01';
 
 const DIRECTORY_STATUS_CLASS: Record<PatientDirectoryStatus, string> = {
   Referred: ' is-referred',
@@ -815,6 +776,11 @@ function HubSelect<T extends string>({
   );
 }
 
+/** Demo enquiries in the training workspace live only in the browser; there is nothing to tell the server. */
+function isTrainingSandboxEnquiryId(id: string) {
+  return id.startsWith('training-');
+}
+
 function PatientDirectoryCard({ record, status, onSelect }: {
   record: CrmRecord;
   status: PatientDirectoryStatus;
@@ -826,10 +792,11 @@ function PatientDirectoryCard({ record, status, onSelect }: {
   const referredAt = record.patient?.crmPatient?.referredAt;
   const collectionOverdue = record.overdueCollection;
   const reorderOverdue = status === 'Inactive';
+  const unseen = Boolean(record.enquiry && record.enquiry.opened === false && !record.enquiry.closedAt);
 
   return (
-    <button type="button" className="patient-hub-row" onClick={onSelect}>
-      <strong>{record.name}</strong>
+    <button type="button" className={`patient-hub-row${unseen ? ' is-new' : ''}`} onClick={onSelect} aria-label={unseen ? `${record.name}, new enquiry, not yet opened` : undefined}>
+      <strong className={unseen ? 'has-fresh-dot' : undefined}>{unseen ? <><i className="nav-fresh-dot row-fresh-dot" aria-hidden="true" /><span>{record.name}</span></> : record.name}</strong>
       <span><em>Date of birth</em>{formatPatientDob(record.dob)}</span>
       {record.enquiry?.closedAt ? (
         <span><em>{status}</em>{formatUkDate(record.enquiry.closedAt, 'Not recorded')}</span>
@@ -1015,6 +982,13 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
   const marketing = clinical.marketingConsent === null ? null : clinical.marketingConsent ? 'Consent given' : 'No consent';
   const eligibilityLabel = patient.submission ? onboardingStatusLabel(patient.submission.status) : null;
   const address = patientAddressLines(patient.crmPatient?.address, patient.crmPatient?.postcode);
+  const orderDates = patient.orders.map(order => new Date(order.date).getTime()).filter(Number.isFinite);
+  const lastOrderAt = orderDates.length ? new Date(Math.max(...orderDates)) : null;
+  const paidOrders = patient.orders.filter(order => order.payment.status === 'paid' && order.refund?.status !== 'completed');
+  const paidCount = paidOrders.length;
+  const paidTotal = paidOrders.reduce((sum, order) => sum + (order.payment.amount || orderRevenue(order)), 0);
+  const openOrders = patient.orders.filter(order => operationalOrder(order)).length;
+  const referredAt = patient.crmPatient?.referredAt ?? patient.submission?.reviewedAt ?? null;
   const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
   const [editingConditions, setEditingConditions] = useState(false);
   const [savingConditions, setSavingConditions] = useState(false);
@@ -1052,13 +1026,9 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
           </div>
           <span className={`order-stage-pill order-tone--${meta.tone}`}>{meta.label}</span>
         </div>
-        <div className="order-crm-record__toolbar">
-          <div className="order-crm-record__value">
-            <small>Orders</small>
-            <strong>{patient.orders.length}</strong>
-            <span className="order-crm-record__opened">{journeyLabel(record.journey)}</span>
-          </div>
-          {referredOnly ? null : <div className="order-crm-record__actions" role="group" aria-label="Patient actions">
+        {/* The figures strip below carries the order count, so the header keeps only the action. */}
+        {referredOnly ? null : <div className="order-crm-record__toolbar patient-record__toolbar">
+          <div className="order-crm-record__actions" role="group" aria-label="Patient actions">
             <button
               className="btn btn-primary btn-sm"
               type="button"
@@ -1069,14 +1039,37 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
               {!canOrder ? <Lock size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />}
               New order
             </button>
-          </div>}
-        </div>
+          </div>
+        </div>}
         {!referredOnly && !canOrder && orderGate ? <span id="patient-order-gate-tip" className="patient-crm-gate">{orderGate}</span> : null}
       </header>
 
       <PatientJourneyRail stage={record.journey} />
 
-      <div className="patient-crm-detail__body">
+      <div className="patient-crm-detail__body pharmacy-dashboard patient-record">
+        <div className="pharmacy-summary__metrics patient-record__glance">
+          <div className="pharmacy-summary__metric">
+            <small>Orders</small>
+            <strong>{patient.orders.length}</strong>
+            <span>{openOrders ? `${openOrders} in progress` : patient.orders.length ? 'None in progress' : 'None yet'}</span>
+          </div>
+          <div className="pharmacy-summary__metric">
+            <small>Last order</small>
+            <strong>{lastOrderAt ? fmtDate(lastOrderAt) : 'None'}</strong>
+            <span>{lastOrderAt ? 'Most recent order' : 'No orders placed'}</span>
+          </div>
+          <div className="pharmacy-summary__metric">
+            <small>Paid</small>
+            <strong>{money(paidTotal)}</strong>
+            <span>{paidCount} paid order{paidCount === 1 ? '' : 's'}</span>
+          </div>
+          <div className="pharmacy-summary__metric">
+            <small>Referred</small>
+            <strong>{referredAt ? fmtDate(referredAt) : 'Not yet'}</strong>
+            <span>{journeyLabel(record.journey)}</span>
+          </div>
+        </div>
+
         {record.overdueCollection ? (
           <div className="patient-record-alert" role="alert">
             <AlertTriangle size={18} aria-hidden="true" />
@@ -1088,71 +1081,64 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
           <p className="patient-crm-eligibility"><span className={`pill ${onboardingStatusPillClass(patient.submission?.status ?? '')}`}>{eligibilityLabel}</span></p>
         ) : null}
 
-        <div className="patient-chart__panels">
-          {/* Every row renders even when empty: a missing detail is itself information. */}
-          <section className="patient-chart-card" aria-labelledby="patient-contact-title">
-            <header><h3 id="patient-contact-title">Contact</h3></header>
-            {/* Date of birth sits under the name in the header, so it is not repeated here. */}
-            <dl className="patient-chart-facts">
-              <div><dt>Email</dt><dd>{patient.email || NOT_RECORDED}</dd></div>
-              <div><dt>Phone</dt><dd>{patient.mobile || NOT_RECORDED}</dd></div>
-              <div><dt>Address</dt><dd>{address.line || NOT_RECORDED}</dd></div>
-              {address.postcodeIsSeparate ? <div><dt>Postcode</dt><dd>{address.postcode}</dd></div> : null}
+        <div className="pharmacy-details">
+          <RecordCard icon={UserRound} title="Contact">
+            {/* Everything in one card, so staff can copy a patient's details from one place. */}
+            <dl className="pharmacy-details__list">
+              <CopyFact label="Name" value={patient.name} />
+              <CopyFact label="Date of birth" value={patient.dob ? formatPatientDob(patient.dob) : null} />
+              <CopyFact label="Email" value={patient.email} />
+              <CopyFact label="Phone" value={patient.mobile} />
+              <CopyFact label="Address" value={address.line} />
+              {address.postcodeIsSeparate ? <CopyFact label="Postcode" value={address.postcode} /> : null}
             </dl>
-          </section>
+          </RecordCard>
 
-          <section className="patient-chart-card" aria-labelledby="patient-clinical-title">
-            <header>
-              <h3 id="patient-clinical-title">Eligibility Form Info</h3>
-              {/* The intake form is a snapshot of what the patient could answer on
-                  their own. Staff hold the clinic letter, so they can correct it. */}
-              {canEditConditions && !editingConditions ? (
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setConditionError(null); setEditingConditions(true); }}>
-                  <Pencil size={13} aria-hidden="true" /> Edit conditions
-                </button>
-              ) : null}
-            </header>
+          {/* Every answer renders even when blank: a missing detail is itself information. */}
+          <RecordCard
+            icon={Stethoscope}
+            title="Eligibility answers"
+            subtitle={eligibilityLabel ? `Form ${eligibilityLabel.toLowerCase()}` : 'From the patient’s form'}
+            tag={canEditConditions && !editingConditions ? (
+              // The intake form is a snapshot of what the patient could answer on
+              // their own. Staff hold the clinic letter, so they can correct it.
+              <button type="button" className="btn btn-sm" onClick={() => { setConditionError(null); setEditingConditions(true); }}>
+                <Pencil size={13} aria-hidden="true" /> Edit
+              </button>
+            ) : undefined}
+          >
             {patient.submission && isNegativeEligibilityStatus(patient.submission.status) ? (
               <div className="patient-eligibility-reason"><span>Reason</span><strong>{pharmacyDecisionReason(patient.submission)}</strong></div>
             ) : null}
             {editingConditions ? (
-              <div className="patient-chart-conditions patient-chart-conditions--editing">
-                <span>Conditions</span>
-                <ConditionEditor
-                  conditions={conditions}
-                  primaryCondition={primaryCondition || conditions[0] || ''}
-                  saving={savingConditions}
-                  error={conditionError}
-                  onCancel={() => { setEditingConditions(false); setConditionError(null); }}
-                  onSave={(conditionCodes, primaryConditionCode) => void saveConditions(conditionCodes, primaryConditionCode)}
-                />
-              </div>
+              <ConditionEditor
+                conditions={conditions}
+                primaryCondition={primaryCondition || conditions[0] || ''}
+                saving={savingConditions}
+                error={conditionError}
+                onCancel={() => { setEditingConditions(false); setConditionError(null); }}
+                onSave={(conditionCodes, primaryConditionCode) => void saveConditions(conditionCodes, primaryConditionCode)}
+              />
             ) : conditions.length > 0 ? (
-              <div className="patient-chart-conditions">
-                <span>Conditions</span>
-                <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
-              </div>
+              <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
             ) : null}
-            {/* The pills above already carry the primary and secondary conditions.
-                These rows only appear when there are no pills to show. */}
-            <dl className="patient-chart-facts">
-              {conditions.length === 0 && !editingConditions ? <div><dt>Conditions</dt><dd>{EMPTY_FIELD}</dd></div> : null}
-              <div><dt>Tried two or more treatments</dt><dd>{treatmentCheck ?? EMPTY_FIELD}</dd></div>
-              <div><dt>Psychosis check</dt><dd>{psychosisCheck ?? EMPTY_FIELD}</dd></div>
-              <div><dt>How they found the service</dt><dd>{foundService ?? EMPTY_FIELD}</dd></div>
-              <div><dt>Marketing contact</dt><dd>{marketing ?? EMPTY_FIELD}</dd></div>
-              <div><dt>Reviewed by</dt><dd>{patient.submission?.reviewerDisplay ?? EMPTY_FIELD}</dd></div>
-              <div><dt>Decision recorded</dt><dd>{patient.submission?.reviewedAt ? fmtDate(patient.submission.reviewedAt) : EMPTY_FIELD}</dd></div>
+            <dl className="pharmacy-details__list">
+              {conditions.length === 0 && !editingConditions ? <Fact label="Conditions">{notAnswered}</Fact> : null}
+              <Fact label="Tried two or more treatments">{treatmentCheck ?? notAnswered}</Fact>
+              <Fact label="Psychosis check">{psychosisCheck ?? notAnswered}</Fact>
+              <Fact label="How they found the service">{foundService ?? notAnswered}</Fact>
+              <Fact label="Marketing contact">{marketing ?? notAnswered}</Fact>
+              <Fact label="Reviewed by">{patient.submission?.reviewerDisplay ?? notRecorded}</Fact>
+              <Fact label="Decision recorded">{patient.submission?.reviewedAt ? fmtDate(patient.submission.reviewedAt) : notRecorded}</Fact>
             </dl>
             {patient.submission && patient.submission.calls.length > 0 ? (
-              <p className="patient-chart-calls">{patient.submission.calls.length} patient call{patient.submission.calls.length === 1 ? '' : 's'} logged</p>
+              <p className="admin-intake-note">{patient.submission.calls.length} patient call{patient.submission.calls.length === 1 ? '' : 's'} logged</p>
             ) : null}
-          </section>
+          </RecordCard>
         </div>
 
         {patient.crmPatient?.interactions && patient.crmPatient.interactions.length > 0 ? (
-          <section className="patient-chart-card" aria-labelledby="patient-audit-title">
-            <header><h3 id="patient-audit-title">Activity</h3><span>{patient.crmPatient.interactions.length}</span></header>
+          <RecordCard icon={History} title="Activity" tag={<span className="order-stage-pill order-tone--neutral">{patient.crmPatient.interactions.length}</span>}>
             <div className="patient-audit-list">
               {patient.crmPatient.interactions.map((log, idx) => (
                 <div className="patient-audit-item" key={idx}>
@@ -1167,13 +1153,13 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
                 </div>
               ))}
             </div>
-          </section>
+          </RecordCard>
         ) : null}
 
         <section className="patient-chart-orders" aria-labelledby="patient-orders-title">
           <header className="patient-chart-orders__header">
-            <h3 id="patient-orders-title">Orders</h3>
-            <span>{patient.orders.length}</span>
+            <h3 id="patient-orders-title" className="pharmacy-dashboard__heading">Orders</h3>
+            <span className="order-stage-pill order-tone--neutral">{patient.orders.length}</span>
           </header>
           {patient.orders.length === 0 ? (
             <div className="patient-record-empty patient-order-empty">
@@ -1405,34 +1391,31 @@ function EnquiryCrmDetail({ record }: { record: CrmRecord }) {
         </span>
       </header>
       {closed ? null : <PatientJourneyRail stage="enquiry" />}
-      <div className="patient-crm-detail__body">
-        <div className="patient-chart__panels">
-          <section className="patient-chart-card" aria-labelledby="enquiry-contact-title">
-            <header><h3 id="enquiry-contact-title">Contact</h3></header>
-            {/* Date of birth sits under the name in the header, so it is not repeated here. */}
-            <dl className="patient-chart-facts">
-              <div><dt>Email</dt><dd>{enquiry.email || NOT_RECORDED}</dd></div>
-              <div><dt>Phone</dt><dd>{enquiry.mobile || NOT_RECORDED}</dd></div>
-              <div><dt>Postcode</dt><dd>{enquiry.postcode || NOT_RECORDED}</dd></div>
+      <div className="patient-crm-detail__body pharmacy-dashboard patient-record">
+        <div className="pharmacy-details">
+          <RecordCard icon={UserRound} title="Contact">
+            {/* Everything in one card, so staff can copy a patient's details from one place. */}
+            <dl className="pharmacy-details__list">
+              <CopyFact label="Name" value={record.name} />
+              <CopyFact label="Date of birth" value={enquiry.dob ? formatPatientDob(enquiry.dob) : null} />
+              <CopyFact label="Email" value={enquiry.email} />
+              <CopyFact label="Phone" value={enquiry.mobile} />
+              <CopyFact label="Postcode" value={enquiry.postcode} />
+              <CopyFact label="Case reference" value={enquiry.caseReference} />
             </dl>
-          </section>
-          {closed ? null : <section className="patient-chart-card" aria-labelledby="enquiry-clinical-title">
-            <header><h3 id="enquiry-clinical-title">Eligibility Form Info</h3></header>
-            {conditions.length > 0 ? (
-              <div className="patient-chart-conditions">
-                <span>Conditions</span>
-                <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} />
-              </div>
-            ) : null}
-            {/* The pills above already carry the conditions; this row is the empty fallback. */}
-            <dl className="patient-chart-facts">
-              {conditions.length === 0 ? <div><dt>Conditions</dt><dd>{EMPTY_FIELD}</dd></div> : null}
-              <div><dt>Tried two treatments</dt><dd>{treatmentCheck ?? EMPTY_FIELD}</dd></div>
-              <div><dt>Psychosis exclusion</dt><dd>{psychosisCheck ?? EMPTY_FIELD}</dd></div>
-              <div><dt>Heard about</dt><dd>{heardAbout ?? EMPTY_FIELD}</dd></div>
-              <div><dt>Referral source</dt><dd>{record.sourceLabel ?? EMPTY_FIELD}</dd></div>
-            </dl>
-          </section>}
+          </RecordCard>
+          {closed ? null : (
+            <RecordCard icon={Stethoscope} title="Eligibility answers" subtitle="From the patient’s form">
+              {conditions.length > 0 ? <ConditionList conditions={conditions} primaryCondition={primaryCondition || conditions[0]} /> : null}
+              <dl className="pharmacy-details__list">
+                {conditions.length === 0 ? <Fact label="Conditions">{notAnswered}</Fact> : null}
+                <Fact label="Tried two treatments">{treatmentCheck ?? notAnswered}</Fact>
+                <Fact label="Psychosis exclusion">{psychosisCheck ?? notAnswered}</Fact>
+                <Fact label="Heard about">{heardAbout ?? notAnswered}</Fact>
+                <Fact label="Referral source">{record.sourceLabel ?? notAnswered}</Fact>
+              </dl>
+            </RecordCard>
+          )}
         </div>
       </div>
     </article>

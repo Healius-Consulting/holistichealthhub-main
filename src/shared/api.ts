@@ -372,6 +372,32 @@ export function updateAdminPatientDetails(patientId: string, input: AdminPatient
   });
 }
 
+/** HHH correcting the details a patient typed on an enquiry still in the queue. */
+export function updateAdminIntakeDetails(caseId: string, input: AdminPatientDetails) {
+  return apiRequest<AdminPatientDetails & { id: string; changed: string[] }>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/details`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+/** HHH correcting the conditions on an enquiry still in the queue. */
+export function updateAdminIntakeConditions(caseId: string, input: { conditionCodes: string[]; primaryConditionCode: string }) {
+  return apiRequest<{ id: string; conditionCodes: string[]; primaryConditionCode: string }>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/conditions`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+/** Someone at the pharmacy opened a new enquiry, so it stops showing as new for the team. */
+export function markEnquiryOpened(enquiryId: string) {
+  return apiRequest<void>(`/v1/portal/enquiries/${encodeURIComponent(enquiryId)}/opened`, { method: 'POST' });
+}
+
+/** An HHH admin opened an enquiry, so it stops showing as new for every admin. */
+export function markAdminIntakeOpened(caseId: string) {
+  return apiRequest<void>(`/v2/portal/admin/intake/${encodeURIComponent(caseId)}/opened`, { method: 'POST' });
+}
+
 export function updateAdminPatientConditions(patientId: string, input: { organisationId: string; conditionCodes: string[]; primaryConditionCode: string }) {
   return apiRequest<{
     patientId: string;

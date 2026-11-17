@@ -440,7 +440,7 @@ export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | '
 export type NavigationTarget =
   | { kind: 'patient'; id: string }
   | { kind: 'patient-lane'; lane: 'enquiries' }
-  | { kind: 'patient-list'; status: 'referred' | 'active' | 'inactive' | 'declined'; period: 'this-month' | 'all-time' }
+  | { kind: 'patient-list'; status: 'referred' | 'active' | 'inactive' | 'declined' }
   | { kind: 'order'; key: string }
   | { kind: 'order-filter'; filter: 'awaiting-payment' }
   | { kind: 'catalogue'; query: string }
@@ -660,6 +660,7 @@ export type Action =
   | { type: 'SET_CATALOGUE_ERROR'; message: string }
   | { type: 'APPLY_CURALEAF_QUOTE'; items: Array<{ productId: string; wholesalePrice: number; patientPrice: number; inStock: boolean; stockStatus?: 'in_stock' | 'low_stock' | 'out_of_stock' }> }
   | { type: 'SYNC_PATIENT_DIRECTORY'; organisationId: string; patients: CRMPatient[]; enquiries: PendingEnquiry[] }
+  | { type: 'MARK_ENQUIRY_OPENED'; enquiryId: string }
   | { type: 'SET_PATIENT_CONDITIONS'; patientId: string; conditions: string[]; primaryCondition: string }
   | { type: 'SYNC_PORTAL_ORDERS'; organisationId: string; orders: PatientOrder[]; preferredActiveOrderId?: number }
   | { type: 'LOG_INTERACTION'; patientId: string; interactionType: string; detail: string }
@@ -1421,6 +1422,8 @@ function reducer(state: AppState, action: Action): AppState {
         orders: ordersChanged ? nextOrders : state.orders,
       };
     }
+    case 'MARK_ENQUIRY_OPENED':
+      return { ...state, enquiries: state.enquiries.map(enquiry => enquiry.id === action.enquiryId ? { ...enquiry, opened: true } : enquiry) };
     case 'SYNC_PATIENT_DIRECTORY': {
       const retainedPatients = state.crm.filter(patient =>
         patient.organisationId !== action.organisationId && !isTrainingSandboxPatient(patient),

@@ -1022,7 +1022,8 @@ html{
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-brand-copy,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-collapse,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-menu-label,
-.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-item-content > span,
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-item-content > span:not(.sidebar-item-icon),
+.sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .nav-fresh-count,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .nav-queue-count,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .user-profile-info,
 .sidebar.is-collapsed:not(:hover):not(:has(:focus-visible)) .sidebar-footer-action span,
@@ -4149,7 +4150,7 @@ body{ background: var(--bg-app); }
 
 .sidebar-item-content{ gap: 11px; min-width: 0; }
 
-.sidebar-item-content span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-item-content span:not(.sidebar-item-icon){ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .sidebar-item svg{ color: #718a81; transition: color var(--transition-fast), transform var(--transition-fast); }
 
@@ -4378,7 +4379,7 @@ body{ background: var(--bg-app); }
 @media (max-width: 820px) {
 .sidebar{ width: 76px; }
 .sidebar-header{ min-height: 86px; justify-content: center; padding-inline: 12px; }
-.sidebar-brand > span, .sidebar-menu-label, .sidebar-item-content span, .nav-queue-count, .user-profile-info{ display: none; }
+.sidebar-brand > span, .sidebar-menu-label, .sidebar-item-content span:not(.sidebar-item-icon), .nav-queue-count, .nav-fresh-count, .user-profile-info{ display: none; }
 .sidebar-item{ justify-content: center; width: 44px; padding: 0; }
 .sidebar-item-content{ gap: 0; }
 .sidebar-menu{ align-items: center; padding-inline: 10px; }
@@ -21855,3 +21856,84 @@ html[data-theme='dark']{ --fee-first: #22a091; --fee-annual: #b87d24; }
 .fee-timeline strong{ color: var(--text-primary); font-size: 13px; }
 .fee-timeline small{ color: var(--text-tertiary); font-size: 12px; }
 .fee-timeline b{ color: var(--text-primary); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* Pharmacy patient popup: figures strip, then cards in the same language as the admin records. */
+.patient-record{ display: grid; gap: 16px; padding-top: 16px; }
+.patient-record__glance.pharmacy-summary__metrics{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.patient-record__glance .pharmacy-summary__metric strong{ font-size: 17px; overflow-wrap: anywhere; }
+@container (max-width: 640px){ .patient-record__glance.pharmacy-summary__metrics{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.patient-record .pharmacy-details{ align-items: stretch; }
+.patient-record .patient-eligibility-reason{ margin: 0; }
+.patient-record .patient-chart-orders__header{ display: flex; align-items: center; justify-content: space-between; }
+.patient-record .patient-audit-list{ margin: 0; }
+.patient-record__toolbar{ justify-content: flex-end; }
+
+/* Nav counts: a quiet pill for work waiting, and a pulsing dot for new items nobody has opened. */
+.sidebar-item-icon{ position: relative; display: inline-grid; place-items: center; flex: 0 0 auto; }
+.nav-queue-count{
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 6px;
+  color: #e7f1ed;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: rgba(255, 255, 255, .1);
+  border-radius: 999px;
+}
+.sidebar-item.active .nav-queue-count{ color: var(--text-primary, #14201d); background: rgba(255, 255, 255, .85); }
+.nav-fresh-count{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 2px 8px 2px 7px;
+  color: #fde7c7;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(245, 158, 11, .16);
+  border: 1px solid rgba(245, 158, 11, .35);
+  border-radius: 999px;
+}
+.nav-fresh-dot{
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: #f59e0b;
+  border-radius: 50%;
+}
+.nav-fresh-dot::after{
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: inherit;
+  animation: freshPulse 1.8s ease-out infinite;
+}
+@keyframes freshPulse{ from{ transform: scale(1); opacity: .7; } to{ transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce){ .nav-fresh-dot::after{ animation: none; } }
+/* On the icon: only when the rail is resting, so the "N new" pill is not doubled up. */
+.sidebar-item-icon > .nav-fresh-dot{ position: absolute; top: -3px; right: -4px; box-shadow: 0 0 0 2px var(--bg-sidebar, #0f2a24); }
+.sidebar:not(.is-collapsed) .sidebar-item-icon > .nav-fresh-dot,
+.sidebar.is-collapsed:hover .sidebar-item-icon > .nav-fresh-dot,
+.sidebar.is-collapsed:has(:focus-visible) .sidebar-item-icon > .nav-fresh-dot{ display: none; }
+@media (max-width: 820px){ .sidebar-item-icon > .nav-fresh-dot{ display: inline-block !important; } }
+.mobile-nav-icon{ position: relative; }
+.mobile-nav-icon > .nav-fresh-dot{ position: absolute; top: -2px; right: -5px; box-shadow: 0 0 0 2px var(--bg-surface, #fff); }
+
+/* Rows: a new enquiry nobody has opened carries the same pulsing dot by its name. */
+.row-fresh-dot{ margin-right: 6px; vertical-align: middle; }
+.row-fresh-dot.nav-fresh-dot{ background: #d97706; }
+/* Pharmacy Patients hub: the shared admin filter-bar layout. */
+.patient-hub-bar .order-crm-filters > button{ display: inline-flex; align-items: center; gap: 7px; }
+.patient-hub-bar .order-crm-filters .nav-fresh-dot{ margin-right: -1px; }
+.patient-hub-bar__more{ align-items: center; }
+/* A row name with the "new" dot: the name clips its own text, the dot and its pulse sit outside that clip. */
+strong.has-fresh-dot{ display: flex !important; align-items: center; gap: 8px; min-width: 0; overflow: visible !important; padding-left: 2px; }
+strong.has-fresh-dot > span{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }

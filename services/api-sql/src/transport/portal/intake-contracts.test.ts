@@ -31,6 +31,11 @@ describe('SQL admin intake projections', () => {
     assert.equal(projected.displayStatus, 'Awaiting referral decision');
   });
 
+  it('marks an enquiry new to HHH until an admin opens it', () => {
+    assert.equal(toAdminIntakeQueueItem(submission).hhhOpened, false);
+    assert.equal(toAdminIntakeQueueItem({ ...submission, hhhOpenedAt: '2026-08-17T11:00:00.000Z' }).hhhOpened, true);
+  });
+
   it('includes selected conditions only in the authorised detail projection', () => {
     const detail = toAdminIntakeDetail(submission, [
       { conditionCode: 'chronic-pain', primary: true },

@@ -195,7 +195,7 @@ export default function PharmacyOverview() {
   useEffect(() => { void load(); }, [load]);
 
   const openPatientList = (status: 'referred' | 'active') => {
-    dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient-list', status, period: 'this-month' } });
+    dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient-list', status } });
     dispatch({ type: 'SET_SCREEN', screen: 'patients' });
   };
 

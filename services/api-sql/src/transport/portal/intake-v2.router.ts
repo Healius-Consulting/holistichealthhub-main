@@ -21,6 +21,10 @@ import { isDedicatedSqlIntake, isOpenSqlIntake, sqlIntakeCaseReference, toAdminI
 import { buildDuplicateIndex, type DuplicateRecordMatch } from '../../domain/eligibility/duplicates.js';
 import { SqlPatientRepository } from '../../repositories/sql/patient.sql.js';
 import { portalSourceType } from './intake-source.js';
+import { changedPatientFields, normalisePatientDetails, patientDetailsInputSchema } from '../../application/patient-details/patient-details.js';
+import { conditionEditDiff, conditionEditFailureMessage, validateConditionEdit } from '../../domain/eligibility/condition-edit.js';
+import { formConditionRecords } from '../../domain/eligibility/form-conditions.js';
+import { sha256 } from '../../security/session-utils.js';
 
 export { canReceiveReferral };
 
@@ -216,6 +220,87 @@ export function createPortalIntakeV2Router(): Router {
    * Recorded by hand when a review request arrives at info@. The mailbox is not wired
    * to the platform, so a human marks the record and the queue then shows it first.
    */
+  /*
+   * HHH correcting what the patient typed on an enquiry still in the queue: same
+   * rules as the public form and the patient edit. The duplicate check is not a
+   * block here; a match is shown on the record so the admin can decide.
+   */
+  router.patch('/portal/admin/intake/:caseId/details', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const caseId = caseIdSchema.parse(req.params.caseId);
+      const input = patientDetailsInputSchema.parse(req.body);
+      const record = await intakeRepo.findSubmissionById(caseId) as PlatformSubmissionRecord | null;
+      if (!record) throw new HttpError(404, 'The requested record was not found.', 'NOT_FOUND');
+      assertPending(record);
+      const details = normalisePatientDetails(input);
+      const changed = changedPatientFields(record, details);
+      if (changed.length) {
+        await intakeRepo.updateSubmissionDetails({ id: record.id, ...details, emailHash: sha256(details.email) });
+        await identityRepo.appendAudit({
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          event: 'eligibility.details_updated',
+          recordType: 'EligibilitySubmission',
+          recordId: record.id,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: 'admin',
+          // Which fields, never their values.
+          details: { fields: changed },
+        });
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ id: record.id, ...details, changed });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /* HHH correcting the conditions on an enquiry still in the queue. Same validation as the patient edit. */
+  router.patch('/portal/admin/intake/:caseId/conditions', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const caseId = caseIdSchema.parse(req.params.caseId);
+      const body = z.object({ conditionCodes: z.array(z.string().trim().min(1).max(120)).min(1).max(200), primaryConditionCode: z.string().trim().min(1).max(120) }).strict().parse(req.body);
+      const record = await intakeRepo.findSubmissionById(caseId) as PlatformSubmissionRecord | null;
+      if (!record) throw new HttpError(404, 'The requested record was not found.', 'NOT_FOUND');
+      assertPending(record);
+      const validation = validateConditionEdit({ conditionCodes: body.conditionCodes, primaryConditionCode: body.primaryConditionCode });
+      if (!validation.ok) throw new HttpError(400, conditionEditFailureMessage(validation.failure), 'INVALID_CONDITIONS');
+      const before = formConditionRecords({ conditionCodes: record.conditionCodes, primaryConditionCode: record.primaryConditionCode });
+      const diff = conditionEditDiff(before, validation.records);
+      await intakeRepo.rewriteSubmissionConditions(record.id, validation.records);
+      await identityRepo.appendAudit({
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'eligibility.conditions_updated',
+        recordType: 'EligibilitySubmission',
+        recordId: record.id,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: 'admin',
+        details: { added: diff.added, removed: diff.removed, primaryBefore: diff.primaryBefore, primaryAfter: diff.primaryAfter },
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({ id: record.id, conditionCodes: validation.conditionCodes, primaryConditionCode: validation.primaryConditionCode });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /* An HHH admin opened the enquiry: its "new" dot clears for every admin. */
+  router.post('/portal/admin/intake/:caseId/opened', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      assertPlatformScope(req.context!);
+      const caseId = caseIdSchema.parse(req.params.caseId);
+      await intakeRepo.markHhhOpened(caseId);
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/portal/admin/intake/:caseId/review-request', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertPlatformScope(req.context!);

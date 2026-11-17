@@ -43,6 +43,8 @@ export interface SubmissionQueueItem {
   postcode: string;
   assignmentStatus: string;
   pharmacyReviewStatus: string;
+  /** When an HHH admin first opened it; null while it is still new to HHH. */
+  hhhOpenedAt?: string | null;
   outcomeStatus: string;
   followUpStatus: string;
   submittedAt: string;
@@ -79,6 +81,8 @@ export interface TenantPendingEnquiryRecord {
   id: string;
   submittedAt: string;
   followUpStatus: string;
+  /** NOT_OPENED until someone at the pharmacy opens it. */
+  pharmacyReviewStatus?: string | null;
   sourceType: 'GENERAL_HHH_WEBSITE' | 'PHARMACY_QR' | 'LEGACY_PHARMACY_QR';
   firstName: string;
   surname: string;
@@ -237,6 +241,12 @@ export interface IntakeRepositoryPort {
   reduceToMinimalRecord(id: string): Promise<void>;
   deleteSubmission(id: string): Promise<void>;
   markReviewRequested(id: string, note?: string | null): Promise<void>;
+  /** HHH corrects the patient's own details on an enquiry still in the queue. */
+  updateSubmissionDetails(input: { id: string; firstName: string; surname: string; dob: string; email: string; emailHash: string; mobile: string; postcode: string }): Promise<void>;
+  /** The holding pharmacy opened this open enquiry. Idempotent. */
+  markPharmacyOpened(id: string, organisationId: string): Promise<void>;
+  /** An HHH admin opened this enquiry. Idempotent. */
+  markHhhOpened(id: string): Promise<void>;
   listSubmissionConditions(submissionId: string): Promise<SubmissionConditionRecord[]>;
   reassignPendingSubmission(input: ReassignSubmissionInput): Promise<void>;
   updateSubmissionFollowUp(input: UpdateSubmissionFollowUpInput): Promise<void>;
