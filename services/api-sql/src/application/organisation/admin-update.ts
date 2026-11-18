@@ -59,6 +59,10 @@ export function resolveOrganisationStatusChange(
   current: OrganisationRecord['status'],
   requested: NonNullable<UpdateOrganisationInput['status']>,
 ): OrganisationRecord['status'] | null {
+  // Not available is set and cleared only through its own audited admin action.
+  if (current === 'NOT_AVAILABLE') {
+    throw new HttpError(409, 'Clear Not available on this pharmacy first.', 'NOT_AVAILABLE_ACTION_REQUIRED');
+  }
   if (requested === 'live' || requested === 'intake_live') {
     if (current.toLowerCase() === requested) return null;
     throw new HttpError(

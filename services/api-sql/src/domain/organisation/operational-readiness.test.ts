@@ -80,6 +80,18 @@ describe('operational readiness', () => {
     assert.ok(paused.missingGates.includes('paused'));
     assert.equal(goLiveBlockedMessage(paused), 'Unpause this pharmacy before flipping the workspace to live.');
 
+    const notAvailable = buildOperationalStatus({
+      organisation: { ...organisation, status: 'NOT_AVAILABLE' },
+      tasks: loggedGoLiveTasks(),
+      staff: [staff('ACTIVE', 'owner')],
+      curaleaf: connection('CURALEAF', 'ACTIVE'),
+      worldpay: null,
+    });
+    assert.equal(notAvailable.goLiveReady, false);
+    assert.equal(notAvailable.intake.live, false);
+    assert.deepEqual(notAvailable.missingGates.filter(gate => gate === 'not_available' || gate === 'paused'), ['not_available']);
+    assert.equal(goLiveBlockedMessage(notAvailable), 'Clear Not available on this pharmacy before flipping the workspace to live.');
+
     const platformTest = buildOperationalStatus({
       organisation: { ...organisation, id: '70913a30-71c3-4a41-952e-d532927af58c' },
       tasks: loggedGoLiveTasks(),

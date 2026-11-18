@@ -26,6 +26,8 @@ enum OrganisationStatus {
   INTAKE_LIVE
   LIVE
   PAUSED
+  # Set by HHH admin for a pharmacy that is already a Curaleaf customer: no access, intake off.
+  NOT_AVAILABLE
 }
 
 enum WorkspaceClassification {
@@ -1315,8 +1317,9 @@ type PharmacyOnboardingRequest @table {
 # updated or deleted, except that Activate fills organisationId once the branch exists.
 type PartnerTermsAcceptance @table {
   id: UUID! @default(expr: "uuidV4()")
-  onboardingRequest: PharmacyOnboardingRequest! @ref(fields: "onboardingRequestId")
-  onboardingRequestId: UUID! @index
+  # Empty when an activated branch with no onboarding request accepts from its portal.
+  onboardingRequest: PharmacyOnboardingRequest @ref(fields: "onboardingRequestId")
+  onboardingRequestId: UUID @index
   organisation: Organisation @ref(fields: "organisationId")
   organisationId: UUID @index
   termsVersion: String!
@@ -1341,6 +1344,8 @@ type PartnerTermsAcceptance @table {
 type PharmacyWorldpaySubmission @table {
   id: UUID! @default(expr: "uuidV4()")
   gphcNumber: String! @index
+  # The branch, when it was sent from the pharmacy portal. Empty from the onboarding page.
+  organisationId: UUID @index
   tradingName: String!
   submittedAt: Timestamp!
   idempotencyKey: String! @unique

@@ -21,6 +21,7 @@ declare global {
 const identityRepo = new SqlIdentityRepository();
 
 export const PHARMACY_SUSPENDED_MESSAGE = 'This pharmacy\'s account is suspended. Contact Holistic Health Hub to restore access.';
+export const PHARMACY_NOT_AVAILABLE_MESSAGE = 'This service may be available to you in the near future. Contact onboarding@holistichealthhub.live for more details.';
 
 export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') {
 
@@ -58,9 +59,11 @@ export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') 
         // plain "your role cannot do this" that it actually is.
         const message = failure.code === 'PHARMACY_SUSPENDED'
           ? PHARMACY_SUSPENDED_MESSAGE
-          : failure.status === 403
-            ? 'Your staff role is not permitted to perform this action.'
-            : 'Session admission failed.';
+          : failure.code === 'PHARMACY_NOT_AVAILABLE'
+            ? PHARMACY_NOT_AVAILABLE_MESSAGE
+            : failure.status === 403
+              ? 'Your staff role is not permitted to perform this action.'
+              : 'Session admission failed.';
         throw new HttpError(failure.status, message, failure.code);
       }
 

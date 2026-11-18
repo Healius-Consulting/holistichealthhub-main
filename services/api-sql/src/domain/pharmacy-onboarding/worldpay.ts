@@ -111,6 +111,8 @@ export type WorldpayPrincipal = z.infer<typeof worldpayPrincipalSchema>;
 export type WorldpaySubmissionNote = {
   id: string;
   gphcNumber: string;
+  /** The branch, when the form was sent from the pharmacy portal. */
+  organisationId?: string | null;
   tradingName: string;
   submittedAt: string;
   idempotencyKey: string;

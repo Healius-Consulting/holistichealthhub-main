@@ -7,11 +7,19 @@ function isTrainingGphc(organisation: Pick<OrganisationRecord, 'gphcNumber'>): b
   return /^TRAINING-[A-Z0-9_-]+$/i.test(organisation.gphcNumber ?? '');
 }
 
+/**
+ * Suspended (PAUSED) and Not available (an existing Curaleaf customer) pharmacies get
+ * no access at all: staff are refused at sign-in and admission, intake is off.
+ */
+export function isClosedToPharmacy(organisation: Pick<OrganisationRecord, 'status'>): boolean {
+  return organisation.status === 'PAUSED' || organisation.status === 'NOT_AVAILABLE';
+}
+
 /** Public eligibility token and HHH intake queue — independent of pharmacy operational access. */
 export function canAcceptPublicIntake(organisation: OrganisationRecord | null | undefined): boolean {
   if (!organisation || organisation.archivedAt) return false;
   if (!organisation.intakeEnabled) return false;
-  if (organisation.status === 'PAUSED') return false;
+  if (isClosedToPharmacy(organisation)) return false;
   if (isPlatformTestOrganisation(organisation)) return true;
   if (isTrainingGphc(organisation)) return organisation.status === 'LIVE';
   return organisation.status === 'ONBOARDING' || organisation.status === 'INTAKE_LIVE' || organisation.status === 'LIVE';
@@ -29,6 +37,7 @@ export function canReceiveReferral(organisation: OrganisationRecord | null | und
  */
 export function pharmacyOperationalAccess(organisation: OrganisationRecord | null | undefined): boolean {
   if (!organisation || organisation.archivedAt) return false;
+  if (isClosedToPharmacy(organisation)) return false;
   if (isPlatformTestOrganisation(organisation)) return true;
   return organisation.status === 'LIVE';
 }
@@ -58,7 +67,7 @@ export function pharmacyWorkspaceMode(
   organisation: OrganisationRecord | null | undefined,
   extras?: { curaleafProduction?: boolean },
 ): PharmacyWorkspaceMode {
-  if (!organisation || organisation.archivedAt || organisation.status === 'PAUSED') return 'paused';
+  if (!organisation || organisation.archivedAt || isClosedToPharmacy(organisation)) return 'paused';
   if (isPlatformTestOrganisation(organisation)) {
     return extras?.curaleafProduction === true ? 'live' : 'test';
   }

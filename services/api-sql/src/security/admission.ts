@@ -12,6 +12,7 @@ export interface AdmissionValidationInput {
 
 export type AdmissionFailureCode =
   | 'PHARMACY_SUSPENDED'
+  | 'PHARMACY_NOT_AVAILABLE'
   | 'SESSION_NOT_FOUND'
   | 'STAFF_NOT_FOUND'
   | 'ACCOUNT_DISABLED'
@@ -98,6 +99,10 @@ export function validatePortalAdmission(input: AdmissionValidationInput): Admiss
   // A suspended pharmacy's staff are locked out until HHH lifts the suspension.
   if (staffRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'PAUSED') {
     return { status: 403, code: 'PHARMACY_SUSPENDED', event: 'auth.pharmacy_suspended' };
+  }
+  // An existing Curaleaf customer HHH marked Not available has no access either.
+  if (staffRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'NOT_AVAILABLE') {
+    return { status: 403, code: 'PHARMACY_NOT_AVAILABLE', event: 'auth.pharmacy_not_available' };
   }
 
   // Check revocation and expiry

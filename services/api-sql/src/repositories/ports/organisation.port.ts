@@ -21,7 +21,7 @@ export interface OrganisationRecord {
   longitude: number | null;
   primaryColour: string;
   logoText: string;
-  status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED';
+  status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED' | 'NOT_AVAILABLE';
   classification: 'STANDARD' | 'TRAINING' | 'ALLOCATION_HOLDING';
   portalName: string;
   intakeEnabled: boolean;

@@ -46,6 +46,20 @@ describe('validatePortalAdmission', () => {
     assert.equal(failure, null);
   });
 
+  it('locks out staff of a suspended or Not available pharmacy, each with its own code', () => {
+    const session = createSyntheticSession('test-cookie-closed', SYNTHETIC_STAFF_PHARMACY_A);
+    for (const [status, code] of [['PAUSED', 'PHARMACY_SUSPENDED'], ['NOT_AVAILABLE', 'PHARMACY_NOT_AVAILABLE']] as const) {
+      const failure = validatePortalAdmission({
+        claims: dummyClaims,
+        admission: { session, staff: { ...SYNTHETIC_STAFF_PHARMACY_A, organisation: { status } } },
+        sessionHash: session.sessionHash,
+        surface: 'pharmacy',
+      });
+      assert.equal(failure?.status, 403);
+      assert.equal(failure?.code, code);
+    }
+  });
+
   it('rejects when session record is missing in SQL (SEC-01)', () => {
     const failure = validatePortalAdmission({
       claims: dummyClaims,

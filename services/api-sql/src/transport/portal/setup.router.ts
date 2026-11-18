@@ -12,6 +12,9 @@ import {
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { liftSuspensionStatus, suspendStatus } from '../../application/organisation/suspension.js';
+import { clearPharmacyNotAvailable, markPharmacyNotAvailable, type NotAvailableDeps } from '../../application/organisation/not-available.js';
+import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
+import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import {
   buildGoLiveReadinessView,
   buildSetupStatusView,
@@ -153,6 +156,7 @@ export function createPortalSetupRouter(): Router {
   const organisationRepo = new SqlOrganisationRepository();
   const identityRepo = new SqlIdentityRepository();
   const integrationRepo = new SqlIntegrationRepository();
+  const onboardingRepo = new SqlPharmacyOnboardingRepository();
   const directoryRepo = new SqlDirectoryRepository();
   const storage = new StorageProvider();
   const referralLinks = new ReferralLinkService(organisationRepo);
@@ -565,6 +569,56 @@ export function createPortalSetupRouter(): Router {
       }
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json({ status: (next_ ?? organisation.status).toLowerCase() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Not available: an existing Curaleaf customer. No access and intake off until HHH clears it. Both audited.
+  const notAvailableDeps = (scope: ReturnType<typeof assertPlatformScope>): NotAvailableDeps => ({
+    organisations: organisationRepo,
+    clickup: sqlClickupHooks(),
+    findRequestIdByOrganisation: async id => (await onboardingRepo.findByOrganisationId(id))?.id ?? null,
+    audit: input => identityRepo.appendAudit({
+      organisationId: input.organisationId,
+      actorUid: scope.uid,
+      actorRole: scope.role,
+      event: input.event,
+      recordType: 'Organisation',
+      recordId: input.organisationId,
+      requestId: scope.requestId,
+      sessionHashPrefix: scope.sessionHash.slice(0, 12),
+      surface: scope.surface,
+      details: input.details,
+    }),
+  });
+
+  router.post('/portal/admin/organisations/:id/not-available', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const { reason } = z.object({ reason: z.string().trim().max(500).optional() }).parse(req.body ?? {});
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const result = await markPharmacyNotAvailable(notAvailableDeps(scope), organisation, reason);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ status: result.status });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/admin/organisations/:id/clear-not-available', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = organisationIdSchema.parse(req.params.id);
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const curaleaf = await integrationRepo.findConnection(organisation.id, 'CURALEAF').catch(() => null);
+      const environment = curaleaf && curaleaf.status !== 'DISCONNECTED' ? curaleaf.environment ?? null : null;
+      const result = await clearPharmacyNotAvailable(notAvailableDeps(scope), organisation, environment);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ status: result.status });
     } catch (error) {
       next(error);
     }

@@ -206,10 +206,24 @@ const LIST_WORLDPAY_GQL = `
   }
 `;
 
+/** The branch's latest note: sent from its portal, or from the onboarding page under its GPhC. */
+const WORLDPAY_FOR_BRANCH_GQL = `
+  query PharmacyWorldpaySubmissionForBranch($organisationId: UUID!, $gphcNumber: String!) {
+    pharmacyWorldpaySubmissions(
+      where: { _or: [{ organisationId: { eq: $organisationId } }, { gphcNumber: { eq: $gphcNumber } }] }
+      orderBy: [{ submittedAt: DESC }]
+      limit: 1
+    ) {
+      ${WORLDPAY_FIELDS}
+    }
+  }
+`;
+
 const INSERT_WORLDPAY_GQL = `
   mutation CreatePharmacyWorldpaySubmission(
     $id: UUID!
     $gphcNumber: String!
+    $organisationId: UUID
     $tradingName: String!
     $submittedAt: Timestamp!
     $idempotencyKey: String!
@@ -217,6 +231,7 @@ const INSERT_WORLDPAY_GQL = `
     pharmacyWorldpaySubmission_insert(data: {
       id: $id
       gphcNumber: $gphcNumber
+      organisationId: $organisationId
       tradingName: $tradingName
       submittedAt: $submittedAt
       idempotencyKey: $idempotencyKey
@@ -374,6 +389,18 @@ const REQUEST_IDS_BY_GPHC_GQL = `
   }
 `;
 
+/** Acceptances signed from the branch's portal (no onboarding request) or linked to it at Activate. */
+const TERMS_BY_ORGANISATION_GQL = `
+  query PartnerTermsAcceptancesByOrganisation($organisationId: UUID!) {
+    partnerTermsAcceptances(
+      where: { organisationId: { eq: $organisationId } }
+      orderBy: [{ acceptedAt: DESC }]
+    ) {
+      ${TERMS_FIELDS}
+    }
+  }
+`;
+
 const TERMS_FOR_REQUESTS_GQL = `
   query PartnerTermsAcceptedForRequests($ids: [UUID!]!) {
     partnerTermsAcceptances(where: { onboardingRequestId: { in: $ids } }, limit: 1) {
@@ -386,7 +413,8 @@ const TERMS_FOR_REQUESTS_GQL = `
 const INSERT_TERMS_GQL = `
   mutation CreatePartnerTermsAcceptance(
     $id: UUID!
-    $onboardingRequestId: UUID!
+    $onboardingRequestId: UUID
+    $organisationId: UUID
     $termsVersion: String!
     $signerName: String!
     $signerRole: String!
@@ -401,6 +429,7 @@ const INSERT_TERMS_GQL = `
     partnerTermsAcceptance_insert(data: {
       id: $id
       onboardingRequestId: $onboardingRequestId
+      organisationId: $organisationId
       termsVersion: $termsVersion
       signerName: $signerName
       signerRole: $signerRole
@@ -536,8 +565,17 @@ export class SqlPharmacyOnboardingRepository {
 
   async insertWorldpaySubmission(note: WorldpaySubmissionNote): Promise<void> {
     await dataConnect.executeGraphql<unknown, WorldpaySubmissionNote>(INSERT_WORLDPAY_GQL, {
-      variables: { ...note, id: asUuid(note.id) },
+      variables: { ...note, id: asUuid(note.id), organisationId: note.organisationId ? asUuid(note.organisationId) : null },
     });
+  }
+
+  async findWorldpaySubmissionForBranch(organisationId: string, gphcNumber: string): Promise<WorldpaySubmissionNote | null> {
+    const result = await dataConnect.executeGraphql<{
+      pharmacyWorldpaySubmissions: WorldpaySubmissionNote[];
+    }, { organisationId: string; gphcNumber: string }>(WORLDPAY_FOR_BRANCH_GQL, {
+      variables: { organisationId: asUuid(organisationId), gphcNumber },
+    });
+    return result.data.pharmacyWorldpaySubmissions?.[0] ?? null;
   }
 
   async insertDeferral(record: PharmacyOnboardingDeferralRecord): Promise<void> {
@@ -599,9 +637,22 @@ export class SqlPharmacyOnboardingRepository {
     return (accepted.data.partnerTermsAcceptances ?? []).length > 0;
   }
 
-  async insertTermsAcceptance(record: Omit<PartnerTermsAcceptanceRecord, 'organisationId'>): Promise<void> {
-    await dataConnect.executeGraphql<unknown, Omit<PartnerTermsAcceptanceRecord, 'organisationId'>>(INSERT_TERMS_GQL, {
-      variables: { ...record, id: asUuid(record.id), onboardingRequestId: asUuid(record.onboardingRequestId) },
+  async findTermsAcceptancesForOrganisation(organisationId: string): Promise<PartnerTermsAcceptanceRecord[]> {
+    const result = await dataConnect.executeGraphql<{
+      partnerTermsAcceptances: RawTerms[];
+    }, { organisationId: string }>(TERMS_BY_ORGANISATION_GQL, { variables: { organisationId: asUuid(organisationId) } });
+    return (result.data.partnerTermsAcceptances ?? []).map(toTerms);
+  }
+
+  /** organisationId is set only for an acceptance made from the branch's own portal. */
+  async insertTermsAcceptance(record: Omit<PartnerTermsAcceptanceRecord, 'organisationId'> & { organisationId?: string | null }): Promise<void> {
+    await dataConnect.executeGraphql<unknown, Omit<PartnerTermsAcceptanceRecord, 'organisationId'> & { organisationId: string | null }>(INSERT_TERMS_GQL, {
+      variables: {
+        ...record,
+        id: asUuid(record.id),
+        onboardingRequestId: record.onboardingRequestId ? asUuid(record.onboardingRequestId) : null,
+        organisationId: record.organisationId ? asUuid(record.organisationId) : null,
+      },
     });
   }
 

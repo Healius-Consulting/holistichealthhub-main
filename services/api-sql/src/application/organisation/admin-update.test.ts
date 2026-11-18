@@ -174,6 +174,15 @@ describe('resolveOrganisationStatusChange', () => {
     assert.equal(resolveOrganisationStatusChange('LIVE', 'onboarding'), 'ONBOARDING');
     assert.equal(resolveOrganisationStatusChange('PAUSED', 'paused'), null);
   });
+
+  it('leaves Not available to its own admin action', () => {
+    for (const requested of ['onboarding', 'paused', 'live'] as const) {
+      assert.throws(
+        () => resolveOrganisationStatusChange('NOT_AVAILABLE', requested),
+        (error: unknown) => error instanceof HttpError && error.code === 'NOT_AVAILABLE_ACTION_REQUIRED' && error.statusCode === 409,
+      );
+    }
+  });
 });
 
 describe('updateAdminOrganisationDetails', () => {

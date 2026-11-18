@@ -75,6 +75,36 @@ test('refuses the Worldpay form until the Curaleaf form is in and the Partner Te
   assert.equal(notes.length, 0);
 });
 
+test('from the portal, a branch whose Terms were accepted there sends the form under its own GPhC and id', async () => {
+  const { notes, sent, repo, send } = memory([]);
+  const branch = { organisationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gphcNumber: '765 4321' };
+  repo.findTermsAcceptancesForOrganisation = async id => (id === branch.organisationId ? [{ id: 'terms-1' }] : []);
+  // The form's own GPhC box is ignored: the branch's account says which pharmacy this is.
+  await submitWorldpayForm(repo, send, sample({ gphcNumber: '111 1111' }), new Date('2026-11-18T10:00:00Z'), branch);
+  assert.equal(sent.length, 1);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0]!.gphcNumber, '7654321');
+  assert.equal(notes[0]!.organisationId, branch.organisationId);
+  assert.equal((sent[0]!.payload as { gphcNumber: string }).gphcNumber, '7654321');
+});
+
+test('from the portal, a branch with no accepted Terms is still refused', async () => {
+  const { notes, sent, repo, send } = memory([]);
+  repo.findTermsAcceptancesForOrganisation = async () => [];
+  await assert.rejects(
+    submitWorldpayForm(repo, send, sample(), new Date(), { organisationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gphcNumber: '7654321' }),
+    (error: unknown) => error instanceof HttpError && error.code === 'ONBOARDING_TERMS_REQUIRED',
+  );
+  assert.equal(sent.length, 0);
+  assert.equal(notes.length, 0);
+});
+
+test('from the portal, Terms accepted on the onboarding page under the GPhC count too', async () => {
+  const { notes, repo, send } = memory(['7654321']);
+  await submitWorldpayForm(repo, send, sample(), new Date(), { organisationId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', gphcNumber: '765 4321' });
+  assert.equal(notes.length, 1);
+});
+
 test('a retry with the same key sends nothing more', async () => {
   const { notes, sent, repo, send } = memory();
   await submitWorldpayForm(repo, send, sample());

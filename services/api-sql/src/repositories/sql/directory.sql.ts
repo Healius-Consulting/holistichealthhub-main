@@ -28,7 +28,7 @@ type DirectoryOrganisationRow = {
   pharmacyPhone?: string | null;
   showEmailToPatients?: boolean | null;
   websiteDomains?: string[] | null;
-  status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED';
+  status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED' | 'NOT_AVAILABLE';
   classification: 'STANDARD' | 'TRAINING' | 'ALLOCATION_HOLDING';
   archivedAt: string | null;
 };

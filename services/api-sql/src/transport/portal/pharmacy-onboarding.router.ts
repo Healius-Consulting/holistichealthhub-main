@@ -15,7 +15,14 @@ import { SqlNotificationRepository } from '../../repositories/sql/notification.s
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { requireCsrf } from '../../security/csrf.js';
-import { assertPlatformScope, type RequestContext } from '../../security/request-context.js';
+import { assertPlatformScope, assertTenantScope, type RequestContext } from '../../security/request-context.js';
+import { acceptBranchPartnerTerms, branchOnboardingView } from '../../application/pharmacy-onboarding/branch-onboarding.js';
+import { submitWorldpayForm } from '../../application/pharmacy-onboarding/submit-worldpay.js';
+import { partnerTermsVersion } from '../../application/pharmacy-onboarding/onboarding-config.js';
+import { sendEmailNow } from '../../application/workers/deliver-messages.js';
+import { branchPartnerTermsAcceptanceSchema } from '../../domain/pharmacy-onboarding/terms.js';
+import { worldpayFormSchema } from '../../domain/pharmacy-onboarding/worldpay.js';
+import { ipHash } from '../../security/session-utils.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { uuidParam } from './uuid-param.js';
 
@@ -217,6 +224,81 @@ export function createPortalPharmacyOnboardingRouter(): Router {
       const unheld = await actions.unhold({ id });
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json({ request: toView(unheld, null, await repo.findTermsAcceptances(unheld.id)) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // The pharmacy's own Onboarding page (activated branches only: the portal exists from Activate).
+  const branchFor = async (context: RequestContext) => {
+    const scope = assertTenantScope(context);
+    const organisation = await organisationRepo.findOrganisationById(scope.organisationId);
+    if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+    return { scope, organisation };
+  };
+
+  // GET /v1/portal/pharmacy/onboarding - where this branch is: Awaiting Curaleaf, Terms, Worldpay
+  router.get('/portal/pharmacy/onboarding', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { organisation } = await branchFor(req.context!);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(await branchOnboardingView(repo, organisation));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/pharmacy/onboarding/terms - a branch with no accepted Terms accepts them before Worldpay
+  router.post('/portal/pharmacy/onboarding/terms', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { scope, organisation } = await branchFor(req.context!);
+      const input = branchPartnerTermsAcceptanceSchema.parse(req.body);
+      const { acceptance, created } = await acceptBranchPartnerTerms(
+        { repo, termsVersion: partnerTermsVersion() },
+        organisation,
+        input,
+        { ipHash: ipHash(req) },
+      );
+      if (created) {
+        await identityRepo.appendAudit({
+          organisationId: organisation.id,
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          event: 'partner_terms.accepted',
+          recordType: 'PartnerTermsAcceptance',
+          recordId: acceptance.id,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: scope.surface,
+          details: { termsVersion: acceptance.termsVersion },
+        });
+        await sqlClickupHooks().termsAccepted({
+          gphcNumber: organisation.gphcNumber,
+          organisationId: organisation.id,
+          onboardingRequestId: acceptance.onboardingRequestId,
+          acceptedAt: acceptance.acceptedAt,
+          version: acceptance.termsVersion,
+          signerName: acceptance.signerName,
+        });
+      }
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(201).json({ acceptedAt: acceptance.acceptedAt, termsVersion: acceptance.termsVersion });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/pharmacy/onboarding/worldpay - the Worldpay form from the portal, emailed and never stored
+  router.post('/portal/pharmacy/onboarding/worldpay', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { organisation } = await branchFor(req.context!);
+      const form = worldpayFormSchema.parse(req.body);
+      const note = await submitWorldpayForm(repo, email => sendEmailNow(email), form, new Date(), {
+        organisationId: organisation.id,
+        gphcNumber: organisation.gphcNumber,
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(201).json({ submittedAt: note.submittedAt });
     } catch (error) {
       next(error);
     }

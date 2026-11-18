@@ -30,6 +30,18 @@ describe('pharmacy intake access', () => {
     assert.equal(canAcceptPublicIntake({ ...organisation, gphcNumber: 'TRAINING-PHARM1', status: 'LIVE' }), true);
   });
 
+  it('gives a Not available pharmacy no intake and no access, even with intake left on', () => {
+    const closed = { ...organisation, status: 'NOT_AVAILABLE' as const, intakeEnabled: true };
+    assert.equal(canAcceptPublicIntake(closed), false);
+    assert.equal(canReceiveReferral(closed), false);
+    assert.equal(canActivateReferredPatient(closed), false);
+    assert.equal(pharmacyOperationalAccess(closed), false);
+    assert.deepEqual(pharmacyPortalRecordAccess(closed), { patients: false, orders: false, pendingEnquiries: false });
+    assert.equal(pharmacyWorkspaceMode(closed), 'paused');
+    // Test pharmacies are always on, but not once closed.
+    assert.equal(pharmacyOperationalAccess({ ...closed, id: '70913a30-71c3-4a41-952e-d532927af58c' }), false);
+  });
+
   it('withholds pharmacy workspace data until go-live', () => {
     assert.equal(pharmacyOperationalAccess(organisation), true);
     assert.equal(pharmacyOperationalAccess({ ...organisation, classification: 'ALLOCATION_HOLDING' }), true);

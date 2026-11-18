@@ -17,8 +17,7 @@ export function signerRoleIsPharmacist(role: PartnerTermsSignerRole) {
   return role === 'SUPERINTENDENT_PHARMACIST' || role === 'PHARMACIST';
 }
 
-export const partnerTermsAcceptanceSchema = z.object({
-  onboardingRequestId: z.uuid(),
+const signerFields = {
   /** The typed-name e-signature. */
   signerName: z.string().trim().min(2).max(160),
   signerRole: z.enum(PARTNER_TERMS_SIGNER_ROLES),
@@ -26,21 +25,34 @@ export const partnerTermsAcceptanceSchema = z.object({
   signerGphcNumber: z.string().trim().max(40).optional().or(z.literal('')),
   /** "I confirm I am authorised to accept these terms on behalf of [registered company name]". */
   authorised: z.literal(true, { message: 'Confirm you are authorised to accept the terms.' }),
-  /** Signed by the PharmSmart welcome; carries PharmSmart's names for the soft check. */
-  pharmsmartTicket: z.string().max(4000).optional().or(z.literal('')),
-}).superRefine((input, context) => {
+};
+
+function requirePharmacistGphc(input: { signerRole: PartnerTermsSignerRole; signerGphcNumber?: string }, context: z.RefinementCtx) {
   if (!signerRoleIsPharmacist(input.signerRole)) return;
   const gphc = normaliseGphcNumber(input.signerGphcNumber ?? '');
   if (!gphc || !/^\d{7}$/.test(gphc)) {
     context.addIssue({ code: 'custom', path: ['signerGphcNumber'], message: 'Enter your 7-digit GPhC registration number.' });
   }
-});
+}
+
+export const partnerTermsAcceptanceSchema = z.object({
+  onboardingRequestId: z.uuid(),
+  ...signerFields,
+  /** Signed by the PharmSmart welcome; carries PharmSmart's names for the soft check. */
+  pharmsmartTicket: z.string().max(4000).optional().or(z.literal('')),
+}).superRefine(requirePharmacistGphc);
+
+/** The same declaration and signature, from an activated branch's own portal. The branch comes from the session. */
+export const branchPartnerTermsAcceptanceSchema = z.object(signerFields).strict().superRefine(requirePharmacistGphc);
+
+export type BranchPartnerTermsAcceptanceInput = z.infer<typeof branchPartnerTermsAcceptanceSchema>;
 
 export type PartnerTermsAcceptanceInput = z.infer<typeof partnerTermsAcceptanceSchema>;
 
 export type PartnerTermsAcceptanceRecord = {
   id: string;
-  onboardingRequestId: string;
+  /** Null only for a branch that accepted from its portal with no onboarding request behind it. */
+  onboardingRequestId: string | null;
   organisationId: string | null;
   termsVersion: string;
   signerName: string;

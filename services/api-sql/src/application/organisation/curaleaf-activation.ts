@@ -18,7 +18,8 @@ export function curaleafActivationChange(
 ): CuraleafActivationChange {
   // Rejected pharmacies are archived. A suspended (PAUSED) pharmacy stays suspended
   // whatever credentials are saved: only HHH lifting the suspension brings it back.
-  if (organisation.archivedAt || organisation.status === 'PAUSED') return null;
+  // Likewise a Not available pharmacy stays so until HHH clears it.
+  if (organisation.archivedAt || organisation.status === 'PAUSED' || organisation.status === 'NOT_AVAILABLE') return null;
   if (isPlatformTestOrganisation(organisation) || /^TRAINING-/i.test(organisation.gphcNumber ?? '')) return null;
   if (environment === 'PRODUCTION') return organisation.status === 'LIVE' ? null : 'went_live';
   return organisation.status === 'LIVE' ? 'left_live' : null;

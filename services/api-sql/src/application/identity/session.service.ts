@@ -1,4 +1,4 @@
-import { PHARMACY_SUSPENDED_MESSAGE } from '../../security/require-staff.js';
+import { PHARMACY_NOT_AVAILABLE_MESSAGE, PHARMACY_SUSPENDED_MESSAGE } from '../../security/require-staff.js';
 import { auth } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { isPharmsmartSsoSignIn } from '../../domain/identity/pharmsmart-sso.js';
@@ -116,6 +116,9 @@ export class SessionService {
     }
     if (rawRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'PAUSED') {
       throw new HttpError(403, PHARMACY_SUSPENDED_MESSAGE, 'PHARMACY_SUSPENDED');
+    }
+    if (rawRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'NOT_AVAILABLE') {
+      throw new HttpError(403, PHARMACY_NOT_AVAILABLE_MESSAGE, 'PHARMACY_NOT_AVAILABLE');
     }
 
     // 6. Create Firebase session cookie
