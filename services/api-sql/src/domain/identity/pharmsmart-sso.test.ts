@@ -9,6 +9,7 @@ import {
   parsePharmsmartPharmacyInfo,
   pharmacyLoginAccount,
   pharmacyStaffEmails,
+  pharmsmartSetupGaps,
   pharmsmartSsoContract,
   readPharmsmartSetupTicket,
 } from './pharmsmart-sso.js';
@@ -24,10 +25,9 @@ const pharmacyInfo = `{
     "status_message": "Pharmacy info",
     "data": {
         "pharmacy_id": 30,
-        "email": "manoj.iihglobal@gmail.com",
-        "first_name": "Sylvia",
-        "last_name": "Hockett",
-        "gphc": "1234471"
+        "email": "shop@hockett.test",
+        "gphc": "1234471",
+        "sso_user": { "first_name": "Sylvia", "last_name": "Hockett", "email": "Sylvia@Hockett.test" }
     }
 }`;
 
@@ -48,10 +48,10 @@ describe('PharmSmart pharmacy info', () => {
       status: 'pharmacy',
       gphcNumber: '1234471',
       pharmsmartPharmacyId: '30',
-      email: 'manoj.iihglobal@gmail.com',
+      email: 'sylvia@hockett.test',
       firstName: 'Sylvia',
       lastName: 'Hockett',
-      prefill: { pharmacyEmail: 'manoj.iihglobal@gmail.com' },
+      prefill: { pharmacyEmail: 'shop@hockett.test' },
     });
   });
 
@@ -84,7 +84,7 @@ describe('PharmSmart pharmacy info', () => {
     });
   });
 
-  it('reads the keys IIH sent on 18 Nov, skips nulls and drops repeated address parts', () => {
+  it('reads PharmSmart\'s response: the person from sso_user, the inbox from email, no manager', () => {
     const info = parsePharmsmartPharmacyInfo(JSON.stringify({
       status_code: 200,
       status_message: 'Pharmacy info',
@@ -103,13 +103,14 @@ describe('PharmSmart pharmacy info', () => {
         phone: '9898989898',
         trading_name: 'Combe Down & Pharmacy',
         superintendent: { first_name: 'Manoj', last_name: 'Iih', email: 'manoj.iihglobal@gmail.com', pms_contact_no: '9898989898' },
-        manager: { first_name: null, last_name: null, email: null, pms_contact_no: null },
+        sso_user: { first_name: 'Manoj', last_name: 'Tailor', email: 'manoj.iihglobal@gmail.com' },
       },
     }));
     assert.equal(info.status, 'pharmacy');
     if (info.status !== 'pharmacy') return;
     assert.equal(info.email, 'manoj.iihglobal@gmail.com');
-    assert.equal(info.firstName, 'Manoj iig');
+    assert.equal(info.firstName, 'Manoj');
+    assert.equal(info.lastName, 'Tailor');
     assert.deepEqual(info.prefill, {
       pharmacyName: 'Combe Down & Pharmacy',
       pharmacyPhone: '9898989898',
@@ -120,6 +121,20 @@ describe('PharmSmart pharmacy info', () => {
       superintendentEmail: 'manoj.iihglobal@gmail.com',
       superintendentPhone: '9898989898',
     });
+  });
+
+  it('never turns the pharmacy inbox into a login when sso_user is missing', () => {
+    const info = parsePharmsmartPharmacyInfo(JSON.stringify({
+      status_code: 200,
+      data: { gphc: '1028845', email: 'shop@kirkgate.test', first_name: 'Kirkgate', last_name: 'Pharmacy' },
+    }));
+    assert.equal(info.status, 'pharmacy');
+    if (info.status !== 'pharmacy') return;
+    assert.equal(info.email, null);
+    assert.equal(info.firstName, null);
+    assert.equal(info.lastName, null);
+    assert.equal(info.prefill.pharmacyEmail, 'shop@kirkgate.test');
+    assert.deepEqual(pharmsmartSetupGaps(info), ['email', 'name']);
   });
 
   it('reads the pharmacy manager for the Worldpay contact', () => {

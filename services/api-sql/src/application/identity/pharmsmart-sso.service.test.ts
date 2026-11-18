@@ -7,16 +7,15 @@ import { PharmsmartSsoService } from './pharmsmart-sso.service.js';
 
 const organisationId = '70913a30-71c3-4a41-952e-d532927af58c';
 
-function info(overrides: Record<string, unknown> = {}) {
+function info(overrides: Record<string, unknown> = {}, person: Record<string, unknown> = {}) {
   return JSON.stringify({
     status_code: 200,
     status_message: 'Pharmacy info',
     data: {
       pharmacy_id: 30,
-      email: 'amina.khan@pharmacy.test',
-      first_name: 'Amina',
-      last_name: 'Khan',
+      email: 'shop@pharmacy.test',
       gphc: '1234471',
+      sso_user: { first_name: 'Amina', last_name: 'Khan', email: 'amina.khan@pharmacy.test', ...person },
       ...overrides,
     },
   });
@@ -97,7 +96,7 @@ describe('PharmSmart redemption', () => {
   });
 
   it('asks for an email when PharmSmart did not send one', async () => {
-    const { sso, created } = service(info({ email: '' }));
+    const { sso, created } = service(info({}, { email: '' }));
     const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
     assert.equal(result.status, 'setup');
     assert.equal(created.length, 0);
@@ -121,7 +120,7 @@ describe('PharmSmart redemption', () => {
       email: 'amina.khan@pharmacy.test',
       gphcNumber: '5550001',
       pharmsmartPharmacyId: '30',
-      prefill: { pharmacyEmail: 'amina.khan@pharmacy.test' },
+      prefill: { pharmacyEmail: 'shop@pharmacy.test' },
     });
     assert.equal(created.length, 0);
     assert.equal(minted.length, 0);

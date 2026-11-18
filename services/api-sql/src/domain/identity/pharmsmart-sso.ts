@@ -90,18 +90,22 @@ export function parsePharmsmartPharmacyInfo(body: string): PharmsmartPharmacyInf
   const statusCode = Number(record.status_code);
   if (statusCode === 401) return { status: 'expired' };
   if (statusCode !== 200 || !record.data || typeof record.data !== 'object') return { status: 'rejected' };
-  const data = record.data as { gphc?: unknown; pharmacy_id?: unknown; email?: unknown; first_name?: unknown; last_name?: unknown };
+  const data = record.data as { gphc?: unknown; pharmacy_id?: unknown; sso_user?: unknown };
   const gphcNumber = responseText(data.gphc);
   if (!gphcNumber) return { status: 'rejected' };
   const pharmsmartPharmacyId = responseText(data.pharmacy_id) || null;
-  const email = responseText(data.email).toLowerCase() || null;
+  // The signed-in person is `sso_user` only. The top-level email is the pharmacy's inbox, so it
+  // never becomes a personal login: without `sso_user` the person types their own details.
+  const person = data.sso_user && typeof data.sso_user === 'object'
+    ? data.sso_user as { email?: unknown; first_name?: unknown; last_name?: unknown }
+    : {};
   return {
     status: 'pharmacy',
     gphcNumber,
     pharmsmartPharmacyId,
-    email,
-    firstName: responseText(data.first_name) || null,
-    lastName: responseText(data.last_name) || null,
+    email: responseText(person.email).toLowerCase() || null,
+    firstName: responseText(person.first_name) || null,
+    lastName: responseText(person.last_name) || null,
     prefill: parsePharmsmartPrefill(record.data as Record<string, unknown>),
   };
 }
@@ -109,14 +113,13 @@ export function parsePharmsmartPharmacyInfo(body: string): PharmsmartPharmacyInf
 /**
  * Form field, then the PharmSmart keys that fill it in order of preference, then the length cap.
  * The first key of each row is what IIH sent on 18 Nov 2026; the rest are the names we asked
- * for on 16 Nov, kept so either works.
+ * for on 16 Nov, kept so either works. An empty `superintendent` or `manager` is left out entirely.
  */
 const PREFILL_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, readonly string[], number]> = [
   ['pharmacyName', ['trading_name', 'pharmacy_name'], 160],
   ['registeredCompanyName', ['company_name'], 160],
   ['pharmacyPhone', ['phone', 'pharmacy_phone'], 40],
-  // IIH say the top-level `email` is the branch email. It is still also read as the person's
-  // login email (see parsePharmsmartPharmacyInfo) until they confirm which it is.
+  // PharmSmart's top-level `email` is the pharmacy's inbox; the person's email is in `sso_user`.
   ['pharmacyEmail', ['pharmacy_email', 'email'], 254],
   ['accountsEmail', ['accounts_email'], 254],
   ['accountsPhone', ['accounts_phone'], 40],
