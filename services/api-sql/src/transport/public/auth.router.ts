@@ -21,6 +21,7 @@ import { SqlOrganisationRepository } from '../../repositories/sql/organisation.s
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { toPortalOrganisation } from '../portal/pharmacy-contracts.js';
+import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
 
 const sessionInputSchema = z.object({
   idToken: z.string().min(100).max(20_000),
@@ -130,6 +131,7 @@ export function createAuthRouter(): Router {
     createCustomToken: (uid, claims) => auth.createCustomToken(uid, claims),
     audit: input => identityRepo.appendAudit(input),
     setupSecret: config.IP_HASH_SECRET ?? `${config.FIREBASE_PROJECT_ID}:pharmsmart-sso`,
+    recordFirstVisit: sqlClickupHooks().firstVisit,
   });
 
   // GET /v1/auth/csrf - Issue or refresh CSRF token

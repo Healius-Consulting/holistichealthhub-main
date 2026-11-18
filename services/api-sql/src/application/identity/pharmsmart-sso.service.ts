@@ -13,6 +13,7 @@ import {
 } from '../../domain/identity/pharmsmart-sso.js';
 import { compactGphcNumber, type PharmacyOnboardingStatus } from '../../domain/pharmacy-onboarding/request.js';
 import type { AppendAuditInput } from '../../repositories/ports/identity.port.js';
+import { bestEffort, type ClickupHooks } from '../clickup/clickup-hooks.js';
 
 export type PharmsmartRedeemContext = {
   requestId: string | null;
@@ -78,6 +79,8 @@ export class PharmsmartSsoService {
     createCustomToken: (uid: string, claims: { pharmsmartSso: true }) => Promise<string>;
     audit: (input: AppendAuditInput) => Promise<void>;
     setupSecret: string;
+    /** 2.11 stage-1 record and ClickUp Interest card (application/clickup). Best effort: never fails sign-in. */
+    recordFirstVisit?: ClickupHooks['firstVisit'];
   }) {}
 
   async redeem(token: string, context: PharmsmartRedeemContext): Promise<PharmsmartLoginResult> {
@@ -106,6 +109,7 @@ export class PharmsmartSsoService {
         await this.refuse(null, 'WELCOME', context);
         const gphcNumber = compactGphcNumber(info.gphcNumber);
         const request = gphcNumber ? await this.deps.findLatestOnboardingRequest(gphcNumber) : null;
+        if (!request) await bestEffort('first visit', () => this.deps.recordFirstVisit?.({ gphcNumber, pharmsmartPharmacyId: info.pharmsmartPharmacyId, tradingName: info.prefill.pharmacyName }));
         return {
           status: 'welcome',
           email: info.email,

@@ -1,4 +1,4 @@
-export type IntegrationName = 'CURALEAF' | 'WORLDPAY';
+export type IntegrationName = 'CURALEAF' | 'WORLDPAY' | 'CLICKUP';
 export type IntegrationEnvironment = 'TEST' | 'PRODUCTION';
 export type IntegrationStatus = 'DISCONNECTED' | 'PENDING_VALIDATION' | 'ACTIVE' | 'PAUSED' | 'ERROR';
 

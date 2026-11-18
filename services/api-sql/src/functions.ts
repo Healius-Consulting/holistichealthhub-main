@@ -15,6 +15,11 @@ import { maintainPaidOrderFlow } from './application/workers/maintain-orders.js'
 import { processPendingPaymentLifecycle } from './application/workers/payment-lifecycle.js';
 import { pollCuraleafEvents } from './application/workers/poll-curaleaf.js';
 import { createApp } from './bootstrap/app.js';
+import { clickupConfig } from './application/clickup/clickup-config.js';
+import { readClickupToken } from './application/clickup/clickup-token.js';
+import { pruneStaleOnboardingVisits, syncClickup } from './application/clickup/sync-clickup.js';
+import { SqlClickupRepository, SqlPharmacyOnboardingVisitRepository } from './repositories/sql/clickup.sql.js';
+import { SqlPharmacyOnboardingRepository } from './repositories/sql/pharmacy-onboarding.sql.js';
 import { SqlCuraleafQuoteBankRepository } from './repositories/sql/curaleaf-quote-bank.sql.js';
 import { SqlIdentityRepository } from './repositories/sql/identity.sql.js';
 import { SqlIntegrationRepository } from './repositories/sql/integration.sql.js';
@@ -98,6 +103,16 @@ export const applyDataRetentionLondon = onSchedule({
   // is the failure mode that matters, and nothing else in the run reports it.
   for (const failure of run.failed) {
     console.error('Data retention failed for a record', { id: failure.id, reason: failure.reason });
+  }
+  // 2.11: "visited, not submitted" records go after 12 months with no submission.
+  try {
+    const onboardingRepo = new SqlPharmacyOnboardingRepository();
+    console.log('Onboarding visit pruning complete', await pruneStaleOnboardingVisits({
+      visitRepo: new SqlPharmacyOnboardingVisitRepository(),
+      findLatestRequest: gphcNumber => onboardingRepo.findLatestByGphc(gphcNumber),
+    }));
+  } catch (error) {
+    console.error('Onboarding visit pruning failed', error instanceof Error ? error.message : 'unknown');
   }
 });
 
@@ -210,4 +225,27 @@ export const cleanupPrescriptionFilesLondon = onSchedule({
 }, async () => {
   const summary = await cleanupAbandonedPrescriptionFiles(sqlWorkerDeps());
   console.log('Prescription file cleanup complete', summary);
+});
+
+/**
+ * Step 6 (ClickUp, Option A): tells HHH's ClickUp board about partner onboarding,
+ * one card per pharmacy, from the ClickUp outbox. One-way; a ClickUp outage only
+ * delays it. Until CLICKUP_LIST_ID and the CLICKUP connection's token are set, the
+ * events stay queued.
+ */
+export const syncClickupLondon = onSchedule({
+  schedule: 'every 5 minutes',
+  timeZone: 'Europe/London',
+  region: 'europe-west2',
+  timeoutSeconds: 120,
+  memory: '256MiB',
+  maxInstances: 1,
+  retryCount: 0,
+}, async () => {
+  const integrationRepo = new SqlIntegrationRepository();
+  console.log('ClickUp sync complete', await syncClickup({
+    clickupRepo: new SqlClickupRepository(),
+    config: () => clickupConfig(),
+    token: () => readClickupToken(() => integrationRepo.listConnections()),
+  }));
 });

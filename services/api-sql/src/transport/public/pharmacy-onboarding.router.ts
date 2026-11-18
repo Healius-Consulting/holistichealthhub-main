@@ -17,6 +17,7 @@ import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { queuePharmacyOnboardingSubmitted } from '../../application/pharmacy-onboarding/emails.js';
 import { submitPharmacyOnboardingRequest } from '../../application/pharmacy-onboarding/submit-request.js';
+import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
 
 type UploadedLicence = { filename: string; declaredType: string; bytes: Buffer };
 
@@ -97,6 +98,7 @@ export function createPublicPharmacyOnboardingRouter(): Router {
           console.error('Pharmacy onboarding email was not queued', error instanceof Error ? error.message : 'unknown');
         }
       }
+      if (record.status === 'PENDING') await sqlClickupHooks().requestSubmitted(record);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(201).json({ id: record.id, status: publicOnboardingStatus(record.status) });
     } catch (error) {

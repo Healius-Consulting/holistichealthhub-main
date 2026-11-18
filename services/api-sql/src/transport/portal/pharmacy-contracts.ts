@@ -967,7 +967,7 @@ function isSupplierFlow(order: PortalOrder) {
 }
 
 export type OverviewIntegrationConnection = {
-  integration: 'CURALEAF' | 'WORLDPAY';
+  integration: 'CURALEAF' | 'WORLDPAY' | 'CLICKUP';
   environment: 'TEST' | 'PRODUCTION';
   status: 'DISCONNECTED' | 'PENDING_VALIDATION' | 'ACTIVE' | 'PAUSED' | 'ERROR';
   secretResourceName: string | null;

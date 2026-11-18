@@ -7,6 +7,7 @@ import {
   unholdPharmacyOnboardingRequest,
 } from './decide-request.js';
 import { queuePharmacyOnboardingActivated, queuePharmacyOnboardingHeld } from './emails.js';
+import { bestEffort, type ClickupHooks } from '../clickup/clickup-hooks.js';
 
 type RequestAudit = {
   event: string;
@@ -22,6 +23,8 @@ export type PharmacyRequestActionDeps = {
   referralLinks: { ensureEligibilityLink(params: { organisationId: string; createdByUid?: string | null }): Promise<{ token: string }> };
   notificationRepo: NotificationRepositoryPort;
   audit: (input: RequestAudit) => Promise<void>;
+  /** ClickUp card updates (application/clickup). Best effort: never fails the action. */
+  clickup?: Pick<ClickupHooks, 'activated' | 'held' | 'unheld'>;
 };
 
 /** The state change has happened by now, so a failed email is logged rather than undoing it. */
@@ -62,6 +65,7 @@ export function pharmacyRequestActions(deps: PharmacyRequestActionDeps) {
         pharmacyName: result.organisation.name,
         pharmacyEmail: result.organisation.pharmacyEmail,
       }));
+      await bestEffort('activation', () => deps.clickup?.activated(result));
       return { ...result, request };
     },
 
@@ -75,6 +79,7 @@ export function pharmacyRequestActions(deps: PharmacyRequestActionDeps) {
         details: { gphcNumber: held.gphcNumber },
       });
       await queueQuietly('on-hold', () => queuePharmacyOnboardingHeld(deps.notificationRepo, held));
+      await bestEffort('hold', () => deps.clickup?.held(held));
       return held;
     },
 
@@ -87,6 +92,7 @@ export function pharmacyRequestActions(deps: PharmacyRequestActionDeps) {
         recordId: unheld.id,
         details: { gphcNumber: unheld.gphcNumber },
       });
+      await bestEffort('unhold', () => deps.clickup?.unheld(unheld));
       return unheld;
     },
   };

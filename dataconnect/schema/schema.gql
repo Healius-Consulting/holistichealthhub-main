@@ -207,6 +207,7 @@ enum PlacementState {
 enum IntegrationName {
   CURALEAF
   WORLDPAY
+  CLICKUP
 }
 
 enum IntegrationEnvironment {
@@ -1328,4 +1329,56 @@ type PharmacyOnboardingDeferral @table {
   personEmail: String
   idempotencyKey: String! @unique
   createdAt: Timestamp! @default(expr: "request.time")
+}
+
+# --- ClickUp (Step 6, Option A) and the stage-1 visit record (2.11) ---------------
+
+enum ClickupSyncStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
+# One-way feed to HHH's ClickUp board, copied from NotificationOutbox and drained by
+# syncClickupLondon with retries and backoff. References and business fields only,
+# never patient data. gphcNumber names the card the event belongs to.
+type ClickupOutbox @table {
+  id: UUID! @default(expr: "uuidV4()")
+  gphcNumber: String! @index
+  event: String!
+  payload: Any!
+  idempotencyKey: String! @unique
+  status: ClickupSyncStatus! @default(value: PENDING) @index
+  attemptCount: Int! @default(value: 0)
+  nextAttemptAt: Timestamp
+  createdAt: Timestamp! @default(expr: "request.time")
+  sentAt: Timestamp
+  failedAt: Timestamp
+  failureCode: String
+}
+
+# Our side of the one ClickUp card per pharmacy. Keyed by GPhC from the first visit,
+# then also matched by onboarding request and branch, so the worker updates the card
+# it made rather than creating another.
+type ClickupCard @table(key: "gphcNumber") {
+  gphcNumber: String!
+  clickupTaskId: String
+  onboardingRequestId: UUID @index
+  organisationId: UUID @index
+  status: String
+  pharCodeEntered: Boolean! @default(value: false)
+  apiKeyEntered: Boolean! @default(value: false)
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+# "Visited, not submitted": the first PharmSmart SSO visit of a GPhC with no account
+# and no request. No person's details. Cleared after 12 months with no submission.
+type PharmacyOnboardingVisit @table(key: "gphcNumber") {
+  gphcNumber: String!
+  pharmsmartPharmacyId: String
+  tradingName: String
+  firstVisitAt: Timestamp! @default(expr: "request.time")
+  submittedAt: Timestamp
 }

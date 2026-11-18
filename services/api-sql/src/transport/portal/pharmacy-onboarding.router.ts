@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod';
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { pharmacyRequestActions } from '../../application/pharmacy-onboarding/request-actions.js';
+import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
 import { queuePharmacyDeclinedEmail } from '../../application/pharmacy-onboarding/emails.js';
 import { declineNewPharmacy } from '../../application/pharmacy-onboarding/decline-pharmacy.js';
 import { safeDownloadName } from '../../application/pharmacy-onboarding/licence-file.js';
@@ -142,6 +143,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
         organisations: organisationRepo,
         referralLinks,
         notificationRepo,
+        clickup: sqlClickupHooks(),
         audit: input => identityRepo.appendAudit({
           ...input,
           actorUid: scope.uid,
