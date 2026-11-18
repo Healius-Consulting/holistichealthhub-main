@@ -18957,6 +18957,54 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .curaleaf-account-form__grid fieldset{ grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
 }
 
+/* Template block: the client's Terms text and layout replace it later, as content. */
+.partner-terms-form__terms{
+  margin-top: 16px;
+  padding: 18px;
+  color: var(--ink-muted);
+  background: color-mix(in srgb, var(--green) 6%, #fff);
+  border: 1px dashed color-mix(in srgb, var(--green) 30%, transparent);
+  border-radius: 12px;
+}
+
+.partner-terms-form__terms p{ margin: 0; }
+
+.curaleaf-account-form__grid .partner-terms-form__declaration{
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.curaleaf-account-form__grid .partner-terms-form__declaration input{
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+}
+
+.curaleaf-account-form__grid .partner-terms-form__declaration span{
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.partner-terms-form__signature{
+  font-family: var(--serif);
+  font-size: 20px;
+  font-style: italic;
+}
+
+.onb__forms .onb__actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.onb__button:disabled{
+  cursor: not-allowed;
+  opacity: .5;
+}
+
 .worldpay-form .worldpay-form__label{
   display: flex;
   flex-wrap: wrap;
@@ -19247,36 +19295,6 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   margin: 0 auto;
   background: #fff;
   box-shadow: 0 8px 24px rgba(15, 43, 35, 0.12);
-}
-
-.pharmsmart-guide__sheet{
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  height: auto;
-  overflow: auto;
-  padding: 8px 20px 20px;
-  background: #fff;
-  border: 0;
-  border-radius: 0;
-}
-
-.pharmsmart-guide__sheet div{
-  display: grid;
-  gap: 2px;
-  padding: 12px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
-}
-
-.pharmsmart-guide__sheet strong{
-  color: var(--ink);
-  font-size: 14px;
-}
-
-.pharmsmart-guide__sheet span{
-  color: var(--ink-muted);
-  font-size: 15px;
-  line-height: 1.45;
 }
 
 .pharmsmart-guide__preview-status{

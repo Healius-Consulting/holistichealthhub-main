@@ -74,7 +74,8 @@ export function CuraleafAccountForm({
   open: boolean;
   welcome: PharmsmartWelcome;
   onClose: () => void;
-  onSubmitted: (values: CuraleafFormValues) => void;
+  /** The form is in; the request it made is where the Partner Terms are accepted next. */
+  onSubmitted: (values: CuraleafFormValues, requestId: string) => void;
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -131,12 +132,12 @@ export function CuraleafAccountForm({
     setBusy(true);
     setError(null);
     try {
-      await submitCuraleafAccountForm({
+      const created = await submitCuraleafAccountForm({
         ...Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, value.trim()])),
         signatureName: fields.pharmacistName.trim(),
         idempotencyKey: idempotencyKey.current,
       });
-      onSubmitted(fields);
+      onSubmitted(fields, created.id);
     } catch (cause) {
       // A second form for a pharmacy we already have is not a failure: say so plainly.
       if (cause instanceof ApiRequestError && cause.code === 'ONBOARDING_ALREADY_RECEIVED') {

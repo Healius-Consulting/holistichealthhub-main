@@ -39,6 +39,7 @@ test('a welcome redemption stays on the guide and does not open a session', () =
   assert.deepEqual(next.welcome.prefill, {});
   assert.equal(next.welcome.pharmsmartPharmacyId, null);
   assert.equal(next.welcome.onboardingRequest, null);
+  assert.equal(next.welcome.termsRequest, null);
   const booking = new URL(pharmsmartOnboardingBookingUrl(next.welcome, {
     embed: true,
     hostname: 'portal.holistichealthhub.live',
@@ -67,6 +68,25 @@ test('a welcome redemption carries a pending or on-hold request through to the p
   }
 });
 
+test('a welcome redemption with the Terms outstanding carries the request to resume at', () => {
+  const termsRequest = { id: '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11', pharmacyName: 'Shah Pharmacy', registeredCompanyName: 'Shah Health Ltd' };
+  const next = pharmsmartRedeemNext({
+    status: 'welcome',
+    firstName: 'Amina',
+    lastName: 'Khan',
+    email: 'amina@pharmacy.test',
+    gphcNumber: '1234471',
+    onboardingRequest: 'terms_outstanding',
+    termsRequest,
+    pharmsmartTicket: 'signed.ticket',
+  });
+  assert.equal(next.action, 'welcome');
+  if (next.action !== 'welcome') return;
+  assert.equal(next.welcome.onboardingRequest, 'terms_outstanding');
+  assert.deepEqual(next.welcome.termsRequest, termsRequest);
+  assert.equal(next.welcome.pharmsmartTicket, 'signed.ticket');
+});
+
 test('a ready redemption is the only path that carries a session token', () => {
   assert.deepEqual(pharmsmartRedeemNext({ status: 'ready', customToken: 'custom-1' }), {
     action: 'session',
@@ -82,12 +102,11 @@ test('a ready redemption is the only path that carries a session token', () => {
   }), { action: 'setup' });
 });
 
-test('the onboarding packets are a brochure and two short form descriptions', () => {
-  assert.deepEqual(PHARMSMART_ONBOARDING_PACKETS.map(packet => packet.title), ['Brochure', 'Curaleaf account', 'Worldpay']);
-  assert.deepEqual(PHARMSMART_ONBOARDING_PACKETS.map(packet => packet.detail), ['PDF', 'FORM', 'FORM']);
+test('the onboarding packets are the brochure and the Curaleaf form; Worldpay is an in-app step, not a spreadsheet', () => {
+  assert.deepEqual(PHARMSMART_ONBOARDING_PACKETS.map(packet => packet.title), ['Brochure', 'Curaleaf account']);
+  assert.deepEqual(PHARMSMART_ONBOARDING_PACKETS.map(packet => packet.detail), ['PDF', 'FORM']);
   assert.match(PHARMSMART_ONBOARDING_PACKETS[1].summary, /Fill this in and submit it here/);
-  assert.match(PHARMSMART_ONBOARDING_PACKETS[2].summary, /Most of it is done/);
-  assert.equal('entered' in PHARMSMART_ONBOARDING_PACKETS[2], false);
+  assert.equal(PHARMSMART_ONBOARDING_PACKETS.some(packet => /\.xlsx$/.test(packet.href)), false);
 });
 
 test('the invitation notice survives after the token is removed from the address', () => {

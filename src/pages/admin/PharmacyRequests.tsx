@@ -112,6 +112,18 @@ export function PharmacyRequestRow({
 
 type FileKind = 'filled-form' | 'licence';
 
+const SIGNER_ROLES: Record<string, string> = {
+  SUPERINTENDENT_PHARMACIST: 'Superintendent pharmacist',
+  PHARMACIST: 'Pharmacist',
+  DIRECTOR: 'Director',
+  PHARMACY_MANAGER: 'Pharmacy manager',
+  OTHER: 'Other',
+};
+
+function signerRoleLabel(role: string) {
+  return SIGNER_ROLES[role] ?? role;
+}
+
 export function PharmacyRequestRecord({
   request,
   worldpaySubmittedAt,
@@ -133,6 +145,8 @@ export function PharmacyRequestRecord({
   const tone = requestTone(request.status);
   const pending = request.status === 'pending';
   const onHold = request.status === 'on_hold';
+  // The sign-up acceptance; re-acceptance rows (a later feature) come after it.
+  const terms = request.termsAcceptances?.find(row => row.source === 'signup') ?? request.termsAcceptances?.[0] ?? null;
   const licenceIsPdf = request.licenceFilename.toLowerCase().endsWith('.pdf');
 
   // A different request starts clean: no open hold box or file from the last one.
@@ -315,6 +329,18 @@ export function PharmacyRequestRecord({
               </button>
             </li>
             <li className="pharmacy-summary__row">
+              <span className="pharmacy-summary__label">Partner Terms</span>
+              <span className="pharmacy-summary__value">
+                <span className={`pharmacy-summary__state ${terms ? (terms.nameMatchesPharmsmart === false ? 'is-wait' : 'is-ok') : 'is-off'}`}>
+                  {terms ? (terms.nameMatchesPharmsmart === false ? 'Accepted, name differs' : 'Accepted') : 'Not accepted'}
+                </span>
+                <small>{terms
+                  ? `${formatRequestDate(terms.acceptedAt)} · signed by ${terms.signerName} · version ${terms.termsVersion}`
+                  : 'The Curaleaf form is not sent to Curaleaf until the pharmacy accepts'}</small>
+              </span>
+              <span aria-hidden="true" />
+            </li>
+            <li className="pharmacy-summary__row">
               <span className="pharmacy-summary__label">Worldpay</span>
               <span className="pharmacy-summary__value">
                 <span className={`pharmacy-summary__state ${worldpaySubmittedAt ? 'is-ok' : 'is-off'}`}>{worldpaySubmittedAt ? 'Sent' : 'Not sent'}</span>
@@ -340,6 +366,34 @@ export function PharmacyRequestRecord({
           ) : null}
           {preview?.kind === 'licence' && !licenceIsPdf ? <img className="admin-request-preview" alt="Controlled drugs licence" src={preview.url} /> : null}
         </section>
+
+        {terms ? (
+          <section className="pharmacy-summary__card" aria-labelledby="admin-request-terms">
+            <header><h3 id="admin-request-terms">Partner Terms acceptance</h3></header>
+            {terms.nameMatchesPharmsmart === false ? (
+              <p className="banner banner-amber" role="status">
+                <AlertCircle size={14} aria-hidden="true" /> The signer's name does not match the superintendent or manager PharmSmart holds for this pharmacy. Check they can accept for {terms.registeredCompanyName} before activating.
+              </p>
+            ) : null}
+            <dl className="admin-request-details">
+              {([
+                ['Signed by', terms.signerName],
+                ['Role', signerRoleLabel(terms.signerRole)],
+                ['Email', terms.signerEmail],
+                ...(terms.signerGphcNumber ? [['GPhC registration', terms.signerGphcNumber] as [string, string]] : []),
+                ['On behalf of', terms.registeredCompanyName],
+                ['Accepted', formatRequestDate(terms.acceptedAt) || terms.acceptedAt],
+                ['Terms version', terms.termsVersion],
+                ['Name check', terms.nameMatchesPharmsmart === null ? 'Not checked (no PharmSmart names)' : terms.nameMatchesPharmsmart ? 'Matches PharmSmart' : 'Does not match PharmSmart'],
+              ] as Array<[string, string]>).map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        ) : null}
 
         <section className="pharmacy-summary__card" aria-labelledby="admin-request-details">
           <header><h3 id="admin-request-details">Application details</h3></header>
