@@ -248,7 +248,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
   }, [formUrl]);
 
   const notify = (message: string) => dispatch({ type: 'ADD_TOAST', message, toastType: 'success' });
-  // The poster pack stays off until HHH's templates and wording are in; local preview shows it to check the layout.
+  // HHH's poster and leaflet with this branch's QR and logo. The switch is in posterPackRules.ts.
   const postersOn = POSTER_TEMPLATES_READY || isLocalPortalPreview;
   const postersOpen = posterPackAvailable(organisation.status);
   const [postersBusy, setPostersBusy] = useState(false);
@@ -257,7 +257,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     try {
       const { downloadPosterPack } = await import('../utils/posterPackDownload');
       await downloadPosterPack(organisation, formUrl);
-      notify('Poster pack saved: an A4 poster, an A5 leaflet and an A6 counter card.');
+      notify('Poster pack saved: an A3 poster and a two-sided A5 leaflet.');
     } catch {
       dispatch({ type: 'ADD_TOAST', message: 'The poster pack could not be made. Try again.', toastType: 'error' });
     } finally {
@@ -711,7 +711,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                 {qr
                   ? <img className="pharmacy-settings-qr" src={qr} alt={`Eligibility QR code for ${organisation.name}`} />
                   : <div className="pharmacy-settings-qr-placeholder">{linkError ? 'QR unavailable' : 'Generating QR…'}</div>}
-                <p className="pharmacy-details__note">The same link as a high-resolution image, for leaflets, posters and counter cards.</p>
+                <p className="pharmacy-details__note">The same link as a high-resolution image, for leaflets, posters and other printed material.</p>
               </div>
             </section>
             <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-packs">
@@ -735,7 +735,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                       <strong>Poster pack</strong>
                       <small>
                         {postersOpen
-                          ? 'An A4 poster, an A5 leaflet and an A6 counter card with your logo and QR code, as print-ready PDFs to send to your printer.'
+                          ? 'An A3 poster and a two-sided A5 leaflet with your logo and QR code, as print-ready PDFs to send to your printer.'
                           : 'Available again once your eligibility link is back on.'}
                       </small>
                     </span>
@@ -747,7 +747,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                   <li className="pharmacy-details__switch-row is-muted">
                     <span>
                       <strong>Poster pack</strong>
-                      <small>An A4 poster, an A5 leaflet and a counter card with your logo and QR code will appear here when HHH's designs are ready.</small>
+                      <small>An A3 poster and a two-sided A5 leaflet with your logo and QR code will appear here soon.</small>
                     </span>
                     <span className="pharmacy-details__tag">Coming soon</span>
                   </li>

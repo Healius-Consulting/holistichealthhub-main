@@ -2,23 +2,33 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import QRCode from 'qrcode';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { buildPosterPdfs, POSTER_FORMATS, posterImageType, wrapText } from '../src/utils/posterPack.ts';
-import { POSTER_COPY, POSTER_TEMPLATES_READY, posterPackAvailable } from '../src/utils/posterPackRules.ts';
+import { PDFDocument, PDFName, StandardFonts } from 'pdf-lib';
+import { buildPosterPdfs, fitName, POSTER_TEMPLATES, posterImageType, wrapText } from '../src/utils/posterPack.ts';
+import { POSTER_TEMPLATES_READY, posterPackAvailable } from '../src/utils/posterPackRules.ts';
 import { HELP_TOPICS, ONBOARDING_INBOX, PHARMACY_FAQ, PHARMACY_GUIDES, searchFaq } from '../src/onboarding/pharmacyHelp.ts';
 import { isSupportedPortalRelativePath } from '../packages/domain/portal-route.js';
 
-const MM = 72 / 25.4;
 const qrPng = () => QRCode.toBuffer('https://holistichealthhub.live/eligibility?token=abcdefghijklmnop', { width: 360, margin: 2 }).then(buffer => new Uint8Array(buffer));
 // A 1x1 PNG, as an uploaded branch logo.
 const tinyPng = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'));
+/** Image objects in a PDF. */
+function imageCount(pdf: PDFDocument) {
+  return pdf.context.enumerateIndirectObjects().filter(([, object]) => {
+    const dict = (object as { dict?: { get(name: unknown): unknown } }).dict;
+    return String(dict?.get(PDFName.of('Subtype'))) === '/Image';
+  }).length;
+}
 
-test('the poster pack stays off until HHH supplies its templates and wording', () => {
-  assert.equal(POSTER_TEMPLATES_READY, false);
-  assert.match(POSTER_COPY.headline, /to be supplied by HHH/);
+const templates = {
+  poster: new Uint8Array(readFileSync(new URL('../public/posters/hhh-poster-a3.pdf', import.meta.url))),
+  leaflet: new Uint8Array(readFileSync(new URL('../public/posters/hhh-leaflet-a5.pdf', import.meta.url))),
+};
+
+test('the poster pack is switched on in Settings', () => {
+  assert.equal(POSTER_TEMPLATES_READY, true);
   const settings = readFileSync(new URL('../src/pages/PharmacySettings.tsx', import.meta.url), 'utf8');
   assert.match(settings, /POSTER_TEMPLATES_READY \|\| isLocalPortalPreview/);
-  assert.match(settings, /Coming soon/);
+  assert.match(settings, /An A3 poster and a two-sided A5 leaflet/);
 });
 
 test('posters are offered from Awaiting Curaleaf onwards, while the eligibility link works', () => {
@@ -26,29 +36,64 @@ test('posters are offered from Awaiting Curaleaf onwards, while the eligibility 
   for (const status of ['paused', 'not_available', undefined, null]) assert.equal(posterPackAvailable(status), false, String(status));
 });
 
-test('the pack is an A4 poster, an A5 leaflet and an A6 counter card, one page each at paper size', async () => {
-  const files = await buildPosterPdfs({ pharmacyName: 'Carlton Pharmacy', address: '1 High Street, Leeds LS1 1AA', primary: '#0f766e', qr: await qrPng(), logo: { bytes: tinyPng, type: 'png' } });
-  assert.deepEqual(files.map(file => file.filename), ['a4-poster.pdf', 'a5-leaflet.pdf', 'a6-counter-card.pdf']);
+test('the pack is HHH\'s A3 poster and two-sided A5 leaflet, stamped, at the templates\' own sizes', async () => {
+  const files = await buildPosterPdfs({ pharmacyName: 'Carlton Pharmacy', qr: await qrPng(), logo: { bytes: tinyPng, type: 'png' }, templates });
+  assert.deepEqual(files.map(file => file.filename), ['a3-poster.pdf', 'a5-leaflet.pdf']);
   for (const [index, file] of files.entries()) {
     const pdf = await PDFDocument.load(file.bytes);
-    assert.equal(pdf.getPageCount(), 1);
-    const { width, height } = pdf.getPage(0).getSize();
-    assert.ok(Math.abs(width - POSTER_FORMATS[index].widthMm * MM) < 0.5, `${file.filename} width`);
-    assert.ok(Math.abs(height - POSTER_FORMATS[index].heightMm * MM) < 0.5, `${file.filename} height`);
+    const template = POSTER_TEMPLATES[index]!;
+    assert.equal(pdf.getPageCount(), template.pages.length, file.filename);
+    for (const page of pdf.getPages()) {
+      const box = page.getMediaBox();
+      assert.ok(Math.abs(box.width - template.mediaBox.width) < 1 && Math.abs(box.y - template.mediaBox.y) < 1, `${file.filename} page box`);
+    }
     assert.match(pdf.getTitle() ?? '', /Carlton Pharmacy/);
+    const added = imageCount(pdf) - imageCount(await PDFDocument.load(templates[template.id]));
+    assert.ok(added >= 2, `${file.filename} adds the QR and the logo (PNG transparency masks count as images too)`);
   }
 });
 
-test('without a usable logo the poster prints the pharmacy name, and a bad colour falls back', async () => {
+test('the QR and logo slots sit inside each page', () => {
+  for (const template of POSTER_TEMPLATES) {
+    const { x, y, width, height } = template.mediaBox;
+    for (const slots of template.pages) {
+      for (const box of [slots.qr, slots.logo].filter(Boolean)) {
+        assert.ok(box!.x >= x && box!.y >= y && box!.x + box!.width <= x + width && box!.y + box!.height <= y + height, template.id);
+      }
+    }
+  }
+  assert.ok(POSTER_TEMPLATES.find(template => template.id === 'leaflet')!.pages[1]!.qr === null, 'the leaflet back has no QR');
+});
+
+test('a template whose page size has changed is refused, not stamped in the wrong place', async () => {
+  const resized = await PDFDocument.create();
+  resized.addPage([595.28, 841.89]);
+  await assert.rejects(
+    buildPosterPdfs({ pharmacyName: 'Carlton Pharmacy', qr: await qrPng(), templates: { ...templates, poster: await resized.save() } }),
+    /page box has changed|pages, not/,
+  );
+});
+
+test('without a usable logo the pharmacy name is printed, and a broken logo does not stop the pack', async () => {
   const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
   assert.equal(posterImageType(svg), null);
   assert.equal(posterImageType(tinyPng), 'png');
   assert.equal(posterImageType(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0])), 'jpg');
-  const files = await buildPosterPdfs({ pharmacyName: 'A Very Long Pharmacy Name That Has To Wrap Onto More Than One Line', address: '', primary: 'teal', qr: await qrPng(), logo: null });
-  assert.equal(files.length, 3);
-  // A broken logo file doesn't stop the pack either.
-  const broken = await buildPosterPdfs({ pharmacyName: 'Carlton Pharmacy', address: '', primary: '#0f766e', qr: await qrPng(), logo: { bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5]), type: 'png' } });
-  assert.equal(broken.length, 3);
+  assert.equal((await buildPosterPdfs({ pharmacyName: 'A Very Long Pharmacy Name That Has To Wrap Onto More Than One Line', qr: await qrPng(), logo: null, templates })).length, 2);
+  const broken = await buildPosterPdfs({ pharmacyName: 'Carlton Pharmacy', qr: await qrPng(), logo: { bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5]), type: 'png' }, templates });
+  assert.equal(broken.length, 2);
+});
+
+test('the name fits the logo box in at most three lines', async () => {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const box = { width: 81.8, height: 39.9 };
+  for (const name of ['Boots', 'Carlton Road Pharmacy', 'The Very Long Name Community Pharmacy and Wellbeing Centre Ltd']) {
+    const { size, lines } = fitName(name, font, box);
+    assert.ok(lines.length >= 1 && lines.length <= 3, name);
+    assert.ok(lines.length * size * 1.15 <= box.height + 0.01, `${name} height`);
+    for (const line of lines) assert.ok(font.widthOfTextAtSize(line, size) <= box.width + 0.01, `${name}: ${line}`);
+  }
 });
 
 test('text wraps to the width and drops characters the PDF font cannot print', async () => {

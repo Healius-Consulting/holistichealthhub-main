@@ -78,7 +78,7 @@ export const PHARMACY_FAQ: readonly HelpQuestion[] = [
     id: 'posters',
     topic: 'support',
     question: 'Where are my QR code and posters?',
-    answer: 'In Settings & Support, under Assets. You can download your eligibility link, a high-resolution QR code and a pack for your web developer. Posters and leaflets will appear there too.',
+    answer: 'In Settings & Support, under Assets. You can download your eligibility link, a high-resolution QR code and a pack for your web developer, and an A3 poster and A5 leaflet with your logo and QR code to send to your printer.',
   },
   {
     id: 'contact',
