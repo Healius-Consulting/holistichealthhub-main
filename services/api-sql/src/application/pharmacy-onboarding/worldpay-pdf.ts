@@ -22,7 +22,7 @@ const RULE = rgb(0.86, 0.89, 0.87);
 const BAND = rgb(0.93, 0.95, 0.94);
 
 type Row = [label: string, value: string];
-type Section = { title: string; rows: Row[] };
+export type Section = { title: string; rows: Row[] };
 
 /** Standard PDF fonts only cover Latin-1, so anything else becomes '?'. */
 function clean(value: string) {
@@ -139,6 +139,79 @@ export function worldpaySections(form: WorldpayForm): Section[] {
   ];
 }
 
+/** Where a row's text and rule go. Points from the page bottom, as PDF draws them. */
+export type WorldpayLayoutOp =
+  | { kind: 'band'; page: number; y: number; height: number; title: string }
+  | { kind: 'text'; page: number; x: number; y: number; text: string; font: 'regular' | 'bold'; muted: boolean }
+  | { kind: 'rule'; page: number; y: number };
+
+/** Space above the first line's capitals and below the last line's descenders. */
+const ROW_TOP_TO_BASELINE = 13;
+const ROW_BOTTOM_PAD = 9;
+const BAND_HEIGHT = 24;
+/** The lowest a row may reach, clear of the footer. */
+const FLOOR = MARGIN + 20;
+/** A heading keeps at least this many of its rows with it, at the start of a section and when it continues. */
+const KEEP_WITH_HEADING = 2;
+
+function rowHeight(lines: number) {
+  return ROW_TOP_TO_BASELINE + (lines - 1) * LEADING + ROW_BOTTOM_PAD;
+}
+
+/**
+ * Lays the sections out from `top` down, page by page. Each row is a band of its own
+ * with its rule along its bottom edge, so a rule never crosses text. A section that
+ * runs onto a new page repeats its heading there, marked "continued".
+ */
+export function layoutWorldpaySections(
+  sections: Section[],
+  measure: { wrapLabel: (text: string) => string[]; wrapValue: (text: string) => string[] },
+  top: number,
+): WorldpayLayoutOp[] {
+  const ops: WorldpayLayoutOp[] = [];
+  let page = 0;
+  let y = top;
+
+  const heading = (title: string) => {
+    ops.push({ kind: 'band', page, y: y - BAND_HEIGHT, height: BAND_HEIGHT, title });
+    y -= BAND_HEIGHT + 6;
+  };
+  const newPage = () => {
+    page += 1;
+    y = PAGE.height - MARGIN;
+  };
+
+  for (const section of sections) {
+    const rows = section.rows.map(([label, value]) => {
+      const labelLines = measure.wrapLabel(label);
+      const valueLines = measure.wrapValue(value || 'Not given');
+      return { labelLines, valueLines, given: Boolean(value), height: rowHeight(Math.max(labelLines.length, valueLines.length)) };
+    });
+    const opening = BAND_HEIGHT + 6 + rows.slice(0, KEEP_WITH_HEADING).reduce((sum, row) => sum + row.height, 0);
+    if (y - opening < FLOOR) newPage();
+    heading(section.title);
+    for (const [index, row] of rows.entries()) {
+      // A section's last rows move together, so a "continued" heading never has just one row.
+      const tail = rows.slice(index);
+      const tailBreaks = index >= KEEP_WITH_HEADING && tail.length <= KEEP_WITH_HEADING
+        && y - tail.reduce((sum, next) => sum + next.height, 0) < FLOOR;
+      if (y - row.height < FLOOR || tailBreaks) {
+        newPage();
+        heading(`${section.title} (continued)`);
+      }
+      const baseline = y - ROW_TOP_TO_BASELINE;
+      row.labelLines.forEach((text, index) => ops.push({ kind: 'text', page, x: MARGIN, y: baseline - index * LEADING, text, font: 'regular', muted: true }));
+      row.valueLines.forEach((text, index) => ops.push({
+        kind: 'text', page, x: VALUE_X, y: baseline - index * LEADING, text, font: row.given ? 'bold' : 'regular', muted: !row.given,
+      }));
+      y -= row.height;
+      ops.push({ kind: 'rule', page, y });
+    }
+    y -= 14;
+  }
+  return ops;
+}
+
 export async function renderWorldpayPdf(form: WorldpayForm, submittedAt: Date) {
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Worldpay card processing questionnaire - ${clean(form.tradingName)}`);
@@ -146,47 +219,38 @@ export async function renderWorldpayPdf(form: WorldpayForm, submittedAt: Date) {
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-  let page: PDFPage = pdf.addPage([PAGE.width, PAGE.height]);
+  const first = pdf.addPage([PAGE.width, PAGE.height]);
   let y = PAGE.height - MARGIN;
-
-  const newPage = () => {
-    page = pdf.addPage([PAGE.width, PAGE.height]);
-    y = PAGE.height - MARGIN;
-  };
-  const ensure = (height: number) => {
-    if (y - height < MARGIN + 20) newPage();
-  };
-
-  page.drawText('CARD PROCESSING QUESTIONNAIRE', { x: MARGIN, y, size: 8.5, font: bold, color: MUTED });
+  first.drawText('CARD PROCESSING QUESTIONNAIRE', { x: MARGIN, y, size: 8.5, font: bold, color: MUTED });
   y -= 24;
-  page.drawText(clean(form.tradingName), { x: MARGIN, y, size: 20, font: bold, color: GREEN });
+  first.drawText(clean(form.tradingName), { x: MARGIN, y, size: 20, font: bold, color: GREEN });
   y -= 18;
-  page.drawText(clean(`Submitted to Holistic Health Hub on ${londonLongDate(submittedAt)} for Worldpay`), {
+  first.drawText(clean(`Submitted to Holistic Health Hub on ${londonLongDate(submittedAt)} for Worldpay`), {
     x: MARGIN, y, size: SIZE, font: regular, color: MUTED,
   });
-  y -= 26;
+  y -= 22;
 
-  for (const section of worldpaySections(form)) {
-    ensure(48);
-    page.drawRectangle({ x: MARGIN, y: y - 8, width: PAGE.width - MARGIN * 2, height: 24, color: BAND });
-    page.drawText(clean(section.title), { x: MARGIN + 10, y, size: 11, font: bold, color: GREEN });
-    y -= 26;
-    for (const [label, value] of section.rows) {
-      const labelLines = wrap(label, regular, SIZE, LABEL_WIDTH);
-      const valueLines = wrap(value || 'Not given', bold, SIZE, VALUE_WIDTH);
-      const height = Math.max(labelLines.length, valueLines.length) * LEADING + 8;
-      ensure(height);
-      labelLines.forEach((line, index) => page.drawText(line, { x: MARGIN, y: y - index * LEADING, size: SIZE, font: regular, color: MUTED }));
-      valueLines.forEach((line, index) => page.drawText(line, {
-        x: VALUE_X, y: y - index * LEADING, size: SIZE, font: value ? bold : regular, color: value ? INK : MUTED,
-      }));
-      y -= height;
-      page.drawLine({ start: { x: MARGIN, y: y + 5 }, end: { x: PAGE.width - MARGIN, y: y + 5 }, thickness: 0.5, color: RULE });
+  const ops = layoutWorldpaySections(worldpaySections(form), {
+    wrapLabel: text => wrap(text, regular, SIZE, LABEL_WIDTH),
+    wrapValue: text => wrap(text, bold, SIZE, VALUE_WIDTH),
+  }, y);
+  const pages = [first];
+  const pageFor = (index: number) => {
+    while (pages.length <= index) pages.push(pdf.addPage([PAGE.width, PAGE.height]));
+    return pages[index]!;
+  };
+  for (const op of ops) {
+    const page = pageFor(op.page);
+    if (op.kind === 'band') {
+      page.drawRectangle({ x: MARGIN, y: op.y, width: PAGE.width - MARGIN * 2, height: op.height, color: BAND });
+      page.drawText(clean(op.title), { x: MARGIN + 10, y: op.y + 8, size: 11, font: bold, color: GREEN });
+    } else if (op.kind === 'text') {
+      page.drawText(op.text, { x: op.x, y: op.y, size: SIZE, font: op.font === 'bold' ? bold : regular, color: op.muted ? MUTED : INK });
+    } else {
+      page.drawLine({ start: { x: MARGIN, y: op.y }, end: { x: PAGE.width - MARGIN, y: op.y }, thickness: 0.5, color: RULE });
     }
-    y -= 12;
   }
 
-  const pages = pdf.getPages();
   pages.forEach((each, index) => {
     each.drawText(clean(`Confidential: contains bank and identity details. Page ${index + 1} of ${pages.length}`), {
       x: MARGIN, y: MARGIN - 18, size: 7.5, font: regular, color: MUTED,
