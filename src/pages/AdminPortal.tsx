@@ -55,6 +55,7 @@ import { PharmacyRequestRecord, PharmacyRequestRow, usePharmacyRequests } from '
 import { formatRequestDate } from './admin/requestFormat';
 import { ActivationChecklist, DeclinePharmacyPanel, SuspendPharmacyPanel } from './admin/PharmacyActivation';
 import { PharmacySummary } from './admin/PharmacySummary';
+import { GoLiveChecklistCard } from './admin/GoLiveChecklistCard';
 import { performancePeriodStart, type PerformancePeriod } from '../utils/performancePeriod';
 import { PharmacyDetails } from './admin/PharmacyDetails';
 import { LOCAL_PREVIEW_NEW_PHARMACIES } from '../dev/localPharmacyRequests';
@@ -2237,6 +2238,7 @@ export default function AdminPortal() {
                       period={performancePeriod}
                       onPeriodChange={setPerformancePeriod}
                     />
+                    <GoLiveChecklistCard key={selectedPharmacy.id} organisationId={selectedPharmacy.id} />
                   </section>
 
                   <section id="pharmacy-section-identity" className="pharmacy-dashboard__section admin-overview-manage-panel" aria-labelledby="pharmacy-heading-identity">
