@@ -835,7 +835,7 @@ export default function Orders() {
         dispatch({ type: 'ADD_TOAST', message: 'Payment recorded. Order processing will continue.', toastType: 'success' });
       } else {
         dispatch({ type: 'RECORD_MANUAL_PAYMENT', orderId: order.id, tender: form.tender, reference: form.reference, notes: form.notes });
-        dispatch({ type: 'ADD_TOAST', message: 'Training payment recorded locally.', toastType: 'info' });
+        dispatch({ type: 'ADD_TOAST', message: 'Demo payment recorded. Nothing was sent.', toastType: 'info' });
       }
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'Payment could not be recorded.', toastType: 'error' });

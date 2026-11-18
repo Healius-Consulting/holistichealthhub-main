@@ -830,11 +830,11 @@ export default function CreateOrderPage() {
         }
       } else if (paidRedo) {
         dispatch({ type: 'CARRY_OVER_PAYMENT', orderId: activeOrder.id, sourceOrderId: activeOrder.redoContext!.originalOrderId, sourcePrescriptionBackendId: activeOrder.redoContext!.originalPrescriptionBackendId, sourceResolved: redoSourceOrder ? redoSourceOrder.prescriptions.length <= 1 : true });
-        dispatch({ type: 'ADD_TOAST', message: 'Training payment carry-over recorded. No second payment request was created.', toastType: 'info' });
+        dispatch({ type: 'ADD_TOAST', message: 'Demo payment carry-over recorded. No second payment request was created.', toastType: 'info' });
       } else if (selectedPaymentRoute === 'worldpay') {
         if (!canUseWorldpay) return;
         dispatch({ type: 'SEND_PAYMENT_LINK', orderId: activeOrder.id });
-        dispatch({ type: 'ADD_TOAST', message: 'Training Worldpay request created. No external payment was sent.', toastType: 'success' });
+        dispatch({ type: 'ADD_TOAST', message: 'Demo Worldpay request created. No payment was sent.', toastType: 'success' });
       } else {
         dispatch({ type: 'START_MANUAL_PAYMENT', orderId: activeOrder.id });
         dispatch({ type: 'ADD_TOAST', message: 'Training pharmacy payment selected. No external record was created.', toastType: 'success' });
