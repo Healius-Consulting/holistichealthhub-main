@@ -12449,7 +12449,9 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   cursor: not-allowed;
   opacity: 1;
 }
-.eligibility-form-footer p{ display: flex; align-items: center; justify-content: center; gap: 6px; color: #66756e; font-size: 11px; text-align: center; }
+.eligibility-form-footer p{ max-width: 56ch; margin: 0 auto; color: #66756e; font-size: 11px; line-height: 1.6; text-align: center; text-wrap: balance; }
+/* Inline so the icon starts the first line instead of standing apart from wrapped text. */
+.eligibility-form-footer p svg{ display: inline-block; margin-right: 5px; vertical-align: -2px; }
 .eligibility-controller-details{
   display: grid;
   gap: 6px;
@@ -12475,7 +12477,46 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 /* Helper text under a screening question, and the withdraw line under the consent
    boxes: both are guidance rather than a field, so they sit quieter than a label. */
 .eligibility-field-help{ margin: 0 0 10px; color: #5f6f68; font-size: 12px; line-height: 1.55; }
-.eligibility-consent-withdraw{ margin: 0; color: #5f6f68; font-size: 12px; line-height: 1.55; }
+.eligibility-consent-withdraw{ max-width: 60ch; margin: 0 auto; color: #5f6f68; font-size: 12px; line-height: 1.55; text-align: center; text-wrap: balance; }
+
+/* Submitted screen: a clear confirmation, then what happens next and who to contact. */
+.eligibility-card.eligibility-done{ width: min(640px, calc(100% - 32px)); align-items: stretch; gap: 0; padding: 0 !important; overflow: hidden; text-align: left; }
+.eligibility-done__head{ display: grid; justify-items: center; gap: 8px; padding: 36px 32px 28px; text-align: center; background: linear-gradient(180deg, var(--tenant-primary-soft, #eef5f1), #fff); border-bottom: 1px solid #e5ebe8; }
+.eligibility-done__head .eligibility-result-icon, .eligibility-shell--tenant .eligibility-done__head .eligibility-result-icon.pass{ width: 64px; height: 64px; margin-bottom: 6px; color: #fff; background: var(--tenant-primary, #173f33); box-shadow: 0 10px 24px color-mix(in srgb, var(--tenant-primary, #173f33) 28%, transparent); }
+.eligibility-done__head .section-label{ color: var(--tenant-primary, #173f33); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.eligibility-done__head h1{ margin: 0; color: var(--green, #173f33); font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: clamp(28px, 6vw, 36px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.1; outline: none; }
+.eligibility-done__head > p:not(.section-label){ color: #44544d; font-size: 15px; line-height: 1.5; }
+.eligibility-done__head strong{ color: #1c2924; font-weight: 700; }
+.eligibility-done__ref{ display: inline-flex; align-items: center; gap: 10px; margin-top: 8px; padding: 8px 14px; background: #fff; border: 1px dashed color-mix(in srgb, var(--tenant-primary, #173f33) 45%, #d5e2dc); border-radius: 10px; }
+.eligibility-done__ref span{ color: #66756e; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.eligibility-done__ref strong{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; letter-spacing: .06em; }
+.eligibility-done > .banner{ margin: 20px 32px 0; }
+.eligibility-done__body{ display: grid; gap: 20px; padding: 28px 32px 30px; }
+.eligibility-done__body h2{ color: #66756e; font-family: var(--sans, Outfit, sans-serif); font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+.eligibility-done__steps{ display: grid; gap: 0; margin: -8px 0 0; padding: 0; list-style: none; }
+.eligibility-done__steps li{ position: relative; display: grid; grid-template-columns: 30px 1fr; gap: 14px; padding-bottom: 18px; }
+.eligibility-done__steps li:last-child{ padding-bottom: 0; }
+.eligibility-done__steps li:not(:last-child)::before{ content: ''; position: absolute; top: 32px; bottom: 2px; left: 14.5px; width: 1px; background: #dce5e0; }
+.eligibility-done__steps li > span{ display: grid; width: 30px; height: 30px; place-items: center; color: #55665e; background: #fff; border: 1px solid #cfd9d4; border-radius: 50%; font-size: 12px; font-weight: 700; }
+.eligibility-done__steps li.is-done > span{ color: #fff; background: var(--tenant-primary, #173f33); border-color: var(--tenant-primary, #173f33); }
+.eligibility-done__steps strong{ display: block; margin-top: 4px; color: #1c2924; font-size: 14px; }
+.eligibility-done__steps small{ display: block; margin-top: 3px; color: #5f6f68; font-size: 13px; line-height: 1.5; }
+.eligibility-done__contacts{ display: grid; gap: 0; margin: 0; background: #f7faf8; border: 1px solid #dce5e0; border-radius: 14px; }
+.eligibility-done__contacts > div{ display: grid; grid-template-columns: minmax(110px, 32%) 1fr; gap: 12px; padding: 14px 16px; }
+.eligibility-done__contacts > div + div{ border-top: 1px solid #e5ebe8; }
+.eligibility-done__contacts dt{ color: #66756e; font-size: 12px; font-weight: 700; }
+.eligibility-done__contacts dd{ margin: 0; color: #2c3b35; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.eligibility-done__contacts a{ color: var(--tenant-primary, #173f33); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.eligibility-done__note{ display: flex; align-items: flex-start; gap: 8px; color: #66756e; font-size: 12px; line-height: 1.5; }
+.eligibility-done__note svg{ flex: 0 0 auto; margin-top: 1px; }
+.eligibility-done > .eligibility-home{ align-self: center; margin: 0 0 28px; }
+@media (max-width: 560px){
+  .eligibility-card.eligibility-done{ margin-top: 0; }
+  .eligibility-done__head{ padding: 30px 20px 24px; }
+  .eligibility-done__body{ padding: 24px 20px 26px; }
+  .eligibility-done > .banner{ margin: 16px 20px 0; }
+  .eligibility-done__contacts > div{ grid-template-columns: 1fr; gap: 3px; }
+}
 
 /* Phone step mode: one section at a time (see STEPPED_FORM_QUERY in EligibilityApp). */
 .eligibility-form-section.is-step-hidden{ display: none; }
@@ -12485,20 +12526,55 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-stepper__bar{ height: 5px; overflow: hidden; background: #e6ece9; border-radius: 999px; }
 .eligibility-stepper__bar span{ display: block; height: 100%; background: var(--tenant-primary, #173f33); border-radius: inherit; transition: width 220ms ease; }
 .eligibility-form--stepped .eligibility-form-section{ border-bottom: 0; }
+/* Moving between steps scrolls the form's top just below the pinned header, not under it. */
+.eligibility-form--stepped{ scroll-margin-top: calc(var(--eligibility-brand-height, 60px) + 12px); }
 .eligibility-form--stepped .eligibility-section-heading{ grid-template-columns: 1fr; }
 .eligibility-form--stepped .eligibility-section-heading > span{ display: none; }
 .eligibility-form--stepped .eligibility-section-heading h3{ font-size: 22px; outline: none; }
 .eligibility-form--stepped .eligibility-choice{ grid-template-columns: 1fr 1fr; }
 .eligibility-step-error{ margin: 0 20px 14px; }
-.eligibility-step-nav{ display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 0 20px 24px; }
-.eligibility-step-nav .eligibility-submit:only-child{ grid-column: 1 / -1; }
-.eligibility-step-nav .btn{ min-height: 50px; justify-content: center; border-radius: 999px; }
-.eligibility-step-back{ display: inline-flex; align-items: center; justify-self: start; gap: 6px; padding: 6px 0; color: #4d5f57; background: none; border: 0; font-size: 13px; font-weight: 650; cursor: pointer; }
+.eligibility-step-nav{
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, #fff 94%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid #e5ebe8;
+  border-radius: 0 0 17px 17px;
+}
+.eligibility-step-nav .eligibility-submit{ flex: 1 1 auto; min-width: 0; min-height: 50px; margin: 0; }
+.eligibility-step-nav .eligibility-submit svg{ flex: 0 0 auto; }
+/* Back: same height and shape as Continue, outlined in the pharmacy's colour. */
+.eligibility-step-back{
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 50px;
+  padding: 0 18px;
+  color: var(--tenant-primary, #173f33);
+  background: #fff;
+  border: 1.5px solid color-mix(in srgb, var(--tenant-primary, #173f33) 40%, #dce5e0);
+  border-radius: 999px;
+  font-family: var(--sans, Outfit, sans-serif);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.eligibility-step-back:hover, .eligibility-step-back:active{ background: var(--tenant-primary-soft, #eef5f1); border-color: var(--tenant-primary, #173f33); }
+.eligibility-step-back:focus-visible{ outline: 3px solid var(--tenant-focus-ring, rgba(23,63,51,.25)); outline-offset: 2px; }
+.eligibility-form--stepped .eligibility-form-footer{ padding-top: 14px; }
 .eligibility-intro--stepped .eligibility-next-steps{ display: none; }
 .eligibility-intro--stepped h1{ font-size: 28px !important; }
 .eligibility-intro--stepped .eligibility-trust{ margin-top: 18px; padding-top: 16px; }
 .eligibility-intro--stepped .eligibility-intro__note{ margin-top: 16px; padding-top: 14px; }
-.eligibility-section-heading a, .eligibility-consents a{ color: var(--tenant-primary, #173f33); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.eligibility-section-heading a, .eligibility-consents a, .eligibility-consent-withdraw a{ color: var(--tenant-primary, #173f33); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 
 .eligibility-finder-shell{ background: #eaf3ed; }
 .eligibility-card.eligibility-finder{

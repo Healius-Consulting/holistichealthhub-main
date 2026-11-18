@@ -8,6 +8,8 @@ export interface PublicPharmacy {
   superintendent: string;
   address: string;
   primaryColour: string;
+  /** The pharmacy's public phone, from its directory profile. */
+  publicPhone?: string | null;
   /** Controller identity and data-protection contacts, shown in the token form header. */
   icoRegistrationNumber?: string | null;
   privacyContactEmail?: string | null;

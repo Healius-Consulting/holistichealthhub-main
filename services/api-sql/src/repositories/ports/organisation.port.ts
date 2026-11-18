@@ -89,6 +89,8 @@ export interface PublicPharmacy {
   address: string;
   primaryColour: string;
   logoUrl?: string | null;
+  /** From the directory profile, so patients can ring the pharmacy they are applying to. */
+  publicPhone?: string | null;
   icoRegistrationNumber?: string | null;
   privacyContactEmail?: string | null;
   dataProtectionOfficer?: string | null;

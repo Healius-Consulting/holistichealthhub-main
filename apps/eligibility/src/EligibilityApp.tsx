@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, Info, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, Info, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
 import { CONDITIONS, conditionLabel } from '@hhh/domain';
 import { createEligibilitySubmission, createV2Intake, resolvePublicReferralToken, searchPublicPharmacies } from '../../../src/shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
@@ -34,6 +34,7 @@ const LOCAL_PREVIEW_PHARMACY: PublicPharmacy = {
   gphcNumber: '9012345',
   superintendent: 'Local preview',
   address: 'Local preview — no patient data is stored',
+  publicPhone: '01234 567890',
   primaryColour: '#0f766e',
 };
 const HHH_PUBLIC_IDENTITY: PublicPharmacy = {
@@ -41,6 +42,8 @@ const HHH_PUBLIC_IDENTITY: PublicPharmacy = {
   gphcNumber: '', superintendent: '', address: '', primaryColour: '#124f3b',
 };
 const PUBLIC_HOME_HREF = '/';
+/** Patients withdraw an application through HHH, which runs the review for the pharmacy. */
+const HHH_CONTACT_EMAIL = 'info@holistichealthhub.live';
 const PUBLIC_SITE_HREF = 'https://holistichealthhub.live';
 const TERMS_HREF = '/terms';
 const PRIVACY_HREF = '/privacy';
@@ -122,11 +125,12 @@ function directoryFulfilmentLine(result: PublicDirectoryResult) {
  * rather than shown as an empty label.
  */
 function PharmacyControllerDetails({ pharmacy, className }: {
-  pharmacy: Pick<PublicPharmacy, 'name' | 'address' | 'gphcNumber' | 'icoRegistrationNumber' | 'privacyContactEmail' | 'dataProtectionOfficer' | 'complaintsContactEmail' | 'complaintsContactPhone'>;
+  pharmacy: Pick<PublicPharmacy, 'name' | 'address' | 'publicPhone' | 'gphcNumber' | 'icoRegistrationNumber' | 'privacyContactEmail' | 'dataProtectionOfficer' | 'complaintsContactEmail' | 'complaintsContactPhone'>;
   className?: string;
 }) {
   const rows: Array<[string, string]> = [];
   if (pharmacy.address?.trim()) rows.push(['Address', pharmacy.address]);
+  if (pharmacy.publicPhone?.trim()) rows.push(['Phone', pharmacy.publicPhone]);
   if (pharmacy.gphcNumber?.trim()) rows.push(['GPhC premises', pharmacy.gphcNumber]);
   if (pharmacy.icoRegistrationNumber?.trim()) rows.push(['ICO registration', pharmacy.icoRegistrationNumber]);
   if (pharmacy.dataProtectionOfficer?.trim()) rows.push(['Data Protection Officer', pharmacy.dataProtectionOfficer]);
@@ -175,6 +179,7 @@ export default function EligibilityApp() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [complete, setComplete] = useState(false);
+  const [submittedName, setSubmittedName] = useState('');
   const [eligible, setEligible] = useState(false);
   const [selectedConditions, setSelectedConditions] = useState<string[]>([]);
   const [primaryCondition, setPrimaryCondition] = useState('');
@@ -249,7 +254,7 @@ export default function EligibilityApp() {
     setSelectedDirectoryProfileId(result.id);
     setManualProceed(false);
     const pharmacyName = publicDirectoryPharmacyName(result);
-    setPharmacy({ ...HHH_PUBLIC_IDENTITY, id: result.id, name: pharmacyName, tradingName: pharmacyName, gphcNumber: result.gphcNumber, address: result.addressSummary });
+    setPharmacy({ ...HHH_PUBLIC_IDENTITY, id: result.id, name: pharmacyName, tradingName: pharmacyName, gphcNumber: result.gphcNumber, address: result.addressSummary, publicPhone: result.publicPhone ?? null });
   };
 
   const continueManual = () => { setSelectedDirectoryProfileId(null); setPharmacy(HHH_PUBLIC_IDENTITY); setManualProceed(true); };
@@ -295,6 +300,9 @@ export default function EligibilityApp() {
     form?.querySelector<HTMLElement>(`[data-step="${currentStep}"] h3`)?.focus({ preventScroll: true });
   }, [currentStep, stepped]);
 
+  // Screen readers land on the thank-you heading rather than the top of an empty page.
+  useEffect(() => { if (complete) document.getElementById('eligibility-done-title')?.focus({ preventScroll: true }); }, [complete]);
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     // Enter on an earlier step moves on rather than submitting.
@@ -335,6 +343,7 @@ export default function EligibilityApp() {
       // The screening answers are recorded for HHH admin to weigh; every application
       // is received the same way and the decision comes from a person.
       setEligible(true);
+      setSubmittedName(input.firstName.trim());
       setComplete(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
@@ -359,6 +368,8 @@ export default function EligibilityApp() {
   if (!pharmacy) return null;
 
   const brandIdentity = token ? pharmacy : HHH_PUBLIC_IDENTITY;
+  const submitBlocked = !token && !selectedDirectoryProfileId && !manualProceed;
+  const submitButton = <button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || submitBlocked}>{submitting ? 'Submitting securely…' : submitBlocked ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button>;
   const stepClass = (step: EligibilityStep) => (stepped && step !== currentStep ? ' is-step-hidden' : '');
   const maxDateOfBirth = latestEligibleDateOfBirth();
   // "[Pharmacy]" in the approved copy: the trading name on a token form, and a
@@ -366,7 +377,37 @@ export default function EligibilityApp() {
   const pharmacyRef = token ? pharmacy.name : 'your pharmacy';
   const consentPharmacyRef = token ? pharmacy.name : 'my pharmacy';
 
-  if (complete) return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}><EligibilityBrand identity={brandIdentity} token={token} /><section className="eligibility-card eligibility-message"><div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div><p className="section-label">{receipt ? `Case ${receipt.caseReference}` : `Submitted via ${pharmacy.name}`}</p><h1>Thank you — your application has gone to {pharmacy.name}</h1><p>A registered pharmacist will review it and contact you within 3 working days. This is not a diagnosis or guarantee of treatment.</p>{receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}{!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}</section></EligibilityShell>;
+  if (complete) {
+    const caseReference = receipt?.caseReference ?? null;
+    const phone = pharmacy.publicPhone?.trim() || null;
+    return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
+      <EligibilityBrand identity={brandIdentity} token={token} />
+      <section className="eligibility-card eligibility-message eligibility-done" aria-labelledby="eligibility-done-title">
+        <div className="eligibility-done__head">
+          <div className={`eligibility-result-icon ${eligible ? 'pass' : 'review'}`}><CheckCircle2 size={32} /></div>
+          <p className="section-label">Application received</p>
+          <h1 id="eligibility-done-title" tabIndex={-1}>{submittedName ? `Thank you, ${submittedName}` : 'Thank you'}</h1>
+          <p>Your application has gone to <strong>{pharmacy.name}</strong>.</p>
+          {caseReference ? <p className="eligibility-done__ref"><span>Case reference</span><strong>{caseReference}</strong></p> : null}
+        </div>
+        {receipt?.warning && <div className="banner banner-amber">Your selected pharmacy became unavailable, so HHH will allocate your application manually.</div>}
+        <div className="eligibility-done__body">
+          <h2>What happens next</h2>
+          <ol className="eligibility-done__steps">
+            <li className="is-done"><span><Check size={15} aria-hidden="true" /></span><div><strong>Application received</strong><small>Your answers are with {pharmacy.name}.</small></div></li>
+            <li><span>2</span><div><strong>Pharmacy review</strong><small>A registered pharmacist or technician reviews your application and may call, email or text you within 3 working days.</small></div></li>
+            <li><span>3</span><div><strong>Referral to the clinic</strong><small>If suitable, {pharmacyRef} refers you to its partner clinic. The clinic decides whether to see you.</small></div></li>
+          </ol>
+          <dl className="eligibility-done__contacts">
+            <div><dt>Your pharmacy</dt><dd>{pharmacy.name}{phone ? <><br /><a href={`tel:${phone.replace(/[^+\d]/g, '')}`}>{phone}</a></> : null}</dd></div>
+            <div><dt>Changed your mind?</dt><dd>You can withdraw at any time before referral by contacting Holistic Health Hub at <a href={`mailto:${HHH_CONTACT_EMAIL}`}>{HHH_CONTACT_EMAIL}</a>.</dd></div>
+          </dl>
+          <p className="eligibility-done__note"><HeartPulse size={15} aria-hidden="true" /> This is not a diagnosis or a guarantee of treatment.</p>
+        </div>
+        {!token && <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={16} aria-hidden="true" /> Return home</a>}
+      </section>
+    </EligibilityShell>;
+  }
 
   return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
     <EligibilityBrand identity={brandIdentity} token={token} />
@@ -483,12 +524,13 @@ export default function EligibilityApp() {
           <div className="eligibility-section-heading"><span>{token ? '03' : '04'}</span><div><h3 id="eligibility-consent" tabIndex={-1}>Consent and referral</h3><p>Please read the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> and <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>, then confirm:</p></div></div>
           <label>Where did you hear about this service? <em>*</em><select className="input select" name="source" defaultValue="" required><option value="" disabled>Please select an option</option><option>Poster</option><option>Text</option><option>Leaflet</option><option>Website</option><option>Google</option><option>TV ad</option></select></label>
           <div className="eligibility-consents"><label><input type="checkbox" name="consentReferral" required /><span>I am 18 or over, this application is about me and is accurate, and I accept the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink>. <em>*</em></span></label><label><input type="checkbox" name="consentShare" required /><span>I consent to {consentPharmacyRef} and Holistic Health Hub using my health information — including my GP record and automatic screening of my answers — to assess me for referral, as set out in the <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>. <em>*</em></span></label><label className="eligibility-consent--optional"><input type="checkbox" name="marketing" /><span>Email and text me news about this service from {pharmacyRef} and Holistic Health Hub. Unsubscribe any time. <small>Optional</small></span></label></div>
-          <p className="eligibility-consent-withdraw">You can withdraw at any time before referral by contacting {pharmacyRef}.</p>
+          <p className="eligibility-consent-withdraw">After you submit, you can withdraw at any time before referral by contacting Holistic Health Hub at <a href={`mailto:${HHH_CONTACT_EMAIL}`}>{HHH_CONTACT_EMAIL}</a>.</p>
         </section>
         {stepError && <div className="banner banner-red eligibility-step-error" role="alert"><AlertTriangle size={16} /> {stepError}</div>}
-        {!lastStep && <div className="eligibility-step-nav">{stepIndex > 0 && <button className="btn btn-secondary" type="button" onClick={goBack}><ArrowLeft size={16} /> Back</button>}<button className="btn btn-primary eligibility-submit" type="button" onClick={goNext}>Continue <ArrowRight size={16} /></button></div>}
         {lastStep && error && <div className="banner banner-red"><AlertTriangle size={16} /> {error}</div>}
-        {lastStep && <footer className="eligibility-form-footer">{stepped && <button className="eligibility-step-back" type="button" onClick={goBack}><ArrowLeft size={15} /> Back</button>}<button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{!token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>}
+        {/* Phones: one bar on every step, pinned to the bottom of the screen while the step scrolls. */}
+        {stepped && <div className="eligibility-step-nav">{stepIndex > 0 && <button className="eligibility-step-back" type="button" onClick={goBack} aria-label="Back to the previous step"><ArrowLeft size={17} aria-hidden="true" /><span>Back</span></button>}{lastStep ? submitButton : <button className="btn btn-primary eligibility-submit" type="button" onClick={goNext}>Continue <ArrowRight size={16} aria-hidden="true" /></button>}</div>}
+        {lastStep && <footer className="eligibility-form-footer">{!stepped && submitButton}<p>{!token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>}
         {lastStep && <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : <>This service is provided by {token ? pharmacy.name : 'the partner pharmacy you select'}. Website operated by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX · ICO ZB639206 · <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> · <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink> · Protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</>}</p>}
       </form>
     </div>

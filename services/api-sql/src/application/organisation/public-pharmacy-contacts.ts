@@ -19,6 +19,7 @@ export async function attachPublicPharmacyContacts(
     if (!profile) return pharmacy;
     return {
       ...pharmacy,
+      publicPhone: profile.publicPhone?.trim() || null,
       icoRegistrationNumber: profile.icoRegistrationNumber,
       privacyContactEmail: profile.privacyContactEmail,
       dataProtectionOfficer: profile.dataProtectionOfficer,
