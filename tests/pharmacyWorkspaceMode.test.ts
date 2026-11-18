@@ -39,9 +39,15 @@ test('Training, Test and Live are distinct pharmacy workspaces', () => {
   assert.equal(pharmacyWorkspaceStatusLabel('training'), 'Awaiting Curaleaf');
 });
 
-test('dummy pack is local preview only', () => {
-  assert.equal(usesSandboxDummyPack(primary, true), true);
-  assert.equal(usesSandboxDummyPack(primary, false), false);
-  assert.equal(usesSandboxDummyPack(livePharmacy, false), false);
-  assert.equal(usesSandboxDummyPack(null, true), true);
+test('the demo data set shows in Demo mode or local preview, never on a live account otherwise', () => {
+  assert.equal(usesSandboxDummyPack({ demo: true, localPreview: false }), true);
+  assert.equal(usesSandboxDummyPack({ demo: false, localPreview: true }), true);
+  assert.equal(usesSandboxDummyPack({ demo: false, localPreview: false }), false);
+});
+
+test('Demo mode runs any pharmacy as a closed training workspace, whatever its status', () => {
+  assert.equal(resolvePharmacyWorkspaceMode(livePharmacy, { curaleafEstate: 'production', demo: true }), 'training');
+  assert.equal(resolvePharmacyWorkspaceMode(primary, { demo: true }), 'training');
+  assert.equal(resolvePharmacyWorkspaceMode({ ...livePharmacy, status: 'onboarding' }, { demo: true }), 'training');
+  assert.equal(resolvePharmacyWorkspaceMode(livePharmacy, { curaleafEstate: 'production', demo: false }), 'live');
 });

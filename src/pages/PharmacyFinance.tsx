@@ -233,6 +233,8 @@ type LedgerRow = FinanceRow & { realised: boolean; pendingCollection: boolean };
 
 export default function PharmacyFinance() {
   const { state, dispatch } = useApp();
+  // Demo mode and local preview both run on the demo data set, so neither writes to the server.
+  const sandboxPortal = isLocalPortalPreview || state.demoMode;
   const liveWorkspace = isOpenPharmacyWorkspace(state.workspaceMode);
   const [period, setPeriod] = useState<Period>('this-month');
   const [customFrom, setCustomFrom] = useState('');
@@ -248,7 +250,7 @@ export default function PharmacyFinance() {
     setLoading(true);
     setError(null);
     try {
-      const nextReport = isLocalPortalPreview
+      const nextReport = sandboxPortal
         ? localPreviewFinanceReport(period)
         : liveWorkspace
           ? await getPharmacyPrescriptionFinance(periodRange(period, customFrom, customTo))
@@ -261,7 +263,7 @@ export default function PharmacyFinance() {
     } finally {
       if (requestVersion.current === version) setLoading(false);
     }
-  }, [customFrom, customTo, liveWorkspace, period, state.currentOrganisationId]);
+  }, [customFrom, customTo, liveWorkspace, period, sandboxPortal, state.currentOrganisationId]);
 
   useEffect(() => { void load(); }, [load]);
 

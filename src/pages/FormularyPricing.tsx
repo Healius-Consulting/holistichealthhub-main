@@ -14,13 +14,15 @@ const PAGE_SIZE = 25;
 
 export default function FormularyPricing() {
   const { state, dispatch } = useApp();
+  // Demo mode and local preview both run on the demo data set, so neither writes to the server.
+  const sandboxPortal = isLocalPortalPreview || state.demoMode;
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [page, setPage] = useState(1);
   const ledgerRef = useRef<HTMLElement>(null);
   const placementUnlocked = curaleafPlacementUnlocked({
     workspaceMode: state.workspaceMode,
-    localPreview: isLocalPortalPreview,
+    localPreview: sandboxPortal,
     catalogueSource: state.catalogueSource,
     catalogueEnvironment: state.catalogueEnvironment,
     organisationId: state.currentOrganisationId,

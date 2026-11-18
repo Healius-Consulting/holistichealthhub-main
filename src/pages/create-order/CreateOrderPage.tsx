@@ -58,15 +58,19 @@ function serialOccupancyFieldError(reason: string | null, inherited?: boolean) {
 
 export default function CreateOrderPage() {
   const { state, dispatch } = useApp();
+  // Demo mode and local preview both run on the demo data set, so neither writes to the server.
+  const sandboxPortal = isLocalPortalPreview || state.demoMode;
   const organisationPatients = state.crm.filter(candidate => candidate.organisationId === state.currentOrganisationId);
-  const openWorkspace = isLocalPortalPreview || isOpenPharmacyWorkspace(state.workspaceMode);
+  const openWorkspace = sandboxPortal || isOpenPharmacyWorkspace(state.workspaceMode);
   const placementUnlocked = curaleafPlacementUnlocked({
     workspaceMode: state.workspaceMode,
-    localPreview: isLocalPortalPreview,
+    localPreview: sandboxPortal,
     catalogueSource: state.catalogueSource,
     catalogueEnvironment: state.catalogueEnvironment,
     organisationId: state.currentOrganisationId,
   });
+  // Demo runs checkout end to end on the demo data: the training branches below record it locally.
+  const checkoutUnlocked = placementUnlocked || state.demoMode;
   const orderablePatients = organisationPatients.filter(patient => canLinkPatientOnOrderDraft(patient, openWorkspace));
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const canUseWorldpay = organisation?.worldpay.status === 'connected';
@@ -88,7 +92,7 @@ export default function CreateOrderPage() {
   useEffect(() => {
     setReplacementPreview(null);
     setReplacementPreviewError(null);
-    if (!replacementSourceBackendId || !replacementPrescriptionBackendId || replacementDraftId == null || isLocalPortalPreview) return;
+    if (!replacementSourceBackendId || !replacementPrescriptionBackendId || replacementDraftId == null || sandboxPortal) return;
     let current = true;
     getPrescriptionReplacementPreview(replacementSourceBackendId, replacementPrescriptionBackendId)
       .then(preview => {
@@ -100,7 +104,7 @@ export default function CreateOrderPage() {
       })
       .catch(error => { if (current) setReplacementPreviewError(error instanceof Error ? error.message : 'The carry-over could not be prepared.'); });
     return () => { current = false; };
-  }, [replacementSourceBackendId, replacementPrescriptionBackendId, replacementDraftId, replacementPreviewNonce, dispatch]);
+  }, [replacementSourceBackendId, replacementPrescriptionBackendId, replacementDraftId, replacementPreviewNonce, dispatch, sandboxPortal]);
   const patient = activeOrder?.patientId ? organisationPatients.find(candidate => candidate.id === activeOrder.patientId) ?? null : null;
   const [selectedRxId, setSelectedRxId] = useState<number | null>(null);
   const [changingPatient, setChangingPatient] = useState(false);
@@ -134,7 +138,7 @@ export default function CreateOrderPage() {
   const [mobileSheetOpen, setMobileSheetOpen] = useState(false);
   const [serialByRxId, setSerialByRxId] = useState<Record<number, { allowed: boolean; reason: string | null; pending: boolean }>>({});
   const [confirmingRemoveRxId, setConfirmingRemoveRxId] = useState<number | null>(null);
-  const durableDraftEnabled = isApiConfigured && !isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode);
+  const durableDraftEnabled = isApiConfigured && !sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode);
   const durableDraftPayload = useMemo(() => activeOrder ? {
     localOrderId: activeOrder.id,
     patientId: activeOrder.patientId,
@@ -165,10 +169,10 @@ export default function CreateOrderPage() {
   }, [dispatch, state.currentOrganisationId]);
 
   useEffect(() => {
-    if (!isLocalPortalPreview || !state.currentOrganisationId) return;
+    if (!sandboxPortal || !state.currentOrganisationId) return;
     if (state.orders.some(order => order.organisationId === state.currentOrganisationId && order.payment.status === 'none')) return;
     dispatch({ type: 'NEW_ORDER' });
-  }, [dispatch, state.currentOrganisationId, state.orders]);
+  }, [dispatch, state.currentOrganisationId, state.orders, sandboxPortal]);
 
   useEffect(() => {
     // Wait until Worldpay status has been synced before demoting a draft off Worldpay.
@@ -285,7 +289,7 @@ export default function CreateOrderPage() {
       return next;
     });
     if (!manuals.length) return;
-    if (isLocalPortalPreview || !isApiConfigured) {
+    if (sandboxPortal || !isApiConfigured) {
       setSerialByRxId(current => {
         const next = { ...current };
         for (const rx of manuals) next[rx.id] = { allowed: true, reason: 'ok', pending: false };
@@ -330,12 +334,13 @@ export default function CreateOrderPage() {
     activeOrder?.redoContext?.originalBackendId,
     serialOccupancySignature,
     state.currentOrganisationId,
+    sandboxPortal,
   ]);
 
   const serialAvailability = selectedRx
     ? serialByRxId[selectedRx.id] ?? { allowed: false, reason: null, pending: false }
     : { allowed: false, reason: null, pending: false };
-  const requiresLiveCuraleafEvidence = isOpenPharmacyWorkspace(state.workspaceMode) && !isLocalPortalPreview;
+  const requiresLiveCuraleafEvidence = isOpenPharmacyWorkspace(state.workspaceMode) && !sandboxPortal;
   const hasPrescriptionRecords = Boolean(activeOrder?.prescriptions.length);
   const allManualSerialsAllowed = !activeOrder || activeOrder.prescriptions.every(rx => {
     if (rx.entryMode !== 'manual') return true;
@@ -614,7 +619,7 @@ export default function CreateOrderPage() {
   };
 
   const readClinicBarcode = async (rxId: number, fileId: string) => {
-    if (!activeOrder || isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode)) return;
+    if (!activeOrder || sandboxPortal || !isOpenPharmacyWorkspace(state.workspaceMode)) return;
     setReadingRxId(rxId);
     setScanError(null);
     try {
@@ -674,10 +679,10 @@ export default function CreateOrderPage() {
   };
 
   const createPaymentRequest = async () => {
-    if (!activeOrder || !patient || !readyForPayment || !placementUnlocked) return;
+    if (!activeOrder || !patient || !readyForPayment || !checkoutUnlocked) return;
     setCheckoutBusy(true);
     try {
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode)) {
         if (!quoteAvailable) throw new Error('A complete in-stock Curaleaf quote is required before creating the live order.');
         const pricingQuote = latestQuote;
         const quoteItems = Array.isArray(pricingQuote?.items) ? pricingQuote.items : [];
@@ -846,7 +851,7 @@ export default function CreateOrderPage() {
     if (!activeOrder) return;
     const prescription = activeOrder.prescriptions.find(candidate => candidate.id === rxId);
     if (!prescription) return;
-    if (isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode)) {
+    if (sandboxPortal || !isOpenPharmacyWorkspace(state.workspaceMode)) {
       if (prescription.entryMode === 'manual') {
         dispatch({ type: 'SET_RX_FILE', orderId: activeOrder.id, rxId, fileName: file.name, fileId: `training-file-${activeOrder.id}-${rxId}` });
         dispatch({ type: 'ADD_TOAST', message: 'Manual prescription attached for training. Nothing was uploaded.', toastType: 'info' });
@@ -900,7 +905,7 @@ export default function CreateOrderPage() {
     if (!prescription?.copyFileName) return;
     setFileRemovalBusyRxId(rxId);
     try {
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && prescription.fileId) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode) && prescription.fileId) {
         const draftId = await ensureDurableDraft(activeOrder, durableDraftPayload ?? {});
         const prescriptions = activeOrder.prescriptions.map(candidate => candidate.id === rxId
           ? { ...candidate, copyFileName: null, fileId: null, clinicScanId: undefined, curaleafPrescriptionId: undefined }
@@ -946,7 +951,7 @@ export default function CreateOrderPage() {
       );
       const quote = snapshot
         ? snapshot.quote
-        : isLocalPortalPreview
+        : sandboxPortal
           ? await getDevCuraleafQuote(currentQuoteItems)
           : await getCuraleafQuote(state.currentOrganisationId, currentQuoteItems);
       if (requestVersion !== quoteRequestVersion.current) return;
@@ -1314,7 +1319,7 @@ export default function CreateOrderPage() {
                   selectedRx={selectedRx}
                   rxSubStep={wizard.progress.rxSubStep}
                   routeChosen={wizard.progress.routeChosen}
-                  isLocalPreview={isLocalPortalPreview}
+                  isLocalPreview={sandboxPortal}
                   workspaceMode={state.workspaceMode}
                   catalogue={state.catalogue}
                   scanError={scanError}
@@ -1345,7 +1350,7 @@ export default function CreateOrderPage() {
                   catalogueError={state.catalogueError}
                   catalogueSource={state.catalogueSource}
                   catalogueEnvironment={state.catalogueEnvironment}
-                  paymentPreview={!placementUnlocked}
+                  paymentPreview={!checkoutUnlocked}
                   onRetryCatalogue={() => dispatch({ type: 'REQUEST_CATALOGUE_REFRESH' })}
                   editingClinicFormulary={editingClinicFormularyRxId === selectedRx?.id}
                   onToggleEditFormulary={() => setEditingClinicFormularyRxId(selectedRx?.id ?? null)}
@@ -1368,7 +1373,7 @@ export default function CreateOrderPage() {
                   wholesaleKnown={wholesaleKnown}
                   pharmacyDeliveryCurrentlyEnabled={organisation.pharmacyDeliveryEnabled}
                   workspaceMode={state.workspaceMode}
-                  paymentPreview={!placementUnlocked}
+                  paymentPreview={!checkoutUnlocked}
                   quoteAvailable={quoteAvailable}
                   quoteBusy={quoteBusy}
                   quoteCurrent={quoteCurrent}

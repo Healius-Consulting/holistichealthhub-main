@@ -1,4 +1,4 @@
-import { ArrowUpRight, BadgePoundSterling, FilePlus, Home, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
+import { ArrowUpRight, BadgePoundSterling, FilePlus, FlaskConical, Home, LogIn, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
 
 
 import { useAuth } from '../auth/useAuth';
@@ -6,10 +6,12 @@ import { useApp, type Screen } from '../context/AppContext';
 import HhhBrandMark from './HhhBrandMark';
 import WorkspaceNavigation, { type WorkspaceNavGroup } from './WorkspaceNavigation';
 import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
+import { useDemoMode } from './useDemoMode';
 
 export default function Navigation() {
   const { state, dispatch } = useApp();
   const { signOutStaff } = useAuth();
+  const demo = useDemoMode();
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const tenantOrders = state.orders.filter(order => order.organisationId === organisation.id);
   const isAdminViewingClient = state.staffSession?.role === 'admin';
@@ -57,7 +59,12 @@ export default function Navigation() {
       mobilePrimaryKeys={['home', 'create', 'orders', 'patients']}
       onNavigate={screen => dispatch({ type: 'SET_SCREEN', screen })}
       brand={{ title: 'Holistic Health Hub', subtitle: 'Pharmacy operations', partner: organisation.name, logo: <HhhBrandMark /> }}
-      user={{ initials: staffInitials, name: staffName, role: isAdminViewingClient ? 'HHH administrator' : `Pharmacy staff · ${pharmacyWorkspaceStatusLabel(state.workspaceMode)}` }}
+      user={{ initials: staffInitials, name: staffName, role: isAdminViewingClient ? 'HHH administrator' : `Pharmacy staff · ${state.demoMode ? 'Demo' : pharmacyWorkspaceStatusLabel(state.workspaceMode)}` }}
+      footerAction={demo.available ? {
+        label: demo.active ? 'Return to live' : 'Demo mode',
+        icon: demo.active ? <LogIn size={14} /> : <FlaskConical size={14} />,
+        onClick: demo.active ? demo.returnToLive : demo.turnOn,
+      } : undefined}
       exitAction={{
         label: isAdminViewingClient ? 'Return to administration' : 'Sign out',
         icon: isAdminViewingClient ? <ArrowUpRight size={14} /> : <LogOut size={14} />,

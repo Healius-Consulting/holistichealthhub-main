@@ -32,6 +32,7 @@ import { resolvePharmacyWorkspaceMode } from './training/workspace';
 import LocalPortalSwitcher from './dev/LocalPortalSwitcher';
 import CommandPalette from './components/CommandPalette';
 import WorkspaceTour from './components/WorkspaceTour';
+import { DemoModeBanner, DemoModeSessionBridge } from './components/DemoMode';
 import { appPathPrefix, isCurrentSurfacePath } from './auth/surface-path';
 import { surfaceRelativePath, surfaceRoutePath } from './routing/surfaceRoute';
 
@@ -211,6 +212,7 @@ function StaffWorkspace() {
   const workspaceMode = resolvePharmacyWorkspaceMode(organisation, {
     curaleafEstate: state.catalogueEnvironment,
     localPreview: isLocalPortalPreview,
+    demo: state.demoMode,
   });
   const paused = organisation?.status === 'paused';
   const initialPathHandled = useRef(false);
@@ -303,7 +305,8 @@ function StaffWorkspace() {
       <Navigation />
       <div className="app-main">
         <Header />
-        {state.workspaceMode === 'training' && (
+        <DemoModeBanner />
+        {state.workspaceMode === 'training' && !state.demoMode && (
           <div className="training-mode-banner" role="status">
             <strong>{isLocalPortalPreview ? 'Training' : 'Awaiting Curaleaf'}</strong>
             <span>
@@ -313,13 +316,13 @@ function StaffWorkspace() {
             </span>
           </div>
         )}
-        {state.workspaceMode === 'test' && !paused && (
+        {state.workspaceMode === 'test' && !paused && !state.demoMode && (
           <div className="test-mode-banner" role="status">
             <strong>Test</strong>
             <span>This pharmacy is using Curaleaf and Worldpay sandbox keys. Patients, orders and payments are real for this workspace, against those sandboxes only. Live credentials under Settings & Support → Curaleaf move it to Live.</span>
           </div>
         )}
-        {paused && (
+        {paused && !state.demoMode && (
           <div className="paused-mode-banner" role="status">
             <strong>Paused</strong>
             <span>Intake is off and this pharmacy cannot run live orders until HHH unpauses it.</span>
@@ -353,6 +356,7 @@ function AppContent() {
   return (
     <>
       <AuthSessionBridge />
+      <DemoModeSessionBridge />
       <SessionExpiryNotice />
       {authState.phase === 'unconfigured' && <ConfigurationRequired />}
       {authState.phase === 'loading' && <AuthLoading />}

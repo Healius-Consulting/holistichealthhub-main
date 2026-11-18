@@ -1,4 +1,5 @@
 import { shouldDispatchSessionEnded } from './sessionEnded';
+import { assertNotDemoWrite } from './demoGuard';
 import type { PharmsmartOnboardingRequestState, PharmsmartPrefill } from '../auth/types';
 import type {
   CuraleafConnectionStatus,
@@ -126,6 +127,7 @@ export function describeApiError(error: unknown, fallback: string) {
 async function performApiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const securityHeaders = securityTokenProvider ? await securityTokenProvider() : {};
   const method = (init?.method || 'GET').toUpperCase();
+  assertNotDemoWrite(method, path);
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     ...init,
     credentials: 'include',

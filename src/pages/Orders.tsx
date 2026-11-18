@@ -420,6 +420,8 @@ function searchFieldsFor(record: OrderRecord, scope: OrderSearchScope): Array<st
 
 export default function Orders() {
   const { state, dispatch } = useApp();
+  // Demo mode and local preview both run on the demo data set, so neither writes to the server.
+  const sandboxPortal = isLocalPortalPreview || state.demoMode;
   const [activeFilter, setActiveFilter] = useState<StageFilter>('current');
   const [query, setQuery] = useState('');
   const [searchScope, setSearchScope] = useState<OrderSearchScope>('all');
@@ -644,7 +646,7 @@ export default function Orders() {
     if (cancellationBusyOrderId) return;
     setCancellationBusyOrderId(order.id);
     try {
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
         const result = await requestPortalOrderCancellation(order.backendId, {
           organisationId: state.currentOrganisationId,
           reason: 'other',
@@ -666,7 +668,7 @@ export default function Orders() {
 
   const handleQuoteReviewResolve = async (order: PatientOrder, action: 'absorb' | 'refresh') => {
     if (quoteReviewBusyOrderId) return;
-    const trainingLocal = isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId;
+    const trainingLocal = sandboxPortal || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId;
     if (trainingLocal) {
       const review = order.quoteReview;
       if (action === 'refresh') {
@@ -721,7 +723,7 @@ export default function Orders() {
     setRefundBusyOrderId(order.id);
     try {
       let submittedMethod: NonNullable<PatientOrder['refund']>['method'] | null = null;
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
         const refund = await createPortalOrderRefund(order.backendId, {
           organisationId: state.currentOrganisationId,
           reason: 'patient_cancelled',
@@ -767,7 +769,7 @@ export default function Orders() {
     setRefundBusyOrderId(order.id);
     try {
       let recordedStatus: NonNullable<PatientOrder['refund']>['status'] = 'completed';
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode) && order.backendId) {
         const refund = await confirmPortalOrderRefund(order.backendId, order.refund.id, { organisationId: state.currentOrganisationId, externalReference });
         recordedStatus = refund.status;
         dispatch({ type: 'SET_ORDER_REFUND', orderId: order.id, refund });
@@ -818,7 +820,7 @@ export default function Orders() {
     if (!form.confirmed) return;
     setSubmittingOrderId(order.id);
     try {
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode)) {
         if (!order.backendId) throw new Error('This order has not finished saving. Refresh and try again.');
         if (!form.reference.trim()) throw new Error('Enter the pharmacy receipt reference before recording a live payment.');
         const tender = ({ 'epos-card': 'epos', cash: 'cash', 'bank-transfer': 'bank_transfer', other: 'other' } as const)[form.tender];
@@ -875,7 +877,7 @@ export default function Orders() {
     }
     setFulfilmentBusyRxId(prescription.id);
     try {
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode)) {
         const targetShipmentId = shipmentId ?? prescription.shipmentId ?? prescription.shipmentIds?.[0];
         if (!targetShipmentId || !order.backendId) {
           throw new Error('This consignment is not linked to the order yet. Refresh and try again.');
@@ -926,7 +928,7 @@ export default function Orders() {
     }
     setHandoutBusy(true);
     try {
-      if (!isLocalPortalPreview && isOpenPharmacyWorkspace(state.workspaceMode)) {
+      if (!sandboxPortal && isOpenPharmacyWorkspace(state.workspaceMode)) {
         if (!order.backendId) throw new Error('This order has not finished saving. Refresh and try again.');
         await handoutPortalOrder(order.backendId, {
           organisationId: state.currentOrganisationId,
@@ -954,7 +956,7 @@ export default function Orders() {
   };
 
   const handlePaymentLinkResend = async (order: PatientOrder) => {
-    if (isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId || paymentLinkBusyOrderId) return;
+    if (sandboxPortal || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId || paymentLinkBusyOrderId) return;
     setPaymentLinkBusyOrderId(order.id);
     try {
       const session = await resendWorldpayPaymentLink(order.backendId, { organisationId: state.currentOrganisationId });
@@ -968,7 +970,7 @@ export default function Orders() {
   };
 
   const handleManualPlace = async (order: PatientOrder, prescription: Prescription) => {
-    if (isLocalPortalPreview || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId || !prescription.backendId) return;
+    if (sandboxPortal || !isOpenPharmacyWorkspace(state.workspaceMode) || !order.backendId || !prescription.backendId) return;
     setFulfilmentBusyRxId(prescription.id);
     try {
       await placePrescriptionManually(order.backendId, prescription.backendId, state.currentOrganisationId);
@@ -1532,6 +1534,8 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
   const [copiedDetailKey, setCopiedDetailKey] = useState<string | null>(null);
   const [viewingPrescriptionCopy, setViewingPrescriptionCopy] = useState(false);
   const { state, dispatch } = useApp();
+  // Demo mode and local preview both run on the demo data set, so neither writes to the server.
+  const sandboxPortal = isLocalPortalPreview || state.demoMode;
   const { order, patient, stage } = record;
   const prescriptionWorkItems = buildPrescriptionWorkItems(record).filter(item => item.prescription);
   const defaultPrescriptionItem = [...prescriptionWorkItems].sort((left, right) => orderRecordPriority(left.record) - orderRecordPriority(right.record))[0] ?? null;
@@ -1615,7 +1619,7 @@ function OrderDetail({ record, selectedPrescriptionId, onSelectPrescription, now
     if (!fileId || viewingPrescriptionCopy) return;
     setViewingPrescriptionCopy(true);
     try {
-      if (!isPersistedPrescriptionFileId(fileId) || isLocalPortalPreview) {
+      if (!isPersistedPrescriptionFileId(fileId) || sandboxPortal) {
         if (!openTrainingPrescriptionPreview()) {
           dispatch({ type: 'ADD_TOAST', message: 'Allow pop-ups to view the prescription copy.', toastType: 'warning' });
         }
