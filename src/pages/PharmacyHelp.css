@@ -1,0 +1,37 @@
+/* Brief 2.10: the pharmacy Help page. */
+.pharmacy-help { display: grid; grid-template-columns: minmax(0, 1fr) 280px; align-items: start; gap: 16px; max-width: 1080px; }
+.pharmacy-help__faq { display: grid; gap: 14px; padding: 18px 20px; }
+.pharmacy-help__faq > header h2 { margin: 0; color: var(--text-primary); font-size: 16px; }
+.pharmacy-help__faq > header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12.5px; }
+.pharmacy-help__search { position: relative; display: block; }
+.pharmacy-help__search svg { position: absolute; top: 50%; left: 11px; color: var(--text-secondary); transform: translateY(-50%); pointer-events: none; }
+.pharmacy-help__search input { width: 100%; padding-left: 34px; }
+.pharmacy-help__topic { display: grid; gap: 0; }
+.pharmacy-help__topic h3 { margin: 4px 0 6px; color: var(--text-secondary); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pharmacy-help__question { border-top: 1px solid var(--border); }
+.pharmacy-help__question:last-child { border-bottom: 1px solid var(--border); }
+.pharmacy-help__question summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 2px; color: var(--text-primary); font-size: 13.5px; font-weight: 600; list-style: none; cursor: pointer; }
+.pharmacy-help__question summary::-webkit-details-marker { display: none; }
+.pharmacy-help__question summary::after { content: '+'; flex: 0 0 auto; color: var(--text-secondary); font-size: 16px; font-weight: 400; line-height: 1; }
+.pharmacy-help__question[open] summary::after { content: '−'; }
+.pharmacy-help__question summary:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+.pharmacy-help__question p { margin: 0 2px 12px; color: var(--text-secondary); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.pharmacy-help__empty { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.pharmacy-help__side { display: grid; gap: 16px; }
+.pharmacy-help__card { display: grid; gap: 10px; padding: 16px 18px; }
+.pharmacy-help__card h2 { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--text-primary); font-size: 14px; }
+.pharmacy-help__card p { margin: 0; color: var(--text-secondary); font-size: 12.5px; }
+.pharmacy-help__card ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.pharmacy-help__card li { display: grid; gap: 2px; }
+.pharmacy-help__card li a { display: inline-flex; align-items: center; gap: 5px; color: var(--tenant-primary); font-size: 13px; font-weight: 600; }
+.pharmacy-help__card small { color: var(--text-secondary); font-size: 11.5px; line-height: 1.4; }
+.pharmacy-help__card .btn { justify-self: start; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; overflow-wrap: anywhere; }
+.pharmacy-help__link { display: inline-flex; align-items: center; gap: 5px; justify-self: start; padding: 0; border: 0; background: none; color: var(--tenant-primary); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+.pharmacy-help__link:hover { text-decoration: underline; }
+
+@media (max-width: 900px) {
+  .pharmacy-help { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 680px) {
+  .pharmacy-help__faq { padding: 14px 16px; }
+}

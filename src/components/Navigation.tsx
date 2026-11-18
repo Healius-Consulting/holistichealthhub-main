@@ -1,4 +1,4 @@
-import { ArrowUpRight, BadgePoundSterling, FilePlus, FlaskConical, Home, LogIn, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
+import { ArrowUpRight, BadgePoundSterling, CircleHelp, FilePlus, FlaskConical, Home, LogIn, LogOut, Package, Settings, Tags, Users } from 'lucide-react';
 
 
 import { useAuth } from '../auth/useAuth';
@@ -45,6 +45,7 @@ export default function Navigation() {
       label: 'Settings and support',
       placement: 'bottom',
       items: [
+        { key: 'help', label: 'Help', shortLabel: 'Help', icon: <CircleHelp size={17} /> },
         { key: 'settings', label: 'Settings & Support', shortLabel: 'Settings', icon: <Settings size={17} /> },
       ],
     },

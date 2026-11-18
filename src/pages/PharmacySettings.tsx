@@ -29,6 +29,7 @@ import { curaleafCatalogueEstateLabel } from '../utils/catalogueEstate';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { POSTER_TEMPLATES_READY, posterPackAvailable } from '../utils/posterPackRules';
 import { requestWorkspaceTourReplay } from '../training/workspaceTourPersist';
 import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
 import './PharmacySettings.css';
@@ -247,6 +248,22 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
   }, [formUrl]);
 
   const notify = (message: string) => dispatch({ type: 'ADD_TOAST', message, toastType: 'success' });
+  // The poster pack stays off until HHH's templates and wording are in; local preview shows it to check the layout.
+  const postersOn = POSTER_TEMPLATES_READY || isLocalPortalPreview;
+  const postersOpen = posterPackAvailable(organisation.status);
+  const [postersBusy, setPostersBusy] = useState(false);
+  const savePosterPack = async () => {
+    setPostersBusy(true);
+    try {
+      const { downloadPosterPack } = await import('../utils/posterPackDownload');
+      await downloadPosterPack(organisation, formUrl);
+      notify('Poster pack saved: an A4 poster, an A5 leaflet and an A6 counter card.');
+    } catch {
+      dispatch({ type: 'ADD_TOAST', message: 'The poster pack could not be made. Try again.', toastType: 'error' });
+    } finally {
+      setPostersBusy(false);
+    }
+  };
 
   const refreshCuraleaf = async () => {
     setCuraleafRefreshing(true);
@@ -712,13 +729,29 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                     <Download size={13} /> Download .zip
                   </button>
                 </li>
-                <li className="pharmacy-details__switch-row is-muted">
-                  <span>
-                    <strong>More approved materials</strong>
-                    <small>Posters and leaflets will appear here when they are ready.</small>
-                  </span>
-                  <span className="pharmacy-details__tag">Coming soon</span>
-                </li>
+                {postersOn ? (
+                  <li className="pharmacy-details__switch-row">
+                    <span>
+                      <strong>Poster pack</strong>
+                      <small>
+                        {postersOpen
+                          ? 'An A4 poster, an A5 leaflet and an A6 counter card with your logo and QR code, as print-ready PDFs to send to your printer.'
+                          : 'Available again once your eligibility link is back on.'}
+                      </small>
+                    </span>
+                    <button className="btn btn-sm" type="button" disabled={!formUrl || !postersOpen || postersBusy} onClick={() => void savePosterPack()}>
+                      <Download size={13} /> {postersBusy ? 'Making…' : 'Download .zip'}
+                    </button>
+                  </li>
+                ) : (
+                  <li className="pharmacy-details__switch-row is-muted">
+                    <span>
+                      <strong>Poster pack</strong>
+                      <small>An A4 poster, an A5 leaflet and a counter card with your logo and QR code will appear here when HHH's designs are ready.</small>
+                    </span>
+                    <span className="pharmacy-details__tag">Coming soon</span>
+                  </li>
+                )}
               </ul>
             </section>
         </div>

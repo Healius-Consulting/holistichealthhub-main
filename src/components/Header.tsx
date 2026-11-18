@@ -13,6 +13,7 @@ const SCREEN_TITLES: Record<string, string> = {
   settings: 'Settings & support',
   contacts: 'Settings & support',
   onboarding: 'Onboarding',
+  help: 'Help',
 };
 
 export default function Header() {

@@ -12,6 +12,7 @@ import AdminPortal from './pages/AdminPortal';
 import PharmacySettings from './pages/PharmacySettings';
 import PharmacyFinance from './pages/PharmacyFinance';
 import PharmacyOnboarding from './pages/PharmacyOnboarding';
+import PharmacyHelp from './pages/PharmacyHelp';
 import { AwaitingSetupBanner, PreLiveScreen } from './components/PreLiveAccount';
 import { preLiveLockedScreen } from './onboarding/branchOnboarding';
 
@@ -92,7 +93,7 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
   };
 }
 
-const pharmacyScreens = new Set<Screen>(['home', 'create', 'orders', 'patients', 'formulary', 'finance', 'settings', 'contacts', 'onboarding']);
+const pharmacyScreens = new Set<Screen>(['home', 'create', 'orders', 'patients', 'formulary', 'finance', 'settings', 'contacts', 'onboarding', 'help']);
 
 function pharmacyScreenFromPath(): Screen {
   const segment = surfaceRelativePath(window.location.pathname, appPathPrefix)?.split('/').filter(Boolean)[0];
@@ -279,6 +280,7 @@ function StaffWorkspace() {
       case 'formulary': return <FormularyPricing />;
       case 'create': return <CreateOrder />;
       case 'onboarding': return <PharmacyOnboarding />;
+      case 'help': return <PharmacyHelp />;
       case 'orders':
       case 'patients':
         // Keep both CRM boards mounted so "Open patient" / "Open order" can open the
