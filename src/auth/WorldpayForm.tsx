@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ApiRequestError, submitWorldpayForm } from '../shared/api';
+import { ApiRequestError, submitWorldpayForm, describeApiError } from '../shared/api';
 import { PrefillReviewBanner } from './PrefillReviewBanner';
 
 /** Worldpay's own answers, already filled in on their spreadsheet. The pharmacy can change them. */
@@ -195,7 +195,7 @@ export function WorldpayForm({
       });
       onSubmitted(result);
     } catch (cause) {
-      setError(cause instanceof ApiRequestError ? cause.message : 'The form could not be sent. Try again.');
+      setError(cause instanceof ApiRequestError ? describeApiError(cause, 'The form could not be sent. Try again.') : 'The form could not be sent. Try again.');
       setBusy(false);
     }
   };

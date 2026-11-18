@@ -1,4 +1,4 @@
-import { sameUuid } from '../common/uuid.js';
+import { nameBasedUuid, sameUuid, uuidKey } from '../common/uuid.js';
 
 /**
  * The go-live checklist (brief 2.5, list fixed by Shay on 18 Nov 2026).
@@ -173,6 +173,16 @@ export function checklistDefinition(key: string): ChecklistItemDefinition | null
 }
 
 /** A stored tick. Only self-declared items are stored; auto items are worked out each time. */
+/**
+ * The row id for a branch's checklist item, the same every time. Data Connect's upsert
+ * matches on the table key (`id`), so a tick must name it: a random id would add a row
+ * that the unique (branch, item) index then refuses. A name-based UUID from the branch
+ * and item key gives that one row a fixed id.
+ */
+export function checklistItemId(organisationId: string, itemKey: string): string {
+  return nameBasedUuid('go-live-checklist', uuidKey(organisationId), itemKey);
+}
+
 export interface ChecklistTickRecord {
   organisationId: string;
   itemKey: string;

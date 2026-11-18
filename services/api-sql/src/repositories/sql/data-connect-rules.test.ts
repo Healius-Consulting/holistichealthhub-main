@@ -13,6 +13,9 @@ import { fileURLToPath } from 'node:url';
  * 2. "cannot mix _and/_or/_not with specific fields". A filter can't put _or
  *    (or _and/_not) beside plain fields at the same level; wrap them all in _and.
  *    This broke the Worldpay reconciliation job.
+ * 3. "key id is required in upsert but is not set in data". An `_upsert` matches on
+ *    the table's key, so its data must name every key field. This broke ticking the
+ *    go-live checklist, whose table is keyed on a generated `id`.
  *
  * Every GraphQL operation the API, the connectors and the one-off scripts send is
  * scanned for both.
@@ -123,4 +126,48 @@ test('the checks spot both mistakes', () => {
   const wrapped = 'payments(where: {\n  _and: [{ route: { eq: WORLDPAY } }, { _or: [{ status: { eq: PENDING } }] }]\n})';
   assert.deepEqual(filtersMixingLogicWithFields(mixed), [1]);
   assert.deepEqual(filtersMixingLogicWithFields(wrapped), []);
+});
+
+/** Each table's key fields: `id` unless `@table(key: ...)` names others. */
+export function tableKeys(schema: string): Map<string, string[]> {
+  const keys = new Map<string, string[]>();
+  for (const match of schema.matchAll(/^type\s+(\w+)\s+@table(\([^)]*\))?/gm)) {
+    const args = match[2] ?? '';
+    const named = /key:\s*(\[[^\]]*\]|"[^"]*")/.exec(args)?.[1];
+    keys.set(match[1]!, named ? [...named.matchAll(/"(\w+)"/g)].map(found => found[1]!) : ['id']);
+  }
+  return keys;
+}
+
+/** Upserts whose data leaves out part of the table key. A reference key is given by its target's key, as `organisationId` or `conditionCode`. */
+export function upsertsMissingKey(source: string, keys: Map<string, string[]>): string[] {
+  const offenders: string[] = [];
+  for (const match of source.matchAll(/\b(\w+)_upsert\s*\(\s*data:\s*\{/g)) {
+    const table = match[1]!.charAt(0).toUpperCase() + match[1]!.slice(1);
+    const key = keys.get(table);
+    if (!key) continue;
+    const given = new Set(topLevelKeys(source, match.index! + match[0].length - 1));
+    const missing = key.filter(field => !given.has(field) && ![...given].some(name => name.startsWith(field) && /^[A-Z]/.test(name.slice(field.length))));
+    if (missing.length) offenders.push(`${match[1]}_upsert (missing ${missing.join(', ')})`);
+  }
+  return offenders;
+}
+
+const schemaKeys = tableKeys(readFileSync(join(repoRoot, 'dataconnect/schema/schema.gql'), 'utf8'));
+
+test('every upsert names its table key', () => {
+  assert.ok(schemaKeys.get('OrganisationChecklistItem')?.includes('id'));
+  const offenders = files.flatMap(file => upsertsMissingKey(readFileSync(file, 'utf8'), schemaKeys)
+    .map(name => `${relative(repoRoot, file)}: ${name}`));
+  assert.deepEqual(offenders, []);
+});
+
+test('the upsert check spots a missing key', () => {
+  const keys = tableKeys('type Thing @table {\n  id: UUID!\n}\ntype Pair @table(key: ["order", "prescription"]) {\n  order: Order!\n}');
+  assert.deepEqual(keys.get('Pair'), ['order', 'prescription']);
+  assert.deepEqual(upsertsMissingKey('thing_upsert(data: {\n  name: $name\n})', keys), ['thing_upsert (missing id)']);
+  assert.deepEqual(upsertsMissingKey('thing_upsert(data: {\n  id: $id\n  name: $name\n})', keys), []);
+  assert.deepEqual(upsertsMissingKey('pair_upsert(data: {\n  orderId: $o\n  prescription: { id: $p }\n})', keys), []);
+  assert.deepEqual(upsertsMissingKey('pair_upsert(data: {\n  orderId: $o\n  prescriptionCode: $p\n})', keys), []);
+  assert.deepEqual(upsertsMissingKey('pair_upsert(data: {\n  orderId: $o\n  prescriptions: $p\n})', keys), ['pair_upsert (missing prescription)']);
 });

@@ -1,5 +1,5 @@
 import { dataConnect } from '../../bootstrap/firebase.js';
-import { asUuid } from '../../domain/common/uuid.js';
+import { asUuid, nameBasedUuid, uuidKey } from '../../domain/common/uuid.js';
 import type {
   OrganisationRecord,
   OrganisationRepositoryPort,
@@ -281,6 +281,7 @@ const LIST_SETUP_TASKS_GQL = `
 
 const UPSERT_SETUP_TASK_GQL = `
   mutation UpsertSetupTask(
+    $id: UUID!
     $organisationId: UUID!
     $taskCode: String!
     $completed: Boolean!
@@ -289,6 +290,7 @@ const UPSERT_SETUP_TASK_GQL = `
     $completedAt: Timestamp
   ) {
     setupTask_upsert(data: {
+      id: $id
       organisationId: $organisationId
       taskCode: $taskCode
       completed: $completed
@@ -722,8 +724,13 @@ export class SqlOrganisationRepository implements OrganisationRepositoryPort {
     completedByUid?: string | null;
   }): Promise<void> {
     const completedAt = params.completed ? new Date().toISOString() : null;
+    // The upsert matches on the table key (id), so it must name the row: the existing
+    // one for this branch and task (rows backfilled from Firestore have random ids), or
+    // a fixed name-based id for a new one.
+    const existing = (await this.listSetupTasks(params.organisationId)).find(task => task.taskCode === params.taskCode);
     await dataConnect.executeGraphql<any, any>(UPSERT_SETUP_TASK_GQL, {
       variables: {
+        id: existing?.id ?? nameBasedUuid('setup-task', uuidKey(params.organisationId), params.taskCode),
         organisationId: params.organisationId,
         taskCode: params.taskCode,
         completed: params.completed,

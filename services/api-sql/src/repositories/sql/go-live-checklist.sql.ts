@@ -1,6 +1,6 @@
 import { dataConnect } from '../../bootstrap/firebase.js';
 import { asUuid } from '../../domain/common/uuid.js';
-import type { ChecklistTickRecord } from '../../domain/organisation/go-live-checklist.js';
+import { checklistItemId, type ChecklistTickRecord } from '../../domain/organisation/go-live-checklist.js';
 
 const LIST_TICKS_GQL = `
   query ListOrganisationChecklistItems($organisationId: UUID!) {
@@ -14,9 +14,13 @@ const LIST_TICKS_GQL = `
   }
 `;
 
-/** One row per branch and item (unique on both), so a tick or untick replaces the last one. */
+/**
+ * One row per branch and item (unique on both), so a tick or untick replaces the last one.
+ * The upsert matches on the table key, so it carries the row's fixed id (see checklistItemId).
+ */
 const UPSERT_TICK_GQL = `
   mutation UpsertOrganisationChecklistItem(
+    $id: UUID!
     $organisationId: UUID!
     $itemKey: String!
     $status: String!
@@ -24,6 +28,7 @@ const UPSERT_TICK_GQL = `
     $tickedAt: Timestamp
   ) {
     organisationChecklistItem_upsert(data: {
+      id: $id
       organisationId: $organisationId
       itemKey: $itemKey
       status: $status
@@ -75,8 +80,8 @@ export class SqlGoLiveChecklistRepository {
   }
 
   async saveTick(tick: ChecklistTickRecord): Promise<void> {
-    await dataConnect.executeGraphql<unknown, ChecklistTickRecord>(UPSERT_TICK_GQL, {
-      variables: { ...tick, organisationId: asUuid(tick.organisationId) },
+    await dataConnect.executeGraphql<unknown, ChecklistTickRecord & { id: string }>(UPSERT_TICK_GQL, {
+      variables: { ...tick, id: checklistItemId(tick.organisationId, tick.itemKey), organisationId: asUuid(tick.organisationId) },
     });
   }
 

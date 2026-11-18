@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ApiRequestError, acceptPartnerTerms } from '../shared/api';
+import { ApiRequestError, acceptPartnerTerms, describeApiError } from '../shared/api';
 import type { PharmsmartTermsRequest } from './types';
 
 const ROLES = [
@@ -97,7 +97,7 @@ export function PartnerTermsForm({
       else await acceptPartnerTerms({ onboardingRequestId: request.id, ...signed, ...(pharmsmartTicket ? { pharmsmartTicket } : {}) });
       onAccepted();
     } catch (cause) {
-      setError(cause instanceof ApiRequestError ? cause.message : 'The terms could not be accepted. Try again.');
+      setError(cause instanceof ApiRequestError ? describeApiError(cause, 'The terms could not be accepted. Try again.') : 'The terms could not be accepted. Try again.');
       setBusy(false);
     }
   };

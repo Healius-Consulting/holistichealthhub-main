@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   buildGoLiveChecklist,
+  checklistItemId,
   GO_LIVE_CHECKLIST,
   worldpayValidatedAt,
   type ChecklistSignals,
@@ -160,5 +161,20 @@ describe('self-declared ticks and percentages', () => {
     ]);
     assert.equal(view.sections[0]!.percent, 100);
     assert.equal(view.requiredComplete, true);
+  });
+});
+
+describe('checklistItemId', () => {
+  it('gives a branch and item the same row id every time, whatever the uuid spelling', () => {
+    const dashed = 'cd177d0c-0a19-42a5-9a75-107fcf0be08b';
+    const compact = 'cd177d0c0a1942a59a75107fcf0be08b';
+    assert.equal(checklistItemId(dashed, 'sops_approved'), checklistItemId(compact, 'sops_approved'));
+    assert.match(checklistItemId(dashed, 'sops_approved'), /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it('gives each item and each branch its own row', () => {
+    const branch = 'cd177d0c-0a19-42a5-9a75-107fcf0be08b';
+    assert.notEqual(checklistItemId(branch, 'sops_approved'), checklistItemId(branch, 'staff_training'));
+    assert.notEqual(checklistItemId(branch, 'sops_approved'), checklistItemId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'sops_approved'));
   });
 });

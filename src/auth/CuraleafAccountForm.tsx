@@ -3,20 +3,9 @@ import { createPortal } from 'react-dom';
 import { ApiRequestError, submitCuraleafAccountForm } from '../shared/api';
 import type { PharmsmartWelcome } from './types';
 import { PrefillReviewBanner } from './PrefillReviewBanner';
+import { CURALEAF_FIELD_LABELS, curaleafFormProblems, curaleafProblemsFromServer, describeCuraleafProblems } from './curaleafFormRules';
 
-const LABELS: Record<keyof Fields, string> = {
-  pharmacistName: 'Pharmacist / contact name',
-  pharmacyName: 'Pharmacy name',
-  registeredCompanyName: 'Registered company name',
-  invoiceAddress: 'Invoice address',
-  deliveryAddress: 'Delivery address',
-  gphcNumber: 'GPhC premises number',
-  pharmacyEmail: 'Pharmacy email',
-  accountsEmail: 'Accounts email',
-  pharmacyPhone: 'Pharmacy telephone',
-  accountsPhone: 'Accounts telephone',
-  faxNumber: 'Fax number',
-};
+const LABELS: Record<keyof Fields, string> = CURALEAF_FIELD_LABELS;
 
 export type CuraleafFormValues = Fields;
 
@@ -122,6 +111,13 @@ export function CuraleafAccountForm({
       form.reportValidity();
       return;
     }
+    // The server's rules are stricter than the browser's (lengths, a full email address).
+    const problems = curaleafFormProblems(fields);
+    if (problems.length) {
+      setError(describeCuraleafProblems(problems));
+      form.querySelector<HTMLElement>(`[name="${problems[0].field}"]`)?.focus();
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -138,9 +134,12 @@ export function CuraleafAccountForm({
         setBusy(false);
         return;
       }
-      const message = cause instanceof ApiRequestError
-        ? cause.message
-        : 'The form could not be submitted. Try again.';
+      const named = cause instanceof ApiRequestError && cause.details.length ? curaleafProblemsFromServer(cause.details, fields) : [];
+      const message = named.length
+        ? describeCuraleafProblems(named)
+        : cause instanceof ApiRequestError
+          ? cause.message
+          : 'The form could not be submitted. Try again.';
       setError(message);
       setBusy(false);
     }
