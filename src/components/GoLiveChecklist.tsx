@@ -12,6 +12,7 @@ import {
 } from '../shared/goLiveChecklist';
 import { goLiveChecklistSource } from '../training/demoChecklist';
 import { isDemoActive } from '../training/demoMode';
+import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import './GoLiveChecklist.css';
 
 /**
@@ -25,7 +26,8 @@ export function useGoLiveChecklist() {
   const demo = state.demoMode;
   const source = useMemo(() => goLiveChecklistSource({
     organisationId,
-    demoActive: () => demo || isDemoActive(),
+    // Local preview has no API, so it ticks the local demo store too.
+    demoActive: () => demo || isDemoActive() || isLocalPortalPreview,
     server: { load: getGoLiveChecklist, setItem: setGoLiveChecklistItem },
   }), [demo, organisationId]);
   const [checklist, setChecklist] = useState<Checklist | null>(null);

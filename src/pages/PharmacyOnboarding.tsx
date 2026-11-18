@@ -3,6 +3,7 @@ import { Check, Clock3, ExternalLink } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../auth/useAuth';
 import PharmacyAccountStatus from '../components/PharmacyAccountStatus';
+import GoLiveChecklist from '../components/GoLiveChecklist';
 import { useDemoMode } from '../components/useDemoMode';
 import { PartnerTermsForm } from '../auth/PartnerTermsForm';
 import { WorldpayForm } from '../auth/WorldpayForm';
@@ -12,14 +13,6 @@ import { acceptBranchPartnerTerms, submitBranchWorldpayForm } from '../shared/ap
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { onboardingQueueItems, pharmacyAccountState, type OnboardingQueueItem } from '../onboarding/branchOnboarding';
 import { useBranchOnboarding } from '../onboarding/useBranchOnboarding';
-
-/**
- * Step 5's go-live checklist goes here, on this page, so the pharmacy sees its onboarding
- * in one place. Until then this renders nothing.
- */
-function GoLiveChecklistSlot() {
-  return null;
-}
 
 /** The pharmacy's Onboarding page: its account status, then the onboarding queue. */
 export default function PharmacyOnboarding() {
@@ -31,6 +24,8 @@ export default function PharmacyOnboarding() {
   const { view, error, update } = useBranchOnboarding(organisation?.id, pharmacyStaff);
   const [termsOpen, setTermsOpen] = useState(false);
   const [worldpayOpen, setWorldpayOpen] = useState(false);
+  // Sending the Terms or the Worldpay form changes the checklist's own ticks, so it reloads.
+  const [checklistVersion, setChecklistVersion] = useState(0);
 
   if (!organisation) return null;
   const live = view?.live ?? organisation.status === 'live';
@@ -105,7 +100,16 @@ export default function PharmacyOnboarding() {
         </ol>
       </section>
 
-      <GoLiveChecklistSlot />
+      <section className="card pharmacy-onboarding__checklist" aria-labelledby="pharmacy-onboarding-checklist-title">
+        <header>
+          <h2 id="pharmacy-onboarding-checklist-title">Go-live checklist</h2>
+          <p>Tick what your pharmacy has done. Nothing on the platform waits on this list.</p>
+        </header>
+        <GoLiveChecklist
+          key={checklistVersion}
+          onOpenWorldpayForm={formsBlocked ? undefined : () => (view?.termsAccepted ? setWorldpayOpen(true) : setTermsOpen(true))}
+        />
+      </section>
 
       <PartnerTermsForm
         open={termsOpen}
@@ -120,6 +124,7 @@ export default function PharmacyOnboarding() {
         onAccepted={() => {
           setTermsOpen(false);
           update({ termsAccepted: true, termsAcceptedAt: new Date().toISOString() });
+          setChecklistVersion(version => version + 1);
           // Straight on to Worldpay, which the pharmacy can close to do later.
           setWorldpayOpen(true);
         }}
@@ -133,6 +138,7 @@ export default function PharmacyOnboarding() {
         onSubmitted={result => {
           setWorldpayOpen(false);
           update({ worldpaySubmittedAt: result.submittedAt });
+          setChecklistVersion(version => version + 1);
           dispatch({ type: 'ADD_TOAST', message: 'Worldpay form sent. Our team will pass it on to Worldpay.', toastType: 'success' });
         }}
       />
