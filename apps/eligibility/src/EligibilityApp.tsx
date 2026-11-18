@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, Info, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, ClipboardCheck, HeartPulse, Home, Info, LoaderCircle, LockKeyhole, MapPin, Search, ShieldCheck } from 'lucide-react';
 import { CONDITIONS, conditionLabel } from '@hhh/domain';
 import { createEligibilitySubmission, createV2Intake, resolvePublicReferralToken, searchPublicPharmacies } from '../../../src/shared/api';
 import { HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL, publicDirectoryPharmacyName, type EligibilitySubmissionInput, type PostcodeSearchReceipt, type PublicDirectoryResult, type PublicPharmacy, type V2IntakeReceipt } from '../../../src/shared/contracts';
@@ -9,6 +9,21 @@ import { parseEligibilityReferralRoute } from './referralRoute';
 import { latestEligibleDateOfBirth } from '../../../src/utils/eligibilityAge';
 
 const LOCAL_PREVIEW_TOKEN = 'local-preview';
+/** Phones get the form one section at a time; matches the 560px mobile stylesheet. */
+const STEPPED_FORM_QUERY = '(max-width: 560px)';
+type EligibilityStep = 'pharmacy' | 'about' | 'health' | 'consent';
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, [query]);
+  return matches;
+}
 const HHH_MARK = '/holistic-health-hub-mark.png';
 const LOCAL_PREVIEW_PHARMACY: PublicPharmacy = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -76,7 +91,6 @@ function EligibilityBrand({
         {token
           ? <a className="eligibility-home" href={PUBLIC_SITE_HREF} target="_blank" rel="noopener noreferrer" aria-label="More info about Holistic Health Hub (opens in a new tab)"><Info size={15} aria-hidden="true" /> More info</a>
           : <a className="eligibility-home" href={PUBLIC_HOME_HREF}><Home size={15} aria-hidden="true" /> Return home</a>}
-        <span className="eligibility-brand__secure"><LockKeyhole size={14} /> Private and secure</span>
       </div>
     </div>
   </header>;
@@ -168,6 +182,14 @@ export default function EligibilityApp() {
   const [treatmentHistory, setTreatmentHistory] = useState<'' | 'yes' | 'no'>('');
   const [psychHistory, setPsychHistory] = useState<'' | 'yes' | 'no'>('');
   const conditionMenuRef = useRef<HTMLDetailsElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const stepped = useMediaQuery(STEPPED_FORM_QUERY);
+  const steps: EligibilityStep[] = token ? ['about', 'health', 'consent'] : ['pharmacy', 'about', 'health', 'consent'];
+  const [stepIndex, setStepIndex] = useState(0);
+  const [stepError, setStepError] = useState('');
+  const currentStep = steps[Math.min(stepIndex, steps.length - 1)]!;
+  const lastStep = !stepped || stepIndex >= steps.length - 1;
+  const stepMoved = useRef(false);
   const themeStyle = tenantThemeVariables(pharmacy?.primaryColour ?? '#0f766e') as CSSProperties;
   const pharmacyThemed = Boolean(token && (pharmacy || loading));
 
@@ -232,15 +254,56 @@ export default function EligibilityApp() {
 
   const continueManual = () => { setSelectedDirectoryProfileId(null); setPharmacy(HHH_PUBLIC_IDENTITY); setManualProceed(true); };
 
+  /** Returns the problem with the chosen conditions, or '' when they are fine. */
+  const conditionProblem = () => {
+    if (selectedConditions.length < 1 || selectedConditions.length > 3) return 'Select between one and three conditions.';
+    if (!primaryCondition || !selectedConditions.includes(primaryCondition)) return 'Choose one of your selected conditions as the primary condition.';
+    return '';
+  };
+
+  /** Checks only the fields on the step on screen, so a patient fixes one screen at a time. */
+  const validateCurrentStep = () => {
+    setStepError('');
+    if (currentStep === 'pharmacy' && !selectedDirectoryProfileId && !manualProceed) {
+      setStepError(search ? 'Choose a pharmacy to continue.' : 'Search for your postcode, then choose a pharmacy to continue.');
+      return false;
+    }
+    if (currentStep === 'health') {
+      const problem = conditionProblem();
+      if (problem) { setConditionError(problem); return false; }
+    }
+    const section = formRef.current?.querySelector<HTMLElement>(`[data-step="${currentStep}"]`);
+    const fields = section ? [...section.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select, textarea')] : [];
+    const invalid = fields.find(field => field.willValidate && !field.checkValidity());
+    if (invalid) { invalid.reportValidity(); return false; }
+    return true;
+  };
+
+  const goToStep = (index: number) => {
+    stepMoved.current = true;
+    setStepError('');
+    setStepIndex(Math.max(0, Math.min(index, steps.length - 1)));
+  };
+  const goNext = () => { if (validateCurrentStep()) goToStep(stepIndex + 1); };
+  const goBack = () => goToStep(stepIndex - 1);
+
+  useEffect(() => {
+    if (!stepped || !stepMoved.current) return;
+    stepMoved.current = false;
+    const form = formRef.current;
+    form?.scrollIntoView({ block: 'start' });
+    form?.querySelector<HTMLElement>(`[data-step="${currentStep}"] h3`)?.focus({ preventScroll: true });
+  }, [currentStep, stepped]);
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Enter on an earlier step moves on rather than submitting.
+    if (!lastStep) { goNext(); return; }
     if (!pharmacy || (!token && (!search || (!selectedDirectoryProfileId && !manualProceed)))) return;
-    if (selectedConditions.length < 1 || selectedConditions.length > 3) {
-      setConditionError('Select between one and three conditions.');
-      return;
-    }
-    if (!primaryCondition || !selectedConditions.includes(primaryCondition)) {
-      setConditionError('Choose one of your selected conditions as the primary condition.');
+    const problem = conditionProblem();
+    if (problem) {
+      setConditionError(problem);
+      if (stepped) goToStep(steps.indexOf('health'));
       return;
     }
     setSubmitting(true); setError('');
@@ -296,6 +359,7 @@ export default function EligibilityApp() {
   if (!pharmacy) return null;
 
   const brandIdentity = token ? pharmacy : HHH_PUBLIC_IDENTITY;
+  const stepClass = (step: EligibilityStep) => (stepped && step !== currentStep ? ' is-step-hidden' : '');
   const maxDateOfBirth = latestEligibleDateOfBirth();
   // "[Pharmacy]" in the approved copy: the trading name on a token form, and a
   // generic reference on the master site, where the choice is made in section 01.
@@ -307,7 +371,7 @@ export default function EligibilityApp() {
   return <EligibilityShell themeStyle={themeStyle} pharmacyThemed={pharmacyThemed}>
     <EligibilityBrand identity={brandIdentity} token={token} />
     <div className="eligibility-layout">
-      <aside className="eligibility-intro">
+      {(!stepped || stepIndex === 0) && <aside className={`eligibility-intro${stepped ? ' eligibility-intro--stepped' : ''}`}>
         <p className="section-label">Private pre-screening · about 2 minutes</p>
         <h1>Could specialist care be right for you?</h1>
         <p className="eligibility-intro__lead">Answer a few confidential questions so {pharmacyRef} can review whether a referral may be appropriate.</p>
@@ -322,11 +386,13 @@ export default function EligibilityApp() {
         </div>
         <p className="eligibility-intro__note"><HeartPulse size={16} /> This check is not a diagnosis and does not guarantee a consultation or prescription.</p>
         {token ? <PharmacyControllerDetails pharmacy={pharmacy} className="eligibility-controller-details--intro" /> : null}
-      </aside>
-      <form className="eligibility-card eligibility-form" onSubmit={submit}>
-        <header className="eligibility-form-header"><span><ClipboardCheck size={17} /> Eligibility check</span><h2>Tell us a little about yourself</h2><p>Fields marked with an asterisk are required.</p></header>
-        {!token && <section className="eligibility-form-section eligibility-location-section" aria-labelledby="eligibility-location">
-          <div className="eligibility-section-heading"><span>01</span><div><h3 id="eligibility-location">Choose your pharmacy</h3><p>Choose the pharmacy you are applying to. Nothing is shared with any other pharmacy unless you agree.</p></div></div>
+      </aside>}
+      <form ref={formRef} className={`eligibility-card eligibility-form${stepped ? ' eligibility-form--stepped' : ''}`} onSubmit={submit} noValidate={stepped && !lastStep}>
+        {stepped
+          ? <div className="eligibility-stepper"><p><span>Step {stepIndex + 1} of {steps.length}</span><span>Fields marked * are required</span></p><div className="eligibility-stepper__bar" role="progressbar" aria-label="Form progress" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={stepIndex + 1}><span style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }} /></div></div>
+          : <header className="eligibility-form-header"><span><ClipboardCheck size={17} /> Eligibility check</span><h2>Tell us a little about yourself</h2><p>Fields marked with an asterisk are required.</p></header>}
+        {!token && <section className={`eligibility-form-section eligibility-location-section${stepClass('pharmacy')}`} data-step="pharmacy" aria-labelledby="eligibility-location">
+          <div className="eligibility-section-heading"><span>01</span><div><h3 id="eligibility-location" tabIndex={-1}>Choose your pharmacy</h3><p>Choose the pharmacy you are applying to. Nothing is shared with any other pharmacy unless you agree.</p></div></div>
           <div className="eligibility-location-search">
             <label htmlFor="eligibility-postcode-search">UK postcode <em>*</em><input id="eligibility-postcode-search" className="input" name="postcode" value={searchPostcode} onChange={event => {
               const next = event.target.value;
@@ -384,14 +450,14 @@ export default function EligibilityApp() {
               <span><strong>{HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL}</strong><small>Your application stays with HHH until an appropriate pharmacy is confirmed.</small></span>
               {manualProceed ? <span className="eligibility-hhh-allocation__selected" role="status"><CheckCircle2 size={16} /> Selected</span> : <button className="btn btn-secondary" type="button" onClick={continueManual}>Choose {HOLISTIC_HEALTH_HUB_ALLOCATION_LABEL}</button>}
             </div>
-          </div> : <div className="eligibility-location-required" role="status"><Search size={17} /><span><strong>Search before submitting</strong><small>Your remaining form fields are available below, but a pharmacy choice is required before submission.</small></span></div>}
+          </div> : <div className="eligibility-location-required" role="status"><Search size={17} /><span><strong>{stepped ? 'Search to find your pharmacy' : 'Search before submitting'}</strong><small>{stepped ? 'Enter your postcode above, then choose a pharmacy to continue.' : 'Your remaining form fields are available below, but a pharmacy choice is required before submission.'}</small></span></div>}
         </section>}
-        <section className="eligibility-form-section" aria-labelledby="eligibility-about-you">
-          <div className="eligibility-section-heading"><span>{token ? '01' : '02'}</span><div><h3 id="eligibility-about-you">About you</h3><p>Your details let {pharmacyRef} contact you about your application.</p></div></div>
+        <section className={`eligibility-form-section${stepClass('about')}`} data-step="about" aria-labelledby="eligibility-about-you">
+          <div className="eligibility-section-heading"><span>{token ? '01' : '02'}</span><div><h3 id="eligibility-about-you" tabIndex={-1}>About you</h3><p>Your details let {pharmacyRef} contact you about your application.</p></div></div>
           <div className="eligibility-form-grid"><label>First name <em>*</em><input className="input" name="firstName" required autoComplete="given-name" /></label><label>Surname <em>*</em><input className="input" name="surname" required autoComplete="family-name" /></label><label>Date of birth <em>*</em><input className="input" name="dob" type="date" required max={maxDateOfBirth} onInvalid={event => event.currentTarget.setCustomValidity(event.currentTarget.validity.rangeOverflow ? 'You must be 18 or over to apply.' : '')} onInput={event => event.currentTarget.setCustomValidity('')} /></label>{token && <label>Postcode <em>*</em><input className="input" name="postcode" required autoComplete="postal-code" /></label>}<label>Email <em>*</em><input className="input" name="email" type="email" required autoComplete="email" /></label><label>Mobile number <em>*</em><input className="input" name="mobile" type="tel" required autoComplete="tel" /></label></div>
         </section>
-        <section className="eligibility-form-section" aria-labelledby="eligibility-health-needs">
-          <div className="eligibility-section-heading"><span>{token ? '02' : '03'}</span><div><h3 id="eligibility-health-needs">Your health needs</h3><p>Select up to three conditions, then choose the main one.</p></div></div>
+        <section className={`eligibility-form-section${stepClass('health')}`} data-step="health" aria-labelledby="eligibility-health-needs">
+          <div className="eligibility-section-heading"><span>{token ? '02' : '03'}</span><div><h3 id="eligibility-health-needs" tabIndex={-1}>Your health needs</h3><p>Select up to three conditions, then choose the main one.</p></div></div>
           <fieldset className={`eligibility-condition-field ${conditionError ? 'has-error' : ''}`} aria-describedby={conditionError ? 'condition-error' : undefined}>
             <legend>Conditions you would like support with <em>*</em></legend>
             <details ref={conditionMenuRef} className="eligibility-condition-menu">
@@ -413,15 +479,17 @@ export default function EligibilityApp() {
           <fieldset><legend>Have you tried at least two licensed treatments or therapies? <em>*</em></legend><div className="eligibility-choice"><label><input type="radio" name="tried2" value="yes" required checked={treatmentHistory === 'yes'} onChange={() => setTreatmentHistory('yes')} /><span><strong>Yes</strong><small>I have tried two or more</small></span></label><label><input type="radio" name="tried2" value="no" checked={treatmentHistory === 'no'} onChange={() => setTreatmentHistory('no')} /><span><strong>No</strong><small>Not yet or I am unsure</small></span></label></div></fieldset>
           <fieldset><legend>Have you or an immediate family member been diagnosed with psychosis or schizophrenia? <em>*</em></legend><p className="eligibility-field-help">We record only your answer, not who the family member is.</p><div className="eligibility-choice"><label><input type="radio" name="psychExclusion" value="yes" required checked={psychHistory === 'yes'} onChange={() => setPsychHistory('yes')} /><span><strong>Yes</strong><small>This applies to me or family</small></span></label><label><input type="radio" name="psychExclusion" value="no" checked={psychHistory === 'no'} onChange={() => setPsychHistory('no')} /><span><strong>No</strong><small>This does not apply</small></span></label></div></fieldset>
         </section>
-        <section className="eligibility-form-section eligibility-form-section--consent" aria-labelledby="eligibility-consent">
-          <div className="eligibility-section-heading"><span>{token ? '03' : '04'}</span><div><h3 id="eligibility-consent">Consent and referral</h3><p>Please read the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> and <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>, then confirm:</p></div></div>
+        <section className={`eligibility-form-section eligibility-form-section--consent${stepClass('consent')}`} data-step="consent" aria-labelledby="eligibility-consent">
+          <div className="eligibility-section-heading"><span>{token ? '03' : '04'}</span><div><h3 id="eligibility-consent" tabIndex={-1}>Consent and referral</h3><p>Please read the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> and <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>, then confirm:</p></div></div>
           <label>Where did you hear about this service? <em>*</em><select className="input select" name="source" defaultValue="" required><option value="" disabled>Please select an option</option><option>Poster</option><option>Text</option><option>Leaflet</option><option>Website</option><option>Google</option><option>TV ad</option></select></label>
           <div className="eligibility-consents"><label><input type="checkbox" name="consentReferral" required /><span>I am 18 or over, this application is about me and is accurate, and I accept the <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink>. <em>*</em></span></label><label><input type="checkbox" name="consentShare" required /><span>I consent to {consentPharmacyRef} and Holistic Health Hub using my health information — including my GP record and automatic screening of my answers — to assess me for referral, as set out in the <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink>. <em>*</em></span></label><label className="eligibility-consent--optional"><input type="checkbox" name="marketing" /><span>Email and text me news about this service from {pharmacyRef} and Holistic Health Hub. Unsubscribe any time. <small>Optional</small></span></label></div>
           <p className="eligibility-consent-withdraw">You can withdraw at any time before referral by contacting {pharmacyRef}.</p>
         </section>
-        {error && <div className="banner banner-red"><AlertTriangle size={16} /> {error}</div>}
-        <footer className="eligibility-form-footer"><button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{!token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>
-        <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : <>This service is provided by {token ? pharmacy.name : 'the partner pharmacy you select'}. Website operated by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX · ICO ZB639206 · <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> · <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink> · Protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</>}</p>
+        {stepError && <div className="banner banner-red eligibility-step-error" role="alert"><AlertTriangle size={16} /> {stepError}</div>}
+        {!lastStep && <div className="eligibility-step-nav">{stepIndex > 0 && <button className="btn btn-secondary" type="button" onClick={goBack}><ArrowLeft size={16} /> Back</button>}<button className="btn btn-primary eligibility-submit" type="button" onClick={goNext}>Continue <ArrowRight size={16} /></button></div>}
+        {lastStep && error && <div className="banner banner-red"><AlertTriangle size={16} /> {error}</div>}
+        {lastStep && <footer className="eligibility-form-footer">{stepped && <button className="eligibility-step-back" type="button" onClick={goBack}><ArrowLeft size={15} /> Back</button>}<button className="btn btn-primary eligibility-submit" type="submit" disabled={submitting || (!token && !selectedDirectoryProfileId && !manualProceed)}>{submitting ? 'Submitting securely…' : !token && !selectedDirectoryProfileId && !manualProceed ? 'Select a pharmacy before submitting' : 'Submit eligibility check'}</button><p>{!token && !selectedDirectoryProfileId && !manualProceed ? <><MapPin size={13} /> Search and select a pharmacy in section 01.</> : <><LockKeyhole size={13} /> Your answers go securely to {pharmacyRef}. Holistic Health Hub’s registered pharmacists and technicians help the pharmacy review them.</>}</p></footer>}
+        {lastStep && <p className="eligibility-legal">{isLocalPreview ? 'Local preview only — this form does not transmit or store the information entered.' : <>This service is provided by {token ? pharmacy.name : 'the partner pharmacy you select'}. Website operated by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX · ICO ZB639206 · <LegalLink href={TERMS_HREF}>Terms of Use</LegalLink> · <LegalLink href={PRIVACY_HREF}>Privacy Notice</LegalLink> · Protected by reCAPTCHA; the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</>}</p>}
       </form>
     </div>
   </EligibilityShell>;

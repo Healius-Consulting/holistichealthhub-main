@@ -12148,19 +12148,6 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.eligibility-brand__secure{
-  display: inline-flex !important;
-  align-items: center;
-  gap: 7px;
-  padding: 0;
-  color: #384941 !important;
-  background: transparent;
-  border: 0;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
 
 .eligibility-layout{
   display: grid;
@@ -12242,14 +12229,14 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-trust svg{ color: #b9e8cb; }
 
 .eligibility-next-steps{ position: relative; z-index: 1; margin-top: 32px; }
-.eligibility-next-steps > p{ color: #a9c6b8; font-size: 9.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+.eligibility-next-steps > p{ color: #a9c6b8; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
 .eligibility-next-steps ol{ display: grid; gap: 16px; margin-top: 16px; padding: 0; list-style: none; }
 .eligibility-next-steps li{ display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: start; }
 .eligibility-next-steps li > span{ display: grid; width: 28px; height: 28px; place-items: center; color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); border-radius: 9px; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 12px; font-weight: 600; }
 .eligibility-next-steps strong, .eligibility-next-steps small{ display: block; }
 .eligibility-next-steps strong{ color: #edf6f2; font-size: 13px; }
-.eligibility-next-steps small{ margin-top: 3px; color: #9bb7ab; font-size: 11px; line-height: 1.5; }
-.eligibility-intro__note{ position: relative; z-index: 1; display: flex; gap: 9px; align-items: flex-start; margin-top: 28px; padding-top: 20px; color: #a3bfb2; border-top: 1px solid rgba(255,255,255,.14); font-size: 11px; line-height: 1.5; }
+.eligibility-next-steps small{ margin-top: 3px; color: #bcd3c8; font-size: 12px; line-height: 1.5; }
+.eligibility-intro__note{ position: relative; z-index: 1; display: flex; gap: 9px; align-items: flex-start; margin-top: 28px; padding-top: 20px; color: #bcd3c8; border-top: 1px solid rgba(255,255,255,.14); font-size: 12px; line-height: 1.5; }
 .eligibility-intro__note svg{ flex: 0 0 auto; margin-top: 2px; }
 
 .eligibility-card.eligibility-form{
@@ -12259,6 +12246,9 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   padding: 0;
   gap: 0;
   overflow: visible;
+  /* The intro panel is positioned with a heavy shadow; without its own layer the form sits under that shadow. */
+  position: relative;
+  z-index: 1;
   color: #1c2924;
   background: #ffffff !important;
   border: 1px solid #dce5e0 !important;
@@ -12276,10 +12266,10 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-section-heading{ display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start; }
 .eligibility-section-heading > span{ display: grid; width: 36px; height: 36px; place-items: center; color: var(--green, #173f33); background: var(--mint-light, #e9f1ed); border: 1px solid #bfd2c8; border-radius: 10px; font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 13px; font-weight: 600; }
 .eligibility-section-heading h3{ color: var(--green, #173f33); font-family: var(--serif, 'Fraunces', Georgia, serif); font-size: 19px; font-weight: 500; letter-spacing: -0.02em; margin: 0; }
-.eligibility-section-heading p{ margin-top: 4px; color: #62726a; font-size: 12px; line-height: 1.5; }
+.eligibility-section-heading p{ margin-top: 4px; color: #55665e; font-size: 13px; line-height: 1.5; }
 
 .eligibility-form-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 18px 16px; }
-.eligibility-form label, .eligibility-form legend{ color: #35453e; font-size: 12px; font-style: normal; font-weight: 650; }
+.eligibility-form label, .eligibility-form legend{ color: #2c3b35; font-size: 13px; font-style: normal; font-weight: 650; }
 .eligibility-form em{ color: #b23b3b; font-style: normal; }
 .eligibility-form label > .input{ margin-top: 7px; }
 .eligibility-form .input{
@@ -12295,6 +12285,9 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-form .input:focus{ border-color: var(--tenant-primary) !important; box-shadow: 0 0 0 3px var(--tenant-focus-ring) !important; }
 .eligibility-form .input:disabled{ color: #8b9892 !important; background: #f1f4f2 !important; cursor: not-allowed; }
 .eligibility-form fieldset{ display: grid; gap: 9px; min-width: 0; border: 0; }
+/* A legend sits outside the fieldset's grid gap; give it the same 7px a label gives its input. */
+.eligibility-form fieldset > legend{ margin-bottom: 7px; padding: 0; }
+.eligibility-form fieldset > legend + .eligibility-field-help{ margin: -4px 0 0; }
 
 .eligibility-location-section{ gap: 20px; }
 .eligibility-location-search{ display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; }
@@ -12365,8 +12358,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-condition-menu summary::-webkit-details-marker{ display: none; }
 .eligibility-condition-menu summary > span{ min-width: 0; }
 .eligibility-condition-menu summary strong, .eligibility-condition-menu summary small{ display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eligibility-condition-menu summary strong{ font-size: 12px; font-weight: 650; }
-.eligibility-condition-menu summary small{ max-width: 580px; margin-top: 4px; color: #718079; font-size: 10px; font-weight: 500; }
+.eligibility-condition-menu summary strong{ font-size: 13px; font-weight: 650; }
+.eligibility-condition-menu summary small{ max-width: 580px; margin-top: 4px; color: #66756e; font-size: 11px; font-weight: 500; }
 .eligibility-condition-menu summary > svg{ flex: 0 0 auto; color: #687770; transition: transform 160ms ease; }
 .eligibility-condition-menu[open] summary > svg{ transform: rotate(180deg); }
 .eligibility-condition-options{
@@ -12395,7 +12388,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   border-bottom: 1px solid #edf1ef;
   font-size: 10px;
 }
-.eligibility-condition-options__head strong{ color: #35453e; font-size: 10px; }
+.eligibility-condition-options__head strong{ color: #35453e; font-size: 11px; }
 .eligibility-condition-options__list{
   display: grid;
   gap: 2px;
@@ -12405,13 +12398,13 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
-.eligibility-condition-options label{ display: flex; min-height: 39px; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; color: #34423c; font-size: 11px; font-weight: 550; cursor: pointer; }
+.eligibility-condition-options label{ display: flex; min-height: 39px; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; color: #34423c; font-size: 13px; font-weight: 550; cursor: pointer; }
 .eligibility-condition-options label:hover{ background: #f1f6f3; }
 .eligibility-condition-options label:has(input:checked){ color: #164f3e; background: var(--tenant-primary-soft); border-color: color-mix(in srgb, var(--tenant-primary) 28%, #d9e6e0); }
 .eligibility-condition-options label.disabled{ color: #9aa59f; background: transparent; cursor: not-allowed; }
 .eligibility-condition-options input{ width: 16px; height: 16px; flex: 0 0 auto; accent-color: var(--tenant-primary); }
 .eligibility-condition-field.has-error .eligibility-condition-menu{ border-color: #c74646; box-shadow: 0 0 0 3px rgba(199,70,70,.1); }
-.eligibility-field-error{ color: #b23131; font-size: 11px; font-weight: 650; }
+.eligibility-field-error{ color: #b23131; font-size: 12px; font-weight: 650; }
 
 .eligibility-choice{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .eligibility-choice label{ display: flex; min-height: 58px; align-items: flex-start; gap: 10px; padding: 12px 13px; color: #34443d; background: #fbfcfb; border: 1px solid #d6dfda; border-radius: 10px; cursor: pointer; transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease; }
@@ -12419,8 +12412,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-choice label:has(input:checked){ color: var(--green, #174f3f); background: var(--tenant-primary-soft); border-color: var(--tenant-primary); box-shadow: inset 0 0 0 1px var(--tenant-primary); }
 .eligibility-choice input{ width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--tenant-primary); }
 .eligibility-choice span, .eligibility-choice strong, .eligibility-choice small{ display: block; }
-.eligibility-choice strong{ font-size: 12px; }
-.eligibility-choice small{ margin-top: 3px; color: #77857f; font-size: 9px; font-weight: 500; }
+.eligibility-choice strong{ font-size: 13px; }
+.eligibility-choice small{ margin-top: 3px; color: #66756e; font-size: 11px; font-weight: 500; }
 
 .eligibility-screening-stop{
   display: grid;
@@ -12435,15 +12428,15 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   border-radius: 10px;
 }
 .eligibility-screening-stop > svg{ margin-top: 1px; color: #b45309; }
-.eligibility-screening-stop strong{ display: block; color: #702b18; font-size: 12px; }
-.eligibility-screening-stop p{ margin-top: 4px; color: #85462f; font-size: 10px; line-height: 1.55; }
+.eligibility-screening-stop strong{ display: block; color: #702b18; font-size: 13px; }
+.eligibility-screening-stop p{ margin-top: 4px; color: #85462f; font-size: 12px; line-height: 1.55; }
 
-.eligibility-consents{ display: grid; gap: 9px; padding: 0; background: transparent; }
-.eligibility-consents label{ display: flex; align-items: flex-start; gap: 11px; padding: 13px 14px; color: #42524b; background: #f7faf8; border: 1px solid #dce5e0; border-radius: 10px; font-size: 11px; font-weight: 520; line-height: 1.55; cursor: pointer; }
+.eligibility-consents{ display: grid; gap: 9px; padding: 0; background: transparent; border: 0; border-radius: 0; }
+.eligibility-consents label{ display: flex; align-items: flex-start; gap: 11px; padding: 13px 14px; color: #2c3b35; background: #f7faf8; border: 1px solid #dce5e0; border-radius: 10px; font-size: 13px; font-weight: 500; line-height: 1.55; cursor: pointer; }
 .eligibility-consents label:has(input:checked){ background: var(--tenant-primary-soft); border-color: color-mix(in srgb, var(--tenant-primary) 35%, #d5e2dc); }
-.eligibility-consents input{ width: 16px; height: 16px; flex: 0 0 auto; margin-top: 1px; accent-color: var(--tenant-primary); }
+.eligibility-consents input{ width: 16px; height: 16px; flex: 0 0 auto; margin-top: 2px; accent-color: var(--tenant-primary); }
 .eligibility-consents .eligibility-consent--optional{ background: #fff; border-style: dashed; }
-.eligibility-consents small{ display: inline-block; margin-left: 5px; padding: 1px 5px; color: #687770; background: #e9eeeb; border-radius: 4px; font-size: 8px; font-weight: 650; text-transform: uppercase; }
+.eligibility-consents small{ display: inline-block; margin-left: 5px; padding: 1px 5px; color: #687770; background: #e9eeeb; border-radius: 4px; font-size: 9px; font-weight: 650; text-transform: uppercase; }
 
 .eligibility-form-footer{ display: grid; gap: 9px; padding: 0 32px 26px; }
 .eligibility-submit{ min-height: 50px; justify-content: center; padding: 13px 22px; border-radius: 999px !important; background: var(--rust, #a84f35) !important; border-color: var(--rust, #a84f35) !important; color: #fff !important; font-family: var(--sans, Outfit, sans-serif); font-size: 14px; font-weight: 700; }
@@ -12456,7 +12449,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   cursor: not-allowed;
   opacity: 1;
 }
-.eligibility-form-footer p{ display: flex; align-items: center; justify-content: center; gap: 6px; color: #718079; font-size: 10px; text-align: center; }
+.eligibility-form-footer p{ display: flex; align-items: center; justify-content: center; gap: 6px; color: #66756e; font-size: 11px; text-align: center; }
 .eligibility-controller-details{
   display: grid;
   gap: 6px;
@@ -12476,13 +12469,36 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .eligibility-decline p{ max-width: 52ch; }
 .eligibility-decline a[href^="mailto:"]{ color: var(--tenant-primary, #174f3f); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 
-.eligibility-legal{ margin: 0 32px 28px; color: #87938e !important; font-size: 9px; line-height: 1.55; text-align: center; }
+.eligibility-legal{ margin: 0 32px 28px; color: #7a8781 !important; font-size: 10px; line-height: 1.55; text-align: center; }
 .eligibility-legal a{ color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
 /* Helper text under a screening question, and the withdraw line under the consent
    boxes: both are guidance rather than a field, so they sit quieter than a label. */
-.eligibility-field-help{ margin: 0 0 10px; color: #6b7a73; font-size: 11px; line-height: 1.55; }
-.eligibility-consent-withdraw{ margin: 12px 0 0; color: #6b7a73; font-size: 11px; line-height: 1.55; }
+.eligibility-field-help{ margin: 0 0 10px; color: #5f6f68; font-size: 12px; line-height: 1.55; }
+.eligibility-consent-withdraw{ margin: 0; color: #5f6f68; font-size: 12px; line-height: 1.55; }
+
+/* Phone step mode: one section at a time (see STEPPED_FORM_QUERY in EligibilityApp). */
+.eligibility-form-section.is-step-hidden{ display: none; }
+.eligibility-stepper{ display: grid; gap: 10px; padding: 20px 20px 4px; }
+.eligibility-stepper p{ display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: #5f6f68; font-size: 12px; }
+.eligibility-stepper p span:first-child{ color: var(--tenant-primary, #173f33); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.eligibility-stepper__bar{ height: 5px; overflow: hidden; background: #e6ece9; border-radius: 999px; }
+.eligibility-stepper__bar span{ display: block; height: 100%; background: var(--tenant-primary, #173f33); border-radius: inherit; transition: width 220ms ease; }
+.eligibility-form--stepped .eligibility-form-section{ border-bottom: 0; }
+.eligibility-form--stepped .eligibility-section-heading{ grid-template-columns: 1fr; }
+.eligibility-form--stepped .eligibility-section-heading > span{ display: none; }
+.eligibility-form--stepped .eligibility-section-heading h3{ font-size: 22px; outline: none; }
+.eligibility-form--stepped .eligibility-choice{ grid-template-columns: 1fr 1fr; }
+.eligibility-step-error{ margin: 0 20px 14px; }
+.eligibility-step-nav{ display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 0 20px 24px; }
+.eligibility-step-nav .eligibility-submit:only-child{ grid-column: 1 / -1; }
+.eligibility-step-nav .btn{ min-height: 50px; justify-content: center; border-radius: 999px; }
+.eligibility-step-back{ display: inline-flex; align-items: center; justify-self: start; gap: 6px; padding: 6px 0; color: #4d5f57; background: none; border: 0; font-size: 13px; font-weight: 650; cursor: pointer; }
+.eligibility-intro--stepped .eligibility-next-steps{ display: none; }
+.eligibility-intro--stepped h1{ font-size: 28px !important; }
+.eligibility-intro--stepped .eligibility-trust{ margin-top: 18px; padding-top: 16px; }
+.eligibility-intro--stepped .eligibility-intro__note{ margin-top: 16px; padding-top: 14px; }
+.eligibility-section-heading a, .eligibility-consents a{ color: var(--tenant-primary, #173f33); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
 
 .eligibility-finder-shell{ background: #eaf3ed; }
 .eligibility-card.eligibility-finder{
@@ -13482,29 +13498,36 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 @media (max-width: 560px){
   .eligibility-shell{ padding: 0 0 52px; }
   .eligibility-brand{ margin-bottom: 14px; }
-  .eligibility-brand__inner{ flex-wrap: wrap; gap: 10px; }
+  .eligibility-brand__inner{ flex-wrap: nowrap; gap: 10px; }
+  .eligibility-brand__actions{ gap: 4px; }
+  .eligibility-brand .eligibility-home{ width: 40px; min-height: 40px; height: 40px; padding: 0; font-size: 0; }
+  /* One slim row on phones: HHH mark | pharmacy logo ... More info, padlock. */
+  .eligibility-brand--pharmacy-logo{ min-height: 60px; }
   .eligibility-brand--pharmacy-logo .eligibility-brand__inner{
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'identity actions' 'logo logo';
-    height: auto;
-    min-height: 88px;
-    padding-block: 10px;
-    row-gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'identity logo actions';
+    height: 60px;
+    min-height: 60px;
+    column-gap: 12px;
   }
-  .eligibility-brand--pharmacy-logo .eligibility-brand__identity{ grid-area: identity; }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__identity{ grid-area: identity; gap: 0; padding-right: 12px; border-right: 1px solid color-mix(in srgb, var(--green) 16%, transparent); }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__identity .eligibility-brand__mark{ width: 30px; height: 30px; }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__identity > span{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .eligibility-brand--pharmacy-logo .eligibility-brand__pharmacy-logo{
     grid-area: logo;
-    height: 64px;
-    max-width: min(420px, 100%);
+    justify-self: start;
+    height: 36px;
+    max-width: 100%;
+    object-position: left center;
   }
-  .eligibility-brand--pharmacy-logo .eligibility-brand__identity small{ display: none; }
-  .eligibility-brand--pharmacy-logo .eligibility-brand__identity strong{ font-size: 15px; }
-  .eligibility-shell:has(.eligibility-brand--pharmacy-logo){ --eligibility-brand-height: 150px; }
+  .eligibility-brand--pharmacy-logo .eligibility-brand__actions{ grid-area: actions; }
+  /* Room for the label now the padlock is gone: a compact pill rather than a bare icon. */
+  .eligibility-brand--pharmacy-logo .eligibility-home{ width: auto; height: 36px; min-height: 36px; padding: 0 12px; gap: 5px; font-size: 12.5px; white-space: nowrap; }
+  .eligibility-shell:has(.eligibility-brand--pharmacy-logo){ --eligibility-brand-height: 60px; }
   .eligibility-brand__pharmacy-logo{
     height: 64px;
     max-width: min(420px, 78vw);
   }
-  .eligibility-brand__secure{ font-size: 0 !important; width: 36px; height: 36px; justify-content: center; }
   .eligibility-intro{ padding: 25px 22px; border-radius: 17px; }
   .eligibility-intro h1{ margin-top: 12px; font-size: 34px; }
   .eligibility-intro__lead{ font-size: 13px; }
