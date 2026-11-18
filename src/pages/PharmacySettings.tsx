@@ -63,6 +63,8 @@ function scrollParentOf(element: HTMLElement | null): HTMLElement {
 
 export default function PharmacySettings({ initialSection }: { initialSection?: SettingsSection } = {}) {
   const { state, dispatch } = useApp();
+  // Demo mode and local preview both run on the demo data set, so neither writes to the server.
+  const sandboxPortal = isLocalPortalPreview || state.demoMode;
   const organisation = useMemo(() => state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0], [state]);
   const [savingRoute, setSavingRoute] = useState(false);
   const [savingDelivery, setSavingDelivery] = useState(false);
@@ -216,7 +218,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     setQr('');
     setLinkError('');
     setLinkLoading(true);
-    const request = isLocalPortalPreview
+    const request = sandboxPortal
       ? Promise.resolve({ url: eligibilityUrl(organisation.referralToken) })
       : getReferralLink();
     void request
@@ -224,16 +226,16 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
       .catch(error => { if (!cancelled) setLinkError(error instanceof Error ? error.message : 'The eligibility link could not be loaded.'); })
       .finally(() => { if (!cancelled) setLinkLoading(false); });
     return () => { cancelled = true; };
-  }, [organisation.id, organisation.referralToken, linkRefresh]);
+  }, [organisation.id, organisation.referralToken, linkRefresh, sandboxPortal]);
 
   useEffect(() => {
     let cancelled = false;
-    if (isLocalPortalPreview) return () => { cancelled = true; };
+    if (sandboxPortal) return () => { cancelled = true; };
     void getCuraleafConnectionStatus()
       .then(status => { if (!cancelled) setCuraleafStatus(status); })
       .catch(() => { if (!cancelled) setCuraleafStatus(null); });
     return () => { cancelled = true; };
-  }, [organisation.id]);
+  }, [organisation.id, sandboxPortal]);
 
   useEffect(() => {
     let cancelled = false;
@@ -253,7 +255,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     let readOnlyFallback = false;
     try {
       // Preview has no write endpoint, so re-read the status instead of forcing a refresh.
-      const status = isLocalPortalPreview
+      const status = sandboxPortal
         ? await getCuraleafConnectionStatus(organisation.id)
         : await refreshCuraleafConnection(organisation.id).catch(async error => {
           // A role wall on the probe is not an outage. Fall back to the read-only
@@ -309,7 +311,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     event.preventDefault();
     setProfileSaving(true);
     try {
-      if (!isLocalPortalPreview && isApiConfigured) {
+      if (!sandboxPortal && isApiConfigured) {
         await updatePharmacyProfile(profileForm);
       }
       dispatch({
@@ -354,7 +356,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { defaultPaymentRoute: route } });
     dispatch({ type: 'UPDATE_WORLDPAY', organisationId: organisation.id, updates: { enabled: route === 'worldpay' } });
     try {
-      if (!isLocalPortalPreview && isApiConfigured) await updatePaymentSettings(organisation.id, route);
+      if (!sandboxPortal && isApiConfigured) await updatePaymentSettings(organisation.id, route);
       dispatch({ type: 'ADD_TOAST', message: `${route === 'worldpay' ? 'Worldpay' : 'Pharmacy payment'} will be used for new orders. Existing orders are unchanged.`, toastType: 'success' });
     } catch (error) {
       dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { defaultPaymentRoute: previousRoute } });
@@ -372,7 +374,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     setSavingEmailVisibility(true);
     dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { showEmailToPatients: show } });
     try {
-      if (!isLocalPortalPreview && isApiConfigured) await updatePatientEmailVisibility(show);
+      if (!sandboxPortal && isApiConfigured) await updatePatientEmailVisibility(show);
       notify(show ? 'Patients will see your email as well as your phone.' : 'Patients will see your phone only.');
     } catch (error) {
       dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { showEmailToPatients: previous } });
@@ -387,7 +389,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     setSavingDelivery(true);
     dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { pharmacyDeliveryEnabled: enabled } });
     try {
-      if (!isLocalPortalPreview && isApiConfigured) await updatePaymentSettings(organisation.id, { pharmacyDeliveryEnabled: enabled });
+      if (!sandboxPortal && isApiConfigured) await updatePaymentSettings(organisation.id, { pharmacyDeliveryEnabled: enabled });
       dispatch({
         type: 'ADD_TOAST',
         message: enabled
@@ -460,6 +462,10 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
           <h3 id="settings-heading-organisation">Organisation</h3>
           <p>Who you are, what you offer, and how patients and HHH reach you.</p>
         </header>
+        {state.demoMode ? (
+          <p className="pharmacy-settings-demo-note" role="note">Settings are not available in demo mode: they belong to your live account. Return to live to change them.</p>
+        ) : null}
+        <fieldset className="pharmacy-settings-demo-lock" disabled={state.demoMode}>
         <div className="pharmacy-details">
             {/* Pharmacy: who the business is and where. */}
             <section className={`pharmacy-details__card${editingCard === 'pharmacy' ? ' is-editing' : ''}`} aria-labelledby="settings-card-pharmacy">
@@ -563,12 +569,14 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
               )}
             </section>
         </div>
+        </fieldset>
       </section>
       <section id="settings-section-payments" className="pharmacy-settings-page__section" aria-labelledby="settings-heading-payments">
         <header className="pharmacy-settings-page__section-head">
           <h3 id="settings-heading-payments">Payments</h3>
           <p>How orders are paid for and priced.</p>
         </header>
+        <fieldset className="pharmacy-settings-demo-lock" disabled={state.demoMode}>
         <div className="pharmacy-details">
             {/* Payment: how new orders take payment, with the Worldpay merchant beneath. */}
             <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-payment">
@@ -622,7 +630,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                   });
                   if (!connection.connected && organisation.defaultPaymentRoute === 'worldpay') {
                     dispatch({ type: 'UPDATE_ORGANISATION', organisationId: organisation.id, updates: { defaultPaymentRoute: 'manual' } });
-                    if (!isLocalPortalPreview && isApiConfigured) {
+                    if (!sandboxPortal && isApiConfigured) {
                       void updatePaymentSettings(organisation.id, 'manual').catch(() => {
                         dispatch({ type: 'ADD_TOAST', message: 'Worldpay was disconnected. Default payment route still needs switching to pharmacy payment.', toastType: 'warning' });
                       });
@@ -648,6 +656,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
               <button type="button" className="pharmacy-details__link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
             </section>
         </div>
+        </fieldset>
       </section>
       <section id="settings-section-assets" className="pharmacy-settings-page__section" aria-labelledby="settings-heading-assets">
         <header className="pharmacy-settings-page__section-head">

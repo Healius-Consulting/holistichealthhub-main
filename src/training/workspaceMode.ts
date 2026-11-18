@@ -15,7 +15,7 @@ export function pharmacyWorkspaceStatusLabel(mode: string | null | undefined, pa
 }
 
 /**
- * Training: local `?devPortal=pharmacy` dummy pack only.
+ * Training: not yet live, or the demo data set (Demo mode, or local `?devPortal=pharmacy`).
  * Test: flipped workspace on sandbox keys, or always-on Primary/Alternate.
  * Live: flipped workspace on production Curaleaf keys.
  */
@@ -26,9 +26,9 @@ export function resolvePharmacyWorkspaceMode(
     workspaceClassification?: string | null;
     testAccount?: boolean;
   } | null | undefined,
-  extras?: { curaleafEstate?: 'test' | 'production'; localPreview?: boolean },
+  extras?: { curaleafEstate?: 'test' | 'production'; localPreview?: boolean; demo?: boolean },
 ): PharmacyWorkspaceMode {
-  if (extras?.localPreview) return 'training';
+  if (extras?.localPreview || extras?.demo) return 'training';
   if (!organisation) return 'training';
   if (isPlatformTestPharmacy(organisation)) {
     return extras?.curaleafEstate === 'production' ? 'live' : 'test';
@@ -38,15 +38,7 @@ export function resolvePharmacyWorkspaceMode(
   return extras?.curaleafEstate === 'production' ? 'live' : 'test';
 }
 
-export function usesSandboxDummyPack(
-  _organisation: {
-    id: string;
-    name?: string | null;
-    tradingName?: string | null;
-    testAccount?: boolean;
-    workspaceClassification?: string | null;
-  } | null | undefined,
-  localPreview: boolean,
-) {
-  return localPreview;
+/** The portal shows the demo data set: the pharmacy turned Demo mode on, or local preview. */
+export function usesSandboxDummyPack(flags: { demo: boolean; localPreview: boolean }) {
+  return flags.demo || flags.localPreview;
 }

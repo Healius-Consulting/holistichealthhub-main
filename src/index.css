@@ -852,6 +852,54 @@ html{
   letter-spacing: .04em;
 }
 
+/* Demo mode: sits between the header and the scrolling page, so it stays on every screen. */
+.demo-mode-banner{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 24px;
+  border-bottom: 1px solid #7c3aed;
+  background: #f5f3ff;
+  color: #4c1d95;
+  font-size: var(--font-xs);
+}
+
+.demo-mode-banner strong{
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: #7c3aed;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.demo-mode-banner > span{ flex: 1 1 auto; font-weight: 600; }
+.demo-mode-banner__actions{ display: flex; flex-wrap: wrap; gap: 6px; }
+.demo-mode-banner__actions .btn{ display: inline-flex; align-items: center; gap: 5px; }
+.tenant-status--demo{ color: #4c1d95; background: #f5f3ff; }
+
+@media (max-width: 760px){
+  .demo-mode-banner{ padding: 8px 14px; }
+  .demo-mode-banner__actions{ width: 100%; }
+}
+
+html[data-theme='dark'] .demo-mode-banner{ background: #2e1065; color: #ede9fe; border-color: #8b5cf6; }
+html[data-theme='dark'] .tenant-status--demo{ background: #2e1065; color: #ede9fe; }
+
+/* Settings stay read-only in demo: they are the real account's. */
+.pharmacy-settings-demo-lock{ display: contents; }
+.pharmacy-settings-demo-note{
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid #c4b5fd;
+  border-radius: var(--radius-sm);
+  background: #f5f3ff;
+  color: #4c1d95;
+  font-size: var(--font-xs);
+}
+
 .test-mode-banner{
   display: flex;
   align-items: center;

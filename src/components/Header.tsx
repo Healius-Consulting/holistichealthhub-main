@@ -18,7 +18,7 @@ export default function Header() {
   const organisation = state.organisations.find((org) => org.id === state.currentOrganisationId) ?? state.organisations[0];
   const title = SCREEN_TITLES[state.screen] || 'HHH Portal';
   const paused = organisation?.status === 'paused';
-  const workspaceLabel = pharmacyWorkspaceStatusLabel(state.workspaceMode);
+  const workspaceLabel = state.demoMode ? 'Demo' : pharmacyWorkspaceStatusLabel(state.workspaceMode);
 
   return (
     <WorkspacePageHeader
@@ -31,7 +31,7 @@ export default function Header() {
       contextControl={
         <div className="header-context" aria-label={`Current pharmacy status: ${workspaceLabel}${paused ? ', paused' : ''}`}>
           <span>Workspace</span>
-          <span className={`tenant-status tenant-status--${state.workspaceMode}`}>{workspaceLabel}</span>
+          <span className={`tenant-status tenant-status--${state.demoMode ? 'demo' : state.workspaceMode}`}>{workspaceLabel}</span>
           {paused ? <span className="tenant-status tenant-status--paused">Paused</span> : null}
         </div>
       }

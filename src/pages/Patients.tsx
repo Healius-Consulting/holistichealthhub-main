@@ -331,6 +331,8 @@ export function emptyCopy(filter: PatientDirectoryFilter, hasSearch: boolean) {
 
 export default function Patients() {
   const { state, dispatch } = useApp();
+  // Demo mode and local preview both run on the demo data set, so neither writes to the server.
+  const sandboxPortal = isLocalPortalPreview || state.demoMode;
   const [search, setSearch] = useState('');
   const [, setActiveFilter] = useState<PatientDirectoryFilter>('all');
   const [openPatients, setOpenPatients] = useState<Array<{ key: string; layer: number }>>(() => {
@@ -475,12 +477,12 @@ export default function Patients() {
       if (!enquiry || enquiry.opened !== false || markedOpenedRef.current.has(enquiry.id)) continue;
       markedOpenedRef.current.add(enquiry.id);
       dispatch({ type: 'MARK_ENQUIRY_OPENED', enquiryId: enquiry.id });
-      if (!isLocalPortalPreview && !isTrainingSandboxEnquiryId(enquiry.id)) {
+      if (!sandboxPortal && !isTrainingSandboxEnquiryId(enquiry.id)) {
         // Best effort: if it fails, the dot comes back on the next refresh and the next open retries.
         void markEnquiryOpened(enquiry.id).catch(() => markedOpenedRef.current.delete(enquiry.id));
       }
     }
-  }, [dispatch, openPatients, records]);
+  }, [dispatch, openPatients, records, sandboxPortal]);
 
   const openPatientFromBoard = (key: string) => {
     setOpenPatients([{ key, layer: allocateRecordLayer() }]);
@@ -559,7 +561,7 @@ export default function Patients() {
   const handleCreateOrder = (patient: UnifiedPatient) => {
     const crmPatient = patient.crmPatient;
     const trainingDraft = Boolean(crmPatient && isTrainingSandboxPatient(crmPatient));
-    if (!isLocalPortalPreview && !isOpenPharmacyWorkspace(state.workspaceMode) && !trainingDraft) {
+    if (!sandboxPortal && !isOpenPharmacyWorkspace(state.workspaceMode) && !trainingDraft) {
       dispatch({ type: 'ADD_TOAST', message: 'Orders unlock after HHH opens this pharmacy as Test or Live.', toastType: 'warning' });
       return;
     }
@@ -685,7 +687,7 @@ export default function Patients() {
             {record.patient ? (
               <PatientCrmDetail
                 record={record}
-                workspaceLive={isLocalPortalPreview || isOpenPharmacyWorkspace(state.workspaceMode)}
+                workspaceLive={sandboxPortal || isOpenPharmacyWorkspace(state.workspaceMode)}
                 trainingDraft={Boolean(record.patient.crmPatient && isTrainingSandboxPatient(record.patient.crmPatient))}
                 onCreateOrder={() => handleCreateOrder(record.patient!)}
                 onConditionsSaved={(patientId, conditions, primaryCondition) => {
@@ -1000,6 +1002,12 @@ function PatientCrmDetail({ record, workspaceLive, trainingDraft = false, onCrea
   const saveConditions = async (conditionCodes: string[], primaryConditionCode: string) => {
     const patientId = patient.crmPatient?.id;
     if (!patientId) return;
+    if (trainingDraft) {
+      // A demo patient: the change stays in the demo data and is never sent.
+      onConditionsSaved(patientId, conditionCodes, primaryConditionCode);
+      setEditingConditions(false);
+      return;
+    }
     setSavingConditions(true);
     setConditionError(null);
     try {

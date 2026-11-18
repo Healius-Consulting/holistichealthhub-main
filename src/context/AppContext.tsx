@@ -7,6 +7,7 @@ import { mapPortalEnquiryRecord, mapPortalPatientRecord } from '../utils/pharmac
 import { isLocalPortalPreview, localPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
 import { ledgerDemoPatients } from '../dev/localAdminLedger';
 import { ORGANISATIONS, isOpenPharmacyWorkspace, isTrainingSandboxPatient, resolvePharmacyWorkspaceMode, trainingWorkspace, usesSandboxDummyPack } from '../training/workspace';
+import { saveDemo, type DemoData } from '../training/demoMode';
 import { parseCatalogueCache, serialiseCatalogueCache, shouldDiscardCatalogueCache } from '../utils/catalogueCache';
 import { curaleafCatalogueEstate, type CuraleafCatalogueEstate } from '../utils/catalogueEstate';
 import { CATALOGUE_TTL_MS, catalogueIsStale } from '../utils/catalogueFreshness';
@@ -498,6 +499,8 @@ export interface AppState {
   };
   portalMode: PortalMode;
   workspaceMode: WorkspaceMode;
+  /** Demo mode: the pharmacy's own account swapped for the demo data set. Nothing reaches the server. */
+  demoMode: boolean;
   organisations: PharmacyTenant[];
   currentOrganisationId: string;
   staffSession: StaffSession | null;
@@ -638,6 +641,9 @@ export const PHARMACY = {
 export type Action =
   | { type: 'SET_PORTAL_MODE'; mode: PortalMode }
   | { type: 'SET_WORKSPACE_MODE'; mode: WorkspaceMode; organisationId?: string }
+  | { type: 'ENTER_DEMO'; data: DemoData }
+  | { type: 'RESET_DEMO'; data: DemoData }
+  | { type: 'LEAVE_DEMO' }
   | { type: 'SIGN_IN_STAFF'; session: StaffSession }
   | { type: 'SIGN_OUT_STAFF' }
   | { type: 'SET_CURRENT_ORGANISATION'; organisationId: string }
@@ -1201,6 +1207,7 @@ const initialState: AppState = {
   nextIds: previewTraining?.nextIds ?? { patient: 2000, rx: 1, order: 7, submission: 5, invoice: 4072 },
   portalMode: initialPortalMode,
   workspaceMode: 'training',
+  demoMode: false,
   organisations: isLocalPortalPreview ? ORGANISATIONS : [],
   currentOrganisationId: previewStaffSession?.organisationId ?? (isLocalPortalPreview ? ORGANISATIONS[0]?.id ?? '' : ''),
   staffSession: previewStaffSession ?? storedStaffSession,
@@ -1425,6 +1432,8 @@ function reducer(state: AppState, action: Action): AppState {
     case 'MARK_ENQUIRY_OPENED':
       return { ...state, enquiries: state.enquiries.map(enquiry => enquiry.id === action.enquiryId ? { ...enquiry, opened: true } : enquiry) };
     case 'SYNC_PATIENT_DIRECTORY': {
+      // A real-account fetch that lands after Demo mode turned on must not mix into the demo data.
+      if (state.demoMode) return { ...state, patientDirectoryRefreshing: false };
       const retainedPatients = state.crm.filter(patient =>
         patient.organisationId !== action.organisationId && !isTrainingSandboxPatient(patient),
       );
@@ -1449,6 +1458,7 @@ function reducer(state: AppState, action: Action): AppState {
           : patient),
       };
     case 'SYNC_PORTAL_ORDERS': {
+      if (state.demoMode) return state;
       const previousActive = state.orders.find(order => order.id === state.activeOrderId && order.payment.status === 'none');
       const incomingPersisted = action.orders.filter(order => order.payment.status !== 'none');
       const incomingDrafts = action.orders.filter(order => order.payment.status === 'none');
@@ -1489,8 +1499,11 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, portalMode: action.mode, screenHistory: [], navigationTarget: null };
     case 'SET_WORKSPACE_MODE': {
       const organisationId = action.organisationId ?? state.currentOrganisationId;
-      const organisation = state.organisations.find(item => item.id === organisationId);
-      const sandboxPharmacy = usesSandboxDummyPack(organisation, isLocalPortalPreview);
+      // Demo data is loaded, reset and cleared by the demo actions alone.
+      if (state.demoMode) {
+        return { ...state, workspaceMode: 'training', currentOrganisationId: organisationId || state.currentOrganisationId };
+      }
+      const sandboxPharmacy = usesSandboxDummyPack({ demo: false, localPreview: isLocalPortalPreview });
       if (action.mode === 'training') {
         if (!sandboxPharmacy) {
           if (state.workspaceMode === 'training' && (!organisationId || organisationId === state.currentOrganisationId)) {
@@ -1555,6 +1568,41 @@ function reducer(state: AppState, action: Action): AppState {
       }
       return state;
     }
+    case 'ENTER_DEMO':
+    case 'RESET_DEMO':
+      // The page stays where it is; only what it shows changes.
+      return {
+        ...state,
+        demoMode: true,
+        workspaceMode: 'training',
+        navigationTarget: null,
+        crm: action.data.crm,
+        enquiries: action.data.enquiries,
+        orders: action.data.orders,
+        submissions: action.data.submissions,
+        activeOrderId: action.data.activeOrderId,
+        nextIds: action.data.nextIds,
+      };
+    case 'LEAVE_DEMO': {
+      if (!state.demoMode) return state;
+      // Nothing from the demo carries over. Local preview goes back to its own training pack;
+      // a real account reloads from the server once the workspace effects see demo is off.
+      const preview = usesSandboxDummyPack({ demo: false, localPreview: isLocalPortalPreview }) && state.currentOrganisationId
+        ? trainingWorkspace(state.currentOrganisationId)
+        : null;
+      return {
+        ...state,
+        demoMode: false,
+        workspaceMode: 'training',
+        navigationTarget: null,
+        crm: preview?.crm ?? [],
+        enquiries: preview?.enquiries ?? [],
+        orders: preview?.orders ?? [],
+        submissions: [],
+        activeOrderId: null,
+        nextIds: preview?.nextIds ?? initialState.nextIds,
+      };
+    }
     case 'SIGN_IN_STAFF':
       return {
         ...state,
@@ -1568,6 +1616,7 @@ function reducer(state: AppState, action: Action): AppState {
         staffSession: null,
         portalMode: 'gateway',
         workspaceMode: 'training',
+        demoMode: false,
         screen: 'home',
         screenHistory: [],
         navigationTarget: null,
@@ -1576,6 +1625,7 @@ function reducer(state: AppState, action: Action): AppState {
         catalogueEnvironment: state.catalogueSource === 'curaleaf' ? state.catalogueEnvironment : 'test',
         crm: [],
         submissions: [],
+        enquiries: [],
         orders: [],
         activeOrderId: null,
         organisations: [],
@@ -2331,8 +2381,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const livePharmacyWorkspace = isOpenPharmacyWorkspace(resolvePharmacyWorkspaceMode(currentOrganisation, {
     curaleafEstate: state.catalogueEnvironment,
     localPreview: isLocalPortalPreview,
+    demo: state.demoMode,
   }));
-  const sandboxPharmacy = usesSandboxDummyPack(currentOrganisation, isLocalPortalPreview);
+  const sandboxPharmacy = usesSandboxDummyPack({ demo: state.demoMode, localPreview: isLocalPortalPreview });
   const intakeDirectorySync = Boolean(
     currentOrganisation
     && currentOrganisation.intakeEnabled !== false
@@ -2340,6 +2391,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     && !sandboxPharmacy
   );
   const syncPatientDirectory = livePharmacyWorkspace || intakeDirectorySync;
+
+  // Demo changes last until Reset demo, Return to live or logout, refreshes included.
+  useEffect(() => {
+    if (!state.demoMode) return;
+    saveDemo({
+      crm: state.crm,
+      enquiries: state.enquiries,
+      orders: state.orders,
+      submissions: state.submissions,
+      activeOrderId: state.activeOrderId,
+      nextIds: state.nextIds,
+    });
+  }, [state.demoMode, state.crm, state.enquiries, state.orders, state.submissions, state.activeOrderId, state.nextIds]);
 
   useEffect(() => {
     if (!isLocalPortalPreview) return;

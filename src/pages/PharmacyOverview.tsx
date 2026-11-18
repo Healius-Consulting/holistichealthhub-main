@@ -170,7 +170,7 @@ export default function PharmacyOverview() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const organisation = state.organisations.find(org => org.id === state.currentOrganisationId) ?? state.organisations[0];
-  const sandboxOverview = usesSandboxDummyPack(organisation, isLocalPortalPreview);
+  const sandboxOverview = usesSandboxDummyPack({ demo: state.demoMode, localPreview: isLocalPortalPreview });
 
   const load = useCallback(async () => {
     setRefreshing(true);
