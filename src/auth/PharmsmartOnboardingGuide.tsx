@@ -5,7 +5,8 @@ import HhhBrandMark from '../components/HhhBrandMark';
 import { CuraleafAccountForm, type CuraleafFormValues } from './CuraleafAccountForm';
 import { PartnerTermsForm } from './PartnerTermsForm';
 import { WorldpayForm } from './WorldpayForm';
-import { worldpayPrincipalFromWelcome, worldpayStartFromWelcome } from './worldpay-start';
+import { worldpayPrincipalsFrom, worldpayStartFromWelcome } from './worldpay-start';
+import type { CompanyLookup } from '../shared/api';
 import {
   afterCuraleafSent,
   afterTermsAccepted,
@@ -136,6 +137,7 @@ export function PharmsmartWelcome({
   const [viewing, setViewing] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [curaleafValues, setCuraleafValues] = useState<CuraleafFormValues | null>(null);
+  const [company, setCompany] = useState<CompanyLookup | null>(null);
   // Curaleaf form, then Partner Terms, then Worldpay (skippable). A pharmacy that left
   // before the Terms comes back straight to them.
   const [setup, setSetup] = useState(() => initialSetupState(welcome));
@@ -163,9 +165,10 @@ export function PharmsmartWelcome({
     panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
   }, [choice, formOpen, termsOpen, worldpayOpen]);
 
-  // Whatever the pharmacy has already told us carries into the Worldpay form.
-  const worldpayPrefill = worldpayStartFromWelcome(welcome, curaleafValues);
-  const worldpayPrincipal = worldpayPrincipalFromWelcome(welcome);
+  // Whatever the pharmacy has already told us, and Companies House when they looked the
+  // company up on the Curaleaf form, carries into the Worldpay form.
+  const worldpayPrefill = worldpayStartFromWelcome(welcome, curaleafValues, company);
+  const worldpayPrincipals = worldpayPrincipalsFrom(welcome, company);
 
   // Only a PharmSmart visit says who chose "Not yet"; an anonymous visit records nothing.
   const recordNotYet = async () => {
@@ -387,9 +390,10 @@ export function PharmsmartWelcome({
             open={formOpen}
             welcome={welcome}
             onClose={() => setFormOpen(false)}
-            onSubmitted={(values, requestId) => {
+            onSubmitted={(values, requestId, found) => {
               setFormOpen(false);
               setCuraleafValues(values);
+              setCompany(found);
               setSetup(current => afterCuraleafSent(current, {
                 id: requestId,
                 pharmacyName: values.pharmacyName,
@@ -415,7 +419,9 @@ export function PharmsmartWelcome({
           <WorldpayForm
             open={worldpayOpen}
             prefill={worldpayPrefill}
-            principal={worldpayPrincipal}
+            principalsStart={worldpayPrincipals}
+            companyNumber={company?.companyNumber}
+            prefillSource={company ? 'your PharmSmart account, Curaleaf form and Companies House' : undefined}
             onClose={() => setWorldpayOpen(false)}
             onSubmitted={() => { setWorldpayOpen(false); setSetup(current => ({ ...current, worldpay: 'sent' })); }}
           />

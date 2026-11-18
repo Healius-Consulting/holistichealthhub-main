@@ -1,7 +1,9 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ApiRequestError, submitWorldpayForm, describeApiError } from '../shared/api';
+import { ApiRequestError, submitWorldpayForm, describeApiError, type CompanyLookup } from '../shared/api';
 import { PrefillReviewBanner } from './PrefillReviewBanner';
+import { CompanyLookupBox } from './CompanyLookupBox';
+import { worldpayFromCompany } from './company-prefill';
 
 /** Worldpay's own answers, already filled in on their spreadsheet. The pharmacy can change them. */
 const DEFAULTS = {
@@ -40,13 +42,14 @@ const BUSINESS = {
 
 type Fields = typeof BUSINESS & typeof DEFAULTS;
 
-/** Business details the pharmacy has already given, from PharmSmart or the Curaleaf form. */
+/** Business details the pharmacy has already given, from PharmSmart, the Curaleaf form or Companies House. */
 export type WorldpayStart = Partial<Pick<Fields,
   'legalName' | 'tradingName' | 'contactName' | 'contactPosition' | 'contactPhone' | 'gphcNumber' | 'registeredAddress' | 'tradingAddress' | 'landline' | 'businessEmail'
+  | 'businessType' | 'registrationNumber' | 'tradingSince'
 >>;
 
-/** The first principal's details PharmSmart sent (its superintendent). */
-export type WorldpayPrincipalStart = Partial<Pick<Principal, 'firstNames' | 'surname' | 'email' | 'mobile'>>;
+/** A principal's details we already hold: PharmSmart's superintendent, or a director from Companies House. */
+export type WorldpayPrincipalStart = Partial<Pick<Principal, 'firstNames' | 'surname' | 'email' | 'mobile' | 'nationality' | 'countryOfResidence'>>;
 
 const BUSINESS_TYPES = ['Ltd Co', 'Sole Trader', 'Partnership', 'LLP', 'PLC'];
 const MAX_PRINCIPALS = 4;
@@ -62,6 +65,9 @@ const PREFILL_LABELS: Record<keyof WorldpayStart, string> = {
   tradingAddress: 'Trading address',
   landline: 'Landline',
   businessEmail: 'Business email',
+  businessType: 'Business type',
+  registrationNumber: 'Company registration number',
+  tradingSince: 'Trading since',
 };
 
 const PRINCIPAL_LABELS: Record<keyof WorldpayPrincipalStart, string> = {
@@ -69,6 +75,8 @@ const PRINCIPAL_LABELS: Record<keyof WorldpayPrincipalStart, string> = {
   surname: 'Principal surname',
   email: 'Principal email',
   mobile: 'Principal mobile',
+  nationality: 'Principal nationality',
+  countryOfResidence: 'Principal country of residence',
 };
 
 function filledOnly<T extends Record<string, string | undefined>>(values: T) {
@@ -86,6 +94,10 @@ function firstPrincipal(prefill: WorldpayPrincipalStart): Principal {
   return { ...PRINCIPAL, ...filledOnly(prefill) };
 }
 
+function startPrincipals(principals: WorldpayPrincipalStart[] | undefined, principal: WorldpayPrincipalStart): Principal[] {
+  return principals?.length ? principals.slice(0, MAX_PRINCIPALS).map(firstPrincipal) : [firstPrincipal(principal)];
+}
+
 function Field({ label, hint, wide, children }: { label: string; hint?: string; wide?: boolean; children: ReactNode }) {
   return (
     <label className={wide ? 'is-wide' : undefined}>
@@ -99,44 +111,58 @@ export function WorldpayForm({
   open,
   prefill,
   principal = {},
+  principalsStart,
   onClose,
   onSubmitted,
   send = submitWorldpayForm,
   prefillSource = 'your PharmSmart account and Curaleaf form',
+  companyNumber,
 }: {
   open: boolean;
   prefill: WorldpayStart;
   principal?: WorldpayPrincipalStart;
+  /** Several principals to start with (a company's directors); used instead of `principal` when given. */
+  principalsStart?: WorldpayPrincipalStart[];
   onClose: () => void;
   onSubmitted: (result: { submittedAt: string }) => void;
   /** The portal posts to its own route, recorded against the signed-in branch. */
   send?: (input: Record<string, unknown>) => Promise<{ submittedAt: string }>;
   prefillSource?: string;
+  /** The Companies House number already looked up on the Curaleaf form, if any. */
+  companyNumber?: string;
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const prefillRef = useRef(prefill);
   const principalRef = useRef(principal);
+  const principalsRef = useRef(principalsStart);
   const onCloseRef = useRef(onClose);
   const busyRef = useRef(false);
   prefillRef.current = prefill;
   principalRef.current = principal;
+  principalsRef.current = principalsStart;
   onCloseRef.current = onClose;
   const [fields, setFields] = useState<Fields>(() => start(prefill));
-  const [principals, setPrincipals] = useState<Principal[]>(() => [firstPrincipal(principal)]);
-  const prefilled = [
+  const [principals, setPrincipals] = useState<Principal[]>(() => startPrincipals(principalsStart, principal));
+  // What the form opened with, so a lookup can tell untouched fields from the pharmacy's own.
+  const openedWith = useRef({ fields: start(prefill), principals: startPrincipals(principalsStart, principal) });
+  const current = useRef({ fields, principals });
+  current.current = { fields, principals };
+  const prefilled = [...new Set([
     ...(Object.keys(filledOnly(prefill)) as Array<keyof WorldpayStart>).map(key => PREFILL_LABELS[key]),
-    ...(Object.keys(filledOnly(principal)) as Array<keyof WorldpayPrincipalStart>).map(key => PRINCIPAL_LABELS[key]),
-  ];
+    ...(principalsStart?.length ? principalsStart : [principal]).flatMap(person => (Object.keys(filledOnly(person)) as Array<keyof WorldpayPrincipalStart>).map(key => PRINCIPAL_LABELS[key])),
+  ])];
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   busyRef.current = busy;
 
   useEffect(() => {
     if (!open) return;
-    setFields(start(prefillRef.current));
-    setPrincipals([firstPrincipal(principalRef.current)]);
+    const opening = { fields: start(prefillRef.current), principals: startPrincipals(principalsRef.current, principalRef.current) };
+    openedWith.current = opening;
+    setFields(opening.fields);
+    setPrincipals(opening.principals);
     setError(null);
     setBusy(false);
     idempotencyKey.current = crypto.randomUUID();
@@ -160,6 +186,20 @@ export function WorldpayForm({
   };
   const setPrincipal = (index: number, key: keyof Principal) => (event: { target: { value: string } }) => {
     setPrincipals(current => current.map((person, at) => (at === index ? { ...person, [key]: event.target.value } : person)));
+  };
+  const applyCompany = (company: CompanyLookup) => {
+    const result = worldpayFromCompany({
+      fields: current.current.fields,
+      startFields: openedWith.current.fields,
+      principals: current.current.principals,
+      startPrincipals: openedWith.current.principals,
+      blankPrincipal: PRINCIPAL,
+      company,
+      max: MAX_PRINCIPALS,
+    });
+    setFields(result.fields);
+    setPrincipals(result.principals);
+    return result.filled;
   };
   const input = (key: keyof Fields, props: Record<string, unknown> = {}) => (
     <input className="input" name={key} value={fields[key]} onChange={set(key)} {...props} />
@@ -211,6 +251,14 @@ export function WorldpayForm({
         <div className="curaleaf-account-form__body">
           <p>Worldpay needs these details to open your card account. They are emailed to our team as a PDF to pass on to Worldpay. The platform does not keep a copy.</p>
           <PrefillReviewBanner fields={prefilled} source={prefillSource} />
+          <CompanyLookupBox
+            intro={prefilled.length
+              ? `Some details are already filled in from ${prefillSource}. If your pharmacy is a limited company, enter its Companies House number to bring in the latest registered details and its directors, and anything not filled in yet.`
+              : 'If your pharmacy is a limited company, enter its Companies House number and we will fill in its registered details and its directors.'}
+            initialNumber={companyNumber}
+            disabled={busy}
+            onFound={applyCompany}
+          />
           {error ? <p className="curaleaf-account-form__error" role="alert">{error}</p> : null}
           <div className="curaleaf-account-form__grid">
             <fieldset>

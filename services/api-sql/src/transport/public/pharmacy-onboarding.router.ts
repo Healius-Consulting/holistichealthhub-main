@@ -7,7 +7,8 @@ import {
   publicOnboardingStatus,
 } from '../../domain/pharmacy-onboarding/request.js';
 import { pharmacyOnboardingDeferralSchema } from '../../domain/pharmacy-onboarding/deferral.js';
-import { publicCuraleafFormLimiter, publicPartnerTermsLimiter, publicPharmacyOnboardingDeferralLimiter, publicWorldpayFormLimiter } from '../../security/public-limits.js';
+import { lookUpCompany } from '../../application/pharmacy-onboarding/companies-house.js';
+import { publicCompanyLookupLimiter, publicCuraleafFormLimiter, publicPartnerTermsLimiter, publicPharmacyOnboardingDeferralLimiter, publicWorldpayFormLimiter } from '../../security/public-limits.js';
 import { recordPharmacyOnboardingDeferral } from '../../application/pharmacy-onboarding/record-deferral.js';
 import { submitWorldpayForm } from '../../application/pharmacy-onboarding/submit-worldpay.js';
 import { sendEmailNow } from '../../application/workers/deliver-messages.js';
@@ -134,6 +135,18 @@ export function createPublicPharmacyOnboardingRouter(): Router {
       const note = await submitWorldpayForm(repo, email => sendEmailNow(email), form);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(201).json({ submittedAt: note.submittedAt });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // GET /v1/public/pharmacy-onboarding-company/:number - Companies House details for the
+  // Curaleaf and Worldpay forms. Public register data only; nothing is stored.
+  router.get('/public/pharmacy-onboarding-company/:number', publicCompanyLookupLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const company = await lookUpCompany(String(req.params.number ?? ''));
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.json(company);
     } catch (error) {
       next(error);
     }

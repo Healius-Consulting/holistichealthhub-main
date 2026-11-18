@@ -39,6 +39,14 @@ function onboardingFormLimiter() {
 export const publicCuraleafFormLimiter = onboardingFormLimiter();
 export const publicPartnerTermsLimiter = onboardingFormLimiter();
 export const publicWorldpayFormLimiter = onboardingFormLimiter();
+/**
+ * Companies House lookups on the Curaleaf form. Thirty an hour covers a few typos per
+ * pharmacy and keeps any one address well inside HHH's 600-per-5-minutes key.
+ */
+export const publicCompanyLookupLimiter = publicLimiter(60 * 60 * 1000, 30, {
+  code: 'RATE_LIMITED',
+  message: 'Too many company lookups. Fill the form in yourself, or try again in an hour.',
+});
 /** "Not yet" is one click per visit. Ten an hour allows a few retries and stops scripts. */
 export const publicPharmacyOnboardingDeferralLimiter = publicLimiter(60 * 60 * 1000, 10);
 export const publicPaymentStatusLimiter = publicLimiter(15 * 60 * 1000, 90);

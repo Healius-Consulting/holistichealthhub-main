@@ -14608,6 +14608,29 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .prefill-review-banner strong{ color: #4a3106; font-weight: 700; }
 .prefill-review-banner__fields{ color: #7a5410; font-size: 13px; }
 
+/* The optional Companies House lookup at the top of the Curaleaf form. */
+.company-lookup{
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding: 14px;
+  background: #f4f8f6;
+  border: 1px solid #d5e5dc;
+  border-radius: 12px;
+}
+.company-lookup__intro{ margin: 0; color: var(--ink-muted); font-size: 14px; line-height: 1.5; }
+.company-lookup__intro strong{ display: block; margin-bottom: 2px; color: var(--ink); font-weight: 700; }
+.company-lookup__intro strong span{ margin-left: 6px; color: var(--ink-muted); font-size: 13px; font-weight: 500; }
+.company-lookup__row{ display: flex; gap: 8px; }
+.company-lookup__row .input{ flex: 1 1 auto; min-width: 0; max-width: 240px; }
+.company-lookup__row .btn{ flex: 0 0 auto; }
+.company-lookup__found,
+.company-lookup__warning,
+.company-lookup__error{ margin: 0; padding: 10px 12px; font-size: 14px; line-height: 1.5; border-radius: 10px; }
+.company-lookup__found{ color: #173f33; background: #e9f1ed; }
+.company-lookup__warning{ color: #5c3d08; background: #fffbeb; border: 1px solid #fde68a; }
+.company-lookup__error{ color: #7f1d1d; background: #fef2f2; }
+
 .curaleaf-account-form__notice{
   margin: 0;
   padding: 12px 14px;

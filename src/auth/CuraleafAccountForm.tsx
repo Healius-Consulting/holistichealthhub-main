@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ApiRequestError, submitCuraleafAccountForm } from '../shared/api';
+import { ApiRequestError, submitCuraleafAccountForm, type CompanyLookup } from '../shared/api';
 import type { PharmsmartWelcome } from './types';
 import { PrefillReviewBanner } from './PrefillReviewBanner';
+import { CompanyLookupBox } from './CompanyLookupBox';
+import { curaleafFieldsFromCompany } from './company-prefill';
 import { CURALEAF_FIELD_LABELS, curaleafFormProblems, curaleafProblemsFromServer, describeCuraleafProblems } from './curaleafFormRules';
 
 const LABELS: Record<keyof Fields, string> = CURALEAF_FIELD_LABELS;
@@ -56,8 +58,11 @@ export function CuraleafAccountForm({
   open: boolean;
   welcome: PharmsmartWelcome;
   onClose: () => void;
-  /** The form is in; the request it made is where the Partner Terms are accepted next. */
-  onSubmitted: (values: CuraleafFormValues, requestId: string) => void;
+  /**
+   * The form is in; the request it made is where the Partner Terms are accepted next.
+   * `company` is the Companies House record when the pharmacy looked one up.
+   */
+  onSubmitted: (values: CuraleafFormValues, requestId: string, company: CompanyLookup | null) => void;
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -68,8 +73,14 @@ export function CuraleafAccountForm({
   welcomeRef.current = welcome;
   onCloseRef.current = onClose;
   const [fields, setFields] = useState<Fields>(() => blank(welcome));
-  const prefilled = (Object.entries(blank(welcome)) as Array<[keyof Fields, string]>)
-    .filter(([, value]) => value)
+  const [company, setCompany] = useState<CompanyLookup | null>(null);
+  const [fromCompany, setFromCompany] = useState<Array<keyof Fields>>([]);
+  const fieldsRef = useRef(fields);
+  fieldsRef.current = fields;
+  const pharmsmartStart = blank(welcome);
+  // Fields Companies House has since filled are named by the lookup box, not here.
+  const prefilled = (Object.entries(pharmsmartStart) as Array<[keyof Fields, string]>)
+    .filter(([key, value]) => value && !fromCompany.includes(key))
     .map(([key]) => LABELS[key]);
   const [error, setError] = useState<string | null>(null);
   const [alreadyReceived, setAlreadyReceived] = useState<string | null>(null);
@@ -79,6 +90,8 @@ export function CuraleafAccountForm({
   useEffect(() => {
     if (!open) return;
     setFields(blank(welcomeRef.current));
+    setCompany(null);
+    setFromCompany([]);
     setError(null);
     setAlreadyReceived(null);
     setBusy(false);
@@ -100,6 +113,14 @@ export function CuraleafAccountForm({
 
   const set = (key: keyof Fields) => (event: { target: { value: string } }) => {
     setFields(current => ({ ...current, [key]: event.target.value }));
+  };
+
+  const applyCompany = (found: CompanyLookup) => {
+    const result = curaleafFieldsFromCompany(fieldsRef.current, pharmsmartStart, found);
+    setFields(result.fields);
+    setCompany(found);
+    setFromCompany(current => [...new Set([...current, ...result.filled])]);
+    return result.filled.map(key => LABELS[key]);
   };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -126,7 +147,7 @@ export function CuraleafAccountForm({
         signatureName: fields.pharmacistName.trim(),
         idempotencyKey: idempotencyKey.current,
       });
-      onSubmitted(fields, created.id);
+      onSubmitted(fields, created.id, company);
     } catch (cause) {
       // A second form for a pharmacy we already have is not a failure: say so plainly.
       if (cause instanceof ApiRequestError && cause.code === 'ONBOARDING_ALREADY_RECEIVED') {
@@ -156,6 +177,14 @@ export function CuraleafAccountForm({
         <div className="curaleaf-account-form__body">
           <p>These details are written onto the Curaleaf account form. The date is added when you submit.</p>
           <PrefillReviewBanner fields={prefilled} source="your PharmSmart account" />
+          <CompanyLookupBox
+            intro={Object.values(pharmsmartStart).some(Boolean)
+              ? 'PharmSmart has sent us some of your details. If your pharmacy is a limited company, enter its Companies House number to bring in the latest registered details, and any PharmSmart did not send.'
+              : 'If your pharmacy is a limited company, enter its Companies House number and we will fill in its registered details.'}
+            carriesToWorldpay
+            disabled={busy}
+            onFound={applyCompany}
+          />
           {alreadyReceived ? <p className="curaleaf-account-form__notice" role="status"><strong>Already received.</strong> {alreadyReceived}</p> : null}
           {error ? <p className="curaleaf-account-form__error" role="alert">{error}</p> : null}
           <div className="curaleaf-account-form__grid">

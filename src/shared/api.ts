@@ -521,6 +521,23 @@ export function submitWorldpayForm(input: Record<string, unknown>) {
   });
 }
 
+/** A company's public Companies House record, shaped for the onboarding forms. */
+export interface CompanyLookup {
+  companyNumber: string;
+  companyName: string;
+  status: string;
+  active: boolean;
+  businessType: 'Ltd Co' | 'LLP' | 'PLC' | null;
+  incorporatedOn: string | null;
+  registeredAddress: string;
+  directors: Array<{ firstNames: string; surname: string; nationality: string; countryOfResidence: string }>;
+}
+
+/** Looked up on the server, which holds the Companies House key. Nothing is stored. */
+export function lookUpCompany(companyNumber: string) {
+  return apiRequest<CompanyLookup>(`/v1/public/pharmacy-onboarding-company/${encodeURIComponent(companyNumber.trim())}`, { skipGetCache: true });
+}
+
 /** Where an activated branch is in onboarding, for its portal Onboarding page and banner. */
 export interface BranchOnboardingView {
   live: boolean;
