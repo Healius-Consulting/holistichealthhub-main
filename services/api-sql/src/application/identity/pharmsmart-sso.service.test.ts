@@ -24,7 +24,9 @@ function info(overrides: Record<string, unknown> = {}, person: Record<string, un
 function service(
   body = info(),
   pharmacies?: Array<{ id: string; gphcNumber: string; primaryContactUid?: string | null }>,
+  requests: Record<string, 'PENDING' | 'ON_HOLD' | 'ACTIVATED'> = {},
 ) {
+  const lookedUp: string[] = [];
   const audits: AppendAuditInput[] = [];
   const created: Array<{ email: string; displayName: string; organisationId: string }> = [];
   const adopted: string[] = [];
@@ -44,6 +46,11 @@ function service(
       { id: '30', gphcNumber: '9999999', primaryContactUid: 'someone-else' },
       { id: organisationId, gphcNumber: '1234471', primaryContactUid: 'owner-uid' },
     ],
+    findLatestOnboardingRequest: async gphcNumber => {
+      lookedUp.push(gphcNumber);
+      const status = requests[gphcNumber];
+      return status ? { status } : null;
+    },
     listStaff: async () => staff,
     findEmailOwner: async email => staff.find(member => member.email === email) ?? null,
     adoptAccount: async member => { adopted.push(member.uid); },
@@ -68,7 +75,7 @@ function service(
     audit: async input => { audits.push(input); },
     setupSecret: 'test-secret',
   });
-  return { sso, audits, created, adopted, minted, staff };
+  return { sso, audits, created, adopted, minted, staff, lookedUp };
 }
 
 describe('PharmSmart redemption', () => {
@@ -121,6 +128,7 @@ describe('PharmSmart redemption', () => {
       gphcNumber: '5550001',
       pharmsmartPharmacyId: '30',
       prefill: { pharmacyEmail: 'shop@pharmacy.test' },
+      onboardingRequest: null,
     });
     assert.equal(created.length, 0);
     assert.equal(minted.length, 0);
@@ -128,6 +136,29 @@ describe('PharmSmart redemption', () => {
     assert.equal(audits.at(-1)?.organisationId, null);
     assert.deepEqual(audits.at(-1)?.details, { reason: 'WELCOME' });
     assert.equal(JSON.stringify(audits.at(-1)?.details).includes('amina.khan'), false);
+  });
+
+  it('returns the awaiting-activation view for a GPhC whose request is pending', async () => {
+    const { sso, created, minted, lookedUp } = service(info({ gphc: '555 0001' }), undefined, { '5550001': 'PENDING' });
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status, 'welcome');
+    if (result.status !== 'welcome') return;
+    assert.equal(result.onboardingRequest, 'pending');
+    assert.deepEqual(lookedUp, ['5550001']);
+    assert.equal(created.length, 0);
+    assert.equal(minted.length, 0);
+  });
+
+  it('returns the on-hold view for a GPhC whose request is on hold', async () => {
+    const { sso } = service(info({ gphc: '5550001' }), undefined, { '5550001': 'ON_HOLD' });
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status === 'welcome' && result.onboardingRequest, 'on_hold');
+  });
+
+  it('shows the forms when the latest request is not pending or on hold', async () => {
+    const { sso } = service(info({ gphc: '5550001' }), undefined, { '5550001': 'ACTIVATED' });
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status === 'welcome' && result.onboardingRequest, null);
   });
 
   it('still opens the workspace when the GPhC matches a pharmacy account', async () => {

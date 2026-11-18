@@ -1,0 +1,29 @@
+# One-off (Step 0, Manual activation and Hold): turn every DECLINED pharmacy
+# onboarding request into ON_HOLD so admin can Unhold it. No emails are sent.
+# declineReason, decidedAt and decidedByUid are left as they are: the decline
+# reason becomes the hold reason.
+#
+# Run only after the schema with ON_HOLD is deployed. Run ListDeclinedPharmacyRequests
+# first, check the rows, then HoldDeclinedPharmacyRequests, then the list again
+# (it should return nothing). See README.md.
+
+query ListDeclinedPharmacyRequests @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequests(where: { status: { eq: DECLINED } }, orderBy: [{ createdAt: ASC }], limit: 500) {
+    id
+    pharmacyName
+    gphcNumber
+    pharmacyEmail
+    organisationId
+    declineReason
+    decidedAt
+    decidedByUid
+    createdAt
+  }
+}
+
+mutation HoldDeclinedPharmacyRequests @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequest_updateMany(
+    where: { status: { eq: DECLINED } }
+    data: { status: ON_HOLD }
+  )
+}

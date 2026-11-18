@@ -54,7 +54,7 @@ Route families:
 - `/v1/portal/admin/companies/*`
 - `/v1/portal/admin/organisations/*`
 - organisation logo upload/complete/delete
-- go-live readiness/intake-live/go-live routes
+- go-live readiness/go-live routes
 - `/v1/public/pharmacies/by-token/:token` (directory projection only)
 
 SQL tables:

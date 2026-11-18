@@ -23,7 +23,7 @@ function activationState(organisation: PharmacyTenant, testPharmacy: boolean): {
   if (testPharmacy) return { value: 'Test pharmacy', tone: 'ok', detail: 'Always on, against the Curaleaf and Worldpay sandboxes.' };
   if (organisation.status === 'paused') return { value: 'Suspended', tone: 'stop', detail: 'Staff are locked out and the eligibility link is off until HHH lifts the suspension.' };
   if (organisation.status === 'live') return { value: 'Live', tone: 'ok', detail: 'Live Curaleaf credentials are saved. Patients, orders and payments are real.' };
-  return { value: 'Awaiting Curaleaf', tone: 'wait', detail: 'Goes live by itself when live Curaleaf credentials are saved.' };
+  return { value: 'Awaiting Curaleaf', tone: 'wait', detail: 'Eligibility is open; ordering and payments open when live Curaleaf credentials are saved, which takes it live.' };
 }
 
 function curaleafRow(organisation: PharmacyTenant, testPharmacy: boolean, openCuraleaf: () => void): AccountRow {
@@ -118,7 +118,7 @@ export function PharmacySummary({
       tone: intakeLive ? 'ok' : 'off',
       detail: intakeLive
         ? 'Patients can check eligibility through the pharmacy link and QR code.'
-        : organisation.status === 'paused' ? 'Off while the pharmacy is suspended.' : 'Turns on when the pharmacy goes live.',
+        : organisation.status === 'paused' ? 'Off while the pharmacy is suspended.' : 'Off for this pharmacy.',
     },
     worldpayRow(organisation, worldpayFormSentAt, testPharmacy),
   ];

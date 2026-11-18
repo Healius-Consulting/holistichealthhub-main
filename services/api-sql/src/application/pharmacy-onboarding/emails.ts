@@ -62,20 +62,31 @@ export async function queuePharmacyOnboardingSubmitted(
   );
 }
 
-export async function queuePharmacyOnboardingDeclined(
+/** Tells the pharmacy its request is on hold. The admin's reason is never sent. */
+export async function queuePharmacyOnboardingHeld(
   notificationRepo: NotificationRepositoryPort,
-  request: PharmacyOnboardingRequestRecord,
-  reason: string,
+  request: Pick<PharmacyOnboardingRequestRecord, 'id' | 'pharmacyName' | 'pharmacyEmail' | 'decidedAt'>,
 ) {
   await queueEmailToRecipients(
     notificationRepo,
     [{ email: request.pharmacyEmail, displayName: request.pharmacyName }],
-    'pharmacy_onboarding_declined',
-    {
-      pharmacyName: request.pharmacyName,
-      declineReason: reason,
-    },
-    ['pharmacy-onboarding-declined', request.id],
+    'pharmacy_onboarding_held',
+    { pharmacyName: request.pharmacyName },
+    // A request can be held again after Unhold, so each hold gets its own key.
+    ['pharmacy-onboarding-held', request.id, request.decidedAt ?? ''],
+  );
+}
+
+export async function queuePharmacyOnboardingActivated(
+  notificationRepo: NotificationRepositoryPort,
+  request: Pick<PharmacyOnboardingRequestRecord, 'id' | 'pharmacyName' | 'pharmacyEmail'>,
+) {
+  await queueEmailToRecipients(
+    notificationRepo,
+    [{ email: request.pharmacyEmail, displayName: request.pharmacyName }],
+    'pharmacy_onboarding_activated',
+    { pharmacyName: request.pharmacyName },
+    ['pharmacy-onboarding-activated', request.id],
   );
 }
 

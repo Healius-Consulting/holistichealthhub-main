@@ -932,7 +932,7 @@ export interface GoLiveReadiness {
 
 export interface PharmacyOperationalStatus {
   intake: { live: boolean; label: 'Live' | 'Off' };
-  workspace: { mode: 'training' | 'live' | 'paused'; label: 'Training' | 'Live' | 'Paused' };
+  workspace: { mode: 'training' | 'test' | 'live' | 'paused'; label: 'Awaiting Curaleaf' | 'Test' | 'Live' | 'Paused' };
   staff: { activeCount: number; invitedCount: number; passed: boolean; label: string };
   curaleaf: { connected: boolean; production: boolean; label: 'Waiting' | 'Test' | 'Production' };
   payment: { route: 'manual' | 'worldpay'; worldpayConnected: boolean; passed: boolean; label: string };

@@ -57,7 +57,7 @@ export const LOCAL_PREVIEW_PHARMACY_REQUESTS: PharmacyOnboardingRequestView[] = 
   {
     ...base,
     id: 'preview-request-3',
-    status: 'declined',
+    status: 'on_hold',
     pharmacistName: 'Priya Nair',
     pharmacyName: 'Northgate Pharmacy',
     registeredCompanyName: 'Northgate Retail Ltd',
@@ -73,6 +73,25 @@ export const LOCAL_PREVIEW_PHARMACY_REQUESTS: PharmacyOnboardingRequestView[] = 
     createdAt: '2026-11-10T14:30:00Z',
     decidedAt: '2026-11-11T10:00:00Z',
     declineReason: 'This GPhC number belongs to a pharmacy that is already part of a group on the platform.',
+    worldpaySubmittedAt: null,
+  },
+  {
+    ...base,
+    id: 'preview-request-4',
+    status: 'pending',
+    pharmacistName: 'Ravi Patel',
+    pharmacyName: 'Parkside Pharmacy',
+    registeredCompanyName: 'Parkside Healthcare Ltd',
+    invoiceAddress: '5 Park Row, Bradford, BD1 2AB',
+    deliveryAddress: '5 Park Row, Bradford, BD1 2AB',
+    gphcNumber: '1133557',
+    pharmacyEmail: 'team@parkside.example',
+    accountsEmail: 'accounts@parkside.example',
+    pharmacyPhone: '01274 000 222',
+    accountsPhone: '01274 000 223',
+    signatureName: 'Ravi Patel',
+    signedOn: '2026-11-18',
+    createdAt: '2026-11-18T11:20:00Z',
     worldpaySubmittedAt: null,
   },
 ];
@@ -111,8 +130,8 @@ function withState(base: PharmacyTenant, state: Partial<PharmacyTenant>): Pharma
 
 /**
  * One preview pharmacy per state the overview shows: waiting with no Curaleaf
- * credentials, waiting on test credentials, and live. Rejected ones
- * appear through the declined request above; test pharmacies come from the demo data.
+ * credentials, waiting on test credentials, and live. Held requests
+ * appear through the on-hold request above; test pharmacies come from the demo data.
  */
 export const LOCAL_PREVIEW_NEW_PHARMACIES: PharmacyTenant[] = [
   newPharmacy('preview-new-pharmacy-1', LOCAL_PREVIEW_PHARMACY_REQUESTS[0]!, 'KP', '#0f766e'),

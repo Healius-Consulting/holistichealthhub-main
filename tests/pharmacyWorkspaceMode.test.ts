@@ -36,7 +36,7 @@ test('Training, Test and Live are distinct pharmacy workspaces', () => {
   assert.equal(isOpenPharmacyWorkspace('live'), true);
   assert.equal(pharmacyWorkspaceStatusLabel('test'), 'Test');
   assert.equal(pharmacyWorkspaceStatusLabel('live'), 'Live');
-  assert.equal(pharmacyWorkspaceStatusLabel('training'), 'Training');
+  assert.equal(pharmacyWorkspaceStatusLabel('training'), 'Awaiting Curaleaf');
 });
 
 test('dummy pack is local preview only', () => {

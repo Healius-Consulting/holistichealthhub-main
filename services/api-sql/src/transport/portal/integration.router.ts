@@ -23,6 +23,7 @@ import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { applyCuraleafActivation } from '../../application/organisation/curaleaf-activation.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { requireStaff } from '../../security/require-staff.js';
+import { requirePharmacyOperationalWrites } from './require-operational-writes.js';
 import type { RequestContext } from '../../security/request-context.js';
 
 const organisationIdSchema = z.string().regex(/^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i);
@@ -354,7 +355,7 @@ export function createPortalIntegrationRouter(): Router {
     } catch (error) { next(error); }
   });
 
-  router.post('/portal/integrations/curaleaf/quote', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/integrations/curaleaf/quote', requireCsrf, requireStaff('any'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = z.object({
         organisationId: z.string().optional(),
@@ -376,7 +377,7 @@ export function createPortalIntegrationRouter(): Router {
     } catch (error) { next(error); }
   });
 
-  router.post('/portal/integrations/curaleaf/prescriptions/scan', requireCsrf, requireStaff('any'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/integrations/curaleaf/prescriptions/scan', requireCsrf, requireStaff('any'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = curaleafScanSchema.parse(req.body);
       const { organisationId, connection } = await requireCuraleafConnection(req.context, input.organisationId);

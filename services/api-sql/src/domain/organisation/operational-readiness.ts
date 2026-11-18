@@ -18,7 +18,7 @@ export type SetupTaskId = typeof SETUP_TASK_IDS[number];
 
 export interface PharmacyOperationalStatus {
   intake: { live: boolean; label: 'Live' | 'Off' };
-  workspace: { mode: 'training' | 'test' | 'live' | 'paused'; label: 'Training' | 'Test' | 'Live' | 'Paused' };
+  workspace: { mode: 'training' | 'test' | 'live' | 'paused'; label: 'Awaiting Curaleaf' | 'Test' | 'Live' | 'Paused' };
   staff: { activeCount: number; invitedCount: number; passed: boolean; label: string };
   curaleaf: { connected: boolean; production: boolean; label: 'Waiting' | 'Test' | 'Production' };
   payment: { route: 'manual' | 'worldpay'; worldpayConnected: boolean; passed: boolean; label: string };
@@ -88,7 +88,7 @@ function workspaceLabel(mode: PharmacyOperationalStatus['workspace']['mode']): P
   if (mode === 'live') return 'Live';
   if (mode === 'test') return 'Test';
   if (mode === 'paused') return 'Paused';
-  return 'Training';
+  return 'Awaiting Curaleaf';
 }
 
 export function buildOperationalStatus(input: {

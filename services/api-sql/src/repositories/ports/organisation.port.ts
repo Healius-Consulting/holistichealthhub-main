@@ -77,6 +77,8 @@ export interface CreateOrganisationRecordInput {
   primaryColour: string;
   logoText: string;
   portalName: string;
+  /** The eligibility link. On from creation: a pharmacy awaiting Curaleaf takes patients, not orders. */
+  intakeEnabled: boolean;
 }
 
 export interface PublicPharmacy {

@@ -78,6 +78,7 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
         gphcNumber: result.gphcNumber ?? null,
         pharmsmartPharmacyId: result.pharmsmartPharmacyId ?? null,
         prefill: result.prefill ?? {},
+        onboardingRequest: result.onboardingRequest ?? null,
       },
     };
   }

@@ -14,11 +14,11 @@ export function compactGphc(value: string) {
 }
 
 export function requestTone(status: PharmacyOnboardingRequestView['status']) {
-  return status === 'declined' ? 'danger' : 'warning';
+  return status === 'on_hold' ? 'danger' : 'warning';
 }
 
 export function requestStatusLabel(status: PharmacyOnboardingRequestView['status']) {
-  if (status === 'declined') return 'Rejected';
+  if (status === 'on_hold') return 'On hold';
   if (status === 'activated') return 'Activated';
   return 'New request';
 }

@@ -6,7 +6,11 @@ import { isTenantScope } from '../../security/request-context.js';
 
 const organisationRepo = new SqlOrganisationRepository();
 
-/** Training and pre-live workspaces must not persist CRM, orders, payments, or goods-in. */
+/**
+ * A pharmacy awaiting Curaleaf (or any other not-live workspace) takes eligible
+ * patients but never orders, pays, reaches Curaleaf or records goods-in. Admin
+ * (platform) requests pass: they are not a pharmacy acting on its own account.
+ */
 export async function requirePharmacyOperationalWrites(req: Request, _res: Response, next: NextFunction) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
     next();
@@ -20,7 +24,7 @@ export async function requirePharmacyOperationalWrites(req: Request, _res: Respo
   try {
     const organisation = await organisationRepo.findOrganisationById(context.organisationId);
     if (!pharmacyOperationalAccess(organisation)) {
-      throw new HttpError(409, 'This pharmacy workspace cannot save live records until HHH flips it live.', 'WORKSPACE_NOT_LIVE');
+      throw new HttpError(409, 'Ordering, payments and Curaleaf open once this pharmacy is live. Until then it can take eligible patients only.', 'WORKSPACE_NOT_LIVE');
     }
     next();
   } catch (error) {

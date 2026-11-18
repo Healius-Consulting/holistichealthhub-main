@@ -11,16 +11,16 @@ function deps(organisation: Partial<OrganisationRecord> | null, request: Partial
     findOrganisation: async () => (organisation ? { id: 'org-1', name: 'Shah Pharmacy', status: 'ONBOARDING', pharmacyEmail: 'shop@shah.test', mainContactEmail: null, archivedAt: null, ...organisation } as OrganisationRecord : null),
     findRequestByOrganisation: async () => (request ? { id: 'req-1', pharmacyName: 'Shah Pharmacy', pharmacyEmail: 'form@shah.test', ...request } as PharmacyOnboardingRequestRecord : null),
     archiveOrganisation: async (id, reason) => { calls.push(`archive:${id}:${reason}`); },
-    declineRequest: async id => { calls.push(`decline:${id}`); },
+    holdRequest: async id => { calls.push(`hold:${id}`); },
     emailPharmacy: async input => { emails.push(input); },
   };
   return { d, calls, emails };
 }
 
-test('archives a new pharmacy, declines its request and emails the form address', async () => {
+test('archives a new pharmacy, holds its request and emails the form address', async () => {
   const { d, calls, emails } = deps({}, {});
   await declineNewPharmacy(d, { organisationId: 'org-1', reason: 'Curaleaf rejected the account.', actorUid: 'admin-1' });
-  assert.deepEqual(calls, ['archive:org-1:Curaleaf rejected the account.', 'decline:req-1']);
+  assert.deepEqual(calls, ['archive:org-1:Curaleaf rejected the account.', 'hold:req-1']);
   assert.deepEqual(emails.map(email => email.email), ['form@shah.test']);
 });
 

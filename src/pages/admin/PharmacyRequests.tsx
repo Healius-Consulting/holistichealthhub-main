@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, FileText } from 'lucide-react';
 import {
   activatePharmacyOnboardingRequest,
-  declinePharmacyOnboardingRequest,
   describeApiError,
+  holdPharmacyOnboardingRequest,
   listPharmacyOnboardingRequests,
   openPharmacyOnboardingFile,
+  unholdPharmacyOnboardingRequest,
   type ActivatedPharmacyOnboarding,
   type PharmacyOnboardingRequestView,
 } from '../../shared/api';
@@ -15,8 +16,9 @@ import { LOCAL_PREVIEW_PHARMACY_REQUESTS } from '../../dev/localPharmacyRequests
 
 /**
  * Pharmacy requests (Curaleaf account forms sent from the onboarding page) live
- * in the pharmacies overview as their own tab. A request is not a pharmacy yet:
- * Activate turns it into one, after which the normal Manage options apply.
+ * in the pharmacies overview. A request is not a pharmacy yet: HHH either
+ * activates it (creating the pharmacy, after which the normal Manage options
+ * apply) or holds it. A held request can be unheld back to new.
  */
 
 function initials(name: string) {
@@ -68,9 +70,9 @@ export function usePharmacyRequests(enabled: boolean) {
 
   const worldpayFor = useCallback((gphcNumber: string) => worldpay.get(compactGphc(gphcNumber)) ?? null, [worldpay]);
   const pending = useMemo(() => records.filter(record => record.status === 'pending'), [records]);
-  const declined = useMemo(() => records.filter(record => record.status === 'declined'), [records]);
+  const onHold = useMemo(() => records.filter(record => record.status === 'on_hold'), [records]);
 
-  return { records, pending, declined, status, error, reload: load, replace, worldpayFor };
+  return { records, pending, onHold, status, error, reload: load, replace, worldpayFor };
 }
 
 export function PharmacyRequestRow({
@@ -121,20 +123,21 @@ export function PharmacyRequestRecord({
   onActivated: (organisation: ActivatedPharmacyOnboarding, request: PharmacyOnboardingRequestView) => void;
   onChanged: (request: PharmacyOnboardingRequestView) => void;
 }) {
-  const [busy, setBusy] = useState<null | 'activate' | 'decline' | FileKind>(null);
+  const [busy, setBusy] = useState<null | 'activate' | 'hold' | 'unhold' | FileKind>(null);
   const [error, setError] = useState<string | null>(null);
-  const [declining, setDeclining] = useState(false);
+  const [holding, setHolding] = useState(false);
   const [reason, setReason] = useState('');
   const [preview, setPreview] = useState<{ url: string; kind: FileKind } | null>(null);
   const previewRef = useRef<string | null>(null);
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const tone = requestTone(request.status);
   const pending = request.status === 'pending';
+  const onHold = request.status === 'on_hold';
   const licenceIsPdf = request.licenceFilename.toLowerCase().endsWith('.pdf');
 
-  // A different request starts clean: no open decline box or file from the last one.
+  // A different request starts clean: no open hold box or file from the last one.
   useEffect(() => {
-    setDeclining(false);
+    setHolding(false);
     setReason('');
     setError(null);
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
@@ -147,8 +150,8 @@ export function PharmacyRequestRecord({
   }, []);
 
   useEffect(() => {
-    if (declining) reasonRef.current?.focus();
-  }, [declining]);
+    if (holding) reasonRef.current?.focus();
+  }, [holding]);
 
   const showFile = async (kind: FileKind) => {
     if (preview?.kind === kind) {
@@ -181,22 +184,35 @@ export function PharmacyRequestRecord({
     }
   };
 
-  const decline = async () => {
+  const hold = async () => {
     const note = reason.trim();
     if (note.length < 2) {
-      setError('Enter a reason the pharmacy can read.');
+      setError('Enter a reason for the hold. Only HHH admins see it.');
       reasonRef.current?.focus();
       return;
     }
-    setBusy('decline');
+    setBusy('hold');
     setError(null);
     try {
-      const result = await declinePharmacyOnboardingRequest(request.id, note);
+      const result = await holdPharmacyOnboardingRequest(request.id, note);
       onChanged(result.request);
-      setDeclining(false);
+      setHolding(false);
       setReason('');
     } catch (cause) {
-      setError(describeApiError(cause, 'The request could not be rejected.'));
+      setError(describeApiError(cause, 'The request could not be put on hold.'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const unhold = async () => {
+    setBusy('unhold');
+    setError(null);
+    try {
+      const result = await unholdPharmacyOnboardingRequest(request.id);
+      onChanged(result.request);
+    } catch (cause) {
+      setError(describeApiError(cause, 'The request could not be unheld.'));
     } finally {
       setBusy(null);
     }
@@ -211,7 +227,7 @@ export function PharmacyRequestRecord({
             <div className="order-crm-record__titles">
               <strong id="admin-request-title">{request.pharmacyName}</strong>
               <span className="order-crm-record__ref">{request.registeredCompanyName} · GPhC {request.gphcNumber}</span>
-              <em>{pending ? 'Not on the platform yet' : `Rejected ${formatRequestDate(request.decidedAt)}`}</em>
+              <em>{onHold ? `On hold since ${formatRequestDate(request.decidedAt)}` : 'Not on the platform yet'}</em>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${tone}`}>{requestStatusLabel(request.status)}</span>
@@ -224,9 +240,16 @@ export function PharmacyRequestRecord({
           </div>
           {pending ? (
             <div className="order-crm-record__actions" role="group" aria-label="Request actions">
-              <button type="button" className="btn btn-sm" disabled={busy !== null} aria-expanded={declining} onClick={() => setDeclining(open => !open)}>Reject</button>
+              <button type="button" className="btn btn-sm" disabled={busy !== null} aria-expanded={holding} onClick={() => setHolding(open => !open)}>Hold</button>
               <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} onClick={() => void activate()}>
-                {busy === 'activate' ? 'Activating…' : 'Activate pharmacy'}
+                {busy === 'activate' ? 'Activating…' : 'Activate'}
+              </button>
+            </div>
+          ) : null}
+          {onHold ? (
+            <div className="order-crm-record__actions" role="group" aria-label="Request actions">
+              <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} onClick={() => void unhold()}>
+                {busy === 'unhold' ? 'Unholding…' : 'Unhold'}
               </button>
             </div>
           ) : null}
@@ -236,40 +259,45 @@ export function PharmacyRequestRecord({
       <div className="patient-crm-detail__body pharmacy-dashboard">
         {error ? <div className="banner banner-amber" role="alert"><span>{error}</span></div> : null}
 
-        {declining && pending ? (
-          <section className="admin-request-decline" aria-labelledby="admin-request-decline-title">
-            <h3 id="admin-request-decline-title">Reject this request</h3>
-            <p>The pharmacy is emailed this reason at <strong>{request.pharmacyEmail}</strong>. No workspace is created.</p>
-            <textarea ref={reasonRef} className="input" rows={3} value={reason} onChange={event => setReason(event.target.value)} aria-label="Reason the pharmacy will be emailed" />
+        {holding && pending ? (
+          <section className="admin-request-decline" aria-labelledby="admin-request-hold-title">
+            <h3 id="admin-request-hold-title">Put this request on hold</h3>
+            <p>
+              Only HHH admins see this reason. <strong>{request.pharmacyEmail}</strong> is emailed that the account could not be
+              created at this point and to contact onboarding@holistichealthhub.live. No workspace is created.
+            </p>
+            <textarea ref={reasonRef} className="input" rows={3} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} aria-label="Reason for the hold (admin only)" />
             <div className="admin-request-decline__actions">
-              <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => { setDeclining(false); setReason(''); }}>Cancel</button>
-              <button type="button" className="btn btn-sm btn-danger" disabled={busy !== null} onClick={() => void decline()}>
-                {busy === 'decline' ? 'Rejecting…' : 'Reject pharmacy'}
+              <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => { setHolding(false); setReason(''); }}>Cancel</button>
+              <button type="button" className="btn btn-sm btn-danger" disabled={busy !== null || reason.trim().length < 2} onClick={() => void hold()}>
+                {busy === 'hold' ? 'Holding…' : 'Hold request'}
               </button>
             </div>
           </section>
         ) : null}
 
-        {request.status === 'declined' ? (
-          <section className="admin-activation admin-activation--stopped" aria-labelledby="admin-request-declined">
+        {onHold ? (
+          <section className="admin-activation admin-activation--stopped" aria-labelledby="admin-request-on-hold">
             <header>
               <span className="admin-activation__icon" aria-hidden="true"><AlertCircle size={18} /></span>
               <span>
-                <small>Rejected {formatRequestDate(request.decidedAt)}</small>
-                <strong id="admin-request-declined">Not activated</strong>
+                <small>On hold since {formatRequestDate(request.decidedAt)}</small>
+                <strong id="admin-request-on-hold">Not activated</strong>
               </span>
             </header>
             {request.declineReason ? <blockquote className="admin-request-quote">{request.declineReason}</blockquote> : null}
             <p className="admin-activation__body">
-              This reason was emailed to <strong>{request.pharmacyEmail}</strong>. The pharmacy cannot sign in, its records are kept,
-              and a new Curaleaf form for GPhC {request.gphcNumber} is refused.
+              Only HHH admins see this reason. The pharmacy was told its account could not be created yet, and a new Curaleaf
+              form for GPhC {request.gphcNumber} is refused. <strong>Unhold</strong> moves it back to a new request without emailing the pharmacy.
             </p>
           </section>
         ) : null}
 
         {pending ? (
           <p className="admin-request-next">
-            This form did not become a pharmacy automatically. <strong>Activate</strong> creates it in onboarding, where it waits for Curaleaf's live credentials like any other.
+            Submitting the form does not create a pharmacy. <strong>Activate</strong> creates it in onboarding, where it waits for Curaleaf's
+            live credentials like any other, and emails the pharmacy that its account is active.
+            {request.declineReason ? <> Previously held: <em>{request.declineReason}</em></> : null}
           </p>
         ) : null}
 

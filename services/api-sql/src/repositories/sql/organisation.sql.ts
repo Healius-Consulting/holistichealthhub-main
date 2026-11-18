@@ -196,6 +196,7 @@ const CREATE_ORGANISATION_GQL = `
     $primaryColour: String!
     $logoText: String!
     $portalName: String!
+    $intakeEnabled: Boolean!
   ) {
     organisation_insert(data: {
       id: $id
@@ -214,7 +215,7 @@ const CREATE_ORGANISATION_GQL = `
       portalName: $portalName
       status: ONBOARDING
       classification: STANDARD
-      intakeEnabled: true
+      intakeEnabled: $intakeEnabled
       prescriptionEnabled: true
       paymentsEnabled: true
       supplierOrdersEnabled: true

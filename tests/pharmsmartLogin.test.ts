@@ -38,6 +38,7 @@ test('a welcome redemption stays on the guide and does not open a session', () =
   if (next.action !== 'welcome') return;
   assert.deepEqual(next.welcome.prefill, {});
   assert.equal(next.welcome.pharmsmartPharmacyId, null);
+  assert.equal(next.welcome.onboardingRequest, null);
   const booking = new URL(pharmsmartOnboardingBookingUrl(next.welcome, {
     embed: true,
     hostname: 'portal.holistichealthhub.live',
@@ -50,6 +51,20 @@ test('a welcome redemption stays on the guide and does not open a session', () =
   const fallback = new URL(pharmsmartOnboardingBookingUrl(next.welcome));
   assert.equal(fallback.searchParams.get('embed_type'), null);
   assert.equal(fallback.searchParams.get('name'), 'Amina Khan');
+});
+
+test('a welcome redemption carries a pending or on-hold request through to the page', () => {
+  for (const state of ['pending', 'on_hold'] as const) {
+    const next = pharmsmartRedeemNext({
+      status: 'welcome',
+      firstName: 'Amina',
+      lastName: 'Khan',
+      email: 'amina@pharmacy.test',
+      gphcNumber: '1234471',
+      onboardingRequest: state,
+    });
+    assert.equal(next.action === 'welcome' && next.welcome.onboardingRequest, state);
+  }
 });
 
 test('a ready redemption is the only path that carries a session token', () => {

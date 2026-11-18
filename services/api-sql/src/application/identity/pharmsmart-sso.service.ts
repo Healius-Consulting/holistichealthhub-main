@@ -11,6 +11,7 @@ import {
   type PharmsmartSetupGap,
   type PharmsmartStaffCandidate,
 } from '../../domain/identity/pharmsmart-sso.js';
+import { compactGphcNumber, type PharmacyOnboardingStatus } from '../../domain/pharmacy-onboarding/request.js';
 import type { AppendAuditInput } from '../../repositories/ports/identity.port.js';
 
 export type PharmsmartRedeemContext = {
@@ -42,7 +43,20 @@ export type PharmsmartLoginResult =
     gphcNumber: string | null;
     pharmsmartPharmacyId: string | null;
     prefill: PharmsmartPrefill;
+    /**
+     * The GPhC's latest onboarding request, when it is still waiting (`pending`) or
+     * held (`on_hold`): the page shows that instead of the forms. Null shows the forms.
+     */
+    onboardingRequest: PharmsmartOnboardingRequestState;
   };
+
+export type PharmsmartOnboardingRequestState = 'pending' | 'on_hold' | null;
+
+function onboardingRequestState(status: PharmacyOnboardingStatus | null | undefined): PharmsmartOnboardingRequestState {
+  if (status === 'PENDING') return 'pending';
+  if (status === 'ON_HOLD') return 'on_hold';
+  return null;
+}
 
 type Person = { email: string | null; firstName: string | null; lastName: string | null };
 
@@ -56,6 +70,7 @@ export class PharmsmartSsoService {
   constructor(private readonly deps: {
     fetchPharmacyInfo: (token: string) => Promise<string>;
     listOrganisations: () => Promise<PharmacyLink[]>;
+    findLatestOnboardingRequest: (gphcNumber: string) => Promise<{ status: PharmacyOnboardingStatus } | null>;
     listStaff: (organisationId: string) => Promise<PharmsmartStaffCandidate[]>;
     findEmailOwner: (email: string) => Promise<PharmsmartStaffCandidate | 'unlinked' | null>;
     adoptAccount: (staff: PharmsmartStaffCandidate, displayName: string) => Promise<void>;
@@ -89,6 +104,8 @@ export class PharmsmartSsoService {
     if (matched.status !== 'matched') {
       if (matched.reason === 'NOT_FOUND') {
         await this.refuse(null, 'WELCOME', context);
+        const gphcNumber = compactGphcNumber(info.gphcNumber);
+        const request = gphcNumber ? await this.deps.findLatestOnboardingRequest(gphcNumber) : null;
         return {
           status: 'welcome',
           email: info.email,
@@ -97,6 +114,7 @@ export class PharmsmartSsoService {
           gphcNumber: info.gphcNumber,
           pharmsmartPharmacyId: info.pharmsmartPharmacyId,
           prefill: info.prefill,
+          onboardingRequest: onboardingRequestState(request?.status),
         };
       }
       await this.refuse(null, matched.reason, context);

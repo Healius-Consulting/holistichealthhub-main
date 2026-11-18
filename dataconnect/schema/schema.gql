@@ -1260,8 +1260,11 @@ type CuraleafQuoteBankSync @table(key: ["environment"]) {
   updatedAt: Timestamp! @default(expr: "request.time")
 }
 
+# PENDING waits for HHH to Activate or Hold. ON_HOLD can go back to PENDING (Unhold).
+# DECLINED is retired: existing rows become ON_HOLD, then the value is dropped.
 enum PharmacyOnboardingRequestStatus {
   PENDING
+  ON_HOLD
   ACTIVATED
   DECLINED
 }
@@ -1293,7 +1296,9 @@ type PharmacyOnboardingRequest @table {
   filledFormStoragePath: String!
   organisation: Organisation @ref(fields: "organisationId")
   organisationId: UUID @index
+  # The hold reason: admin-only, never shown or emailed to the pharmacy. Kept after Unhold.
   declineReason: String
+  # When and by whom the request was last held or activated.
   decidedAt: Timestamp
   decidedByUid: String
   idempotencyKey: String! @unique

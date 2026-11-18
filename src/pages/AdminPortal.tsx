@@ -153,7 +153,7 @@ function overviewFilterFromPath(): OverviewFilter {
   return route?.kind === 'view' && route.filter === 'requests' ? 'requests' : 'all';
 }
 
-type OverviewFilter = 'all' | 'registered' | 'training' | 'requests' | 'declined';
+type OverviewFilter = 'all' | 'registered' | 'training' | 'requests' | 'on_hold';
 
 function adminPathForView(view: AdminView) {
   return surfaceRoutePath(ADMIN_VIEW_PATHS[view], appPathPrefix);
@@ -1624,9 +1624,10 @@ export default function AdminPortal() {
   ], [allPatients, openPharmacyOnOverview, state.organisations]);
 
   /**
-   * Every pharmacy is created when its Curaleaf form arrives. Until HHH enters the
-   * PHAR code and API key Curaleaf send, it is "awaiting Curaleaf". Test
-   * pharmacies are always connected to the sandbox and never wait.
+   * Every pharmacy is created when HHH activates its request. Until HHH enters the
+   * PHAR code and API key Curaleaf send, it is "awaiting Curaleaf": its eligibility
+   * link is open but ordering is not. Test pharmacies are always connected to the
+   * sandbox and never wait.
    */
   const awaitingCuraleaf = useCallback(
     (org: PharmacyTenant) => !isTrainingDirectoryPharmacy(org) && org.status !== 'live' && org.status !== 'paused' && org.curaleafEnvironment !== 'production',
@@ -1636,25 +1637,25 @@ export default function AdminPortal() {
     const matchesQuery = `${org.name} ${org.tradingName} ${org.gphcNumber}`.toLowerCase().includes(query.toLowerCase());
     if (!matchesQuery) return false;
     if (overviewFilter === 'requests') return awaitingCuraleaf(org);
-    if (overviewFilter === 'declined') return false;
+    if (overviewFilter === 'on_hold') return false;
     if (overviewFilter === 'registered') return !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org);
     if (overviewFilter === 'training') return isTrainingDirectoryPharmacy(org);
     return true;
   });
-  // Forms that never became a pharmacy (the automatic step failed) wait with the
-  // rest; declined ones are only listed on the Awaiting Curaleaf tab.
-  const { overviewRequests, declinedRequests } = useMemo(() => {
+  // New requests wait for HHH to activate or hold them; held ones are listed only on
+  // their own On hold tab.
+  const { overviewRequests, heldRequests } = useMemo(() => {
     const needle = query.toLowerCase();
     const matches = (request: { pharmacyName: string; registeredCompanyName: string; gphcNumber: string }) => (
       `${request.pharmacyName} ${request.registeredCompanyName} ${request.gphcNumber}`.toLowerCase().includes(needle)
     );
     return {
       overviewRequests: overviewFilter === 'all' || overviewFilter === 'requests' ? pharmacyRequests.pending.filter(matches) : [],
-      declinedRequests: overviewFilter === 'declined' ? pharmacyRequests.declined.filter(matches) : [],
+      heldRequests: overviewFilter === 'on_hold' ? pharmacyRequests.onHold.filter(matches) : [],
     };
-  }, [overviewFilter, pharmacyRequests.declined, pharmacyRequests.pending, query]);
+  }, [overviewFilter, pharmacyRequests.onHold, pharmacyRequests.pending, query]);
   const selectedRequest = pharmacyRequests.records.find(request => request.id === selectedRequestId && request.status !== 'activated') ?? null;
-  const overviewResultCount = overviewPharmacies.length + overviewRequests.length + declinedRequests.length;
+  const overviewResultCount = overviewPharmacies.length + overviewRequests.length + heldRequests.length;
   const awaitingPharmacies = overviewPharmacies.filter(awaitingCuraleaf);
   const registeredPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org) && org.status !== 'paused');
   const suspendedPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && org.status === 'paused');
@@ -1669,7 +1670,7 @@ export default function AdminPortal() {
   // the first pharmacy in the list. A request stays selected while it is listed.
   useEffect(() => {
     if (view !== 'overview') return;
-    const requestVisible = selectedRequest && [...overviewRequests, ...declinedRequests].some(request => request.id === selectedRequest.id);
+    const requestVisible = selectedRequest && [...overviewRequests, ...heldRequests].some(request => request.id === selectedRequest.id);
     if (requestVisible) return;
     if (selectedRequestId) setSelectedRequestId(null);
     if (overviewPharmacyId && overviewPharmacies.some(organisation => organisation.id === overviewPharmacyId)) return;
@@ -1678,18 +1679,18 @@ export default function AdminPortal() {
     if (firstPharmacy) {
       setOverviewPharmacyId(firstPharmacy.id);
     } else {
-      const firstRequest = overviewRequests[0] ?? declinedRequests[0];
+      const firstRequest = overviewRequests[0] ?? heldRequests[0];
       if (firstRequest) setSelectedRequestId(firstRequest.id);
       else if (overviewFilter === 'requests') setOverviewPharmacyId(null);
     }
     setOverviewManagePanel('summary');
     setOverviewManageOpen(false);
-  }, [awaitingPharmacies, declinedRequests, overviewFilter, overviewPharmacies, overviewPharmacyId, overviewRequests, registeredPharmacies, selectedRequest, selectedRequestId, state.organisations.length, trainingPharmacies, view]);
+  }, [awaitingPharmacies, heldRequests, overviewFilter, overviewPharmacies, overviewPharmacyId, overviewRequests, registeredPharmacies, selectedRequest, selectedRequestId, state.organisations.length, trainingPharmacies, view]);
 
   const statusLabel = (status: PharmacyTenant['status']) => {
     if (status === 'live') return 'Live';
     if (status === 'paused') return 'Suspended';
-    return 'Onboarding';
+    return 'Awaiting Curaleaf';
   };
   const pharmacyTone = (status: PharmacyTenant['status']) => status === 'live' ? 'paid' : status === 'paused' ? 'danger' : 'warning';
   /** A pharmacy is Test, Awaiting Curaleaf or Live; rejected ones leave the directory. */
@@ -1818,7 +1819,7 @@ export default function AdminPortal() {
           ? 'Live'
           : selectedPharmacy?.status === 'paused'
             ? 'Suspended'
-            : 'Onboarding';
+            : 'Awaiting Curaleaf';
     const formUrl = referralLink;
     const selectedIntakeLive = selectedPharmacy ? intakeIsLive(selectedPharmacy) : false;
 
@@ -1957,7 +1958,7 @@ export default function AdminPortal() {
               { key: 'requests' as const, label: 'Awaiting Curaleaf', count: awaitingCount },
               { key: 'registered' as const, label: 'Live', count: state.organisations.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org)).length },
               { key: 'training' as const, label: 'Testing', count: trainingCount },
-              ...(pharmacyRequests.declined.length ? [{ key: 'declined' as const, label: 'Rejected', count: pharmacyRequests.declined.length }] : []),
+              ...(pharmacyRequests.onHold.length ? [{ key: 'on_hold' as const, label: 'On hold', count: pharmacyRequests.onHold.length }] : []),
             ]).map(filter => (
               <button
                 type="button"
@@ -1992,7 +1993,7 @@ export default function AdminPortal() {
                     <div className="order-crm-empty">
                       <Building2 size={26} />
                       <strong>{query ? 'No pharmacies match' : 'Nothing waiting on Curaleaf'}</strong>
-                      <span>{pharmacyRequests.status === 'error' ? (pharmacyRequests.error ?? 'Try again shortly.') : 'New pharmacies appear here as soon as they send the Curaleaf account form, until their PHAR code and API key are entered.'}</span>
+                      <span>{pharmacyRequests.status === 'error' ? (pharmacyRequests.error ?? 'Try again shortly.') : 'New requests appear here when a pharmacy sends the Curaleaf account form. Activated pharmacies stay here until their PHAR code and API key are entered.'}</span>
                       {pharmacyRequests.status === 'error' ? <button type="button" className="btn btn-sm" onClick={() => void pharmacyRequests.reload()}>Try again</button> : null}
                     </div>
                   ) : (
@@ -2004,29 +2005,40 @@ export default function AdminPortal() {
                   )
                 ) : (
                   <>
-                    {overviewRequests.length || awaitingPharmacies.length ? (
+                    {overviewRequests.length ? (
+                      <section className="order-crm-list-group admin-request-group" aria-label="New pharmacy requests">
+                        <header>
+                          <span>
+                            <strong>New requests</strong>
+                            <small>Activate or hold</small>
+                          </span>
+                          <b>{overviewRequests.length}</b>
+                        </header>
+                        {overviewRequests.map(renderRequestRow)}
+                      </section>
+                    ) : null}
+                    {awaitingPharmacies.length ? (
                       <section className="order-crm-list-group admin-request-group" aria-label="Pharmacies awaiting Curaleaf">
                         <header>
                           <span>
                             <strong>Awaiting Curaleaf</strong>
                             <small>Enter the PHAR code and API key to activate</small>
                           </span>
-                          <b>{overviewRequests.length + awaitingPharmacies.length}</b>
+                          <b>{awaitingPharmacies.length}</b>
                         </header>
-                        {overviewRequests.map(renderRequestRow)}
                         {awaitingPharmacies.map(organisation => renderPharmacyRow(organisation))}
                       </section>
                     ) : null}
-                    {declinedRequests.length ? (
-                      <section className="order-crm-list-group" aria-label="Rejected pharmacies">
+                    {heldRequests.length ? (
+                      <section className="order-crm-list-group" aria-label="Pharmacy requests on hold">
                         <header>
                           <span>
-                            <strong>Rejected</strong>
-                            <small>Emailed the reason</small>
+                            <strong>On hold</strong>
+                            <small>Unhold to activate</small>
                           </span>
-                          <b>{declinedRequests.length}</b>
+                          <b>{heldRequests.length}</b>
                         </header>
-                        {declinedRequests.map(renderRequestRow)}
+                        {heldRequests.map(renderRequestRow)}
                       </section>
                     ) : null}
                     {registeredPharmacies.length ? (

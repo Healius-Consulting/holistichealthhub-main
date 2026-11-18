@@ -460,15 +460,27 @@ query PharmacyOnboardingRequestByOrganisation($organisationId: UUID!) @auth(leve
   }
 }
 
-query PendingPharmacyOnboardingByGphc($gphcNumber: String!) @auth(level: NO_ACCESS) {
+query OpenPharmacyOnboardingByGphc($gphcNumber: String!) @auth(level: NO_ACCESS) {
   pharmacyOnboardingRequests(
-    where: { gphcNumber: { eq: $gphcNumber }, status: { eq: PENDING } }
+    where: { gphcNumber: { eq: $gphcNumber }, status: { in: [PENDING, ON_HOLD] } }
+    orderBy: [{ createdAt: DESC }]
     limit: 1
   ) {
     id
     status
     gphcNumber
     idempotencyKey
+  }
+}
+
+query LatestPharmacyOnboardingByGphc($gphcNumber: String!) @auth(level: NO_ACCESS) {
+  pharmacyOnboardingRequests(
+    where: { gphcNumber: { eq: $gphcNumber } }
+    orderBy: [{ createdAt: DESC }]
+    limit: 1
+  ) {
+    id
+    status
   }
 }
 

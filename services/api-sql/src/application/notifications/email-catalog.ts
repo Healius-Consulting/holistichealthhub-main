@@ -24,6 +24,8 @@ export const EMAIL_EVENT_NAMES = [
   'staff.2fa_enabled',
   'staff.2fa_disabled',
   'pharmacy_onboarding.submitted',
+  'pharmacy_onboarding.held',
+  'pharmacy_onboarding.activated',
   'pharmacy_onboarding.declined',
   'pharmacy_onboarding.worldpay_submitted',
 ] as const;
@@ -65,6 +67,8 @@ export const EMAIL_TEMPLATE_CODES = [
   'pharmacy_collection_completed',
   'pharmacy_onboarding_submitted',
   'admin_pharmacy_onboarding_request',
+  'pharmacy_onboarding_held',
+  'pharmacy_onboarding_activated',
   'pharmacy_onboarding_declined',
   'admin_worldpay_form_submitted',
 ] as const;
@@ -80,10 +84,15 @@ export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
  * Copy must never invite a reply unless the template names an alias here, or the
  * patient is writing to a mailbox nobody reads.
  */
-export type EmailAlias = 'referrals' | 'IT' | 'support';
+export type EmailAlias = 'referrals' | 'IT' | 'support' | 'onboarding';
 
 export function emailAliasDomain() {
   return process.env.EMAIL_ALIAS_DOMAIN?.trim() || 'holistichealthhub.live';
+}
+
+/** Pharmacy onboarding mail is sent from, replied to and cites this one mailbox. */
+function onboardingAddress() {
+  return `onboarding@${emailAliasDomain()}`;
 }
 
 export function replyToFor(kind: EmailTemplateCode): string | null {
@@ -91,7 +100,7 @@ export function replyToFor(kind: EmailTemplateCode): string | null {
   return definition.replyTo ? `${definition.replyTo}@${emailAliasDomain()}` : null;
 }
 
-export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 'enquiries';
+export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 'enquiries' | 'onboarding';
 
 const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   patient_enquiry_declined: 'referrals',
@@ -116,8 +125,10 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_order_dispatched: 'orders',
   pharmacy_prescription_close_to_expiry: 'orders',
   pharmacy_collection_completed: 'orders',
-  pharmacy_onboarding_submitted: 'accounts',
+  pharmacy_onboarding_submitted: 'onboarding',
   admin_pharmacy_onboarding_request: 'enquiries',
+  pharmacy_onboarding_held: 'onboarding',
+  pharmacy_onboarding_activated: 'onboarding',
   pharmacy_onboarding_declined: 'accounts',
   admin_worldpay_form_submitted: 'enquiries',
 };
@@ -1047,21 +1058,65 @@ export const EMAILS = {
     audience: 'staff',
     events: ['pharmacy_onboarding.submitted'],
     schedule: 'immediate',
-    summary: 'Sent to the pharmacy email when a Curaleaf account form is submitted from the onboarding page.',
+    summary: 'Sent to the pharmacy email when a Curaleaf account form is submitted from the onboarding page. The request waits for HHH to activate or hold it; no account exists yet.',
+    replyTo: 'onboarding',
     render: (payload) => {
-      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'your pharmacy');
-      const plainName = value(payload, 'pharmacyName') || 'your pharmacy';
+      const contact = onboardingAddress();
+      const lines = [
+        "Thank you, we've received your request to join Holistic Health Hub. We'll review it and let you know our decision.",
+        `Please check back in a few days, or contact ${contact} for more details.`,
+      ];
       return render({
         kind: 'pharmacy_onboarding_submitted',
         payload,
-        subject: 'Curaleaf account form received',
-        preheader: 'We have the Curaleaf account form.',
-        title: 'Form received',
-        text: `We have received the Curaleaf account form for ${plainName}. We will email you when the pharmacy can start using Holistic Health Hub.`,
+        subject: "We've received your request",
+        preheader: "We'll review it and let you know our decision.",
+        title: 'Request received',
+        text: lines.join('\n\n'),
         paragraphs: [
-          `We have received the Curaleaf account form for <strong>${pharmacyName}</strong>.`,
-          'We will email you when the pharmacy can start using Holistic Health Hub.',
+          escapeHtml(lines[0]!),
+          `Please check back in a few days, or contact ${mailLink(contact)} for more details.`,
         ],
+      });
+    },
+  },
+  pharmacy_onboarding_held: {
+    audience: 'staff',
+    events: ['pharmacy_onboarding.held'],
+    schedule: 'immediate',
+    summary: "Sent to the pharmacy email when HHH puts its onboarding request on hold. Never includes the admin's reason.",
+    replyTo: 'onboarding',
+    render: (payload) => {
+      const contact = onboardingAddress();
+      const line = 'Your account could not be created at this point in time.';
+      return render({
+        kind: 'pharmacy_onboarding_held',
+        payload,
+        subject: 'Update on your Holistic Health Hub request',
+        preheader: line,
+        title: 'Update on your request',
+        text: `${line} Please email ${contact} for more details.`,
+        paragraphs: [`${line} Please email ${mailLink(contact)} for more details.`],
+      });
+    },
+  },
+  pharmacy_onboarding_activated: {
+    audience: 'staff',
+    events: ['pharmacy_onboarding.activated'],
+    schedule: 'immediate',
+    summary: 'Sent to the pharmacy email when HHH activates its onboarding request and the account is created.',
+    replyTo: 'onboarding',
+    render: (payload) => {
+      const contact = onboardingAddress();
+      const line = 'Your account has been activated.';
+      return render({
+        kind: 'pharmacy_onboarding_activated',
+        payload,
+        subject: 'Your Holistic Health Hub account is active',
+        preheader: line,
+        title: 'Account active',
+        text: `${line} You can sign in through PharmSmart, or contact us at ${contact} and we'll send an invite to your account.`,
+        paragraphs: [`${line} You can sign in through PharmSmart, or contact us at ${mailLink(contact)} and we'll send an invite to your account.`],
       });
     },
   },
@@ -1069,7 +1124,7 @@ export const EMAILS = {
     audience: 'staff',
     events: ['pharmacy_onboarding.submitted'],
     schedule: 'immediate',
-    summary: 'Sent to partner success and the HHH admin inbox when a pharmacy submits a Curaleaf account form. The pharmacy is created in onboarding at the same time; the filled form is attached for Curaleaf. Not sent to every platform admin.',
+    summary: 'Sent to partner success and the HHH admin inbox when a pharmacy submits a Curaleaf account form. The request waits in the portal for HHH to activate or hold it; the filled form is attached for Curaleaf. Not sent to every platform admin.',
     render: (payload) => {
       const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'A pharmacy');
       const plainName = value(payload, 'pharmacyName') || 'A pharmacy';
@@ -1078,15 +1133,15 @@ export const EMAILS = {
         kind: 'admin_pharmacy_onboarding_request',
         payload,
         subject: 'New pharmacy: Curaleaf form received',
-        preheader: `${plainName} joined and is waiting on Curaleaf.`,
+        preheader: `${plainName} is waiting for HHH to activate it.`,
         title: 'New pharmacy',
         text: [
           `${plainName}${gphc ? ` (GPhC ${gphc})` : ''} submitted a Curaleaf account form.`,
-          'The pharmacy is already set up in onboarding and the filled form is attached. Forward it to Curaleaf. When they send the PHAR code and API key, enter them in the portal to activate it, or decline it there if Curaleaf reject the account.',
+          'The filled form is attached. Review the request in the portal and activate it or put it on hold. Activating creates the pharmacy in onboarding; it goes live once Curaleaf\'s PHAR code and API key are entered.',
         ].join('\n\n'),
         paragraphs: [
           `<strong>${pharmacyName}</strong>${gphc ? ` (GPhC ${escapeHtml(gphc)})` : ''} submitted a Curaleaf account form.`,
-          'The pharmacy is already set up in onboarding and the filled form is attached. Forward it to Curaleaf. When they send the PHAR code and API key, enter them in the portal to activate it, or decline it there if Curaleaf reject the account.',
+          'The filled form is attached. Review the request in the portal and activate it or put it on hold. Activating creates the pharmacy in onboarding; it goes live once Curaleaf\'s PHAR code and API key are entered.',
         ],
         cta: { label: 'Open pharmacy requests', href: 'https://portal.holistichealthhub.live/admin/pharmacy-requests' },
         detailsTitle: 'Request',
@@ -1132,7 +1187,7 @@ export const EMAILS = {
     audience: 'staff',
     events: ['pharmacy_onboarding.declined'],
     schedule: 'immediate',
-    summary: 'Sent to the pharmacy email when HHH declines a pharmacy onboarding request.',
+    summary: 'Sent to the pharmacy email when HHH declines a pharmacy already created from the onboarding page (it is archived), for example when Curaleaf rejects the account.',
     render: (payload) => {
       const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'the pharmacy');
       const plainName = value(payload, 'pharmacyName') || 'the pharmacy';

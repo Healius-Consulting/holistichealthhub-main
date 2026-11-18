@@ -17,6 +17,21 @@ import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 
 const BROCHURE = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.title === 'Brochure')!;
 
+const ONBOARDING_ADDRESS = 'onboarding@holistichealthhub.live';
+const onboardingMail = <a className="onb__address" href={`mailto:${ONBOARDING_ADDRESS}`}>{ONBOARDING_ADDRESS}</a>;
+
+/** What a GPhC with a request already in sees instead of the forms. */
+const REQUEST_STATE_VIEWS = {
+  pending: {
+    title: 'Awaiting activation',
+    body: <>Awaiting activation. Please check back in a few days, or contact {onboardingMail} for more details.</>,
+  },
+  on_hold: {
+    title: 'Your request',
+    body: <>Your account could not be created at this point in time. Please email us at {onboardingMail} for more details.</>,
+  },
+} as const;
+
 function OnboardingPdfPreview({ href }: { href: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const documentRef = useRef<PDFDocumentProxy | null>(null);
@@ -230,6 +245,31 @@ export function PharmsmartWelcome({
   const signIn = accountHref
     ? <a className="onb__signin" href={accountHref} target="_blank" rel="noopener noreferrer">Sign in</a>
     : <button className="onb__signin" type="button" onClick={onUseEmail}>Sign in</button>;
+
+  const requestView = welcome.onboardingRequest ? REQUEST_STATE_VIEWS[welcome.onboardingRequest] : null;
+  if (requestView) {
+    return (
+      <div className="staff-login-page auth-page staff-login-page--guide">
+        <div className="onb">
+          <header className="onb__top">
+            <div className="staff-login-lockup" aria-label="Holistic Health Hub">
+              <HhhBrandMark />
+              <span>
+                <strong>Holistic Health Hub</strong>
+                <small>Pharmacy onboarding</small>
+              </span>
+            </div>
+            <p className="onb__account">Already on Holistic Health Hub? {signIn}</p>
+          </header>
+          <section className="onb__panel" aria-labelledby="onb-request-state" role="status">
+            <h1 id="onb-request-state">{requestView.title}</h1>
+            {knownName ? <p className="onb__person">Signed in from PharmSmart as <strong>{knownName}</strong>{welcome.gphcNumber ? <> · GPhC {welcome.gphcNumber}</> : null}</p> : null}
+            <p>{requestView.body}</p>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="staff-login-page auth-page staff-login-page--guide">

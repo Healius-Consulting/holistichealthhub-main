@@ -43,7 +43,7 @@ export const pharmacyOnboardingFieldsSchema = z.object({
 
 export type PharmacyOnboardingFields = z.infer<typeof pharmacyOnboardingFieldsSchema>;
 
-export type PharmacyOnboardingStatus = 'PENDING' | 'ACTIVATED' | 'DECLINED';
+export type PharmacyOnboardingStatus = 'PENDING' | 'ON_HOLD' | 'ACTIVATED';
 
 export type PharmacyOnboardingRequestRecord = {
   id: string;
@@ -68,6 +68,7 @@ export type PharmacyOnboardingRequestRecord = {
   licenceFilename: string;
   filledFormStoragePath: string;
   organisationId: string | null;
+  /** The hold reason. Admin-only: never shown or emailed to the pharmacy. */
   declineReason: string | null;
   decidedAt: string | null;
   decidedByUid: string | null;
@@ -106,8 +107,8 @@ export function londonLongDate(now: Date) {
   }).format(now);
 }
 
-export function publicOnboardingStatus(status: PharmacyOnboardingStatus): 'pending' | 'activated' | 'declined' {
+export function publicOnboardingStatus(status: PharmacyOnboardingStatus): 'pending' | 'on_hold' | 'activated' {
   if (status === 'ACTIVATED') return 'activated';
-  if (status === 'DECLINED') return 'declined';
+  if (status === 'ON_HOLD') return 'on_hold';
   return 'pending';
 }

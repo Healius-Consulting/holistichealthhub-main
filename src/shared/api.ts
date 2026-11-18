@@ -1,5 +1,5 @@
 import { shouldDispatchSessionEnded } from './sessionEnded';
-import type { PharmsmartPrefill } from '../auth/types';
+import type { PharmsmartOnboardingRequestState, PharmsmartPrefill } from '../auth/types';
 import type {
   CuraleafConnectionStatus,
   CuraleafActivationInput,
@@ -299,6 +299,8 @@ export type PharmsmartLoginResult =
     gphcNumber?: string | null;
     pharmsmartPharmacyId?: string | null;
     prefill?: PharmsmartPrefill;
+    /** The GPhC's onboarding request still waiting or on hold: show that instead of the forms. */
+    onboardingRequest?: PharmsmartOnboardingRequestState;
   };
 
 export async function redeemPharmsmartLogin(token: string) {
@@ -428,7 +430,7 @@ export function createEligibilitySubmission(input: EligibilitySubmissionInput & 
 
 export type PharmacyOnboardingRequestView = {
   id: string;
-  status: 'pending' | 'activated' | 'declined';
+  status: 'pending' | 'on_hold' | 'activated';
   pharmacistName: string;
   pharmacyName: string;
   registeredCompanyName: string;
@@ -446,6 +448,7 @@ export type PharmacyOnboardingRequestView = {
   signedOn: string;
   licenceFilename: string;
   organisationId: string | null;
+  /** The hold reason. Admin-only: the pharmacy never sees it. Kept after Unhold. */
   declineReason: string | null;
   decidedAt: string | null;
   createdAt: string | null;
@@ -471,7 +474,7 @@ export type ActivatedPharmacyOnboarding = {
 };
 
 export function submitCuraleafAccountForm(input: Record<string, string>) {
-  return apiRequest<{ id: string; status: 'pending' | 'activated' | 'declined' }>('/v1/public/pharmacy-onboarding-requests', {
+  return apiRequest<{ id: string; status: PharmacyOnboardingRequestView['status'] }>('/v1/public/pharmacy-onboarding-requests', {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -547,10 +550,19 @@ export function declineNewPharmacy(organisationId: string, reason: string) {
   );
 }
 
-export function declinePharmacyOnboardingRequest(id: string, reason: string) {
+/** Pending only. The reason stays with HHH admin; the pharmacy is emailed without it. */
+export function holdPharmacyOnboardingRequest(id: string, reason: string) {
   return apiRequest<{ request: PharmacyOnboardingRequestView }>(
-    `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/decline`,
+    `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/hold`,
     { method: 'POST', body: JSON.stringify({ reason }) },
+  );
+}
+
+/** On hold only: back to pending. No email. */
+export function unholdPharmacyOnboardingRequest(id: string) {
+  return apiRequest<{ request: PharmacyOnboardingRequestView }>(
+    `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/unhold`,
+    { method: 'POST', body: JSON.stringify({}) },
   );
 }
 

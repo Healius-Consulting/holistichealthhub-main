@@ -6,7 +6,8 @@ export type DeclinePharmacyDeps = {
   findOrganisation(id: string): Promise<OrganisationRecord | null>;
   findRequestByOrganisation(organisationId: string): Promise<PharmacyOnboardingRequestRecord | null>;
   archiveOrganisation(id: string, reason: string, archivedAt: string): Promise<void>;
-  declineRequest(id: string, reason: string, decidedAt: string, actorUid: string): Promise<void>;
+  /** Its request goes on hold (keeping the reason), so admin can Unhold it if it comes back. */
+  holdRequest(id: string, reason: string, decidedAt: string, actorUid: string): Promise<void>;
   emailPharmacy(input: { email: string; pharmacyName: string; reason: string; key: string }): Promise<void>;
 };
 
@@ -32,7 +33,7 @@ export async function declineNewPharmacy(
   const now = (input.now ?? new Date()).toISOString();
   const request = await deps.findRequestByOrganisation(organisation.id);
   await deps.archiveOrganisation(organisation.id, reason, now);
-  if (request) await deps.declineRequest(request.id, reason, now, input.actorUid);
+  if (request) await deps.holdRequest(request.id, reason, now, input.actorUid);
   const email = request?.pharmacyEmail || organisation.pharmacyEmail || organisation.mainContactEmail;
   if (email) {
     await deps.emailPharmacy({

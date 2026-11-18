@@ -103,6 +103,7 @@ describe('operational readiness', () => {
     });
     assert.equal(operational.goLiveReady, true);
     assert.equal(operational.workspace.mode, 'training');
+    assert.equal(operational.workspace.label, 'Awaiting Curaleaf');
     const liveTest = buildOperationalStatus({
       organisation: { ...organisation, classification: 'TRAINING', status: 'LIVE' },
       tasks: loggedGoLiveTasks(),

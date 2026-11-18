@@ -305,11 +305,11 @@ function StaffWorkspace() {
         <Header />
         {state.workspaceMode === 'training' && (
           <div className="training-mode-banner" role="status">
-            <strong>Training</strong>
+            <strong>{isLocalPortalPreview ? 'Training' : 'Awaiting Curaleaf'}</strong>
             <span>
               {isLocalPortalPreview
                 ? 'This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH opens Test or Live. Supplier writes and payments are not sent from training.'
-                : 'Orders, supplier writes and payments stay locked until HHH opens this pharmacy as Test or Live. Enquiries and referred patients assigned to you are already visible.'}
+                : 'Your eligibility link is open: eligible patients are added to your list. Orders and payments open once your Curaleaf account is live.'}
             </span>
           </div>
         )}

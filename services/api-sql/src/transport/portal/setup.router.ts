@@ -11,7 +11,6 @@ import {
 } from '../../application/organisation/brand-logo.js';
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { HttpError } from '../../domain/common/errors.js';
-import { canAcceptPublicIntake } from '../../domain/organisation/access.js';
 import { liftSuspensionStatus, suspendStatus } from '../../application/organisation/suspension.js';
 import {
   buildGoLiveReadinessView,
@@ -509,39 +508,6 @@ export function createPortalSetupRouter(): Router {
     }
   });
 
-  router.post('/portal/admin/organisations/:id/intake-live', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const scope = assertPlatformScope(req.context!);
-      const organisationId = organisationIdSchema.parse(req.params.id);
-      const organisation = await organisationRepo.findOrganisationById(organisationId);
-      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
-      if (organisation.status === 'PAUSED' || organisation.archivedAt) {
-        throw new HttpError(409, 'Unpause this pharmacy before turning the eligibility link on.', 'INTAKE_LIVE_GATE_INCOMPLETE');
-      }
-      if (!organisation.intakeEnabled) {
-        await organisationRepo.updateOrganisationIntakeEnabled(organisationId, true);
-      }
-      const updated = await organisationRepo.findOrganisationById(organisationId);
-      if (!updated || !canAcceptPublicIntake(updated)) {
-        throw new HttpError(409, 'Public intake is not available for this pharmacy.', 'INTAKE_LIVE_GATE_INCOMPLETE');
-      }
-      await identityRepo.appendAudit({
-        organisationId,
-        actorUid: scope.uid,
-        actorRole: scope.role,
-        event: 'organisation.intake_went_live',
-        recordType: 'Organisation',
-        recordId: organisationId,
-        requestId: scope.requestId,
-        sessionHashPrefix: scope.sessionHash.slice(0, 12),
-        surface: scope.surface,
-      });
-      res.status(200).json(await goLiveSnapshot(updated));
-    } catch (error) {
-      next(error);
-    }
-  });
-
   // Suspend stops a live pharmacy's use of the platform; lift brings it back. Both are audited.
   router.post('/portal/admin/organisations/:id/suspend', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -871,6 +837,7 @@ export function createPortalSetupRouter(): Router {
         primaryColour: input.primaryColour.toLowerCase(),
         logoText: input.logoText.toUpperCase(),
         portalName: input.name,
+        intakeEnabled: true,
       });
 
       const referralLink = await referralLinks.ensureEligibilityLink({

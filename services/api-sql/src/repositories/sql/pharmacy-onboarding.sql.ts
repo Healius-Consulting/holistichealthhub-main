@@ -43,8 +43,10 @@ type RawRequest = Omit<PharmacyOnboardingRequestRecord, 'status' | 'createdAt' |
   decidedAt?: string | null;
 };
 
+/** A request declined before Hold existed reads as on hold until the one-off change moves it. */
 function asStatus(value: string): PharmacyOnboardingStatus {
-  if (value === 'ACTIVATED' || value === 'DECLINED' || value === 'PENDING') return value;
+  if (value === 'ACTIVATED' || value === 'ON_HOLD' || value === 'PENDING') return value;
+  if (value === 'DECLINED') return 'ON_HOLD';
   return 'PENDING';
 }
 
@@ -113,16 +115,30 @@ const BY_IDEMPOTENCY_GQL = `
   }
 `;
 
-const PENDING_BY_GPHC_GQL = `
-  query PendingPharmacyOnboardingByGphc($gphcNumber: String!) {
+const OPEN_BY_GPHC_GQL = `
+  query OpenPharmacyOnboardingByGphc($gphcNumber: String!) {
     pharmacyOnboardingRequests(
-      where: { gphcNumber: { eq: $gphcNumber }, status: { eq: PENDING } }
+      where: { gphcNumber: { eq: $gphcNumber }, status: { in: [PENDING, ON_HOLD] } }
+      orderBy: [{ createdAt: DESC }]
       limit: 1
     ) {
       id
       status
       gphcNumber
       idempotencyKey
+    }
+  }
+`;
+
+const LATEST_BY_GPHC_GQL = `
+  query LatestPharmacyOnboardingByGphc($gphcNumber: String!) {
+    pharmacyOnboardingRequests(
+      where: { gphcNumber: { eq: $gphcNumber } }
+      orderBy: [{ createdAt: DESC }]
+      limit: 1
+    ) {
+      id
+      status
     }
   }
 `;
@@ -283,8 +299,8 @@ const ACTIVATE_GQL = `
   }
 `;
 
-const DECLINE_GQL = `
-  mutation DeclinePharmacyOnboardingRequest(
+const HOLD_GQL = `
+  mutation HoldPharmacyOnboardingRequest(
     $id: UUID!
     $declineReason: String!
     $decidedAt: Timestamp!
@@ -293,11 +309,21 @@ const DECLINE_GQL = `
     pharmacyOnboardingRequest_update(
       key: { id: $id }
       data: {
-        status: DECLINED
+        status: ON_HOLD
         declineReason: $declineReason
         decidedAt: $decidedAt
         decidedByUid: $decidedByUid
       }
+    )
+  }
+`;
+
+/** Back to waiting. The hold reason stays on the row as history. */
+const UNHOLD_GQL = `
+  mutation UnholdPharmacyOnboardingRequest($id: UUID!) {
+    pharmacyOnboardingRequest_update(
+      key: { id: $id }
+      data: { status: PENDING }
     )
   }
 `;
@@ -337,11 +363,21 @@ export class SqlPharmacyOnboardingRepository {
     return toRecord(result.data.pharmacyOnboardingRequests?.[0]);
   }
 
-  async findPendingByGphc(gphcNumber: string): Promise<{ id: string; idempotencyKey: string } | null> {
+  /** The GPhC's waiting or held request, if any. */
+  async findOpenByGphc(gphcNumber: string): Promise<{ id: string; status: PharmacyOnboardingStatus; idempotencyKey: string } | null> {
     const result = await dataConnect.executeGraphql<{
-      pharmacyOnboardingRequests: Array<{ id: string; idempotencyKey: string }>;
-    }, { gphcNumber: string }>(PENDING_BY_GPHC_GQL, { variables: { gphcNumber } });
-    return result.data.pharmacyOnboardingRequests?.[0] ?? null;
+      pharmacyOnboardingRequests: Array<{ id: string; status: string; idempotencyKey: string }>;
+    }, { gphcNumber: string }>(OPEN_BY_GPHC_GQL, { variables: { gphcNumber } });
+    const row = result.data.pharmacyOnboardingRequests?.[0];
+    return row ? { id: row.id, status: asStatus(row.status), idempotencyKey: row.idempotencyKey } : null;
+  }
+
+  async findLatestByGphc(gphcNumber: string): Promise<{ id: string; status: PharmacyOnboardingStatus } | null> {
+    const result = await dataConnect.executeGraphql<{
+      pharmacyOnboardingRequests: Array<{ id: string; status: string }>;
+    }, { gphcNumber: string }>(LATEST_BY_GPHC_GQL, { variables: { gphcNumber } });
+    const row = result.data.pharmacyOnboardingRequests?.[0];
+    return row ? { id: row.id, status: asStatus(row.status) } : null;
   }
 
   async findById(id: string): Promise<PharmacyOnboardingRequestRecord | null> {
@@ -406,14 +442,18 @@ export class SqlPharmacyOnboardingRepository {
     });
   }
 
-  async decline(id: string, declineReason: string, decidedAt: string, decidedByUid: string): Promise<void> {
+  async hold(id: string, reason: string, decidedAt: string, decidedByUid: string): Promise<void> {
     await dataConnect.executeGraphql<unknown, {
       id: string;
       declineReason: string;
       decidedAt: string;
       decidedByUid: string;
-    }>(DECLINE_GQL, {
-      variables: { id: asUuid(id), declineReason, decidedAt, decidedByUid },
+    }>(HOLD_GQL, {
+      variables: { id: asUuid(id), declineReason: reason, decidedAt, decidedByUid },
     });
+  }
+
+  async unhold(id: string): Promise<void> {
+    await dataConnect.executeGraphql<unknown, { id: string }>(UNHOLD_GQL, { variables: { id: asUuid(id) } });
   }
 }

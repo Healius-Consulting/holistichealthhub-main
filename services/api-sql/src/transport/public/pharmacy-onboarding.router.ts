@@ -17,13 +17,6 @@ import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { queuePharmacyOnboardingSubmitted } from '../../application/pharmacy-onboarding/emails.js';
 import { submitPharmacyOnboardingRequest } from '../../application/pharmacy-onboarding/submit-request.js';
-import { activatePharmacyOnboardingRequest } from '../../application/pharmacy-onboarding/decide-request.js';
-import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
-import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
-import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
-
-/** Audit actor for pharmacies created by the onboarding form rather than an admin. */
-const ONBOARDING_ACTOR = 'system:pharmacy-onboarding';
 
 type UploadedLicence = { filename: string; declaredType: string; bytes: Buffer };
 
@@ -84,9 +77,6 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   const repo = new SqlPharmacyOnboardingRepository();
   const storage = new StorageProvider();
   const notificationRepo = new SqlNotificationRepository();
-  const organisationRepo = new SqlOrganisationRepository();
-  const identityRepo = new SqlIdentityRepository();
-  const referralLinks = new ReferralLinkService(organisationRepo);
 
   router.post('/public/pharmacy-onboarding-requests', publicPharmacyOnboardingLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -99,31 +89,12 @@ export function createPublicPharmacyOnboardingRouter(): Router {
         fields,
         licence: submission.licence && submission.licence.bytes.length > 0 ? submission.licence : null,
       });
+      // The form makes a request, not an account: it waits for HHH to activate or hold it.
       if (record.status === 'PENDING') {
         try {
           await queuePharmacyOnboardingSubmitted(notificationRepo, record);
         } catch (error) {
           console.error('Pharmacy onboarding email was not queued', error instanceof Error ? error.message : 'unknown');
-        }
-        // The pharmacy is created straight away, in onboarding with intake off. The
-        // only step left is HHH entering Curaleaf's PHAR code and API key. If this
-        // fails the request stays pending and HHH can activate it by hand.
-        try {
-          const created = await activatePharmacyOnboardingRequest(repo, organisationRepo, referralLinks, {
-            id: record.id,
-            actorUid: ONBOARDING_ACTOR,
-          });
-          await identityRepo.appendAudit({
-            organisationId: created.organisation.id,
-            actorUid: ONBOARDING_ACTOR,
-            event: 'organisation.created',
-            recordType: 'Organisation',
-            recordId: created.organisation.id,
-            surface: 'public',
-            details: { source: 'pharmacy-onboarding-request', requestId: record.id, automatic: true },
-          }).catch(() => undefined);
-        } catch (error) {
-          console.error('Pharmacy was not created from the onboarding form', error instanceof Error ? error.message : 'unknown');
         }
       }
       res.setHeader('Cache-Control', 'private, no-store');

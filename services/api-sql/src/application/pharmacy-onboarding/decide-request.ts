@@ -60,6 +60,9 @@ export async function activatePharmacyOnboardingRequest(
     primaryColour: DEFAULT_PRIMARY,
     logoText,
     portalName: request.pharmacyName,
+    // Eligibility opens at Activate, while the pharmacy awaits Curaleaf. Patients
+    // are accepted and wait in its list; ordering and payment stay shut until Live.
+    intakeEnabled: true,
   });
   const referral = await referralLinks.ensureEligibilityLink({ organisationId: id, createdByUid: input.actorUid });
   await repo.activate(request.id, id, now.toISOString(), input.actorUid);
@@ -84,28 +87,51 @@ export async function activatePharmacyOnboardingRequest(
   };
 }
 
-export async function declinePharmacyOnboardingRequest(
-  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'decline'>,
+/** The admin's reason stays with HHH: the pharmacy is only told it could not be created yet. */
+export async function holdPharmacyOnboardingRequest(
+  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'hold'>,
   input: { id: string; reason: string; actorUid: string; now?: Date },
 ): Promise<PharmacyOnboardingRequestRecord> {
-  const request = await requirePending(repo, input.id);
   const reason = input.reason.trim();
   if (reason.length < 2 || reason.length > 500) {
-    throw new HttpError(400, 'Enter a reason the pharmacy can read.', 'INVALID_INPUT');
+    throw new HttpError(400, 'Enter a reason for the hold (2 to 500 characters). Only HHH admins see it.', 'INVALID_INPUT');
   }
-  const now = input.now ?? new Date();
-  await repo.decline(request.id, reason, now.toISOString(), input.actorUid);
-  return { ...request, status: 'DECLINED', declineReason: reason, decidedAt: now.toISOString(), decidedByUid: input.actorUid };
+  const existing = await repo.findById(input.id);
+  if (existing?.status === 'ON_HOLD') {
+    throw new HttpError(409, 'This pharmacy request is already on hold.', 'ONBOARDING_REQUEST_ON_HOLD');
+  }
+  const request = await requirePending(repo, input.id, existing);
+  const now = (input.now ?? new Date()).toISOString();
+  await repo.hold(request.id, reason, now, input.actorUid);
+  return { ...request, status: 'ON_HOLD', declineReason: reason, decidedAt: now, decidedByUid: input.actorUid };
+}
+
+/** Back to waiting for a decision. No email; the hold reason is kept as history. */
+export async function unholdPharmacyOnboardingRequest(
+  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'unhold'>,
+  input: { id: string },
+): Promise<PharmacyOnboardingRequestRecord> {
+  const request = await repo.findById(input.id);
+  if (!request) throw new HttpError(404, 'Pharmacy request not found.', 'NOT_FOUND');
+  if (request.status !== 'ON_HOLD') {
+    throw new HttpError(409, 'Only a request on hold can be unheld.', 'ONBOARDING_REQUEST_NOT_ON_HOLD');
+  }
+  await repo.unhold(request.id);
+  return { ...request, status: 'PENDING' };
 }
 
 async function requirePending(
   repo: { findById(id: string): Promise<PharmacyOnboardingRequestRecord | null> },
   id: string,
+  loaded?: PharmacyOnboardingRequestRecord | null,
 ) {
-  const request = await repo.findById(id);
+  const request = loaded !== undefined ? loaded : await repo.findById(id);
   if (!request) throw new HttpError(404, 'Pharmacy request not found.', 'NOT_FOUND');
+  if (request.status === 'ON_HOLD') {
+    throw new HttpError(409, 'This pharmacy request is on hold. Unhold it first.', 'ONBOARDING_REQUEST_ON_HOLD');
+  }
   if (request.status !== 'PENDING') {
-    throw new HttpError(409, 'This pharmacy request has already been decided.', 'ONBOARDING_REQUEST_DECIDED');
+    throw new HttpError(409, 'This pharmacy request has already been activated.', 'ONBOARDING_REQUEST_DECIDED');
   }
   return request;
 }

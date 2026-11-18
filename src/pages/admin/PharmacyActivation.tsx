@@ -119,7 +119,7 @@ export function ActivationChecklist({
           title="Live PHAR code and API key"
           detail={onTest
             ? `Connected to Curaleaf's test estate (${curaleafCode}). Test credentials do not activate a pharmacy: enter the live ones Curaleaf send.`
-            : 'Curaleaf send these to Shaylen once they approve the account. Saving live credentials takes the pharmacy live and turns its eligibility link on.'}
+            : 'Curaleaf send these to Shaylen once they approve the account. Saving live credentials takes the pharmacy live and opens ordering and payments; its eligibility link is already on.'}
         />
       </ol>
       {error ? <p className="admin-activation__error" role="alert">{error}</p> : null}

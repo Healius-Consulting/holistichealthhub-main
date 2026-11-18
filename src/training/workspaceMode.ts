@@ -6,11 +6,12 @@ export function isOpenPharmacyWorkspace(mode: string | null | undefined): mode i
   return mode === 'live' || mode === 'test';
 }
 
-export function pharmacyWorkspaceStatusLabel(mode: string | null | undefined, paused = false): 'Paused' | 'Live' | 'Test' | 'Training' {
+/** A pharmacy not yet live is awaiting Curaleaf: its eligibility link is open, ordering is not. */
+export function pharmacyWorkspaceStatusLabel(mode: string | null | undefined, paused = false): 'Paused' | 'Live' | 'Test' | 'Awaiting Curaleaf' {
   if (paused) return 'Paused';
   if (mode === 'live') return 'Live';
   if (mode === 'test') return 'Test';
-  return 'Training';
+  return 'Awaiting Curaleaf';
 }
 
 /**

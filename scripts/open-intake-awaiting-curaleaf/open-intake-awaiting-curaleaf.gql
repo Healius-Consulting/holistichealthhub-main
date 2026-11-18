@@ -1,0 +1,57 @@
+# One-off (Step 1, Eligibility open at Awaiting Curaleaf): switch the eligibility
+# link (intakeEnabled) on for every pharmacy already in production at ONBOARDING
+# (shown as "Awaiting Curaleaf"). New pharmacies get it on at Activate; this
+# catches the branches created before that. No emails are sent and the status is
+# not changed, so ordering and payment stay shut until Live.
+#
+# Excluded: archived (rejected) pharmacies, the Platform Test pharmacies (Primary,
+# Alternate, Tertiary: the ids below are PLATFORM_TEST_PHARMACY_IDS in
+# services/api-sql/src/domain/organisation/training-directory.ts) and TRAINING-
+# GPhC numbers (matched case-insensitively, as access.ts does).
+#
+# Run only after the functions deploy. Run ListAwaitingCuraleafIntakeOff first,
+# check the rows, then OpenIntakeForAwaitingCuraleaf, then the list again (it
+# should return nothing). See README.md.
+
+query ListAwaitingCuraleafIntakeOff @auth(level: NO_ACCESS) {
+  organisations(
+    where: {
+      status: { eq: ONBOARDING }
+      intakeEnabled: { eq: false }
+      archivedAt: { isNull: true }
+      id: { nin: [
+        "70913a30-71c3-4a41-952e-d532927af58c"
+        "f486a221-2236-44a5-b072-f06de399ab0e"
+        "69abbc03-37f2-42da-bc28-d133abad74e7"
+      ] }
+      _not: { gphcNumber: { pattern: { like: "TRAINING-%", ignoreCase: true } } }
+    }
+    orderBy: [{ createdAt: ASC }]
+    limit: 500
+  ) {
+    id
+    name
+    gphcNumber
+    status
+    intakeEnabled
+    classification
+    createdAt
+  }
+}
+
+mutation OpenIntakeForAwaitingCuraleaf @auth(level: NO_ACCESS) {
+  organisation_updateMany(
+    where: {
+      status: { eq: ONBOARDING }
+      intakeEnabled: { eq: false }
+      archivedAt: { isNull: true }
+      id: { nin: [
+        "70913a30-71c3-4a41-952e-d532927af58c"
+        "f486a221-2236-44a5-b072-f06de399ab0e"
+        "69abbc03-37f2-42da-bc28-d133abad74e7"
+      ] }
+      _not: { gphcNumber: { pattern: { like: "TRAINING-%", ignoreCase: true } } }
+    }
+    data: { intakeEnabled: true }
+  )
+}

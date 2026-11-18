@@ -19,6 +19,7 @@ import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
+import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { toPortalOrganisation } from '../portal/pharmacy-contracts.js';
 
 const sessionInputSchema = z.object({
@@ -63,6 +64,7 @@ export function createAuthRouter(): Router {
   const organisationRepo = new SqlOrganisationRepository();
   const integrationRepo = new SqlIntegrationRepository();
   const notificationRepo = new SqlNotificationRepository();
+  const onboardingRepo = new SqlPharmacyOnboardingRepository();
   const markPharmsmartAccount = async (input: {
     uid: string;
     organisationId: string;
@@ -93,6 +95,7 @@ export function createAuthRouter(): Router {
   const pharmsmartSso = new PharmsmartSsoService({
     fetchPharmacyInfo: fetchPharmsmartPharmacyInfo,
     listOrganisations: () => organisationRepo.listOrganisations(),
+    findLatestOnboardingRequest: gphcNumber => onboardingRepo.findLatestByGphc(gphcNumber),
     listStaff: organisationId => identityRepo.listPharmacyStaffByOrganisationId(organisationId),
     findEmailOwner: async email => {
       try {

@@ -1,11 +1,8 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
-import {
-  activatePharmacyOnboardingRequest,
-  declinePharmacyOnboardingRequest,
-} from '../../application/pharmacy-onboarding/decide-request.js';
-import { queuePharmacyDeclinedEmail, queuePharmacyOnboardingDeclined } from '../../application/pharmacy-onboarding/emails.js';
+import { pharmacyRequestActions } from '../../application/pharmacy-onboarding/request-actions.js';
+import { queuePharmacyDeclinedEmail } from '../../application/pharmacy-onboarding/emails.js';
 import { declineNewPharmacy } from '../../application/pharmacy-onboarding/decline-pharmacy.js';
 import { safeDownloadName } from '../../application/pharmacy-onboarding/licence-file.js';
 import { HttpError } from '../../domain/common/errors.js';
@@ -16,11 +13,13 @@ import { SqlNotificationRepository } from '../../repositories/sql/notification.s
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { requireCsrf } from '../../security/csrf.js';
-import { assertPlatformScope } from '../../security/request-context.js';
+import { assertPlatformScope, type RequestContext } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { uuidParam } from './uuid-param.js';
 
 const idSchema = uuidParam;
+/** Admin-only: the pharmacy never sees the hold reason. */
+const holdSchema = z.object({ reason: z.string().trim().min(2).max(500) });
 
 function toView(record: PharmacyOnboardingRequestRecord, worldpaySubmittedAt: string | null = null) {
   return {
@@ -112,7 +111,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
         findOrganisation: id => organisationRepo.findOrganisationById(id),
         findRequestByOrganisation: id => repo.findByOrganisationId(id),
         archiveOrganisation: (id, note, at) => repo.archiveOrganisation(id, note, at),
-        declineRequest: (id, note, at, actor) => repo.decline(id, note, at, actor),
+        holdRequest: (id, note, at, actor) => repo.hold(id, note, at, actor),
         emailPharmacy: input => queuePharmacyDeclinedEmail(notificationRepo, input),
       }, { organisationId, reason, actorUid: scope.uid });
       await identityRepo.appendAudit({
@@ -134,30 +133,36 @@ export function createPortalPharmacyOnboardingRouter(): Router {
     }
   });
 
+  const actionsFor = (context: RequestContext) => {
+    const scope = assertPlatformScope(context);
+    return {
+      scope,
+      actions: pharmacyRequestActions({
+        repo,
+        organisations: organisationRepo,
+        referralLinks,
+        notificationRepo,
+        audit: input => identityRepo.appendAudit({
+          ...input,
+          actorUid: scope.uid,
+          actorRole: scope.role,
+          requestId: scope.requestId,
+          sessionHashPrefix: scope.sessionHash.slice(0, 12),
+          surface: scope.surface,
+        }),
+      }),
+    };
+  };
+
+  // POST /v1/portal/admin/pharmacy-onboarding-requests/:id/activate - pending only; creates the pharmacy and emails it
   router.post('/portal/admin/pharmacy-onboarding-requests/:id/activate', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const scope = assertPlatformScope(req.context!);
+      const { scope, actions } = actionsFor(req.context!);
       const id = idSchema.parse(req.params.id);
-      const result = await activatePharmacyOnboardingRequest(repo, organisationRepo, referralLinks, {
-        id,
-        actorUid: scope.uid,
-      });
-      await identityRepo.appendAudit({
-        organisationId: result.organisation.id,
-        actorUid: scope.uid,
-        actorRole: scope.role,
-        event: 'organisation.created',
-        recordType: 'Organisation',
-        recordId: result.organisation.id,
-        requestId: scope.requestId,
-        sessionHashPrefix: scope.sessionHash.slice(0, 12),
-        surface: scope.surface,
-        details: { source: 'pharmacy-onboarding-request', requestId: result.requestId },
-      });
-      const request = await repo.findById(result.requestId);
+      const result = await actions.activate({ id, actorUid: scope.uid });
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json({
-        request: request ? toView(request) : { id: result.requestId, status: 'activated', organisationId: result.organisation.id },
+        request: result.request ? toView(result.request) : { id: result.requestId, status: 'activated', organisationId: result.organisation.id },
         organisation: result.organisation,
       });
     } catch (error) {
@@ -165,31 +170,28 @@ export function createPortalPharmacyOnboardingRouter(): Router {
     }
   });
 
-  router.post('/portal/admin/pharmacy-onboarding-requests/:id/decline', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+  // POST /v1/portal/admin/pharmacy-onboarding-requests/:id/hold - pending only; reason required, admin-only
+  router.post('/portal/admin/pharmacy-onboarding-requests/:id/hold', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const scope = assertPlatformScope(req.context!);
+      const { scope, actions } = actionsFor(req.context!);
       const id = idSchema.parse(req.params.id);
-      const reason = z.object({ reason: z.string().trim().min(2).max(500) }).parse(req.body).reason;
-      const declined = await declinePharmacyOnboardingRequest(repo, { id, reason, actorUid: scope.uid });
-      try {
-        await queuePharmacyOnboardingDeclined(notificationRepo, declined, reason);
-      } catch (error) {
-        console.error('Pharmacy onboarding decline email was not queued', error instanceof Error ? error.message : 'unknown');
-      }
-      await identityRepo.appendAudit({
-        organisationId: null,
-        actorUid: scope.uid,
-        actorRole: scope.role,
-        event: 'pharmacy_onboarding.declined',
-        recordType: 'PharmacyOnboardingRequest',
-        recordId: declined.id,
-        requestId: scope.requestId,
-        sessionHashPrefix: scope.sessionHash.slice(0, 12),
-        surface: scope.surface,
-        details: { gphcNumber: declined.gphcNumber },
-      });
+      const { reason } = holdSchema.parse(req.body);
+      const held = await actions.hold({ id, reason, actorUid: scope.uid });
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json({ request: toView(declined) });
+      res.status(200).json({ request: toView(held) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/admin/pharmacy-onboarding-requests/:id/unhold - on hold only; back to pending, no email
+  router.post('/portal/admin/pharmacy-onboarding-requests/:id/unhold', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { actions } = actionsFor(req.context!);
+      const id = idSchema.parse(req.params.id);
+      const unheld = await actions.unhold({ id });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ request: toView(unheld) });
     } catch (error) {
       next(error);
     }

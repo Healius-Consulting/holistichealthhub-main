@@ -27,7 +27,7 @@ const licence = Buffer.from('%PDF-1.7\nlicence');
 function repo(overrides: {
   organisations?: Array<{ id: string; gphcNumber: string; status?: string }>;
   archived?: Array<{ id: string; gphcNumber: string }>;
-  pending?: { id: string; idempotencyKey: string } | null;
+  open?: { id: string; status: 'PENDING' | 'ON_HOLD'; idempotencyKey: string } | null;
   existing?: PharmacyOnboardingRequestRecord | null;
 } = {}) {
   const saved: unknown[] = [];
@@ -36,7 +36,7 @@ function repo(overrides: {
     listOrganisationGphcNumbers: async () => overrides.organisations ?? [],
     listArchivedOrganisationGphcNumbers: async () => overrides.archived ?? [],
     findByIdempotencyKey: async () => overrides.existing ?? null,
-    findPendingByGphc: async () => overrides.pending ?? null,
+    findOpenByGphc: async () => overrides.open ?? null,
     list: async () => [],
     insert: async (input: unknown) => { saved.push(input); },
   };
@@ -75,12 +75,28 @@ describe('submitPharmacyOnboardingRequest', () => {
 
   it('refuses a second request while one is waiting', async () => {
     await assert.rejects(
-      () => submitPharmacyOnboardingRequest(repo({ pending: { id: 'req-1', idempotencyKey: 'other-key' } }), {
+      () => submitPharmacyOnboardingRequest(repo({ open: { id: 'req-1', status: 'PENDING', idempotencyKey: 'other-key' } }), {
         saveObject: async () => {},
         deleteFile: async () => {},
       }, { fields, licence: { filename: 'licence.pdf', declaredType: 'application/pdf', bytes: licence } }),
       (error: unknown) => error instanceof HttpError && error.code === 'ONBOARDING_ALREADY_RECEIVED',
     );
+  });
+
+  it('refuses a GPhC whose request is on hold, without giving the reason', async () => {
+    const saved: string[] = [];
+    await assert.rejects(
+      () => submitPharmacyOnboardingRequest(repo({ open: { id: 'req-1', status: 'ON_HOLD', idempotencyKey: 'other-key' } }), {
+        saveObject: async path => { saved.push(path); },
+        deleteFile: async () => {},
+      }, { fields, licence: null }),
+      (error: unknown) => error instanceof HttpError
+        && error.code === 'ONBOARDING_ON_HOLD'
+        && error.statusCode === 409
+        && /could not be created at this point in time/.test(error.message)
+        && /onboarding@holistichealthhub\.live/.test(error.message),
+    );
+    assert.deepEqual(saved, []);
   });
 
   it('stores a compact GPhC and both files', async () => {
@@ -95,6 +111,7 @@ describe('submitPharmacyOnboardingRequest', () => {
     });
     assert.equal(record.gphcNumber, '2078912');
     assert.equal(record.status, 'PENDING');
+    assert.equal(record.organisationId, null);
     assert.equal(record.signedOn, '2026-11-13');
     assert.equal(record.licenceStoragePath, '');
     assert.deepEqual(paths, [

@@ -63,7 +63,11 @@ export interface PharmsmartWelcome {
   gphcNumber?: string | null;
   pharmsmartPharmacyId?: string | null;
   prefill?: PharmsmartPrefill;
+  /** Set when this GPhC already has a request waiting or on hold: the page shows that, not the forms. */
+  onboardingRequest?: PharmsmartOnboardingRequestState;
 }
+
+export type PharmsmartOnboardingRequestState = 'pending' | 'on_hold' | null;
 
 export interface AuthState {
   phase: AuthPhase;

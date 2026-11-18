@@ -254,7 +254,7 @@ export function createPortalPrescriptionRouter(): Router {
   });
 
   // POST /v1/portal/prescription-serials/availability — occupancy, reuse, and Curaleaf lookup
-  router.post('/portal/prescription-serials/availability', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/portal/prescription-serials/availability', requireCsrf, requireStaff('pharmacy'), requirePharmacyOperationalWrites, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertTenantScope(req.context!);
       const input = serialAvailabilityInputSchema.parse(req.body);
