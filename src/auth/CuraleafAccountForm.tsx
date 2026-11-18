@@ -58,8 +58,9 @@ function blank(welcome: PharmsmartWelcome): Fields {
     pharmacyPhone: from('pharmacyPhone'),
     accountsPhone: from('accountsPhone'),
     faxNumber: from('faxNumber'),
-    wdaNumber: from('wdaNumber'),
-    licenceDetails: from('licenceDetails'),
+    // The licences section stays on the Curaleaf PDF but is not asked for at sign-up.
+    wdaNumber: '',
+    licenceDetails: '',
   };
 }
 
@@ -184,11 +185,6 @@ export function CuraleafAccountForm({
               <label>Accounts email <span>Main contact for invoices</span><input className="input" name="accountsEmail" type="email" value={fields.accountsEmail} onChange={set('accountsEmail')} required autoComplete="email" /></label>
               <label>Accounts telephone <span>Main contact for invoices</span><input className="input" name="accountsPhone" type="tel" value={fields.accountsPhone} onChange={set('accountsPhone')} required autoComplete="tel" /></label>
               <label>Fax number <span>Optional</span><input className="input" name="faxNumber" type="tel" value={fields.faxNumber} onChange={set('faxNumber')} autoComplete="off" /></label>
-            </fieldset>
-            <fieldset>
-              <legend>Licences <span>Optional</span></legend>
-              <label>WDA licence number<input className="input" name="wdaNumber" value={fields.wdaNumber} onChange={set('wdaNumber')} maxLength={40} autoComplete="off" /></label>
-              <label>Controlled drugs licence number<input className="input" name="licenceDetails" value={fields.licenceDetails} onChange={set('licenceDetails')} maxLength={500} autoComplete="off" /></label>
             </fieldset>
             <p className="curaleaf-account-form__sign">
               <span>Signature</span>
