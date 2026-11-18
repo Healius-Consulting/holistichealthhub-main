@@ -42,7 +42,7 @@ type Fields = typeof BUSINESS & typeof DEFAULTS;
 
 /** Business details the pharmacy has already given, from PharmSmart or the Curaleaf form. */
 export type WorldpayStart = Partial<Pick<Fields,
-  'legalName' | 'tradingName' | 'contactName' | 'gphcNumber' | 'registeredAddress' | 'tradingAddress' | 'landline' | 'businessEmail'
+  'legalName' | 'tradingName' | 'contactName' | 'contactPosition' | 'contactPhone' | 'gphcNumber' | 'registeredAddress' | 'tradingAddress' | 'landline' | 'businessEmail'
 >>;
 
 /** The first principal's details PharmSmart sent (its superintendent). */
@@ -55,6 +55,8 @@ const PREFILL_LABELS: Record<keyof WorldpayStart, string> = {
   legalName: 'Legal name',
   tradingName: 'Trading name',
   contactName: 'Contact name',
+  contactPosition: 'Contact position',
+  contactPhone: 'Contact phone',
   gphcNumber: 'GPhC premises number',
   registeredAddress: 'Registered address',
   tradingAddress: 'Trading address',

@@ -47,7 +47,11 @@ export type PharmsmartPrefill = Partial<Record<
   | 'superintendentFirstName'
   | 'superintendentLastName'
   | 'superintendentEmail'
-  | 'superintendentPhone',
+  | 'superintendentPhone'
+  | 'managerFirstName'
+  | 'managerLastName'
+  | 'managerEmail'
+  | 'managerPhone',
   string
 >>;
 

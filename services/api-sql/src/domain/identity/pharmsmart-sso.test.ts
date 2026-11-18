@@ -122,6 +122,24 @@ describe('PharmSmart pharmacy info', () => {
     });
   });
 
+  it('reads the pharmacy manager for the Worldpay contact', () => {
+    const info = parsePharmsmartPharmacyInfo(JSON.stringify({
+      status_code: 200,
+      data: {
+        gphc: '1028845',
+        manager: { first_name: ' Priya ', last_name: 'Shah', email: 'priya@kirkgate.test', pms_contact_no: '07700 900456' },
+      },
+    }));
+    assert.equal(info.status, 'pharmacy');
+    if (info.status !== 'pharmacy') return;
+    assert.deepEqual(info.prefill, {
+      managerFirstName: 'Priya',
+      managerLastName: 'Shah',
+      managerEmail: 'priya@kirkgate.test',
+      managerPhone: '07700 900456',
+    });
+  });
+
   it('treats an expired token as expired and ignores email and name on their own', () => {
     assert.deepEqual(parsePharmsmartPharmacyInfo('{"status_code":401,"status_message":"Token is expired"}'), {
       status: 'expired',

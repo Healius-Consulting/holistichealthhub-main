@@ -46,7 +46,11 @@ export type PharmsmartPrefill = Partial<Record<
   | 'superintendentFirstName'
   | 'superintendentLastName'
   | 'superintendentEmail'
-  | 'superintendentPhone',
+  | 'superintendentPhone'
+  | 'managerFirstName'
+  | 'managerLastName'
+  | 'managerEmail'
+  | 'managerPhone',
   string
 >>;
 
@@ -121,11 +125,12 @@ const PREFILL_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, readonly string[], n
   ['licenceDetails', ['cd_licence_number'], 500],
 ];
 
-const SUPERINTENDENT_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, string, number]> = [
-  ['superintendentFirstName', 'first_name', 80],
-  ['superintendentLastName', 'last_name', 80],
-  ['superintendentEmail', 'email', 254],
-  ['superintendentPhone', 'pms_contact_no', 40],
+/** Field suffix, PharmSmart key inside the `superintendent` or `manager` object, length cap. */
+const PERSON_KEYS: ReadonlyArray<['FirstName' | 'LastName' | 'Email' | 'Phone', string, number]> = [
+  ['FirstName', 'first_name', 80],
+  ['LastName', 'last_name', 80],
+  ['Email', 'email', 254],
+  ['Phone', 'pms_contact_no', 40],
 ];
 
 function firstText(data: Record<string, unknown>, keys: readonly string[]) {
@@ -171,11 +176,12 @@ export function parsePharmsmartPrefill(data: Record<string, unknown>): Pharmsmar
   if (deliveryAddress) prefill.deliveryAddress = deliveryAddress;
   const invoiceAddress = joinAddress(data, 'invoice');
   if (invoiceAddress) prefill.invoiceAddress = invoiceAddress;
-  const superintendent = data.superintendent;
-  if (superintendent && typeof superintendent === 'object') {
-    for (const [field, key, max] of SUPERINTENDENT_KEYS) {
-      const text = responseText((superintendent as Record<string, unknown>)[key]);
-      if (text) prefill[field] = text.slice(0, max);
+  for (const role of ['superintendent', 'manager'] as const) {
+    const person = data[role];
+    if (!person || typeof person !== 'object') continue;
+    for (const [suffix, key, max] of PERSON_KEYS) {
+      const text = responseText((person as Record<string, unknown>)[key]);
+      if (text) prefill[`${role}${suffix}`] = text.slice(0, max);
     }
   }
   return prefill;
