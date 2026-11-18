@@ -32,6 +32,7 @@ export function pharmsmartSsoContract(): PharmsmartSsoContract {
  * actually sent are present, so the form leaves the rest for the pharmacy to type.
  */
 export type PharmsmartPrefill = Partial<Record<
+  | 'contactName'
   | 'pharmacyName'
   | 'registeredCompanyName'
   | 'deliveryAddress'
@@ -171,6 +172,9 @@ function branchAddress(data: Record<string, unknown>) {
  */
 export function parsePharmsmartPrefill(data: Record<string, unknown>): PharmsmartPrefill {
   const prefill: PharmsmartPrefill = {};
+  // The top-level name is the pharmacy's main contact, not the signed-in person (`sso_user`).
+  const contactName = [responseText(data.first_name), responseText(data.last_name)].filter(Boolean).join(' ').replace(/\s+/g, ' ');
+  if (contactName) prefill.contactName = contactName.slice(0, 160);
   for (const [field, keys, max] of PREFILL_KEYS) {
     const text = firstText(data, keys);
     if (text) prefill[field] = text.slice(0, max);

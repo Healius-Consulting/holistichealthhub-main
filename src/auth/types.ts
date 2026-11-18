@@ -33,6 +33,7 @@ export interface PharmsmartSetup {
 
 /** Curaleaf account form values PharmSmart sent. A missing key is left for the pharmacy to type. */
 export type PharmsmartPrefill = Partial<Record<
+  | 'contactName'
   | 'pharmacyName'
   | 'registeredCompanyName'
   | 'deliveryAddress'

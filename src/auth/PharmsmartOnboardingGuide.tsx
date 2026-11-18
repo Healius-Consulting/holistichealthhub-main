@@ -167,13 +167,13 @@ export function PharmsmartWelcome({
   }, [choice, formOpen, worldpayOpen]);
 
   // PharmSmart's pharmacy manager is Worldpay's day-to-day contact. Without one, the contact is
-  // whoever signed in (or the name they gave on the Curaleaf form).
+  // the name on the Curaleaf form, then the pharmacy's main contact, then whoever signed in.
   const managerName = [welcome.prefill?.managerFirstName, welcome.prefill?.managerLastName].filter(Boolean).join(' ');
   // Whatever the pharmacy has already told us carries into the Worldpay form.
   const worldpayPrefill: WorldpayStart = {
     legalName: curaleafValues?.registeredCompanyName ?? welcome.prefill?.registeredCompanyName,
     tradingName: curaleafValues?.pharmacyName ?? welcome.prefill?.pharmacyName,
-    contactName: managerName || (curaleafValues?.pharmacistName ?? knownName),
+    contactName: managerName || (curaleafValues?.pharmacistName ?? (welcome.prefill?.contactName || knownName)),
     contactPosition: managerName ? 'Pharmacy manager' : undefined,
     contactPhone: welcome.prefill?.managerPhone,
     gphcNumber: curaleafValues?.gphcNumber ?? welcome.gphcNumber ?? undefined,

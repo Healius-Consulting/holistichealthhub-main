@@ -39,15 +39,15 @@ type Fields = {
 };
 
 /**
- * Name and GPhC come from the PharmSmart sign-in. The rest comes from the pharmacy
- * details PharmSmart sends. A field PharmSmart left empty stays blank.
+ * The contact is the pharmacy's main contact PharmSmart sends, or else whoever signed in.
+ * The rest comes from the pharmacy details PharmSmart sends. A field left empty stays blank.
  */
 function blank(welcome: PharmsmartWelcome): Fields {
   const name = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ').trim();
   const prefill = welcome.prefill ?? {};
   const from = (key: keyof NonNullable<PharmsmartWelcome['prefill']>) => prefill[key]?.trim() ?? '';
   return {
-    pharmacistName: name,
+    pharmacistName: from('contactName') || name,
     pharmacyName: from('pharmacyName'),
     registeredCompanyName: from('registeredCompanyName'),
     invoiceAddress: from('invoiceAddress') || from('deliveryAddress'),

@@ -112,6 +112,7 @@ describe('PharmSmart pharmacy info', () => {
     assert.equal(info.firstName, 'Manoj');
     assert.equal(info.lastName, 'Tailor');
     assert.deepEqual(info.prefill, {
+      contactName: 'Manoj iig Stage test',
       pharmacyName: 'Combe Down & Pharmacy',
       pharmacyPhone: '9898989898',
       pharmacyEmail: 'manoj.iihglobal@gmail.com',
@@ -134,6 +135,7 @@ describe('PharmSmart pharmacy info', () => {
     assert.equal(info.firstName, null);
     assert.equal(info.lastName, null);
     assert.equal(info.prefill.pharmacyEmail, 'shop@kirkgate.test');
+    assert.equal(info.prefill.contactName, 'Kirkgate Pharmacy');
     assert.deepEqual(pharmsmartSetupGaps(info), ['email', 'name']);
   });
 
