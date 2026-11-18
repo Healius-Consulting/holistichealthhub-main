@@ -322,7 +322,7 @@ const UPDATE_SUBMISSION_DETAILS_GQL = `
     $emailHash: String!
     $mobile: String!
     $postcode: String!
-  ) {
+  ) @transaction {
     updated: eligibilitySubmission_updateMany(
       where: { id: { eq: $id }, outcomeStatus: { eq: OPEN }, pharmacyAccessStatus: { eq: WITHHELD } }
       data: {
@@ -495,7 +495,7 @@ const ACTIVATE_SUBMISSION_GQL = `
 `;
 
 const MARK_REVIEW_REQUESTED_GQL = `
-  mutation MarkSubmissionReviewRequested($id: UUID!, $note: String) {
+  mutation MarkSubmissionReviewRequested($id: UUID!, $note: String) @transaction {
     updated: eligibilitySubmission_updateMany(
       where: {
         id: { eq: $id }
@@ -556,7 +556,7 @@ const LIST_RETENTION_CANDIDATES_GQL = `
  * promise is about the data, not about the row.
  */
 const REDUCE_TO_MINIMAL_RECORD_GQL = `
-  mutation ReduceSubmissionToMinimalRecord($id: UUID!) {
+  mutation ReduceSubmissionToMinimalRecord($id: UUID!) @transaction {
     updated: eligibilitySubmission_updateMany(
       where: { id: { eq: $id }, minimalRecordSince: { isNull: true } }
       data: {
