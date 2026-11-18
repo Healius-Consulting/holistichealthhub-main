@@ -25,8 +25,15 @@ const LEADING = 12;
 
 type PlacedLine = { text: string; x: number; y: number; size?: number };
 
+/**
+ * A registered community pharmacy holds neither licence, so both lines say so and
+ * "Supply valid copy" is left blank. Whatever the form was sent with is ignored.
+ */
+export const LICENCE_NOT_APPLICABLE = 'N/A \u2014 registered community pharmacy';
+
+/** Latin-1 plus the dashes and ellipsis Helvetica's WinAnsi encoding can draw. */
 function clean(value: string) {
-  return value.replace(/[^\u0020-\u00ff]/g, '?').replace(/\s+/g, ' ').trim();
+  return value.replace(/[^\u0020-\u00ff\u2013\u2014\u2026]/g, '?').replace(/\s+/g, ' ').trim();
 }
 
 function wrap(text: string, font: PDFFont, size: number, maxWidth: number, maxLines: number) {
@@ -86,8 +93,8 @@ export async function fillCuraleafAccountForm(fields: PharmacyOnboardingFields, 
     ...block(fields.invoiceAddress, 590, 4),
     ...block(fields.deliveryAddress, 510, 4),
     { text: fit(fields.gphcNumber, font, SIZE, 120), x: 214, y: 438 },
-    ...(fields.wdaNumber?.trim() ? [{ text: fit(fields.wdaNumber, font, SIZE, 120), x: 214, y: 406 }] : []),
-    ...(fields.licenceDetails?.trim() ? [{ text: fit(fields.licenceDetails, font, SIZE, 250), x: 268, y: 374 }] : []),
+    { text: fit(LICENCE_NOT_APPLICABLE, font, SIZE, VALUE_RIGHT - 214), x: 214, y: 406 },
+    { text: fit(LICENCE_NOT_APPLICABLE, font, SIZE, VALUE_RIGHT - 268), x: 268, y: 374 },
     { text: fit(fields.pharmacyEmail, font, SIZE, width), x: VALUE_X, y: 326 },
     { text: fit(fields.accountsEmail, font, SIZE, width), x: VALUE_X, y: 312 },
     { text: fit(fields.pharmacyPhone, font, SIZE, width), x: VALUE_X, y: 288 },

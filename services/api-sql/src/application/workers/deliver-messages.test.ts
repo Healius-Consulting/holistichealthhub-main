@@ -108,16 +108,20 @@ test('sends without a header logo when the pharmacy has not uploaded one', async
   assert.match(body.html, /Eastwood Health/);
 });
 
-test('a new pharmacy request email carries the filled form and the licence', async t => {
+test('the Curaleaf application goes as one email to every To and CC address, with the form attached', async t => {
   process.env.RESEND_API_KEY = 'test-key';
   t.after(() => { delete process.env.RESEND_API_KEY; });
 
   const { repo } = notificationRepoStub([pendingRecord({
-    templateCode: 'admin_pharmacy_onboarding_request',
-    encryptedRecipient: 'spatel@healiusconsulting.com',
+    organisationId: null,
+    templateCode: 'curaleaf_new_account_application',
+    encryptedRecipient: 'robbie.allison@curaleaflaboratories.co.uk',
+    toRecipients: ['robbie.allison@curaleaflaboratories.co.uk', 'ellis.walters@curaleaflaboratories.co.uk'],
+    ccRecipients: ['spatel@healiusconsulting.com'],
     payload: {
-      pharmacyName: 'Eastwood Health',
+      branchName: 'Eastwood Health',
       gphcNumber: '2078912',
+      submittedAt: '2026-11-19T14:05:00.000Z',
       filledFormStoragePath: 'pharmacy-onboarding/req/curaleaf-account.pdf',
       licenceStoragePath: 'pharmacy-onboarding/req/controlled-drug-licence.pdf',
       licenceContentType: 'application/pdf',
@@ -130,9 +134,26 @@ test('a new pharmacy request email carries the filled form and the licence', asy
   const summary = await deliverPatientMessages({ notificationRepo: repo, storage, fetchImpl });
 
   assert.equal(summary.sent, 1);
-  const files = bodies[0]!.attachments.filter((file: { content_id?: string }) => !file.content_id);
+  assert.equal(bodies.length, 1);
+  const body = bodies[0]!;
+  assert.deepEqual(body.to, ['robbie.allison@curaleaflaboratories.co.uk', 'ellis.walters@curaleaflaboratories.co.uk']);
+  assert.deepEqual(body.cc, ['spatel@healiusconsulting.com']);
+  assert.equal(body.from, 'Holistic Health Hub <onboarding@holistichealthhub.live>');
+  assert.equal(body.reply_to, 'onboarding@holistichealthhub.live');
+  assert.equal(body.subject, 'New account application: Eastwood Health, GPhC 2078912');
+  const files = body.attachments.filter((file: { content_id?: string }) => !file.content_id);
   assert.deepEqual(files.map((file: { filename: string }) => file.filename), ['curaleaf-account.pdf', 'cd-licence.pdf']);
   assert.equal(files[0].content, Buffer.from('logo-bytes').toString('base64'));
+});
+
+test('a single-recipient email has no CC', async t => {
+  process.env.RESEND_API_KEY = 'test-key';
+  t.after(() => { delete process.env.RESEND_API_KEY; });
+  const { repo } = notificationRepoStub([pendingRecord()]);
+  const { bodies, fetchImpl } = resendCapture();
+  await deliverPatientMessages({ notificationRepo: repo, fetchImpl });
+  assert.deepEqual(bodies[0]!.to, ['patient@example.test']);
+  assert.equal('cc' in bodies[0]!, false);
 });
 
 test('a logo that cannot be read does not stop the message', async t => {

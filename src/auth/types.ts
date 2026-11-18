@@ -65,9 +65,16 @@ export interface PharmsmartWelcome {
   prefill?: PharmsmartPrefill;
   /** Set when this GPhC already has a request waiting or on hold: the page shows that, not the forms. */
   onboardingRequest?: PharmsmartOnboardingRequestState;
+  /** The request whose Partner Terms are still to accept, when `onboardingRequest` is `terms_outstanding`. */
+  termsRequest?: PharmsmartTermsRequest | null;
+  /** Server-signed PharmSmart names, sent back with the Terms for the soft name check. */
+  pharmsmartTicket?: string | null;
 }
 
-export type PharmsmartOnboardingRequestState = 'pending' | 'on_hold' | null;
+/** `terms_outstanding`: the Curaleaf form arrived but the Terms were never accepted, so the page resumes there. */
+export type PharmsmartOnboardingRequestState = 'pending' | 'on_hold' | 'terms_outstanding' | null;
+
+export type PharmsmartTermsRequest = { id: string; pharmacyName: string; registeredCompanyName: string };
 
 export interface AuthState {
   phase: AuthPhase;

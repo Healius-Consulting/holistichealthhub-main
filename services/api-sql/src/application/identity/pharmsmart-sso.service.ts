@@ -12,6 +12,7 @@ import {
   type PharmsmartStaffCandidate,
 } from '../../domain/identity/pharmsmart-sso.js';
 import { compactGphcNumber, type PharmacyOnboardingStatus } from '../../domain/pharmacy-onboarding/request.js';
+import { issuePharmsmartNamesTicket } from '../../domain/pharmacy-onboarding/terms.js';
 import type { AppendAuditInput } from '../../repositories/ports/identity.port.js';
 import { bestEffort, type ClickupHooks } from '../clickup/clickup-hooks.js';
 
@@ -46,16 +47,30 @@ export type PharmsmartLoginResult =
     prefill: PharmsmartPrefill;
     /**
      * The GPhC's latest onboarding request, when it is still waiting (`pending`) or
-     * held (`on_hold`): the page shows that instead of the forms. Null shows the forms.
+     * held (`on_hold`): the page shows that instead of the forms. `terms_outstanding`
+     * is a waiting request whose Partner Terms were never accepted: the page resumes
+     * at the Terms step. Null shows the forms.
      */
     onboardingRequest: PharmsmartOnboardingRequestState;
+    /** The request to accept the Terms against, only when `terms_outstanding`. */
+    termsRequest: { id: string; pharmacyName: string; registeredCompanyName: string } | null;
+    /** Signed PharmSmart superintendent and manager names, for the Terms step's soft check. */
+    pharmsmartTicket: string;
   };
 
-export type PharmsmartOnboardingRequestState = 'pending' | 'on_hold' | null;
+export type PharmsmartOnboardingRequestState = 'pending' | 'on_hold' | 'terms_outstanding' | null;
 
-function onboardingRequestState(status: PharmacyOnboardingStatus | null | undefined): PharmsmartOnboardingRequestState {
-  if (status === 'PENDING') return 'pending';
-  if (status === 'ON_HOLD') return 'on_hold';
+type LatestOnboardingRequest = {
+  id: string;
+  status: PharmacyOnboardingStatus;
+  termsAccepted: boolean;
+  pharmacyName: string;
+  registeredCompanyName: string;
+};
+
+function onboardingRequestState(request: LatestOnboardingRequest | null | undefined): PharmsmartOnboardingRequestState {
+  if (request?.status === 'PENDING') return request.termsAccepted ? 'pending' : 'terms_outstanding';
+  if (request?.status === 'ON_HOLD') return 'on_hold';
   return null;
 }
 
@@ -71,7 +86,7 @@ export class PharmsmartSsoService {
   constructor(private readonly deps: {
     fetchPharmacyInfo: (token: string) => Promise<string>;
     listOrganisations: () => Promise<PharmacyLink[]>;
-    findLatestOnboardingRequest: (gphcNumber: string) => Promise<{ status: PharmacyOnboardingStatus } | null>;
+    findLatestOnboardingRequest: (gphcNumber: string) => Promise<LatestOnboardingRequest | null>;
     listStaff: (organisationId: string) => Promise<PharmsmartStaffCandidate[]>;
     findEmailOwner: (email: string) => Promise<PharmsmartStaffCandidate | 'unlinked' | null>;
     adoptAccount: (staff: PharmsmartStaffCandidate, displayName: string) => Promise<void>;
@@ -110,6 +125,7 @@ export class PharmsmartSsoService {
         const gphcNumber = compactGphcNumber(info.gphcNumber);
         const request = gphcNumber ? await this.deps.findLatestOnboardingRequest(gphcNumber) : null;
         if (!request) await bestEffort('first visit', () => this.deps.recordFirstVisit?.({ gphcNumber, pharmsmartPharmacyId: info.pharmsmartPharmacyId, tradingName: info.prefill.pharmacyName }));
+        const state = onboardingRequestState(request);
         return {
           status: 'welcome',
           email: info.email,
@@ -118,7 +134,17 @@ export class PharmsmartSsoService {
           gphcNumber: info.gphcNumber,
           pharmsmartPharmacyId: info.pharmsmartPharmacyId,
           prefill: info.prefill,
-          onboardingRequest: onboardingRequestState(request?.status),
+          onboardingRequest: state,
+          termsRequest: state === 'terms_outstanding' && request
+            ? { id: request.id, pharmacyName: request.pharmacyName, registeredCompanyName: request.registeredCompanyName }
+            : null,
+          pharmsmartTicket: issuePharmsmartNamesTicket({
+            gphcNumber: gphcNumber ?? info.gphcNumber,
+            people: [
+              { firstName: info.prefill.superintendentFirstName ?? null, lastName: info.prefill.superintendentLastName ?? null },
+              { firstName: info.prefill.managerFirstName ?? null, lastName: info.prefill.managerLastName ?? null },
+            ],
+          }, this.deps.setupSecret),
         };
       }
       await this.refuse(null, matched.reason, context);

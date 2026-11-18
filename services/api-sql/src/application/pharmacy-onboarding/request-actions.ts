@@ -18,7 +18,7 @@ type RequestAudit = {
 };
 
 export type PharmacyRequestActionDeps = {
-  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'listOrganisationGphcNumbers' | 'activate' | 'hold' | 'unhold'>;
+  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'listOrganisationGphcNumbers' | 'activate' | 'hold' | 'unhold' | 'linkTermsAcceptances'>;
   organisations: Pick<OrganisationRepositoryPort, 'createOrganisation'>;
   referralLinks: { ensureEligibilityLink(params: { organisationId: string; createdByUid?: string | null }): Promise<{ token: string }> };
   notificationRepo: NotificationRepositoryPort;

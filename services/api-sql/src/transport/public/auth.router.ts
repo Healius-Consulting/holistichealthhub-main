@@ -96,7 +96,12 @@ export function createAuthRouter(): Router {
   const pharmsmartSso = new PharmsmartSsoService({
     fetchPharmacyInfo: fetchPharmsmartPharmacyInfo,
     listOrganisations: () => organisationRepo.listOrganisations(),
-    findLatestOnboardingRequest: gphcNumber => onboardingRepo.findLatestByGphc(gphcNumber),
+    findLatestOnboardingRequest: async gphcNumber => {
+      const request = await onboardingRepo.findLatestByGphc(gphcNumber);
+      if (!request) return null;
+      const terms = await onboardingRepo.findTermsAcceptances(request.id);
+      return { ...request, termsAccepted: terms.length > 0 };
+    },
     listStaff: organisationId => identityRepo.listPharmacyStaffByOrganisationId(organisationId),
     findEmailOwner: async email => {
       try {

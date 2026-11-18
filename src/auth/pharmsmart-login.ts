@@ -55,13 +55,6 @@ export const PHARMSMART_ONBOARDING_PACKETS = [
     action: 'submit',
     preview: 'pdf',
   },
-  {
-    href: '/onboarding/worldpay-contract-information.xlsx',
-    title: 'Worldpay',
-    detail: 'FORM',
-    summary: 'Most of it is done. Add your pharmacy and bank details, then send it to us.',
-    preview: 'sheet',
-  },
 ] as const;
 
 export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
@@ -79,6 +72,8 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
         pharmsmartPharmacyId: result.pharmsmartPharmacyId ?? null,
         prefill: result.prefill ?? {},
         onboardingRequest: result.onboardingRequest ?? null,
+        termsRequest: result.termsRequest ?? null,
+        pharmsmartTicket: result.pharmsmartTicket ?? null,
       },
     };
   }

@@ -29,7 +29,7 @@ export type ActivatedPharmacy = {
 };
 
 export async function activatePharmacyOnboardingRequest(
-  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'listOrganisationGphcNumbers' | 'activate'>,
+  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'listOrganisationGphcNumbers' | 'activate' | 'linkTermsAcceptances'>,
   organisations: Pick<OrganisationRepositoryPort, 'createOrganisation'>,
   referralLinks: ReferralLinks,
   input: { id: string; actorUid: string; now?: Date },
@@ -66,6 +66,8 @@ export async function activatePharmacyOnboardingRequest(
   });
   const referral = await referralLinks.ensureEligibilityLink({ organisationId: id, createdByUid: input.actorUid });
   await repo.activate(request.id, id, now.toISOString(), input.actorUid);
+  // The Partner Terms were accepted against the request; they now belong to the branch too.
+  await repo.linkTermsAcceptances(request.id, id);
   return {
     requestId: request.id,
     organisation: {

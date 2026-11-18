@@ -49,6 +49,7 @@ function harness(status: PharmacyOnboardingStatus) {
   const organisations: string[] = [];
   const created: Array<{ id: string; intakeEnabled?: boolean }> = [];
   const writes: string[] = [];
+  const links: Array<[string, string]> = [];
   const keys = new Set<string>();
   const notificationRepo = {
     async enqueue(data: Enqueued) {
@@ -74,6 +75,7 @@ function harness(status: PharmacyOnboardingStatus) {
         writes.push('unhold');
         row = { ...row, status: 'PENDING' };
       },
+      linkTermsAcceptances: async (requestId, organisationId) => { links.push([requestId, organisationId]); },
     },
     organisations: {
       createOrganisation: async (input: { id: string; intakeEnabled?: boolean }) => {
@@ -85,7 +87,7 @@ function harness(status: PharmacyOnboardingStatus) {
     notificationRepo,
     audit: async input => { audits.push(input); },
   });
-  return { actions, emails, audits, organisations, created, writes, row: () => row };
+  return { actions, emails, audits, organisations, created, writes, links, row: () => row };
 }
 
 const id = '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11';
@@ -105,6 +107,15 @@ describe('pharmacy request actions', () => {
     await assert.rejects(() => h.actions.activate({ id, actorUid: 'admin-1' }), refusedWith('ONBOARDING_REQUEST_DECIDED'));
     assert.equal(h.emails.length, 1);
     assert.equal(h.organisations.length, 1);
+  });
+
+  it('links the Partner Terms acceptance to the new branch at Activate, and nowhere else', async () => {
+    const h = harness('PENDING');
+    await h.actions.hold({ id, reason: REASON, actorUid: 'admin-1' });
+    await h.actions.unhold({ id });
+    assert.deepEqual(h.links, []);
+    const result = await h.actions.activate({ id, actorUid: 'admin-1' });
+    assert.deepEqual(h.links, [[id, result.organisation.id]]);
   });
 
   it('opens the eligibility link at Activate, while the pharmacy awaits Curaleaf', async () => {

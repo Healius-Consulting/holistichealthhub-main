@@ -128,6 +128,44 @@ export async function queueEmailToRecipients(
   return { queued, suppressed: unique.length - queued };
 }
 
+/**
+ * One email to several people who all see each other (To and CC), as one outbox row
+ * under one idempotency key, so a retry can never send a second copy to anyone.
+ * Use `queueEmailToRecipients` instead when each person should get their own email.
+ */
+export async function queueSharedEmail(
+  notificationRepo: NotificationRepositoryPort,
+  input: {
+    to: string[];
+    cc?: string[];
+    templateCode: EmailTemplateCode;
+    payload: Record<string, unknown>;
+    keyParts: Array<string | number | null | undefined>;
+    organisationId?: string | null;
+  },
+) {
+  const to = dedupeRecipients(input.to.map(email => ({ email }))).map(recipient => recipient.email);
+  const cc = dedupeRecipients((input.cc ?? []).map(email => ({ email })))
+    .map(recipient => recipient.email)
+    .filter(email => !to.includes(email));
+  if (to.length === 0) throw new Error(`${input.templateCode} has no To address.`);
+  const outcome = await notificationRepo.enqueue({
+    organisationId: input.organisationId ?? null,
+    patientId: null,
+    orderId: null,
+    channel: 'EMAIL',
+    templateCode: input.templateCode,
+    recipientHash: sha256([...to, ...cc].join(',')),
+    encryptedRecipient: to[0]!,
+    toRecipients: to,
+    ccRecipients: cc,
+    payload: input.payload,
+    idempotencyKey: messageIdempotencyKey(input.keyParts),
+    nextAttemptAt: null,
+  });
+  return { queued: outcome.created };
+}
+
 export async function listPlatformAdminRecipients(identityRepo: IdentityRepositoryPort) {
   const admins = await identityRepo.listPlatformAdmins();
   return dedupeRecipients(admins.map(admin => ({

@@ -2,9 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import HhhBrandMark from '../components/HhhBrandMark';
-import { readOnboardingSpreadsheet, type OnboardingSheetRow } from './onboarding-sheet';
 import { CuraleafAccountForm, type CuraleafFormValues } from './CuraleafAccountForm';
+import { PartnerTermsForm } from './PartnerTermsForm';
 import { WorldpayForm, type WorldpayPrincipalStart, type WorldpayStart } from './WorldpayForm';
+import {
+  afterCuraleafSent,
+  afterTermsAccepted,
+  initialSetupState,
+  requestStateView,
+  setupFinished,
+  worldpayUnlocked,
+} from './onboarding-flow';
 import {
   PHARMACY_ONBOARDING_CHOICES,
   PHARMACY_ONBOARDING_PITCH,
@@ -110,39 +118,6 @@ function OnboardingPdfPreview({ href }: { href: string }) {
   );
 }
 
-function OnboardingSheetPreview({ href }: { href: string }) {
-  const [rows, setRows] = useState<OnboardingSheetRow[] | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setRows(null);
-    setFailed(false);
-    void fetch(href)
-      .then(response => {
-        if (!response.ok) throw new Error('The form could not be opened.');
-        return response.arrayBuffer();
-      })
-      .then(readOnboardingSpreadsheet)
-      .then(next => { if (!cancelled) setRows(next); })
-      .catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; };
-  }, [href]);
-
-  if (failed) return <p className="pharmsmart-guide__preview-status">This form could not be opened here. Download it instead.</p>;
-  if (!rows) return <p className="pharmsmart-guide__preview-status">Opening the form…</p>;
-  return (
-    <div className="pharmsmart-guide__sheet" tabIndex={0}>
-      {rows.map((row, index) => (
-        <div key={`${index}:${row.label}`}>
-          {row.label ? <strong>{row.label}</strong> : null}
-          {row.value ? <span>{row.value}</span> : null}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function PharmsmartWelcome({
   welcome,
   onUseEmail,
@@ -159,11 +134,17 @@ export function PharmsmartWelcome({
   const knownName = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ');
   const [viewing, setViewing] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [curaleafValues, setCuraleafValues] = useState<CuraleafFormValues | null>(null);
+  // Curaleaf form, then Partner Terms, then Worldpay (skippable). A pharmacy that left
+  // before the Terms comes back straight to them.
+  const [setup, setSetup] = useState(() => initialSetupState(welcome));
+  const [termsOpen, setTermsOpen] = useState(() => setup.termsRequest !== null);
   const [worldpayOpen, setWorldpayOpen] = useState(false);
-  const [worldpaySent, setWorldpaySent] = useState(false);
-  const [choice, setChoice] = useState<PharmacyOnboardingChoice | null>(null);
+  const [choice, setChoice] = useState<PharmacyOnboardingChoice | null>(() => (setup.termsRequest ? 'setup' : null));
+  const submitted = setup.termsRequest !== null;
+  const termsAccepted = setup.termsAccepted;
+  const worldpayReady = worldpayUnlocked(setup);
+  const finished = setupFinished(setup);
   const [deferral, setDeferral] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
   const deferralKey = useRef(crypto.randomUUID());
 
@@ -176,10 +157,10 @@ export function PharmsmartWelcome({
 
   // The chosen panel sits below the hero; bring it into view, mostly for phones.
   useEffect(() => {
-    if (!choice || formOpen || worldpayOpen) return;
+    if (!choice || formOpen || termsOpen || worldpayOpen) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
-  }, [choice, formOpen, worldpayOpen]);
+  }, [choice, formOpen, termsOpen, worldpayOpen]);
 
   // PharmSmart's pharmacy manager is Worldpay's day-to-day contact. Without one, the contact is
   // the name on the Curaleaf form, then the pharmacy's main contact, then whoever signed in.
@@ -246,7 +227,8 @@ export function PharmsmartWelcome({
     ? <a className="onb__signin" href={accountHref} target="_blank" rel="noopener noreferrer">Sign in</a>
     : <button className="onb__signin" type="button" onClick={onUseEmail}>Sign in</button>;
 
-  const requestView = welcome.onboardingRequest ? REQUEST_STATE_VIEWS[welcome.onboardingRequest] : null;
+  const requestState = requestStateView(welcome.onboardingRequest);
+  const requestView = requestState ? REQUEST_STATE_VIEWS[requestState] : null;
   if (requestView) {
     return (
       <div className="staff-login-page auth-page staff-login-page--guide">
@@ -329,13 +311,13 @@ export function PharmsmartWelcome({
           {choice === 'setup' ? (
             <section className="onb__panel" aria-labelledby="onb-setup">
               <div className="onb__panel-head">
-                <h2 id="onb-setup">{submitted && worldpaySent ? 'You are all set' : 'Two forms to set up'}</h2>
-                <span className="onb__progress">{Number(submitted) + Number(worldpaySent)} of 2 sent</span>
+                <h2 id="onb-setup">{finished ? 'You are all set' : 'Three steps to set up'}</h2>
+                <span className="onb__progress">{Number(submitted) + Number(termsAccepted) + Number(setup.worldpay === 'sent')} of 3 done</span>
               </div>
               <p>
-                {submitted && worldpaySent
-                  ? 'Both forms are with our team. We will email the pharmacy address when your account is ready.'
-                  : 'Fill both in on this page. Each one takes a few minutes, and you can do them in either order.'}
+                {finished
+                  ? `Your application is with our team and Curaleaf Laboratories. We will email the pharmacy address when your account is ready.${setup.worldpay === 'skipped' ? ' You can send the Worldpay form later.' : ''}`
+                  : 'Each step leads into the next and takes a few minutes. The Worldpay form can wait until later.'}
               </p>
               <ol className="onb__forms">
                 <li className={submitted ? 'is-done' : undefined}>
@@ -347,14 +329,32 @@ export function PharmsmartWelcome({
                     ? <p className="onb__done">Sent</p>
                     : <button type="button" className="onb__button onb__button--primary" onClick={() => setFormOpen(true)}>Fill in</button>}
                 </li>
-                <li className={worldpaySent ? 'is-done' : undefined}>
+                <li className={termsAccepted ? 'is-done' : undefined}>
+                  <div>
+                    <h3>Partner Terms</h3>
+                    <p>Confirm you can accept our terms for the pharmacy and sign with your name. This sends your Curaleaf form to Curaleaf Laboratories.</p>
+                  </div>
+                  {termsAccepted
+                    ? <p className="onb__done">Accepted</p>
+                    : <button type="button" className="onb__button onb__button--primary" onClick={() => setTermsOpen(true)} disabled={!submitted}>Read and accept</button>}
+                </li>
+                <li className={setup.worldpay === 'sent' ? 'is-done' : undefined}>
                   <div>
                     <h3>Worldpay card payments</h3>
-                    <p>Lets patients pay by card through a secure link. You will need the bank account for payouts and each owner's date of birth and home address.</p>
+                    <p>Lets patients pay by card through a secure link. You will need the bank account for payouts and each owner's date of birth and home address. You can skip this and do it later.</p>
                   </div>
-                  {worldpaySent
+                  {setup.worldpay === 'sent'
                     ? <p className="onb__done">Sent</p>
-                    : <button type="button" className="onb__button onb__button--primary" onClick={() => setWorldpayOpen(true)}>Fill in</button>}
+                    : setup.worldpay === 'skipped'
+                      ? <p className="onb__done">Skipped</p>
+                      : (
+                        <span className="onb__actions">
+                          <button type="button" className="onb__button onb__button--primary" onClick={() => setWorldpayOpen(true)} disabled={!worldpayReady}>Fill in</button>
+                          {worldpayReady
+                            ? <button type="button" className="onb__button onb__button--quiet" onClick={() => setSetup(current => ({ ...current, worldpay: 'skipped' }))}>Skip for now</button>
+                            : null}
+                        </span>
+                      )}
                 </li>
               </ol>
             </section>
@@ -397,9 +397,7 @@ export function PharmsmartWelcome({
                   <a href={openPacket.href} download>Download</a>
                   <button ref={closePreview} type="button" onClick={() => setViewing(null)}>Close</button>
                 </header>
-                {openPacket.preview === 'sheet'
-                  ? <OnboardingSheetPreview href={openPacket.href} />
-                  : <OnboardingPdfPreview href={openPacket.href} />}
+                <OnboardingPdfPreview href={openPacket.href} />
               </div>
             </div>,
             document.body,
@@ -408,14 +406,37 @@ export function PharmsmartWelcome({
             open={formOpen}
             welcome={welcome}
             onClose={() => setFormOpen(false)}
-            onSubmitted={values => { setFormOpen(false); setSubmitted(true); setCuraleafValues(values); }}
+            onSubmitted={(values, requestId) => {
+              setFormOpen(false);
+              setCuraleafValues(values);
+              setSetup(current => afterCuraleafSent(current, {
+                id: requestId,
+                pharmacyName: values.pharmacyName,
+                registeredCompanyName: values.registeredCompanyName,
+              }));
+              // Straight on to the Terms, with no stop on this page in between.
+              setTermsOpen(true);
+            }}
+          />
+          <PartnerTermsForm
+            open={termsOpen}
+            request={setup.termsRequest}
+            pharmsmartTicket={welcome.pharmsmartTicket}
+            signer={{ name: knownName, email: welcome.email ?? '' }}
+            onClose={() => setTermsOpen(false)}
+            onAccepted={() => {
+              setTermsOpen(false);
+              setSetup(afterTermsAccepted);
+              // Then Worldpay, which the pharmacy can close to skip.
+              setWorldpayOpen(true);
+            }}
           />
           <WorldpayForm
             open={worldpayOpen}
             prefill={worldpayPrefill}
             principal={worldpayPrincipal}
             onClose={() => setWorldpayOpen(false)}
-            onSubmitted={() => { setWorldpayOpen(false); setWorldpaySent(true); }}
+            onSubmitted={() => { setWorldpayOpen(false); setSetup(current => ({ ...current, worldpay: 'sent' })); }}
           />
       </div>
     </div>

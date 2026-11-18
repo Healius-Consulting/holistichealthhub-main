@@ -38,13 +38,13 @@ Operational pharmacy emails go to the pharmacy email, or the superintendent when
 - `pharmacy_password_reset` (staff.password_reset): Sent from the staff login form, or when an HHH admin queues a reset. Reply-To: `IT@holistichealthhub.live`.
 - `pharmacy_2fa_enabled` (staff.2fa_enabled): Sent after a staff member enrols an authenticator app. Reply-To: `IT@holistichealthhub.live`.
 - `pharmacy_2fa_disabled` (staff.2fa_disabled): Sent after an HHH admin removes the authenticator app. Reply-To: `IT@holistichealthhub.live`.
-- `pharmacy_onboarding_submitted` (pharmacy_onboarding.submitted): Sent to the pharmacy email when a Curaleaf account form is submitted from the onboarding page. The request waits for HHH to activate or hold it; no account exists yet. Reply-To: `onboarding@holistichealthhub.live`.
-- `admin_pharmacy_onboarding_request` (pharmacy_onboarding.submitted): Sent to partner success and the HHH admin inbox when a pharmacy submits a Curaleaf account form. The request waits in the portal for HHH to activate or hold it; the filled form is attached for Curaleaf. Not sent to every platform admin.
+- `pharmacy_onboarding_submitted` (pharmacy_onboarding.submitted): Sent to the pharmacy email once it has sent the Curaleaf account form and accepted the Partner Terms (nothing is sent for the form alone). The request waits for HHH to activate or hold it; no account exists yet. Reply-To: `onboarding@holistichealthhub.live`.
 - `pharmacy_onboarding_held` (pharmacy_onboarding.held): Sent to the pharmacy email when HHH puts its onboarding request on hold. Never includes the admin's reason. Reply-To: `onboarding@holistichealthhub.live`.
 - `pharmacy_onboarding_activated` (pharmacy_onboarding.activated): Sent to the pharmacy email when HHH activates its onboarding request and the account is created. Reply-To: `onboarding@holistichealthhub.live`.
 - `pharmacy_onboarding_declined` (pharmacy_onboarding.declined): Sent to the pharmacy email when HHH declines a pharmacy already created from the onboarding page (it is archived), for example when Curaleaf rejects the account.
-- `admin_worldpay_form_submitted` (pharmacy_onboarding.worldpay_submitted): Sent straight away, not through the outbox, to partner success and the HHH admin inbox when a pharmacy submits the Worldpay form. The filled form is attached as a PDF. Its bank and identity details are never stored.
+- `admin_worldpay_form_submitted` (pharmacy_onboarding.worldpay_submitted): Sent straight away, not through the outbox, to the HHH admin inbox only when a pharmacy submits the Worldpay form. The filled form is attached as a PDF. Never sent to Worldpay. Its bank and identity details are never stored.
 
 ## Admin emails
 
 - `admin_new_enquiry_received` (enquiry.submitted): Sent to platform admins when a patient submits an eligibility enquiry.
+- `curaleaf_new_account_application` (pharmacy_onboarding.terms_accepted): One email to Curaleaf Laboratories (To) with partner success copied (CC), sent once the pharmacy accepts the Partner Terms, never at Curaleaf form submission alone. The filled Curaleaf account form is attached. Recipients are set in config. Reply-To: `onboarding@holistichealthhub.live`.

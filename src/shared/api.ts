@@ -1,6 +1,6 @@
 import { shouldDispatchSessionEnded } from './sessionEnded';
 import { assertNotDemoWrite } from './demoGuard';
-import type { PharmsmartOnboardingRequestState, PharmsmartPrefill } from '../auth/types';
+import type { PharmsmartOnboardingRequestState, PharmsmartPrefill, PharmsmartTermsRequest } from '../auth/types';
 import type {
   CuraleafConnectionStatus,
   CuraleafActivationInput,
@@ -303,6 +303,8 @@ export type PharmsmartLoginResult =
     prefill?: PharmsmartPrefill;
     /** The GPhC's onboarding request still waiting or on hold: show that instead of the forms. */
     onboardingRequest?: PharmsmartOnboardingRequestState;
+    termsRequest?: PharmsmartTermsRequest | null;
+    pharmsmartTicket?: string | null;
   };
 
 export async function redeemPharmsmartLogin(token: string) {
@@ -456,6 +458,21 @@ export type PharmacyOnboardingRequestView = {
   createdAt: string | null;
   /** When the Worldpay form was sent. The form itself is never stored. */
   worldpaySubmittedAt?: string | null;
+  /** Partner Terms acceptances against this request, newest first. */
+  termsAcceptances?: PartnerTermsAcceptanceView[];
+};
+
+export type PartnerTermsAcceptanceView = {
+  termsVersion: string;
+  signerName: string;
+  signerRole: string;
+  signerEmail: string;
+  signerGphcNumber: string | null;
+  registeredCompanyName: string;
+  acceptedAt: string;
+  source: 'signup' | 'reacceptance';
+  /** Soft check against PharmSmart's superintendent and manager; null when not checked. */
+  nameMatchesPharmsmart: boolean | null;
 };
 
 export type ActivatedPharmacyOnboarding = {
@@ -477,6 +494,22 @@ export type ActivatedPharmacyOnboarding = {
 
 export function submitCuraleafAccountForm(input: Record<string, string>) {
   return apiRequest<{ id: string; status: PharmacyOnboardingRequestView['status'] }>('/v1/public/pharmacy-onboarding-requests', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** Accepting the Partner Terms is what sends the Curaleaf application. A retry sends nothing twice. */
+export function acceptPartnerTerms(input: {
+  onboardingRequestId: string;
+  signerName: string;
+  signerRole: string;
+  signerEmail: string;
+  signerGphcNumber: string;
+  authorised: true;
+  pharmsmartTicket?: string;
+}) {
+  return apiRequest<{ acceptedAt: string; termsVersion: string }>('/v1/public/pharmacy-onboarding-terms', {
     method: 'POST',
     body: JSON.stringify(input),
   });

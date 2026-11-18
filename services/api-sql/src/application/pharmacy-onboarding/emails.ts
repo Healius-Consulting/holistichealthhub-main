@@ -1,8 +1,7 @@
-import { queueEmailToRecipients } from '../notifications/email-outbox.js';
-import { keyContact } from '../notifications/key-contacts.js';
-import { emailAliasDomain } from '../notifications/email-catalog.js';
+import { queueEmailToRecipients, queueSharedEmail } from '../notifications/email-outbox.js';
 import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
+import { curaleafApplicationCc, curaleafApplicationTo } from './onboarding-config.js';
 
 export const PHARMACY_ONBOARDING_PORTAL_URL = 'https://portal.holistichealthhub.live/admin/pharmacy-requests';
 
@@ -11,46 +10,38 @@ export const LICENCE_PATH_KEY = 'licenceStoragePath';
 export const LICENCE_TYPE_KEY = 'licenceContentType';
 export const LICENCE_NAME_KEY = 'licenceFilename';
 
-function partnerSuccessAddress() {
-  const address = keyContact('healius').emails[0]?.address;
-  if (!address) throw new Error('Partner success has no email address.');
-  return address;
-}
-
 /**
- * The filled Curaleaf form goes to the HHH admin inbox, not to Curaleaf, until HHH
- * has checked submissions for duplicates and false details (decided 16 Nov 2026).
+ * Queued when the pharmacy accepts the Partner Terms, never at Curaleaf form submission
+ * alone: the pharmacy is told its request arrived, and Curaleaf gets the filled form as
+ * one email (To Curaleaf, CC partner success). Each has one idempotency key, so a retried
+ * acceptance never sends either twice.
  */
-export function onboardingAdminInbox() {
-  return `admin@${emailAliasDomain()}`;
-}
-
-export async function queuePharmacyOnboardingSubmitted(
+export async function queuePharmacyApplicationEmails(
   notificationRepo: NotificationRepositoryPort,
   request: PharmacyOnboardingRequestRecord,
+  acceptedAt: string,
 ) {
-  const shared = {
-    pharmacyName: request.pharmacyName,
-    gphcNumber: request.gphcNumber,
-    pharmacistName: request.pharmacistName,
-    pharmacyEmail: request.pharmacyEmail,
-  };
   await queueEmailToRecipients(
     notificationRepo,
     [{ email: request.pharmacyEmail, displayName: request.pharmacyName }],
     'pharmacy_onboarding_submitted',
-    shared,
+    {
+      pharmacyName: request.pharmacyName,
+      gphcNumber: request.gphcNumber,
+      pharmacistName: request.pharmacistName,
+      pharmacyEmail: request.pharmacyEmail,
+    },
     ['pharmacy-onboarding-submitted', request.id],
   );
-  await queueEmailToRecipients(
-    notificationRepo,
-    [
-      { email: partnerSuccessAddress(), displayName: 'Shaylen Patel' },
-      { email: onboardingAdminInbox(), displayName: 'Holistic Health Hub admin' },
-    ],
-    'admin_pharmacy_onboarding_request',
-    {
-      ...shared,
+  await queueSharedEmail(notificationRepo, {
+    to: curaleafApplicationTo(),
+    cc: curaleafApplicationCc(),
+    templateCode: 'curaleaf_new_account_application',
+    payload: {
+      branchName: request.pharmacyName,
+      gphcNumber: request.gphcNumber,
+      // When the Curaleaf form was submitted, the date it carries; the acceptance time if unknown.
+      submittedAt: request.createdAt || acceptedAt,
       [FILLED_FORM_PATH_KEY]: request.filledFormStoragePath,
       ...(request.licenceStoragePath ? {
         [LICENCE_PATH_KEY]: request.licenceStoragePath,
@@ -58,8 +49,8 @@ export async function queuePharmacyOnboardingSubmitted(
         [LICENCE_NAME_KEY]: request.licenceFilename,
       } : {}),
     },
-    ['pharmacy-onboarding-notice', request.id],
-  );
+    keyParts: ['curaleaf-new-account-application', request.id],
+  });
 }
 
 /** Tells the pharmacy its request is on hold. The admin's reason is never sent. */

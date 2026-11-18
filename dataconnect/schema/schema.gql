@@ -1168,6 +1168,10 @@ type NotificationOutbox @table {
   templateCode: String!
   recipientHash: String!
   encryptedRecipient: String
+  # One email to several people: every To address (encryptedRecipient is the first)
+  # and the CC addresses, all visible to each other. Null on single-recipient rows.
+  toRecipients: [String!]
+  ccRecipients: [String!]
   payload: Any!
   idempotencyKey: String! @unique
   status: NotificationStatus! @default(value: PENDING) @index
@@ -1305,6 +1309,30 @@ type PharmacyOnboardingRequest @table {
   idempotencyKey: String! @unique
   createdAt: Timestamp! @default(expr: "request.time")
   updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+# A pharmacy accepting the Partner Terms during sign-up. Append-only: rows are never
+# updated or deleted, except that Activate fills organisationId once the branch exists.
+type PartnerTermsAcceptance @table {
+  id: UUID! @default(expr: "uuidV4()")
+  onboardingRequest: PharmacyOnboardingRequest! @ref(fields: "onboardingRequestId")
+  onboardingRequestId: UUID! @index
+  organisation: Organisation @ref(fields: "organisationId")
+  organisationId: UUID @index
+  termsVersion: String!
+  signerName: String!
+  signerRole: String!
+  signerEmail: String!
+  # The signer's own GPhC registration, required when they sign as a pharmacist.
+  signerGphcNumber: String
+  registeredCompanyName: String!
+  acceptedAt: Timestamp!
+  # HMAC of the address, like every other IP the platform records.
+  ipAddress: String
+  # signup | reacceptance
+  source: String!
+  # Soft check against PharmSmart's superintendent and manager. Null when PharmSmart sent no names.
+  nameMatchesPharmsmart: Boolean
 }
 
 # A note that a pharmacy sent the Worldpay card processing form from the onboarding

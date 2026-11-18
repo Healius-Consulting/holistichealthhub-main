@@ -10,6 +10,8 @@ const OUTBOX_FIELDS = `
   templateCode
   recipientHash
   encryptedRecipient
+  toRecipients
+  ccRecipients
   payload
   idempotencyKey
   status
@@ -55,6 +57,8 @@ const INSERT_GQL = `
     $templateCode: String!
     $recipientHash: String!
     $encryptedRecipient: String
+    $toRecipients: [String!]
+    $ccRecipients: [String!]
     $payload: Any!
     $idempotencyKey: String!
     $nextAttemptAt: Timestamp
@@ -67,6 +71,8 @@ const INSERT_GQL = `
       templateCode: $templateCode
       recipientHash: $recipientHash
       encryptedRecipient: $encryptedRecipient
+      toRecipients: $toRecipients
+      ccRecipients: $ccRecipients
       payload: $payload
       idempotencyKey: $idempotencyKey
       nextAttemptAt: $nextAttemptAt
@@ -146,6 +152,8 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
     templateCode: string;
     recipientHash: string;
     encryptedRecipient?: string | null;
+    toRecipients?: string[] | null;
+    ccRecipients?: string[] | null;
     payload: unknown;
     idempotencyKey: string;
     nextAttemptAt?: string | null;
@@ -165,6 +173,8 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
             nextAttemptAt: data.nextAttemptAt ?? null,
             recipientHash: data.recipientHash,
             encryptedRecipient: data.encryptedRecipient ?? null,
+            toRecipients: data.toRecipients?.length ? data.toRecipients : null,
+            ccRecipients: data.ccRecipients?.length ? data.ccRecipients : null,
             payload: data.payload,
             idempotencyKey: data.idempotencyKey,
           },

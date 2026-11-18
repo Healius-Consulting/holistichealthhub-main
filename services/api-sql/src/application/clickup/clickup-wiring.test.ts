@@ -51,6 +51,7 @@ function actions(status: PharmacyOnboardingStatus, clickup: PharmacyRequestActio
       activate: async (_id, organisationId) => { row = { ...row, status: 'ACTIVATED', organisationId }; },
       hold: async (_id, reason, decidedAt) => { row = { ...row, status: 'ON_HOLD', declineReason: reason, decidedAt }; },
       unhold: async () => { row = { ...row, status: 'PENDING' }; },
+      linkTermsAcceptances: async () => undefined,
     },
     organisations: { createOrganisation: async () => undefined } as unknown as PharmacyRequestActionDeps['organisations'],
     referralLinks: { ensureEligibilityLink: async () => ({ token: 'token-1' }) },
@@ -114,7 +115,7 @@ function sso(recordFirstVisit: ConstructorParameters<typeof PharmsmartSsoService
   return new PharmsmartSsoService({
     fetchPharmacyInfo: async () => pharmsmartInfo(),
     listOrganisations: async () => [],
-    findLatestOnboardingRequest: async () => (requestStatus ? { status: requestStatus } : null),
+    findLatestOnboardingRequest: async () => (requestStatus ? { id: 'request-1', status: requestStatus, termsAccepted: true, pharmacyName: 'Test Pharmacy', registeredCompanyName: 'Test Pharmacy Ltd' } : null),
     listStaff: async () => [],
     findEmailOwner: async () => null,
     adoptAccount: async () => undefined,
