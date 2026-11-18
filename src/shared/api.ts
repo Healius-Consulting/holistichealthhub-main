@@ -981,6 +981,17 @@ export function getGoLiveReadiness(organisationId: string) {
   return apiRequest<GoLiveReadiness>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/go-live-readiness`);
 }
 
+/** Go-live checklist (2.5). The pharmacy's own branch; ticks are for self-declared items only. */
+export function getGoLiveChecklist() {
+  return apiRequest<import('./goLiveChecklist').GoLiveChecklist>('/v1/portal/go-live-checklist', { skipGetCache: true });
+}
+export function setGoLiveChecklistItem(itemKey: string, done: boolean) {
+  return apiRequest<import('./goLiveChecklist').GoLiveChecklist>(`/v1/portal/go-live-checklist/items/${encodeURIComponent(itemKey)}`, { method: 'POST', body: JSON.stringify({ done }) });
+}
+export function getAdminGoLiveChecklist(organisationId: string) {
+  return apiRequest<import('./goLiveChecklist').GoLiveChecklist>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/go-live-checklist`, { skipGetCache: true });
+}
+
 export function updateAdminPharmacySetupTask(
   organisationId: string,
   taskId: SetupTaskId,

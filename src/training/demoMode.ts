@@ -1,5 +1,6 @@
 import type { AppState } from '../context/AppContext';
 import { setDemoNetworkGuard } from '../shared/demoGuard.ts';
+import { clearDemoChecklist } from './demoChecklist.ts';
 import { hydrateSandboxWorkspace } from './sandboxPack.ts';
 
 /**
@@ -140,6 +141,7 @@ function activate(owner: DemoOwner) {
 export function enterDemo(owner: DemoOwner) {
   activate(owner);
   writeRecord(owner, null);
+  clearDemoChecklist();
 }
 
 /**
@@ -170,6 +172,7 @@ export function saveDemo(data: DemoData) {
 export function resetDemo() {
   if (!activeOwner) return;
   writeRecord(activeOwner, null);
+  clearDemoChecklist();
 }
 
 /** Return to live, or logout: demo off, demo changes deleted. */
@@ -177,4 +180,5 @@ export function leaveDemo() {
   activeOwner = null;
   setDemoNetworkGuard(false);
   removeRecord();
+  clearDemoChecklist();
 }
