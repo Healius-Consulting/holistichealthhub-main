@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, CheckCircle2, Coins, ListChecks, RefreshCw, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { getPharmacyOverview } from '../shared/api';
 import type { PharmacyOverview as PharmacyOverviewContract } from '../shared/contracts';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { pharmacyWorkspaceStatusLabel, sandboxOverviewForOrganisation, usesSandboxDummyPack } from '../training/workspace';
+import { demoPatientCensus } from '../utils/patientCensus';
 
 type PriorityItem = PharmacyOverviewContract['priorityItems'][number];
 type PriorityKind = PriorityItem['kind'];
@@ -194,6 +195,15 @@ export default function PharmacyOverview() {
 
   useEffect(() => { void load(); }, [load]);
 
+  // Demo data has no server census, so its Referred and Active counts come from the demo
+  // patients themselves; worked out here, not in load(), so a live account never refetches for it.
+  const demoCensus = useMemo(() => (sandboxOverview && organisation
+    ? demoPatientCensus(
+      state.crm.filter(patient => patient.organisationId === organisation.id),
+      state.orders.filter(order => order.organisationId === organisation.id),
+    )
+    : null), [organisation, sandboxOverview, state.crm, state.orders]);
+
   const openPatientList = (status: 'referred' | 'active') => {
     dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'patient-list', status } });
     dispatch({ type: 'SET_SCREEN', screen: 'patients' });
@@ -207,6 +217,12 @@ export default function PharmacyOverview() {
   const openScreen = (screen: 'orders' | 'patients' | 'finance') => {
     dispatch({ type: 'SET_NAVIGATION_TARGET', target: null });
     dispatch({ type: 'SET_SCREEN', screen });
+  };
+
+  // The pipeline tiles open Orders on the group they count.
+  const openOrders = (filter: 'awaiting-payment' | 'awaiting-fulfilment' | 'ready') => {
+    dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'order-filter', filter } });
+    dispatch({ type: 'SET_SCREEN', screen: 'orders' });
   };
 
   const openRecord = (target: PriorityItem['recordTarget']) => {
@@ -307,7 +323,7 @@ export default function PharmacyOverview() {
       )}
 
       {overview.finance ? (
-        <MonthGlance finance={overview.finance} census={overview.patientCensus} onOpenPatients={openPatientList} onOpenFinance={() => openScreen('finance')} />
+        <MonthGlance finance={overview.finance} census={demoCensus ?? overview.patientCensus} onOpenPatients={openPatientList} onOpenFinance={() => openScreen('finance')} />
       ) : (
         <section className="card overview-finance" aria-labelledby="overview-finance-title">
           <div className="section-heading"><div><h2 id="overview-finance-title"><Coins size={18} aria-hidden="true" /> This month at a glance</h2></div></div>
@@ -406,19 +422,19 @@ export default function PharmacyOverview() {
           </div>
           <ul className="overview-pipeline__counts">
             <li>
-              <button type="button" onClick={() => openScreen('orders')}>
+              <button type="button" onClick={() => openOrders('awaiting-payment')}>
                 <strong>{overview.summary.awaitingPayment}</strong>
                 <span>Awaiting payment</span>
               </button>
             </li>
             <li>
-              <button type="button" onClick={() => openScreen('orders')}>
+              <button type="button" onClick={() => openOrders('awaiting-fulfilment')}>
                 <strong>{overview.summary.supplierFulfilment}</strong>
                 <span>With Curaleaf</span>
               </button>
             </li>
             <li>
-              <button type="button" onClick={() => openScreen('orders')}>
+              <button type="button" onClick={() => openOrders('ready')}>
                 <strong>{overview.summary.readyForCollection}</strong>
                 <span>Ready to collect</span>
               </button>

@@ -443,7 +443,7 @@ export type NavigationTarget =
   | { kind: 'patient-lane'; lane: 'enquiries' }
   | { kind: 'patient-list'; status: 'referred' | 'active' | 'inactive' | 'declined' }
   | { kind: 'order'; key: string }
-  | { kind: 'order-filter'; filter: 'awaiting-payment' }
+  | { kind: 'order-filter'; filter: 'awaiting-payment' | 'awaiting-fulfilment' | 'ready' }
   | { kind: 'catalogue'; query: string }
   | null;
 
