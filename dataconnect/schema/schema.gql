@@ -1410,3 +1410,19 @@ type PharmacyOnboardingVisit @table(key: "gphcNumber") {
   firstVisitAt: Timestamp! @default(expr: "request.time")
   submittedAt: Timestamp
 }
+
+# The go-live checklist (brief 2.5): one row per self-declared item a branch has
+# ticked or unticked. The item list itself is fixed in code
+# (services/api-sql/src/domain/organisation/go-live-checklist.ts); the items that
+# tick themselves (platform live, Partner Terms, Worldpay validated) are never stored.
+type OrganisationChecklistItem @table @unique(fields: ["organisationId", "itemKey"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  organisation: Organisation! @ref(fields: "organisationId")
+  organisationId: UUID! @index
+  itemKey: String!
+  # DONE | OPEN
+  status: String!
+  # Who last ticked or unticked it, and when.
+  tickedByUid: String
+  tickedAt: Timestamp
+}
