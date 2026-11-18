@@ -67,8 +67,11 @@ const LIST_PENDING_WORLDPAY_PAYMENTS_GQL = `
   query ListPendingWorldpayPayments($limit: Int!) {
     payments(
       where: {
-        route: { eq: WORLDPAY }
-        _or: [{ status: { in: [PENDING, REFUND_REQUIRED] } }, { pendingRefundId: { isNull: false } }]
+        # Data Connect refuses _or beside plain fields at the same level, so both go inside _and.
+        _and: [
+          { route: { eq: WORLDPAY } }
+          { _or: [{ status: { in: [PENDING, REFUND_REQUIRED] } }, { pendingRefundId: { isNull: false } }] }
+        ]
       }
       limit: $limit
     ) {

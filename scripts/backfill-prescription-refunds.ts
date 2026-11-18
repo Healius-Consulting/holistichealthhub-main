@@ -21,7 +21,7 @@ for (const refund of refunds) {
   if (!breakdown) { result.reconciliationRequired++; continue; }
   result.eligible++;
   if (apply) {
-    await dataConnect.executeGraphql(`mutation BackfillRefundBreakdown($id: UUID!, $organisationId: UUID!, $prescriptionId: UUID!, $breakdown: Any!) {
+    await dataConnect.executeGraphql(`mutation BackfillRefundBreakdown($id: UUID!, $organisationId: UUID!, $prescriptionId: UUID!, $breakdown: Any!) @transaction {
       refund_updateMany(where: { id: { eq: $id }, organisationId: { eq: $organisationId }, prescriptionId: { isNull: true }, breakdown: { isNull: true }, status: { eq: COMPLETED } },
         data: { prescriptionId: $prescriptionId, breakdown: $breakdown }) @check(expr: "this == 1", message: "REFUND_BACKFILL_CONFLICT")
     }`, { variables: { id: refund.id, organisationId, prescriptionId: breakdown.prescriptionId, breakdown } });
