@@ -7,7 +7,7 @@ import {
   publicOnboardingStatus,
 } from '../../domain/pharmacy-onboarding/request.js';
 import { pharmacyOnboardingDeferralSchema } from '../../domain/pharmacy-onboarding/deferral.js';
-import { publicPharmacyOnboardingDeferralLimiter, publicPharmacyOnboardingLimiter } from '../../security/public-limits.js';
+import { publicCuraleafFormLimiter, publicPartnerTermsLimiter, publicPharmacyOnboardingDeferralLimiter, publicWorldpayFormLimiter } from '../../security/public-limits.js';
 import { recordPharmacyOnboardingDeferral } from '../../application/pharmacy-onboarding/record-deferral.js';
 import { submitWorldpayForm } from '../../application/pharmacy-onboarding/submit-worldpay.js';
 import { sendEmailNow } from '../../application/workers/deliver-messages.js';
@@ -82,7 +82,7 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   const storage = new StorageProvider();
   const notificationRepo = new SqlNotificationRepository();
 
-  router.post('/public/pharmacy-onboarding-requests', publicPharmacyOnboardingLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/public/pharmacy-onboarding-requests', publicCuraleafFormLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const submission = await readSubmission(req);
       if (submission.tooLarge) {
@@ -104,7 +104,7 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   });
 
   // POST /v1/public/pharmacy-onboarding-terms - the Partner Terms, accepted against the request
-  router.post('/public/pharmacy-onboarding-terms', publicPharmacyOnboardingLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/public/pharmacy-onboarding-terms', publicPartnerTermsLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = partnerTermsAcceptanceSchema.parse(req.body);
       const { acceptance, request } = await acceptPartnerTerms({
@@ -128,7 +128,7 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   });
 
   // POST /v1/public/pharmacy-onboarding-worldpay - the Worldpay form, emailed as a PDF and never stored
-  router.post('/public/pharmacy-onboarding-worldpay', publicPharmacyOnboardingLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  router.post('/public/pharmacy-onboarding-worldpay', publicWorldpayFormLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
       const form = worldpayFormSchema.parse(req.body);
       const note = await submitWorldpayForm(repo, email => sendEmailNow(email), form);

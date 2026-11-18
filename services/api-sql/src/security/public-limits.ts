@@ -22,11 +22,23 @@ function publicLimiter(windowMs: number, limit: number, message = limitResponse)
 }
 
 export const publicSubmissionLimiter = publicLimiter(60 * 60 * 1000, 30);
-/** A pharmacy onboarding form is not a high-volume page. Three an hour stops repeat clicks and scripts. */
-export const publicPharmacyOnboardingLimiter = publicLimiter(60 * 60 * 1000, 3, {
-  code: 'RATE_LIMITED',
-  message: 'This form was sent recently. Wait an hour before sending it again.',
-});
+/**
+ * The three pharmacy onboarding forms (Curaleaf account, Partner Terms, Worldpay) each
+ * get their own count, so finishing one never uses up another, and failed attempts
+ * still count, so ten an hour leaves room to fix a typo or two and still stops scripts.
+ */
+export const ONBOARDING_FORM_LIMIT_PER_HOUR = 10;
+
+function onboardingFormLimiter() {
+  return publicLimiter(60 * 60 * 1000, ONBOARDING_FORM_LIMIT_PER_HOUR, {
+    code: 'RATE_LIMITED',
+    message: 'This form has been tried too many times. Wait an hour, then send it again.',
+  });
+}
+
+export const publicCuraleafFormLimiter = onboardingFormLimiter();
+export const publicPartnerTermsLimiter = onboardingFormLimiter();
+export const publicWorldpayFormLimiter = onboardingFormLimiter();
 /** "Not yet" is one click per visit. Ten an hour allows a few retries and stops scripts. */
 export const publicPharmacyOnboardingDeferralLimiter = publicLimiter(60 * 60 * 1000, 10);
 export const publicPaymentStatusLimiter = publicLimiter(15 * 60 * 1000, 90);
