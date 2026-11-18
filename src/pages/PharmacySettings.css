@@ -206,3 +206,13 @@
 /* Header and section bar read as one block: no gap, one outline, a hairline between. */
 .pharmacy-settings-page__hero{ border-bottom: 0; border-radius: 12px 12px 0 0; }
 .pharmacy-settings-page .pharmacy-settings-page__nav{ margin-top: -16px; border-top-color: var(--border); border-radius: 0 0 12px 12px; padding-inline: 14px; }
+
+/* Assets → Logo: the pharmacy's own logo, as it heads emails and posters. */
+.pharmacy-settings-page__logo{ display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: center; gap: 16px; }
+.pharmacy-settings-page__logo-preview{ display: grid; place-items: center; height: 84px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: #1d5c34; text-align: center; overflow: hidden; }
+.pharmacy-settings-page__logo-preview img{ max-width: 100%; max-height: 64px; object-fit: contain; }
+.pharmacy-settings-page__logo-preview strong{ font-size: 15px; line-height: 1.25; overflow-wrap: anywhere; }
+.pharmacy-settings-page__logo-text{ display: grid; gap: 8px; min-width: 0; }
+@media (max-width: 680px){
+  .pharmacy-settings-page__logo{ grid-template-columns: minmax(0, 1fr); }
+}

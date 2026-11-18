@@ -17,6 +17,8 @@ import { requireCsrf } from '../../security/csrf.js';
 import { assertTenantScope } from '../../security/request-context.js';
 import { uuidParam } from './uuid-param.js';
 import { requireStaff } from '../../security/require-staff.js';
+import { StorageProvider } from '../../providers/storage/storage.provider.js';
+import { authoriseBrandLogoUpload, completeBrandLogoUpload, removeBrandLogo, resolveOrganisationLogo } from '../../application/organisation/brand-logo.js';
 import { buildPharmacyPatientDirectory, buildSqlPharmacyOverview, toPortalOrganisation, toPortalPatient, toPortalPendingEnquiry } from './pharmacy-contracts.js';
 
 const patientConditionParamsSchema = z.object({
@@ -61,6 +63,7 @@ export function createPortalPharmacyRouter(): Router {
   const identityRepo = new SqlIdentityRepository();
   const integrationRepo = new SqlIntegrationRepository();
   const paymentRepo = new SqlPaymentRepository();
+  const storage = new StorageProvider();
 
   async function operationalRecords(organisationId: string) {
     const organisation = await organisationRepo.findOrganisationById(organisationId);
@@ -291,6 +294,98 @@ export function createPortalPharmacyRouter(): Router {
       });
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(toPortalOrganisation(updated));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // The pharmacy's own logo, used on its patient emails and its poster pack. The branch
+  // always comes from the session, so a pharmacy can only see or change its own logo.
+  // The browser fits the image to the email logo size before it is uploaded.
+
+  // GET /v1/portal/organisation/logo - a short-lived signed link to the current logo, or nulls
+  router.get('/portal/organisation/logo', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(await resolveOrganisationLogo(storage, scope.organisationId, 15 * 60));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/organisation/logo/upload-url - a signed PUT link for the prepared PNG
+  router.post('/portal/organisation/logo/upload-url', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      const input = z.object({
+        filename: z.string().trim().min(1).max(180),
+        contentType: z.string().trim().min(1).max(80),
+        sizeBytes: z.number().int().positive(),
+      }).strict().parse(req.body);
+      const target = await authoriseBrandLogoUpload(storage, scope.organisationId, input);
+      await identityRepo.appendAudit({
+        organisationId: scope.organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.logo_upload_authorised',
+        recordType: 'Organisation',
+        recordId: scope.organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: { storagePath: target.storagePath, sourceFilename: target.sourceFilename },
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ uploadUrl: target.uploadUrl, storagePath: target.storagePath, requiredHeaders: target.requiredHeaders });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/organisation/logo/complete - checks the upload and makes it the logo
+  router.post('/portal/organisation/logo/complete', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      const input = z.object({ storagePath: z.string().trim().min(1).max(500) }).strict().parse(req.body);
+      const logo = await completeBrandLogoUpload(storage, scope.organisationId, input.storagePath);
+      await identityRepo.appendAudit({
+        organisationId: scope.organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.logo_updated',
+        recordType: 'Organisation',
+        recordId: scope.organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: { storagePath: logo.emailLogoStoragePath },
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(logo);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // DELETE /v1/portal/organisation/logo - back to the pharmacy name
+  router.delete('/portal/organisation/logo', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      const logo = await removeBrandLogo(storage, scope.organisationId);
+      await identityRepo.appendAudit({
+        organisationId: scope.organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.logo_removed',
+        recordType: 'Organisation',
+        recordId: scope.organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(logo);
     } catch (error) {
       next(error);
     }

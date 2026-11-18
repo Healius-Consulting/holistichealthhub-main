@@ -30,6 +30,7 @@ import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { POSTER_TEMPLATES_READY, posterPackAvailable } from '../utils/posterPackRules';
+import PharmacyLogoCard from '../components/PharmacyLogoCard';
 import { requestWorkspaceTourReplay } from '../training/workspaceTourPersist';
 import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
 import './PharmacySettings.css';
@@ -252,11 +253,13 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
   const postersOn = POSTER_TEMPLATES_READY || isLocalPortalPreview;
   const postersOpen = posterPackAvailable(organisation.status);
   const [postersBusy, setPostersBusy] = useState(false);
+  // The pharmacy's own logo (Logo card), for the poster pack. Null until it loads, or when there is none.
+  const [ownLogoUrl, setOwnLogoUrl] = useState<string | null>(organisation.emailLogoUrl ?? null);
   const savePosterPack = async () => {
     setPostersBusy(true);
     try {
       const { downloadPosterPack } = await import('../utils/posterPackDownload');
-      await downloadPosterPack(organisation, formUrl);
+      await downloadPosterPack(organisation, formUrl, ownLogoUrl);
       notify('Poster pack saved: an A3 poster and a two-sided A5 leaflet.');
     } catch {
       dispatch({ type: 'ADD_TOAST', message: 'The poster pack could not be made. Try again.', toastType: 'error' });
@@ -714,6 +717,13 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                 <p className="pharmacy-details__note">The same link as a high-resolution image, for leaflets, posters and other printed material.</p>
               </div>
             </section>
+            <PharmacyLogoCard
+              pharmacyName={organisation.name}
+              initialUrl={organisation.emailLogoUrl ?? null}
+              sandbox={sandboxPortal}
+              onChange={setOwnLogoUrl}
+              notify={notify}
+            />
             <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-packs">
               <header>
                 <span className="pharmacy-details__icon" aria-hidden="true"><FileArchive size={16} /></span>

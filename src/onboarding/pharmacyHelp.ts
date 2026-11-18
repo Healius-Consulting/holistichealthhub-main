@@ -81,6 +81,12 @@ export const PHARMACY_FAQ: readonly HelpQuestion[] = [
     answer: 'In Settings & Support, under Assets. You can download your eligibility link, a high-resolution QR code and a pack for your web developer, and an A3 poster and A5 leaflet with your logo and QR code to send to your printer.',
   },
   {
+    id: 'logo',
+    topic: 'support',
+    question: 'How do I add our logo?',
+    answer: 'In Settings & Support, under Assets, choose Upload logo. It goes at the top of your patient emails and on your poster and leaflet. Without one, your pharmacy name is used.',
+  },
+  {
     id: 'contact',
     topic: 'support',
     question: 'Who do I contact?',

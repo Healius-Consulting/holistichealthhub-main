@@ -8,11 +8,11 @@ function dataUrlBytes(dataUrl: string) {
   return Uint8Array.from(binary, char => char.charCodeAt(0));
 }
 
-/** The branch logo HHH uploaded, when it can be read as PNG or JPEG. Otherwise the poster prints the name. */
-async function branchLogo(org: PharmacyTenant): Promise<PosterImage | null> {
-  if (!org.emailLogoUrl) return null;
+/** The branch's logo (its own upload, or HHH's), when it can be read as PNG or JPEG. Otherwise the poster prints the name. */
+async function branchLogo(logoUrl: string | null): Promise<PosterImage | null> {
+  if (!logoUrl) return null;
   try {
-    const response = await fetch(org.emailLogoUrl, { credentials: 'omit' });
+    const response = await fetch(logoUrl, { credentials: 'omit' });
     if (!response.ok) return null;
     const bytes = new Uint8Array(await response.arrayBuffer());
     const type = posterImageType(bytes);
@@ -33,8 +33,8 @@ async function templates(): Promise<Record<PosterTemplateId, Uint8Array>> {
 }
 
 /** Builds the pack in the browser and saves it as one .zip. Settings imports this file only on click, so pdf-lib loads only then. */
-export async function downloadPosterPack(org: PharmacyTenant, formUrl: string) {
-  const [qr, logo, blanks] = await Promise.all([qrDataUrl(formUrl), branchLogo(org), templates()]);
+export async function downloadPosterPack(org: PharmacyTenant, formUrl: string, logoUrl: string | null = org.emailLogoUrl ?? null) {
+  const [qr, logo, blanks] = await Promise.all([qrDataUrl(formUrl), branchLogo(logoUrl), templates()]);
   const files = await buildPosterPdfs({ pharmacyName: org.name, qr: dataUrlBytes(qr), logo, templates: blanks });
   const zip = new JSZip();
   const folder = zip.folder(`${org.slug}-poster-pack`)!;

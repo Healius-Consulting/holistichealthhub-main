@@ -1189,6 +1189,34 @@ export async function uploadOrganisationLogo(organisationId: string, file: File)
   });
 }
 
+/** The signed-in pharmacy's own logo: a short-lived link, or nulls when there is none. */
+export interface OwnLogoView {
+  emailLogoUrl: string | null;
+  emailLogoUpdatedAt: string | null;
+}
+
+export function getOwnLogo() {
+  return apiRequest<OwnLogoView>('/v1/portal/organisation/logo');
+}
+
+/** Uploads the prepared PNG (see normalisePharmacyLogo) as the signed-in pharmacy's logo. */
+export async function uploadOwnLogo(file: File) {
+  const target = await apiRequest<import('./contracts').OrganisationLogoUploadTarget>('/v1/portal/organisation/logo/upload-url', {
+    method: 'POST',
+    body: JSON.stringify({ filename: file.name, contentType: file.type, sizeBytes: file.size }),
+  });
+  const upload = await fetch(target.uploadUrl, { method: 'PUT', headers: target.requiredHeaders, body: file });
+  if (!upload.ok) throw new Error(`Logo upload failed with status ${upload.status}.`);
+  return apiRequest<OwnLogoView>('/v1/portal/organisation/logo/complete', {
+    method: 'POST',
+    body: JSON.stringify({ storagePath: target.storagePath }),
+  });
+}
+
+export function removeOwnLogo() {
+  return apiRequest<OwnLogoView>('/v1/portal/organisation/logo', { method: 'DELETE' });
+}
+
 export function removeOrganisationLogo(organisationId: string) {
   return apiRequest<PortalOrganisation>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/logo`, { method: 'DELETE' });
 }

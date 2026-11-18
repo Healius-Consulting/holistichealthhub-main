@@ -125,7 +125,7 @@ export async function authoriseBrandLogoUpload(
   input: { filename: string; contentType: string; sizeBytes: number },
 ) {
   if (input.contentType !== EMAIL_LOGO_CONTENT_TYPE) {
-    throw new HttpError(400, 'Upload the normalised PNG logo prepared by the admin form.', 'INVALID_LOGO_TYPE');
+    throw new HttpError(400, 'Upload the PNG logo the logo form prepares.', 'INVALID_LOGO_TYPE');
   }
   if (!Number.isInteger(input.sizeBytes) || input.sizeBytes <= 0 || input.sizeBytes > MAX_EMAIL_LOGO_BYTES) {
     throw new HttpError(400, 'The logo file is too large to store.', 'INVALID_LOGO_SIZE');
