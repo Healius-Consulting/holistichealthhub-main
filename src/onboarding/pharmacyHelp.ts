@@ -5,7 +5,6 @@
  * Operational answers only: nothing clinical and nothing patient-facing. Swap the
  * wording here; the page reads nothing else. Add an entry to add a question.
  */
-export const PHARMACY_HELP_DRAFT = true;
 
 export const ONBOARDING_INBOX = 'onboarding@holistichealthhub.live';
 

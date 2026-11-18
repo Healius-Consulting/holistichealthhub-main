@@ -3,24 +3,6 @@ import { normaliseGphcNumber } from '../identity/pharmsmart-sso.js';
 
 export const MAX_LICENCE_BYTES = 4_000_000;
 
-export const PHARMACY_ONBOARDING_FIELDS = [
-  'pharmacistName',
-  'pharmacyName',
-  'registeredCompanyName',
-  'invoiceAddress',
-  'deliveryAddress',
-  'gphcNumber',
-  'wdaNumber',
-  'licenceDetails',
-  'pharmacyEmail',
-  'accountsEmail',
-  'pharmacyPhone',
-  'accountsPhone',
-  'faxNumber',
-  'signatureName',
-  'idempotencyKey',
-] as const;
-
 const optionalFax = z.string().trim().max(40).optional().or(z.literal(''));
 
 export const pharmacyOnboardingFieldsSchema = z.object({
@@ -30,8 +12,6 @@ export const pharmacyOnboardingFieldsSchema = z.object({
   invoiceAddress: z.string().trim().min(5).max(500),
   deliveryAddress: z.string().trim().min(5).max(500),
   gphcNumber: z.string().trim().min(3).max(40),
-  wdaNumber: z.string().trim().max(40).optional().or(z.literal('')),
-  licenceDetails: z.string().trim().max(500).optional().or(z.literal('')),
   pharmacyEmail: z.string().trim().email().max(254),
   accountsEmail: z.string().trim().email().max(254),
   pharmacyPhone: z.string().trim().min(8).max(40),
@@ -54,8 +34,6 @@ export type PharmacyOnboardingRequestRecord = {
   invoiceAddress: string;
   deliveryAddress: string;
   gphcNumber: string;
-  wdaNumber: string;
-  licenceDetails: string;
   pharmacyEmail: string;
   accountsEmail: string;
   pharmacyPhone: string;

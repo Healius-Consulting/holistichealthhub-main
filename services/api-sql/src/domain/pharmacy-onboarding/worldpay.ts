@@ -105,7 +105,6 @@ export const worldpayFormSchema = z.object({
 });
 
 export type WorldpayForm = z.infer<typeof worldpayFormSchema>;
-export type WorldpayPrincipal = z.infer<typeof worldpayPrincipalSchema>;
 
 /** The only thing kept about a Worldpay form: who sent it and when. */
 export type WorldpaySubmissionNote = {

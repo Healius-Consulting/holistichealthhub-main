@@ -441,8 +441,6 @@ export type PharmacyOnboardingRequestView = {
   invoiceAddress: string;
   deliveryAddress: string;
   gphcNumber: string;
-  wdaNumber: string;
-  licenceDetails: string;
   pharmacyEmail: string;
   accountsEmail: string;
   pharmacyPhone: string;

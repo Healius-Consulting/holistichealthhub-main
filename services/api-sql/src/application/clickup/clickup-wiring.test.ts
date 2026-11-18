@@ -20,8 +20,6 @@ function request(status: PharmacyOnboardingStatus): PharmacyOnboardingRequestRec
     invoiceAddress: '1 High Street, Leeds, LS1 1AA',
     deliveryAddress: '1 High Street, Leeds, LS1 1AA',
     gphcNumber: '1234567',
-    wdaNumber: '',
-    licenceDetails: '',
     pharmacyEmail: 'shop@shah.test',
     accountsEmail: 'accounts@shah.test',
     pharmacyPhone: '0113 000 0000',

@@ -11,8 +11,6 @@ const fields: PharmacyOnboardingFields = {
   invoiceAddress: '1 High Street, Leeds, LS1 1AA',
   deliveryAddress: '2 High Street, Leeds, LS1 1AB',
   gphcNumber: '207 8912',
-  wdaNumber: 'WDA-44',
-  licenceDetails: 'CD licence 2026',
   pharmacyEmail: 'pharmacy@eastwood.test',
   accountsEmail: 'accounts@eastwood.test',
   pharmacyPhone: '0113 000 0000',

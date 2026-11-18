@@ -351,8 +351,8 @@ export function PharmacyRequestRecord({
             <li className="pharmacy-summary__row">
               <span className="pharmacy-summary__label">CD licence</span>
               <span className="pharmacy-summary__value">
-                <span className={`pharmacy-summary__state ${request.licenceFilename || request.licenceDetails ? 'is-ok' : 'is-off'}`}>{request.licenceFilename ? 'Uploaded' : request.licenceDetails ? 'Number given' : 'Not given'}</span>
-                <small>{request.licenceDetails || request.licenceFilename || 'Optional on the form'}</small>
+                <span className={`pharmacy-summary__state ${request.licenceFilename ? 'is-ok' : 'is-off'}`}>{request.licenceFilename ? 'Uploaded' : 'Not given'}</span>
+                <small>{request.licenceFilename || 'Optional on the form'}</small>
               </span>
               {request.licenceFilename ? (
                 <button type="button" className="btn btn-sm" disabled={busy !== null} aria-pressed={preview?.kind === 'licence'} onClick={() => void showFile('licence')}>
@@ -402,7 +402,6 @@ export function PharmacyRequestRecord({
               ['Pharmacy name', request.pharmacyName],
               ['Company name', request.registeredCompanyName],
               ['GPhC number', request.gphcNumber],
-              ['WDA number', request.wdaNumber || 'Not given'],
               ['Pharmacist / contact', request.pharmacistName],
               ['Pharmacy email', request.pharmacyEmail],
               ['Pharmacy phone', request.pharmacyPhone],

@@ -3,8 +3,6 @@ import type { NotificationRepositoryPort } from '../../repositories/ports/notifi
 import type { PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
 import { curaleafApplicationCc, curaleafApplicationTo } from './onboarding-config.js';
 
-export const PHARMACY_ONBOARDING_PORTAL_URL = 'https://portal.holistichealthhub.live/admin/pharmacy-requests';
-
 export const FILLED_FORM_PATH_KEY = 'filledFormStoragePath';
 export const LICENCE_PATH_KEY = 'licenceStoragePath';
 export const LICENCE_TYPE_KEY = 'licenceContentType';

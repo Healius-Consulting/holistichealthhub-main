@@ -393,8 +393,6 @@ query PharmacyOnboardingRequestByIdempotency($idempotencyKey: String!) @auth(lev
     invoiceAddress
     deliveryAddress
     gphcNumber
-    wdaNumber
-    licenceDetails
     pharmacyEmail
     accountsEmail
     pharmacyPhone
@@ -494,8 +492,6 @@ query GetPharmacyOnboardingRequest($id: UUID!) @auth(level: NO_ACCESS) {
     invoiceAddress
     deliveryAddress
     gphcNumber
-    wdaNumber
-    licenceDetails
     pharmacyEmail
     accountsEmail
     pharmacyPhone
@@ -526,8 +522,6 @@ query ListPharmacyOnboardingRequests($limit: Int!) @auth(level: NO_ACCESS) {
     invoiceAddress
     deliveryAddress
     gphcNumber
-    wdaNumber
-    licenceDetails
     pharmacyEmail
     accountsEmail
     pharmacyPhone

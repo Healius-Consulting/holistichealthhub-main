@@ -1288,8 +1288,10 @@ type PharmacyOnboardingRequest @table {
   invoiceAddress: String!
   deliveryAddress: String!
   gphcNumber: String! @index
-  wdaNumber: String!
-  licenceDetails: String!
+  # Retired licence fields (Step 8, Nov 2026): optional and no longer written or read.
+  # A later schema-only deploy drops them, once functions that don't use them are live.
+  wdaNumber: String
+  licenceDetails: String
   pharmacyEmail: String!
   accountsEmail: String!
   pharmacyPhone: String!

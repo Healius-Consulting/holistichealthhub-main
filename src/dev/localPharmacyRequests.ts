@@ -3,8 +3,6 @@ import type { PharmacyOnboardingRequestView } from '../shared/api';
 
 /** Sample requests for `?devPortal=admin` on localhost only. Never shipped data. */
 const base = {
-  wdaNumber: '',
-  licenceDetails: '',
   faxNumber: null,
   licenceFilename: '',
   organisationId: null,
@@ -24,7 +22,6 @@ export const LOCAL_PREVIEW_PHARMACY_REQUESTS: PharmacyOnboardingRequestView[] = 
     invoiceAddress: '12 Kirkgate, Leeds, LS1 6BY',
     deliveryAddress: '12 Kirkgate, Leeds, LS1 6BY',
     gphcNumber: '1123456',
-    licenceDetails: 'CD-445821',
     pharmacyEmail: 'shop@kirkgate.example',
     accountsEmail: 'accounts@kirkgate.example',
     pharmacyPhone: '0113 496 0001',

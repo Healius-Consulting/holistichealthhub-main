@@ -42,8 +42,6 @@ export type PharmsmartPrefill = Partial<Record<
   | 'accountsEmail'
   | 'accountsPhone'
   | 'faxNumber'
-  | 'wdaNumber'
-  | 'licenceDetails'
   | 'superintendentFirstName'
   | 'superintendentLastName'
   | 'superintendentEmail'
@@ -125,8 +123,6 @@ const PREFILL_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, readonly string[], n
   ['accountsEmail', ['accounts_email'], 254],
   ['accountsPhone', ['accounts_phone'], 40],
   ['faxNumber', ['fax'], 40],
-  ['wdaNumber', ['wda_number'], 40],
-  ['licenceDetails', ['cd_licence_number'], 500],
 ];
 
 /** Field suffix, PharmSmart key inside the `superintendent` or `manager` object, length cap. */

@@ -486,8 +486,6 @@ mutation CreatePharmacyOnboardingRequest(
   $invoiceAddress: String!
   $deliveryAddress: String!
   $gphcNumber: String!
-  $wdaNumber: String!
-  $licenceDetails: String!
   $pharmacyEmail: String!
   $accountsEmail: String!
   $pharmacyPhone: String!
@@ -509,8 +507,6 @@ mutation CreatePharmacyOnboardingRequest(
     invoiceAddress: $invoiceAddress
     deliveryAddress: $deliveryAddress
     gphcNumber: $gphcNumber
-    wdaNumber: $wdaNumber
-    licenceDetails: $licenceDetails
     pharmacyEmail: $pharmacyEmail
     accountsEmail: $accountsEmail
     pharmacyPhone: $pharmacyPhone

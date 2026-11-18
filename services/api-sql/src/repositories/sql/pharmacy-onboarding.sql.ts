@@ -17,8 +17,6 @@ const REQUEST_FIELDS = `
   invoiceAddress
   deliveryAddress
   gphcNumber
-  wdaNumber
-  licenceDetails
   pharmacyEmail
   accountsEmail
   pharmacyPhone
@@ -256,8 +254,6 @@ const INSERT_GQL = `
     $invoiceAddress: String!
     $deliveryAddress: String!
     $gphcNumber: String!
-    $wdaNumber: String!
-    $licenceDetails: String!
     $pharmacyEmail: String!
     $accountsEmail: String!
     $pharmacyPhone: String!
@@ -279,8 +275,6 @@ const INSERT_GQL = `
       invoiceAddress: $invoiceAddress
       deliveryAddress: $deliveryAddress
       gphcNumber: $gphcNumber
-      wdaNumber: $wdaNumber
-      licenceDetails: $licenceDetails
       pharmacyEmail: $pharmacyEmail
       accountsEmail: $accountsEmail
       pharmacyPhone: $pharmacyPhone

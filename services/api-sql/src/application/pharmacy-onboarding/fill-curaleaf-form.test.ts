@@ -30,8 +30,6 @@ const fields: PharmacyOnboardingFields = {
   invoiceAddress: '1 High Street, Leeds, LS1 1AA',
   deliveryAddress: '2 High Street, Leeds, LS1 1AB',
   gphcNumber: '2078912',
-  wdaNumber: 'WDA-44',
-  licenceDetails: 'CD licence 2026',
   pharmacyEmail: 'pharmacy@eastwood.test',
   accountsEmail: 'accounts@eastwood.test',
   pharmacyPhone: '0113 000 0000',
@@ -53,7 +51,9 @@ describe('fillCuraleafAccountForm', () => {
   });
 
   it('prints the licence lines as not applicable, ignoring any licence numbers sent', async () => {
-    const text = await drawnText(await fillCuraleafAccountForm(fields, new Date('2026-11-13T12:00:00.000Z')));
+    // An older onboarding page may still send licence numbers; they never reach the PDF.
+    const stray = { ...fields, wdaNumber: 'WDA-44', licenceDetails: 'CD licence 2026' } as PharmacyOnboardingFields;
+    const text = await drawnText(await fillCuraleafAccountForm(stray, new Date('2026-11-13T12:00:00.000Z')));
     const wording = Buffer.from(LICENCE_NOT_APPLICABLE.replace('\u2014', '\x97'), 'latin1').toString('latin1');
     assert.equal(text.filter(line => line === wording).length, 2);
     assert.equal(text.some(line => line.includes('WDA-44') || line.includes('CD licence 2026')), false);

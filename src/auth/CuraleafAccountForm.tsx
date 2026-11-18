@@ -16,8 +16,6 @@ const LABELS: Record<keyof Fields, string> = {
   pharmacyPhone: 'Pharmacy telephone',
   accountsPhone: 'Accounts telephone',
   faxNumber: 'Fax number',
-  wdaNumber: 'WDA licence number',
-  licenceDetails: 'Controlled drugs licence number',
 };
 
 export type CuraleafFormValues = Fields;
@@ -34,8 +32,6 @@ type Fields = {
   pharmacyPhone: string;
   accountsPhone: string;
   faxNumber: string;
-  wdaNumber: string;
-  licenceDetails: string;
 };
 
 /**
@@ -58,9 +54,6 @@ function blank(welcome: PharmsmartWelcome): Fields {
     pharmacyPhone: from('pharmacyPhone'),
     accountsPhone: from('accountsPhone'),
     faxNumber: from('faxNumber'),
-    // The licences section stays on the Curaleaf PDF but is not asked for at sign-up.
-    wdaNumber: '',
-    licenceDetails: '',
   };
 }
 

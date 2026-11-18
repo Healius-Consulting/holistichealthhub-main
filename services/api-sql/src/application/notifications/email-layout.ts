@@ -1,7 +1,5 @@
 import { DEFAULT_EMAIL_HEADER_BACKGROUND, isLightEmailHeader } from './email-logo-background.js';
 
-export const EMAIL_PUBLIC_ORIGIN = 'https://holistichealthhub.live';
-
 export const EMAIL_CID = {
   header: 'email-header-logo',
   hhh: 'email-hhh-logo',

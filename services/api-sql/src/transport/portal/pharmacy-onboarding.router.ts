@@ -59,8 +59,6 @@ function toView(
     invoiceAddress: record.invoiceAddress,
     deliveryAddress: record.deliveryAddress,
     gphcNumber: record.gphcNumber,
-    wdaNumber: record.wdaNumber,
-    licenceDetails: record.licenceDetails,
     pharmacyEmail: record.pharmacyEmail,
     accountsEmail: record.accountsEmail,
     pharmacyPhone: record.pharmacyPhone,

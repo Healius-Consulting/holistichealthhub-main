@@ -69,6 +69,7 @@ describe('PharmSmart pharmacy info', () => {
         pharmacy_email: 'shop@hockett.test',
         accounts_phone: 1132460000,
         fax: null,
+        // Licence numbers are no longer asked for, so PharmSmart's is ignored.
         cd_licence_number: 'CD-998',
       },
     }));
@@ -79,7 +80,6 @@ describe('PharmSmart pharmacy info', () => {
       registeredCompanyName: 'Hockett Health Ltd',
       pharmacyEmail: 'shop@hockett.test',
       accountsPhone: '1132460000',
-      licenceDetails: 'CD-998',
       deliveryAddress: '1 High Street, Leeds, LS1 1AA',
     });
   });
