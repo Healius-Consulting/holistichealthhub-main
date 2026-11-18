@@ -4,7 +4,7 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import HhhBrandMark from '../components/HhhBrandMark';
 import { readOnboardingSpreadsheet, type OnboardingSheetRow } from './onboarding-sheet';
 import { CuraleafAccountForm, type CuraleafFormValues } from './CuraleafAccountForm';
-import { WorldpayForm, type WorldpayStart } from './WorldpayForm';
+import { WorldpayForm, type WorldpayPrincipalStart, type WorldpayStart } from './WorldpayForm';
 import {
   PHARMACY_ONBOARDING_CHOICES,
   PHARMACY_ONBOARDING_PITCH,
@@ -176,6 +176,13 @@ export function PharmsmartWelcome({
     tradingAddress: curaleafValues?.deliveryAddress ?? welcome.prefill?.deliveryAddress,
     landline: curaleafValues?.pharmacyPhone ?? welcome.prefill?.pharmacyPhone,
     businessEmail: curaleafValues?.pharmacyEmail ?? welcome.prefill?.pharmacyEmail,
+  };
+  // PharmSmart's superintendent is the likeliest owner or director, so they start as the first principal.
+  const worldpayPrincipal: WorldpayPrincipalStart = {
+    firstNames: welcome.prefill?.superintendentFirstName,
+    surname: welcome.prefill?.superintendentLastName,
+    email: welcome.prefill?.superintendentEmail,
+    mobile: welcome.prefill?.superintendentPhone,
   };
 
   // Only a PharmSmart visit says who chose "Not yet"; an anonymous visit records nothing.
@@ -361,6 +368,7 @@ export function PharmsmartWelcome({
           <WorldpayForm
             open={worldpayOpen}
             prefill={worldpayPrefill}
+            principal={worldpayPrincipal}
             onClose={() => setWorldpayOpen(false)}
             onSubmitted={() => { setWorldpayOpen(false); setWorldpaySent(true); }}
           />

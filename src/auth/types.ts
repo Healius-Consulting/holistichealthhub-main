@@ -43,7 +43,11 @@ export type PharmsmartPrefill = Partial<Record<
   | 'accountsPhone'
   | 'faxNumber'
   | 'wdaNumber'
-  | 'licenceDetails',
+  | 'licenceDetails'
+  | 'superintendentFirstName'
+  | 'superintendentLastName'
+  | 'superintendentEmail'
+  | 'superintendentPhone',
   string
 >>;
 

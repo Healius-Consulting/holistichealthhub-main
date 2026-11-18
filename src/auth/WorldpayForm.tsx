@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiRequestError, submitWorldpayForm } from '../shared/api';
+import { PrefillReviewBanner } from './PrefillReviewBanner';
 
 /** Worldpay's own answers, already filled in on their spreadsheet. The pharmacy can change them. */
 const DEFAULTS = {
@@ -44,12 +45,43 @@ export type WorldpayStart = Partial<Pick<Fields,
   'legalName' | 'tradingName' | 'contactName' | 'gphcNumber' | 'registeredAddress' | 'tradingAddress' | 'landline' | 'businessEmail'
 >>;
 
+/** The first principal's details PharmSmart sent (its superintendent). */
+export type WorldpayPrincipalStart = Partial<Pick<Principal, 'firstNames' | 'surname' | 'email' | 'mobile'>>;
+
 const BUSINESS_TYPES = ['Ltd Co', 'Sole Trader', 'Partnership', 'LLP', 'PLC'];
 const MAX_PRINCIPALS = 4;
 
+const PREFILL_LABELS: Record<keyof WorldpayStart, string> = {
+  legalName: 'Legal name',
+  tradingName: 'Trading name',
+  contactName: 'Contact name',
+  gphcNumber: 'GPhC premises number',
+  registeredAddress: 'Registered address',
+  tradingAddress: 'Trading address',
+  landline: 'Landline',
+  businessEmail: 'Business email',
+};
+
+const PRINCIPAL_LABELS: Record<keyof WorldpayPrincipalStart, string> = {
+  firstNames: 'Principal first name(s)',
+  surname: 'Principal surname',
+  email: 'Principal email',
+  mobile: 'Principal mobile',
+};
+
+function filledOnly<T extends Record<string, string | undefined>>(values: T) {
+  return Object.fromEntries(
+    Object.entries(values).filter((entry): entry is [string, string] => Boolean(entry[1]?.trim())),
+  ) as Partial<Record<keyof T, string>>;
+}
+
 function start(prefill: WorldpayStart): Fields {
-  const filled = Object.fromEntries(Object.entries(prefill).filter(([, value]) => value?.trim())) as WorldpayStart;
+  const filled = filledOnly(prefill) as WorldpayStart;
   return { ...BUSINESS, ...DEFAULTS, ...filled, accountName: filled.legalName ?? '' };
+}
+
+function firstPrincipal(prefill: WorldpayPrincipalStart): Principal {
+  return { ...PRINCIPAL, ...filledOnly(prefill) };
 }
 
 function Field({ label, hint, wide, children }: { label: string; hint?: string; wide?: boolean; children: ReactNode }) {
@@ -64,11 +96,13 @@ function Field({ label, hint, wide, children }: { label: string; hint?: string; 
 export function WorldpayForm({
   open,
   prefill,
+  principal = {},
   onClose,
   onSubmitted,
 }: {
   open: boolean;
   prefill: WorldpayStart;
+  principal?: WorldpayPrincipalStart;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
@@ -76,12 +110,18 @@ export function WorldpayForm({
   const closeRef = useRef<HTMLButtonElement>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const prefillRef = useRef(prefill);
+  const principalRef = useRef(principal);
   const onCloseRef = useRef(onClose);
   const busyRef = useRef(false);
   prefillRef.current = prefill;
+  principalRef.current = principal;
   onCloseRef.current = onClose;
   const [fields, setFields] = useState<Fields>(() => start(prefill));
-  const [principals, setPrincipals] = useState<Principal[]>([{ ...PRINCIPAL }]);
+  const [principals, setPrincipals] = useState<Principal[]>(() => [firstPrincipal(principal)]);
+  const prefilled = [
+    ...(Object.keys(filledOnly(prefill)) as Array<keyof WorldpayStart>).map(key => PREFILL_LABELS[key]),
+    ...(Object.keys(filledOnly(principal)) as Array<keyof WorldpayPrincipalStart>).map(key => PRINCIPAL_LABELS[key]),
+  ];
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   busyRef.current = busy;
@@ -89,7 +129,7 @@ export function WorldpayForm({
   useEffect(() => {
     if (!open) return;
     setFields(start(prefillRef.current));
-    setPrincipals([{ ...PRINCIPAL, firstNames: '', surname: '' }]);
+    setPrincipals([firstPrincipal(principalRef.current)]);
     setError(null);
     setBusy(false);
     idempotencyKey.current = crypto.randomUUID();
@@ -163,6 +203,7 @@ export function WorldpayForm({
         </header>
         <div className="curaleaf-account-form__body">
           <p>Worldpay needs these details to open your card account. They are emailed to our team as a PDF to pass on to Worldpay. The platform does not keep a copy.</p>
+          <PrefillReviewBanner fields={prefilled} source="your PharmSmart account and Curaleaf form" />
           {error ? <p className="curaleaf-account-form__error" role="alert">{error}</p> : null}
           <div className="curaleaf-account-form__grid">
             <fieldset>

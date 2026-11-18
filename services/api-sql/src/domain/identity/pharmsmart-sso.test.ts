@@ -51,7 +51,7 @@ describe('PharmSmart pharmacy info', () => {
       email: 'manoj.iihglobal@gmail.com',
       firstName: 'Sylvia',
       lastName: 'Hockett',
-      prefill: {},
+      prefill: { pharmacyEmail: 'manoj.iihglobal@gmail.com' },
     });
   });
 
@@ -81,6 +81,44 @@ describe('PharmSmart pharmacy info', () => {
       accountsPhone: '1132460000',
       licenceDetails: 'CD-998',
       deliveryAddress: '1 High Street, Leeds, LS1 1AA',
+    });
+  });
+
+  it('reads the keys IIH sent on 18 Nov, skips nulls and drops repeated address parts', () => {
+    const info = parsePharmsmartPharmacyInfo(JSON.stringify({
+      status_code: 200,
+      status_message: 'Pharmacy info',
+      data: {
+        pharmacy_id: 1785,
+        email: 'manoj.iihglobal@gmail.com',
+        first_name: 'Manoj iig',
+        last_name: 'Stage test',
+        gphc: '1028845',
+        address1: 'Combe Down',
+        address2: 'Combe Down',
+        address3: 'Aberdovey',
+        town: 'Aberdovey',
+        country: 'Northern Ireland',
+        postcode: 'PL11ARTR',
+        phone: '9898989898',
+        trading_name: 'Combe Down & Pharmacy',
+        superintendent: { first_name: 'Manoj', last_name: 'Iih', email: 'manoj.iihglobal@gmail.com', pms_contact_no: '9898989898' },
+        manager: { first_name: null, last_name: null, email: null, pms_contact_no: null },
+      },
+    }));
+    assert.equal(info.status, 'pharmacy');
+    if (info.status !== 'pharmacy') return;
+    assert.equal(info.email, 'manoj.iihglobal@gmail.com');
+    assert.equal(info.firstName, 'Manoj iig');
+    assert.deepEqual(info.prefill, {
+      pharmacyName: 'Combe Down & Pharmacy',
+      pharmacyPhone: '9898989898',
+      pharmacyEmail: 'manoj.iihglobal@gmail.com',
+      deliveryAddress: 'Combe Down, Aberdovey, PL11ARTR',
+      superintendentFirstName: 'Manoj',
+      superintendentLastName: 'Iih',
+      superintendentEmail: 'manoj.iihglobal@gmail.com',
+      superintendentPhone: '9898989898',
     });
   });
 

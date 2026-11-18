@@ -2,6 +2,23 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiRequestError, submitCuraleafAccountForm } from '../shared/api';
 import type { PharmsmartWelcome } from './types';
+import { PrefillReviewBanner } from './PrefillReviewBanner';
+
+const LABELS: Record<keyof Fields, string> = {
+  pharmacistName: 'Pharmacist / contact name',
+  pharmacyName: 'Pharmacy name',
+  registeredCompanyName: 'Registered company name',
+  invoiceAddress: 'Invoice address',
+  deliveryAddress: 'Delivery address',
+  gphcNumber: 'GPhC premises number',
+  pharmacyEmail: 'Pharmacy email',
+  accountsEmail: 'Accounts email',
+  pharmacyPhone: 'Pharmacy telephone',
+  accountsPhone: 'Accounts telephone',
+  faxNumber: 'Fax number',
+  wdaNumber: 'WDA licence number',
+  licenceDetails: 'Controlled drugs licence number',
+};
 
 export type CuraleafFormValues = Fields;
 
@@ -22,9 +39,8 @@ type Fields = {
 };
 
 /**
- * Name and GPhC come from the PharmSmart sign-in. The rest comes from the keys
- * requested from IIH, when PharmSmart sends them. The pharmacy email is the shared
- * inbox, so it is never filled from the signed-in person's own email.
+ * Name and GPhC come from the PharmSmart sign-in. The rest comes from the pharmacy
+ * details PharmSmart sends. A field PharmSmart left empty stays blank.
  */
 function blank(welcome: PharmsmartWelcome): Fields {
   const name = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ').trim();
@@ -68,6 +84,9 @@ export function CuraleafAccountForm({
   welcomeRef.current = welcome;
   onCloseRef.current = onClose;
   const [fields, setFields] = useState<Fields>(() => blank(welcome));
+  const prefilled = (Object.entries(blank(welcome)) as Array<[keyof Fields, string]>)
+    .filter(([, value]) => value)
+    .map(([key]) => LABELS[key]);
   const [error, setError] = useState<string | null>(null);
   const [alreadyReceived, setAlreadyReceived] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -142,6 +161,7 @@ export function CuraleafAccountForm({
         </header>
         <div className="curaleaf-account-form__body">
           <p>These details are written onto the Curaleaf account form. The date is added when you submit.</p>
+          <PrefillReviewBanner fields={prefilled} source="your PharmSmart account" />
           {alreadyReceived ? <p className="curaleaf-account-form__notice" role="status"><strong>Already received.</strong> {alreadyReceived}</p> : null}
           {error ? <p className="curaleaf-account-form__error" role="alert">{error}</p> : null}
           <div className="curaleaf-account-form__grid">

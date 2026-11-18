@@ -42,7 +42,11 @@ export type PharmsmartPrefill = Partial<Record<
   | 'accountsPhone'
   | 'faxNumber'
   | 'wdaNumber'
-  | 'licenceDetails',
+  | 'licenceDetails'
+  | 'superintendentFirstName'
+  | 'superintendentLastName'
+  | 'superintendentEmail'
+  | 'superintendentPhone',
   string
 >>;
 
@@ -98,39 +102,82 @@ export function parsePharmsmartPharmacyInfo(body: string): PharmsmartPharmacyInf
   };
 }
 
-const PREFILL_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, string, number]> = [
-  ['pharmacyName', 'pharmacy_name', 160],
-  ['registeredCompanyName', 'company_name', 160],
-  ['pharmacyPhone', 'pharmacy_phone', 40],
-  ['pharmacyEmail', 'pharmacy_email', 254],
-  ['accountsEmail', 'accounts_email', 254],
-  ['accountsPhone', 'accounts_phone', 40],
-  ['faxNumber', 'fax', 40],
-  ['wdaNumber', 'wda_number', 40],
-  ['licenceDetails', 'cd_licence_number', 500],
+/**
+ * Form field, then the PharmSmart keys that fill it in order of preference, then the length cap.
+ * The first key of each row is what IIH sent on 18 Nov 2026; the rest are the names we asked
+ * for on 16 Nov, kept so either works.
+ */
+const PREFILL_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, readonly string[], number]> = [
+  ['pharmacyName', ['trading_name', 'pharmacy_name'], 160],
+  ['registeredCompanyName', ['company_name'], 160],
+  ['pharmacyPhone', ['phone', 'pharmacy_phone'], 40],
+  // IIH say the top-level `email` is the branch email. It is still also read as the person's
+  // login email (see parsePharmsmartPharmacyInfo) until they confirm which it is.
+  ['pharmacyEmail', ['pharmacy_email', 'email'], 254],
+  ['accountsEmail', ['accounts_email'], 254],
+  ['accountsPhone', ['accounts_phone'], 40],
+  ['faxNumber', ['fax'], 40],
+  ['wdaNumber', ['wda_number'], 40],
+  ['licenceDetails', ['cd_licence_number'], 500],
 ];
 
+const SUPERINTENDENT_KEYS: ReadonlyArray<[keyof PharmsmartPrefill, string, number]> = [
+  ['superintendentFirstName', 'first_name', 80],
+  ['superintendentLastName', 'last_name', 80],
+  ['superintendentEmail', 'email', 254],
+  ['superintendentPhone', 'pms_contact_no', 40],
+];
+
+function firstText(data: Record<string, unknown>, keys: readonly string[]) {
+  for (const key of keys) {
+    const text = responseText(data[key]);
+    if (text) return text;
+  }
+  return '';
+}
+
+/** Join address parts, dropping blanks and any part already included. */
+function joinParts(parts: readonly string[]) {
+  const kept: string[] = [];
+  for (const part of parts) {
+    if (!part) continue;
+    if (kept.some(existing => existing.toLowerCase() === part.toLowerCase())) continue;
+    kept.push(part);
+  }
+  return kept.join(', ').slice(0, 500);
+}
+
 function joinAddress(data: Record<string, unknown>, prefix: 'branch' | 'invoice') {
-  const parts = [`${prefix}_address_line1`, `${prefix}_address_line2`, `${prefix}_town`, `${prefix}_postcode`]
-    .map(key => responseText(data[key]))
-    .filter(Boolean);
-  return parts.join(', ').slice(0, 500);
+  return joinParts([`${prefix}_address_line1`, `${prefix}_address_line2`, `${prefix}_town`, `${prefix}_postcode`]
+    .map(key => responseText(data[key])));
+}
+
+/** IIH's branch address: address1-3, town, postcode. `country` is a UK nation; neither form asks for it. */
+function branchAddress(data: Record<string, unknown>) {
+  return joinParts(['address1', 'address2', 'address3', 'town', 'postcode'].map(key => responseText(data[key])));
 }
 
 /**
- * Keys as requested from IIH on 16 Nov 2026. Missing, empty or non-text values are
- * left out. The pharmacy email is the shared inbox, never the signed-in person's.
+ * Missing, null, empty or non-text values are left out, so the form leaves that field blank.
+ * Values are not checked for format: the forms ask the pharmacy to review what was filled in.
  */
 export function parsePharmsmartPrefill(data: Record<string, unknown>): PharmsmartPrefill {
   const prefill: PharmsmartPrefill = {};
-  for (const [field, key, max] of PREFILL_KEYS) {
-    const text = responseText(data[key]);
+  for (const [field, keys, max] of PREFILL_KEYS) {
+    const text = firstText(data, keys);
     if (text) prefill[field] = text.slice(0, max);
   }
-  const deliveryAddress = joinAddress(data, 'branch');
+  const deliveryAddress = branchAddress(data) || joinAddress(data, 'branch');
   if (deliveryAddress) prefill.deliveryAddress = deliveryAddress;
   const invoiceAddress = joinAddress(data, 'invoice');
   if (invoiceAddress) prefill.invoiceAddress = invoiceAddress;
+  const superintendent = data.superintendent;
+  if (superintendent && typeof superintendent === 'object') {
+    for (const [field, key, max] of SUPERINTENDENT_KEYS) {
+      const text = responseText((superintendent as Record<string, unknown>)[key]);
+      if (text) prefill[field] = text.slice(0, max);
+    }
+  }
   return prefill;
 }
 
