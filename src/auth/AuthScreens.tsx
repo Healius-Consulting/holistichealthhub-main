@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import PharmacyAccountStatus from '../components/PharmacyAccountStatus';
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
 import { FirebaseError } from 'firebase/app';
 import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, LoaderCircle, LockKeyhole, LogIn, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
@@ -150,7 +151,9 @@ export function StaffLogin() {
         {state.notice && <div className="banner banner-blue" role="status"><CheckCircle2 size={15} /> {state.notice}</div>}
         <label className="staff-login-field">Email address<div className="staff-login-input"><Mail size={16} /><input type="email" value={email} onChange={event => setEmail(event.target.value)} autoComplete="username" required placeholder="name@pharmacy.co.uk" /></div></label>
         {!resetMode && <label className="staff-login-field">Password<div className="staff-login-input"><LockKeyhole size={16} /><input type={showPassword ? 'text' : 'password'} value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /><button className="auth-password-toggle" type="button" onClick={() => setShowPassword(value => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}
-        {state.error && <div className="banner banner-red" role="alert"><AlertCircle size={15} /> {state.error}</div>}
+        {state.accountState
+          ? <PharmacyAccountStatus state={state.accountState} />
+          : state.error && <div className="banner banner-red" role="alert"><AlertCircle size={15} /> {state.error}</div>}
         {message && <div className="banner banner-blue" role="status">{message}</div>}
         <button className="btn btn-primary staff-login-submit" type="submit" disabled={state.phase === 'loading'}>{state.phase === 'loading' ? <LoaderCircle size={16} /> : resetMode ? <RefreshCw size={16} /> : <LogIn size={16} />} {state.phase === 'loading' ? 'Checking…' : resetMode ? 'Send reset email' : 'Sign in'}</button>
         <button className="btn btn-sm auth-link-button" type="button" onClick={() => { setResetMode(value => !value); setMessage(null); }}>{resetMode ? 'Back to sign in' : 'Forgotten your password?'}</button>

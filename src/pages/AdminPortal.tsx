@@ -53,7 +53,7 @@ import { type ActivatedPharmacyOnboarding, completeReferralRecordsCheck, createO
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation } from '../shared/contracts';
 import { PharmacyRequestRecord, PharmacyRequestRow, usePharmacyRequests } from './admin/PharmacyRequests';
 import { formatRequestDate } from './admin/requestFormat';
-import { ActivationChecklist, DeclinePharmacyPanel, SuspendPharmacyPanel } from './admin/PharmacyActivation';
+import { ActivationChecklist, DeclinePharmacyPanel, NotAvailablePanel, SuspendPharmacyPanel } from './admin/PharmacyActivation';
 import { PharmacySummary } from './admin/PharmacySummary';
 import { performancePeriodStart, type PerformancePeriod } from '../utils/performancePeriod';
 import { PharmacyDetails } from './admin/PharmacyDetails';
@@ -998,6 +998,7 @@ export default function AdminPortal() {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [declineOpen, setDeclineOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
+  const [notAvailableOpen, setNotAvailableOpen] = useState(false);
   const [activeSection, setActiveSection] = useState<OverviewManagePanel>('summary');
   // The section a click is scrolling to: the highlight follows the scroll, then settles here.
   const pendingSectionRef = useRef<OverviewManagePanel | null>(null);
@@ -1630,7 +1631,7 @@ export default function AdminPortal() {
    * sandbox and never wait.
    */
   const awaitingCuraleaf = useCallback(
-    (org: PharmacyTenant) => !isTrainingDirectoryPharmacy(org) && org.status !== 'live' && org.status !== 'paused' && org.curaleafEnvironment !== 'production',
+    (org: PharmacyTenant) => !isTrainingDirectoryPharmacy(org) && org.status !== 'live' && org.status !== 'paused' && org.status !== 'not_available' && org.curaleafEnvironment !== 'production',
     [],
   );
   const overviewPharmacies = state.organisations.filter(org => {
@@ -1657,8 +1658,9 @@ export default function AdminPortal() {
   const selectedRequest = pharmacyRequests.records.find(request => request.id === selectedRequestId && request.status !== 'activated') ?? null;
   const overviewResultCount = overviewPharmacies.length + overviewRequests.length + heldRequests.length;
   const awaitingPharmacies = overviewPharmacies.filter(awaitingCuraleaf);
-  const registeredPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org) && org.status !== 'paused');
-  const suspendedPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && org.status === 'paused');
+  const closedToPharmacy = (org: PharmacyTenant) => org.status === 'paused' || org.status === 'not_available';
+  const registeredPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org) && !closedToPharmacy(org));
+  const suspendedPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && closedToPharmacy(org));
   const trainingPharmacies = overviewPharmacies.filter(org => isTrainingDirectoryPharmacy(org));
   const awaitingCount = state.organisations.filter(awaitingCuraleaf).length + pharmacyRequests.pending.length;
   const requestForOrganisation = useCallback(
@@ -1690,16 +1692,17 @@ export default function AdminPortal() {
   const statusLabel = (status: PharmacyTenant['status']) => {
     if (status === 'live') return 'Live';
     if (status === 'paused') return 'Suspended';
+    if (status === 'not_available') return 'Not available';
     return 'Awaiting Curaleaf';
   };
-  const pharmacyTone = (status: PharmacyTenant['status']) => status === 'live' ? 'paid' : status === 'paused' ? 'danger' : 'warning';
+  const pharmacyTone = (status: PharmacyTenant['status']) => status === 'live' ? 'paid' : status === 'paused' || status === 'not_available' ? 'danger' : 'warning';
   /** A pharmacy is Test, Awaiting Curaleaf or Live; rejected ones leave the directory. */
   const pharmacyStageLabel = (organisation: PharmacyTenant) => {
     if (isTrainingDirectoryPharmacy(organisation)) return 'Test';
     return awaitingCuraleaf(organisation) ? 'Awaiting Curaleaf' : statusLabel(organisation.status);
   };
   const intakeIsLive = (organisation: PharmacyTenant) => {
-    if (organisation.status === 'paused') return false;
+    if (organisation.status === 'paused' || organisation.status === 'not_available') return false;
     if (organisation.intakeEnabled === false) return false;
     return true;
   };
@@ -1819,7 +1822,9 @@ export default function AdminPortal() {
           ? 'Live'
           : selectedPharmacy?.status === 'paused'
             ? 'Suspended'
-            : 'Awaiting Curaleaf';
+            : selectedPharmacy?.status === 'not_available'
+              ? 'Not available'
+              : 'Awaiting Curaleaf';
     const formUrl = referralLink;
     const selectedIntakeLive = selectedPharmacy ? intakeIsLive(selectedPharmacy) : false;
 
@@ -1840,6 +1845,7 @@ export default function AdminPortal() {
             setSelectedRequestId(null);
             setDeclineOpen(false);
             setSuspendOpen(false);
+            setNotAvailableOpen(false);
             setOverviewPharmacyId(organisation.id);
             setOverviewManageOpen(false);
           }}
@@ -1887,6 +1893,9 @@ export default function AdminPortal() {
     const selectedCanDecline = Boolean(selectedPharmacy && !isTrainingDirectoryPharmacy(selectedPharmacy) && selectedPharmacy.status !== 'live' && selectedPharmacy.status !== 'paused');
     const selectedCanSuspend = Boolean(selectedPharmacy && !isTrainingDirectoryPharmacy(selectedPharmacy) && selectedPharmacy.status === 'live');
     const selectedSuspended = Boolean(selectedPharmacy && selectedPharmacy.status === 'paused');
+    // Not available: an existing Curaleaf customer, found while the pharmacy awaits Curaleaf.
+    const selectedNotAvailable = Boolean(selectedPharmacy && selectedPharmacy.status === 'not_available');
+    const selectedCanMarkNotAvailable = Boolean(selectedPharmacy && selectedAwaiting && !isPlatformTestPharmacy(selectedPharmacy));
 
     return (
       <div className="page-body order-crm patient-crm admin-overview-crm">
@@ -2054,10 +2063,10 @@ export default function AdminPortal() {
                       </section>
                     ) : null}
                     {suspendedPharmacies.length ? (
-                      <section className="order-crm-list-group" aria-label="Suspended pharmacies">
+                      <section className="order-crm-list-group" aria-label="Suspended or not available pharmacies">
                         <header>
                           <span>
-                            <strong>Suspended</strong>
+                            <strong>Suspended or not available</strong>
                             <small>Staff locked out, eligibility link off</small>
                           </span>
                           <b>{suspendedPharmacies.length}</b>
@@ -2148,6 +2157,11 @@ export default function AdminPortal() {
                           {selectedSuspended ? 'Lift suspension' : 'Suspend'}
                         </button>
                       ) : null}
+                      {selectedCanMarkNotAvailable || selectedNotAvailable ? (
+                        <button type="button" className={`btn btn-sm${selectedNotAvailable ? '' : ' admin-decline-button'}`} aria-expanded={notAvailableOpen} onClick={() => setNotAvailableOpen(open => !open)}>
+                          {selectedNotAvailable ? 'Clear Not available' : 'Not available'}
+                        </button>
+                      ) : null}
                       {selectedAwaiting ? null : <button type="button" className="btn btn-sm" onClick={() => { setFinanceOrganisationId(selectedPharmacy.id); setView('finance'); }}>Open ledger</button>}
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => goToSection('identity')}><Pencil size={13} /> Edit details</button>
                     </div>
@@ -2186,6 +2200,30 @@ export default function AdminPortal() {
                             : status === 'live'
                               ? `${selectedPharmacy.name} is live again.`
                               : `${selectedPharmacy.name}'s suspension is lifted. It is awaiting live Curaleaf credentials.`,
+                        });
+                      }}
+                    />
+                  ) : null}
+                  {notAvailableOpen && (selectedCanMarkNotAvailable || selectedNotAvailable) ? (
+                    <NotAvailablePanel
+                      key={`${selectedPharmacy.id}-${selectedPharmacy.status}`}
+                      organisationId={selectedPharmacy.id}
+                      pharmacyName={selectedPharmacy.name}
+                      notAvailable={selectedNotAvailable}
+                      onCancel={() => setNotAvailableOpen(false)}
+                      onDone={status => {
+                        dispatch({
+                          type: 'UPDATE_ORGANISATION',
+                          organisationId: selectedPharmacy.id,
+                          updates: { status, intakeEnabled: status !== 'not_available' },
+                        });
+                        setNotAvailableOpen(false);
+                        dispatch({
+                          type: 'ADD_TOAST',
+                          toastType: 'success',
+                          message: status === 'not_available'
+                            ? `${selectedPharmacy.name} is Not available. Its staff are signed out and its eligibility link is off.`
+                            : `${selectedPharmacy.name} is no longer Not available. Its eligibility link is open again.`,
                         });
                       }}
                     />

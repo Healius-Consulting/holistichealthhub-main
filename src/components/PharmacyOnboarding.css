@@ -1,0 +1,61 @@
+/* Step 4: the account status card, the Onboarding page and queue, and the pre-live screens. */
+
+.pharmacy-account-status { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-left-width: 4px; border-radius: var(--radius-md); background: var(--bg-surface); text-align: left; }
+.pharmacy-account-status__icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 999px; }
+.pharmacy-account-status__text { display: grid; gap: 4px; min-width: 0; }
+.pharmacy-account-status__text strong { color: var(--text-primary); font-size: 14px; font-weight: 700; }
+.pharmacy-account-status__text p { margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.pharmacy-account-status__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.pharmacy-account-status--being_set_up { border-left-color: var(--amber-500); }
+.pharmacy-account-status--being_set_up .pharmacy-account-status__icon { background: var(--amber-50); color: var(--amber-700); }
+.pharmacy-account-status--not_available { border-left-color: var(--tenant-secondary); }
+.pharmacy-account-status--not_available .pharmacy-account-status__icon { background: var(--tenant-secondary-soft); color: var(--tenant-secondary); }
+.pharmacy-account-status--suspended { border-left-color: var(--red-500); }
+.pharmacy-account-status--suspended .pharmacy-account-status__icon { background: var(--red-50); color: var(--red-700); }
+
+.header-onboarding-button { display: inline-flex; align-items: center; gap: 6px; }
+.header-onboarding-button.is-active { border-color: var(--tenant-primary); background: var(--tenant-primary-soft); color: var(--tenant-primary-strong); }
+
+.pharmacy-onboarding { display: grid; gap: 16px; max-width: 860px; }
+.pharmacy-onboarding__queue,
+.pharmacy-onboarding__checklist { display: grid; gap: 12px; padding: 18px 20px; }
+.pharmacy-onboarding__queue > header h2,
+.pharmacy-onboarding__checklist > header h2 { margin: 0; color: var(--text-primary); font-size: 16px; }
+.pharmacy-onboarding__queue > header p,
+.pharmacy-onboarding__checklist > header p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.45; }
+.pharmacy-onboarding__items { display: grid; margin: 0; padding: 0; list-style: none; counter-reset: onboarding; }
+.pharmacy-onboarding__item { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+.pharmacy-onboarding__item:first-child { border-top: 0; }
+.pharmacy-onboarding__mark { display: grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid var(--border-strong); border-radius: 999px; color: var(--text-secondary); font-size: 11px; font-weight: 700; counter-increment: onboarding; }
+.pharmacy-onboarding__mark:empty::before { content: counter(onboarding); }
+.pharmacy-onboarding__item.is-done .pharmacy-onboarding__mark { border-color: var(--green-500); background: var(--green-500); color: #fff; }
+.pharmacy-onboarding__item.is-waiting .pharmacy-onboarding__mark { border-color: var(--amber-500); background: var(--amber-50); color: var(--amber-700); }
+.pharmacy-onboarding__text { display: grid; gap: 2px; min-width: 0; }
+.pharmacy-onboarding__text strong { color: var(--text-primary); font-size: 13.5px; font-weight: 600; }
+.pharmacy-onboarding__text small { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.pharmacy-onboarding__action { display: flex; justify-content: flex-end; }
+.pharmacy-onboarding__action .btn { white-space: nowrap; }
+.pharmacy-onboarding__status { color: var(--text-secondary); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pharmacy-onboarding__item.is-done .pharmacy-onboarding__status { color: var(--color-success); }
+.pharmacy-onboarding__item.is-waiting .pharmacy-onboarding__status { color: var(--color-warning-text); }
+.pharmacy-onboarding__error { margin: 0; padding: 9px 11px; border-left: 3px solid var(--red-500); background: var(--red-50); color: var(--red-700); font-size: 12px; }
+.pharmacy-onboarding__note { margin: 0; padding: 9px 11px; border-left: 3px solid var(--amber-500); background: var(--amber-50); color: var(--amber-700); font-size: 12px; }
+
+.pre-live-screen { display: grid; place-items: start center; }
+.pre-live-screen__card { display: grid; gap: 10px; max-width: 560px; padding: 22px 24px; }
+.pre-live-screen__card h2 { margin: 0; color: var(--text-primary); font-size: 17px; }
+.pre-live-screen__card p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.pre-live-screen__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pre-live-screen__actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+.awaiting-setup-banner { flex-wrap: wrap; }
+.awaiting-setup-banner span { min-width: 0; line-height: 1.45; }
+.awaiting-setup-banner b { color: inherit; font-weight: 700; }
+
+@media (max-width: 680px) {
+  .pharmacy-onboarding__queue,
+  .pharmacy-onboarding__checklist { padding: 14px 16px; }
+  .pharmacy-onboarding__item { grid-template-columns: 24px minmax(0, 1fr); align-items: start; }
+  .pharmacy-onboarding__action { grid-column: 2; justify-content: flex-start; }
+  .pre-live-screen__card { padding: 18px; }
+}

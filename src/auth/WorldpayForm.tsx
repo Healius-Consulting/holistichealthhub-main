@@ -101,12 +101,17 @@ export function WorldpayForm({
   principal = {},
   onClose,
   onSubmitted,
+  send = submitWorldpayForm,
+  prefillSource = 'your PharmSmart account and Curaleaf form',
 }: {
   open: boolean;
   prefill: WorldpayStart;
   principal?: WorldpayPrincipalStart;
   onClose: () => void;
-  onSubmitted: () => void;
+  onSubmitted: (result: { submittedAt: string }) => void;
+  /** The portal posts to its own route, recorded against the signed-in branch. */
+  send?: (input: Record<string, unknown>) => Promise<{ submittedAt: string }>;
+  prefillSource?: string;
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -183,12 +188,12 @@ export function WorldpayForm({
     setError(null);
     try {
       const trimmed = Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, value.trim()]));
-      await submitWorldpayForm({
+      const result = await send({
         ...trimmed,
         principals: principals.map(person => Object.fromEntries(Object.entries(person).map(([key, value]) => [key, value.trim()]))),
         idempotencyKey: idempotencyKey.current,
       });
-      onSubmitted();
+      onSubmitted(result);
     } catch (cause) {
       setError(cause instanceof ApiRequestError ? cause.message : 'The form could not be sent. Try again.');
       setBusy(false);
@@ -205,7 +210,7 @@ export function WorldpayForm({
         </header>
         <div className="curaleaf-account-form__body">
           <p>Worldpay needs these details to open your card account. They are emailed to our team as a PDF to pass on to Worldpay. The platform does not keep a copy.</p>
-          <PrefillReviewBanner fields={prefilled} source="your PharmSmart account and Curaleaf form" />
+          <PrefillReviewBanner fields={prefilled} source={prefillSource} />
           {error ? <p className="curaleaf-account-form__error" role="alert">{error}</p> : null}
           <div className="curaleaf-account-form__grid">
             <fieldset>

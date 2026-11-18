@@ -1,3 +1,4 @@
+import { ListChecks } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
 import WorkspacePageHeader from './WorkspacePageHeader';
@@ -11,6 +12,7 @@ const SCREEN_TITLES: Record<string, string> = {
   finance: 'Prescription financials',
   settings: 'Settings & support',
   contacts: 'Settings & support',
+  onboarding: 'Onboarding',
 };
 
 export default function Header() {
@@ -28,6 +30,16 @@ export default function Header() {
       commandLabel="Find anything"
       onSectionClick={() => dispatch({ type: 'SET_SCREEN', screen: 'home' })}
       backAction={state.screenHistory.length ? { label: 'Return to previous workspace', onClick: () => dispatch({ type: 'GO_BACK' }) } : undefined}
+      actions={
+        <button
+          type="button"
+          className={`btn btn-sm header-onboarding-button${state.screen === 'onboarding' ? ' is-active' : ''}`}
+          aria-current={state.screen === 'onboarding' ? 'page' : undefined}
+          onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'onboarding' })}
+        >
+          <ListChecks size={14} aria-hidden="true" /> Onboarding
+        </button>
+      }
       contextControl={
         <div className="header-context" aria-label={`Current pharmacy status: ${workspaceLabel}${paused ? ', paused' : ''}`}>
           <span>Workspace</span>

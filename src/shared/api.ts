@@ -523,6 +523,42 @@ export function submitWorldpayForm(input: Record<string, unknown>) {
   });
 }
 
+/** Where an activated branch is in onboarding, for its portal Onboarding page and banner. */
+export interface BranchOnboardingView {
+  live: boolean;
+  submittedAt: string | null;
+  termsAccepted: boolean;
+  termsAcceptedAt: string | null;
+  worldpaySubmittedAt: string | null;
+  registeredCompanyName: string;
+}
+
+export function getBranchOnboarding() {
+  return apiRequest<BranchOnboardingView>('/v1/portal/pharmacy/onboarding');
+}
+
+/** Portal: a branch with no accepted Terms accepts them before Worldpay. The branch comes from the session. */
+export function acceptBranchPartnerTerms(input: {
+  signerName: string;
+  signerRole: string;
+  signerEmail: string;
+  signerGphcNumber: string;
+  authorised: true;
+}) {
+  return apiRequest<{ acceptedAt: string; termsVersion: string }>('/v1/portal/pharmacy/onboarding/terms', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+/** Portal: the Worldpay form, recorded against the signed-in branch. */
+export function submitBranchWorldpayForm(input: Record<string, unknown>) {
+  return apiRequest<{ submittedAt: string }>('/v1/portal/pharmacy/onboarding/worldpay', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function recordPharmacyOnboardingDeferral(input: {
   gphcNumber: string;
   pharmsmartPharmacyId?: string;
@@ -573,6 +609,22 @@ export function suspendPharmacy(organisationId: string, reason?: string) {
 export function liftPharmacySuspension(organisationId: string) {
   return apiRequest<{ status: 'live' | 'onboarding' | 'paused' }>(
     `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/lift-suspension`,
+    { method: 'POST', body: '{}' },
+  );
+}
+
+/** An existing Curaleaf customer: staff lose access and the eligibility link goes off. */
+export function markPharmacyNotAvailable(organisationId: string, reason?: string) {
+  return apiRequest<{ status: 'not_available' }>(
+    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/not-available`,
+    { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) },
+  );
+}
+
+/** Clears Not available: back to awaiting Curaleaf (or live on live credentials), intake on. */
+export function clearPharmacyNotAvailable(organisationId: string) {
+  return apiRequest<{ status: 'live' | 'onboarding' | 'not_available' | 'paused' }>(
+    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/clear-not-available`,
     { method: 'POST', body: '{}' },
   );
 }

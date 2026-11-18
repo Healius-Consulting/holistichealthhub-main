@@ -370,7 +370,7 @@ export interface PharmacyTenant {
   county?: string;
   postcode?: string;
   websiteDomains: string[];
-  status: 'live' | 'intake_live' | 'onboarding' | 'paused';
+  status: 'live' | 'intake_live' | 'onboarding' | 'paused' | 'not_available';
   testAccount?: boolean;
   gdprExempt?: boolean;
   workspaceClassification?: 'standard' | 'training' | 'allocation_holding';
@@ -430,7 +430,7 @@ export interface PlatformIntegration {
   status: 'connected' | 'pending' | 'attention';
 }
 
-export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | 'finance' | 'settings' | 'contacts';
+export type Screen = 'home' | 'formulary' | 'create' | 'orders' | 'patients' | 'finance' | 'settings' | 'contacts' | 'onboarding';
 
 /**
  * Which record a board should open. Opening an order from a patient — or a patient
@@ -2387,7 +2387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const intakeDirectorySync = Boolean(
     currentOrganisation
     && currentOrganisation.intakeEnabled !== false
-    && currentOrganisation.status !== 'paused'
+    && currentOrganisation.status !== 'paused' && currentOrganisation.status !== 'not_available'
     && !sandboxPharmacy
   );
   const syncPatientDirectory = livePharmacyWorkspace || intakeDirectorySync;

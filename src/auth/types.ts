@@ -84,4 +84,6 @@ export interface AuthState {
   sessionWarning?: boolean;
   pharmsmartSetup?: PharmsmartSetup | null;
   pharmsmartWelcome?: PharmsmartWelcome | null;
+  /** Set when sign-in was refused because the pharmacy is suspended or Not available. */
+  accountState?: 'not_available' | 'suspended' | null;
 }

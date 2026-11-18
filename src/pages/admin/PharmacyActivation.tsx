@@ -5,6 +5,8 @@ import {
   describeApiError,
   liftPharmacySuspension,
   suspendPharmacy,
+  markPharmacyNotAvailable,
+  clearPharmacyNotAvailable,
   openPharmacyOnboardingFile,
   type PharmacyOnboardingRequestView,
 } from '../../shared/api';
@@ -248,6 +250,76 @@ export function SuspendPharmacyPanel({
         <button type="button" className="btn btn-sm" disabled={busy} onClick={onCancel}>Cancel</button>
         <button type="button" className={`btn btn-sm ${suspended ? 'btn-primary' : 'btn-danger'}`} disabled={busy} onClick={() => void submit()}>
           {busy ? (suspended ? 'Lifting…' : 'Suspending…') : (suspended ? 'Lift suspension' : 'Suspend pharmacy')}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Not available: the pharmacy is an existing Curaleaf customer (Curaleaf say so by
+ * replying to the application). Its staff are signed out and see "may be available to
+ * you in the near future", and its eligibility link goes off. HHH can clear it.
+ */
+export function NotAvailablePanel({
+  organisationId,
+  pharmacyName,
+  notAvailable,
+  onCancel,
+  onDone,
+}: {
+  organisationId: string;
+  pharmacyName: string;
+  notAvailable: boolean;
+  onCancel: () => void;
+  onDone: (status: 'not_available' | 'live' | 'onboarding') => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { reasonRef.current?.focus(); }, []);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (notAvailable) {
+        const result = isLocalPortalPreview ? { status: 'onboarding' as const } : await clearPharmacyNotAvailable(organisationId);
+        onDone(result.status === 'live' ? 'live' : 'onboarding');
+      } else {
+        if (!isLocalPortalPreview) await markPharmacyNotAvailable(organisationId, reason.trim() || undefined);
+        onDone('not_available');
+      }
+    } catch (cause) {
+      setError(describeApiError(cause, notAvailable ? 'Not available could not be cleared.' : 'The pharmacy could not be marked Not available.'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="admin-request-decline" aria-labelledby="admin-not-available-title">
+      <h3 id="admin-not-available-title">{notAvailable ? `Clear Not available on ${pharmacyName}` : `Mark ${pharmacyName} Not available`}</h3>
+      {notAvailable ? (
+        <p>
+          Staff can sign in again and the eligibility link takes patients again. The pharmacy goes back to awaiting Curaleaf,
+          or to live if its live Curaleaf credentials are saved.
+        </p>
+      ) : (
+        <>
+          <p>
+            For a pharmacy that is already a Curaleaf customer. Its staff are signed out and, when they sign in, see that the
+            service may be available to them in the near future. Its eligibility link stops taking patients. You can clear this
+            at any time.
+          </p>
+          <textarea ref={reasonRef} className="input" rows={2} value={reason} onChange={event => setReason(event.target.value)} aria-label="Note, kept in the audit log" placeholder="Note, kept in the audit log (optional)" />
+        </>
+      )}
+      {error ? <p className="admin-activation__error" role="alert">{error}</p> : null}
+      <div className="admin-request-decline__actions">
+        <button type="button" className="btn btn-sm" disabled={busy} onClick={onCancel}>Cancel</button>
+        <button type="button" className={`btn btn-sm ${notAvailable ? 'btn-primary' : 'btn-danger'}`} disabled={busy} onClick={() => void submit()}>
+          {busy ? 'Saving…' : notAvailable ? 'Clear Not available' : 'Mark Not available'}
         </button>
       </div>
     </section>

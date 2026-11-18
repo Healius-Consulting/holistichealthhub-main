@@ -81,9 +81,12 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
   return { action: 'session', customToken: result.customToken };
 }
 
+/** Tags a booking made from the portal's Onboarding queue; Calendly carries UTM values onto the booking. */
+export const PORTAL_ONBOARDING_QUEUE_UTM = { source: 'hhh-portal', campaign: 'onboarding-queue' } as const;
+
 export function pharmsmartOnboardingBookingUrl(
-  person: PharmsmartWelcome,
-  options?: { embed?: boolean; hostname?: string },
+  person: Pick<PharmsmartWelcome, 'firstName' | 'lastName' | 'email'>,
+  options?: { embed?: boolean; hostname?: string; utm?: { source: string; campaign: string } },
 ) {
   const url = new URL(PHARMSMART_ONBOARDING_CALENDLY);
   const name = [person.firstName, person.lastName].filter(Boolean).join(' ').trim();
@@ -92,6 +95,10 @@ export function pharmsmartOnboardingBookingUrl(
   if (options?.embed) {
     url.searchParams.set('embed_type', 'Inline');
     if (options.hostname) url.searchParams.set('embed_domain', options.hostname);
+  }
+  if (options?.utm) {
+    url.searchParams.set('utm_source', options.utm.source);
+    url.searchParams.set('utm_campaign', options.utm.campaign);
   }
   return url.toString();
 }

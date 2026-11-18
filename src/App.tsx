@@ -11,6 +11,9 @@ import Patients from './pages/Patients';
 import AdminPortal from './pages/AdminPortal';
 import PharmacySettings from './pages/PharmacySettings';
 import PharmacyFinance from './pages/PharmacyFinance';
+import PharmacyOnboarding from './pages/PharmacyOnboarding';
+import { AwaitingSetupBanner, PreLiveScreen } from './components/PreLiveAccount';
+import { preLiveLockedScreen } from './onboarding/branchOnboarding';
 
 import { tenantThemeVariables } from './utils/tenantTheme';
 import { AuthProvider } from './auth/AuthProvider';
@@ -27,7 +30,7 @@ import {
 } from './auth/AuthScreens';
 import { getAdminOrganisations, getPortalSession } from './shared/api';
 import { type PortalOrganisation } from './shared/contracts';
-import { isLocalPortalPreview, withLocationSearch } from './dev/localPortalPreview';
+import { isLocalPortalPreview, localPreviewPreLive, withLocationSearch } from './dev/localPortalPreview';
 import { resolvePharmacyWorkspaceMode } from './training/workspace';
 import LocalPortalSwitcher from './dev/LocalPortalSwitcher';
 import CommandPalette from './components/CommandPalette';
@@ -88,7 +91,7 @@ function toPharmacyTenant(record: PortalOrganisation): PharmacyTenant {
   };
 }
 
-const pharmacyScreens = new Set<Screen>(['home', 'create', 'orders', 'patients', 'formulary', 'finance', 'settings', 'contacts']);
+const pharmacyScreens = new Set<Screen>(['home', 'create', 'orders', 'patients', 'formulary', 'finance', 'settings', 'contacts', 'onboarding']);
 
 function pharmacyScreenFromPath(): Screen {
   const segment = surfaceRelativePath(window.location.pathname, appPathPrefix)?.split('/').filter(Boolean)[0];
@@ -264,11 +267,17 @@ function StaffWorkspace() {
 
   if (!organisation) return <AuthLoading />;
 
+  // Before go-live, stock, prices and orders wait for Curaleaf and point at Demo mode.
+  const sandbox = isLocalPortalPreview && !localPreviewPreLive;
+  const locked = (screen: Screen) => preLiveLockedScreen(screen, { workspaceMode: state.workspaceMode, demo: state.demoMode, sandbox });
+
   const renderScreen = () => {
+    if (state.screen !== 'orders' && locked(state.screen)) return <PreLiveScreen screen={state.screen} />;
     switch (state.screen) {
       case 'home': return <PharmacyOverview />;
       case 'formulary': return <FormularyPricing />;
       case 'create': return <CreateOrder />;
+      case 'onboarding': return <PharmacyOnboarding />;
       case 'orders':
       case 'patients':
         // Keep both CRM boards mounted so "Open patient" / "Open order" can open the
@@ -280,7 +289,7 @@ function StaffWorkspace() {
               hidden={state.screen !== 'orders'}
               aria-hidden={state.screen !== 'orders'}
             >
-              <Orders />
+              {locked('orders') ? <PreLiveScreen screen="orders" /> : <Orders />}
             </div>
             <div
               className={state.screen === 'patients' ? undefined : 'crm-screen-parked'}
@@ -306,16 +315,13 @@ function StaffWorkspace() {
       <div className="app-main">
         <Header />
         <DemoModeBanner />
-        {state.workspaceMode === 'training' && !state.demoMode && (
+        {sandbox && state.workspaceMode === 'training' && !state.demoMode && (
           <div className="training-mode-banner" role="status">
-            <strong>{isLocalPortalPreview ? 'Training' : 'Awaiting Curaleaf'}</strong>
-            <span>
-              {isLocalPortalPreview
-                ? 'This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH opens Test or Live. Supplier writes and payments are not sent from training.'
-                : 'Your eligibility link is open: eligible patients are added to your list. Orders and payments open once your Curaleaf account is live.'}
-            </span>
+            <strong>Training</strong>
+            <span>This workspace shows training examples only. Enquiries already go to HHH. Real referred patients appear after HHH opens Test or Live. Supplier writes and payments are not sent from training.</span>
           </div>
         )}
+        {sandbox ? null : <AwaitingSetupBanner />}
         {state.workspaceMode === 'test' && !paused && !state.demoMode && (
           <div className="test-mode-banner" role="status">
             <strong>Test</strong>

@@ -25,6 +25,8 @@ export function PartnerTermsForm({
   signer,
   onClose,
   onAccepted,
+  send,
+  intro = 'Your Curaleaf account form is in. Accept the Partner Terms to send it to Curaleaf Laboratories.',
 }: {
   open: boolean;
   request: PharmsmartTermsRequest | null;
@@ -33,6 +35,9 @@ export function PartnerTermsForm({
   signer: { name: string; email: string };
   onClose: () => void;
   onAccepted: () => void;
+  /** The portal accepts for the signed-in branch instead of an onboarding request. */
+  send?: (input: { signerName: string; signerRole: string; signerEmail: string; signerGphcNumber: string; authorised: true }) => Promise<unknown>;
+  intro?: string;
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -81,15 +86,15 @@ export function PartnerTermsForm({
     setBusy(true);
     setError(null);
     try {
-      await acceptPartnerTerms({
-        onboardingRequestId: request.id,
+      const signed = {
         signerName: name.trim(),
         signerRole: role,
         signerEmail: email.trim(),
         signerGphcNumber: pharmacist ? gphc.trim() : '',
-        authorised: true,
-        ...(pharmsmartTicket ? { pharmsmartTicket } : {}),
-      });
+        authorised: true as const,
+      };
+      if (send) await send(signed);
+      else await acceptPartnerTerms({ onboardingRequestId: request.id, ...signed, ...(pharmsmartTicket ? { pharmsmartTicket } : {}) });
       onAccepted();
     } catch (cause) {
       setError(cause instanceof ApiRequestError ? cause.message : 'The terms could not be accepted. Try again.');
@@ -106,7 +111,7 @@ export function PartnerTermsForm({
           <button ref={closeRef} type="button" onClick={onClose} disabled={busy}>Close</button>
         </header>
         <div className="curaleaf-account-form__body">
-          <p>Your Curaleaf account form is in. Accept the Partner Terms to send it to Curaleaf Laboratories.</p>
+          <p>{intro}</p>
           <section className="partner-terms-form__terms" aria-label="Partner Terms text">
             <p>New item — to be updated here</p>
           </section>

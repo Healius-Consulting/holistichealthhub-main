@@ -17,6 +17,14 @@ export function withLocationSearch(path: string) {
 
 export const isLocalPortalPreview = localPortalPreview !== null;
 
+/**
+ * `&prelive=1` with `?devPortal=pharmacy`: preview the real pre-live account (Awaiting
+ * Curaleaf banner, screens that wait for go-live) instead of the demo data set's look.
+ */
+export const localPreviewPreLive = isLocalPortalPreview
+  && typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('prelive') === '1';
+
 export const localPreviewStaff: AuthenticatedStaff | null = import.meta.env.DEV && localPortalPreview === 'admin'
   ? {
       uid: 'local-preview-admin',

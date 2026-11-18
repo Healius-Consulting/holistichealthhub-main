@@ -4,7 +4,8 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import HhhBrandMark from '../components/HhhBrandMark';
 import { CuraleafAccountForm, type CuraleafFormValues } from './CuraleafAccountForm';
 import { PartnerTermsForm } from './PartnerTermsForm';
-import { WorldpayForm, type WorldpayPrincipalStart, type WorldpayStart } from './WorldpayForm';
+import { WorldpayForm } from './WorldpayForm';
+import { worldpayPrincipalFromWelcome, worldpayStartFromWelcome } from './worldpay-start';
 import {
   afterCuraleafSent,
   afterTermsAccepted,
@@ -162,29 +163,9 @@ export function PharmsmartWelcome({
     panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
   }, [choice, formOpen, termsOpen, worldpayOpen]);
 
-  // PharmSmart's pharmacy manager is Worldpay's day-to-day contact. Without one, the contact is
-  // the name on the Curaleaf form, then the pharmacy's main contact, then whoever signed in.
-  const managerName = [welcome.prefill?.managerFirstName, welcome.prefill?.managerLastName].filter(Boolean).join(' ');
   // Whatever the pharmacy has already told us carries into the Worldpay form.
-  const worldpayPrefill: WorldpayStart = {
-    legalName: curaleafValues?.registeredCompanyName ?? welcome.prefill?.registeredCompanyName,
-    tradingName: curaleafValues?.pharmacyName ?? welcome.prefill?.pharmacyName,
-    contactName: managerName || (curaleafValues?.pharmacistName ?? (welcome.prefill?.contactName || knownName)),
-    contactPosition: managerName ? 'Pharmacy manager' : undefined,
-    contactPhone: welcome.prefill?.managerPhone,
-    gphcNumber: curaleafValues?.gphcNumber ?? welcome.gphcNumber ?? undefined,
-    registeredAddress: curaleafValues?.invoiceAddress ?? welcome.prefill?.invoiceAddress,
-    tradingAddress: curaleafValues?.deliveryAddress ?? welcome.prefill?.deliveryAddress,
-    landline: curaleafValues?.pharmacyPhone ?? welcome.prefill?.pharmacyPhone,
-    businessEmail: curaleafValues?.pharmacyEmail ?? welcome.prefill?.pharmacyEmail,
-  };
-  // PharmSmart's superintendent is the likeliest owner or director, so they start as the first principal.
-  const worldpayPrincipal: WorldpayPrincipalStart = {
-    firstNames: welcome.prefill?.superintendentFirstName,
-    surname: welcome.prefill?.superintendentLastName,
-    email: welcome.prefill?.superintendentEmail,
-    mobile: welcome.prefill?.superintendentPhone,
-  };
+  const worldpayPrefill = worldpayStartFromWelcome(welcome, curaleafValues);
+  const worldpayPrincipal = worldpayPrincipalFromWelcome(welcome);
 
   // Only a PharmSmart visit says who chose "Not yet"; an anonymous visit records nothing.
   const recordNotYet = async () => {
