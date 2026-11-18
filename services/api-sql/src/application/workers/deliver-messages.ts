@@ -106,7 +106,7 @@ function payloadRecord(payload: unknown): Record<string, unknown> {
   return payload as Record<string, unknown>;
 }
 
-const FILE_ATTACHMENT_TEMPLATES = new Set(['admin_pharmacy_onboarding_request']);
+const FILE_ATTACHMENT_TEMPLATES = new Set(['curaleaf_new_account_application']);
 
 async function fileAttachmentsFor(record: NotificationOutboxRecord, deps: MessageDeliveryDeps) {
   if (!FILE_ATTACHMENT_TEMPLATES.has(record.templateCode) || !deps.storage) return [];
@@ -185,7 +185,9 @@ async function deliverOne(
         body: JSON.stringify({
           from,
           ...(replyTo ? { reply_to: replyTo } : {}),
-          to: [record.encryptedRecipient],
+          // A shared email names every recipient on one message; otherwise it is one person.
+          to: record.toRecipients?.length ? record.toRecipients : [record.encryptedRecipient],
+          ...(record.ccRecipients?.length ? { cc: record.ccRecipients } : {}),
           subject: rendered.subject,
           html: rendered.html,
           text: rendered.text,
@@ -291,6 +293,7 @@ export async function sendEmailNow(email: ImmediateEmail, fetchImpl: typeof fetc
     },
     body: JSON.stringify({
       from: `Holistic Health Hub <${fromAddressFor(email.templateCode)}>`,
+      ...(replyToFor(email.templateCode) ? { reply_to: replyToFor(email.templateCode) } : {}),
       to: email.to,
       subject: rendered.subject,
       html: rendered.html,

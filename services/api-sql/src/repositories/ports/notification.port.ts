@@ -7,6 +7,9 @@ export interface NotificationOutboxRecord {
   templateCode: string;
   recipientHash: string;
   encryptedRecipient: string | null;
+  /** Every To address of a one-email-to-several send; null means `encryptedRecipient` alone. */
+  toRecipients?: string[] | null;
+  ccRecipients?: string[] | null;
   payload: unknown;
   idempotencyKey: string;
   status: 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED' | 'CANCELLED';
@@ -24,6 +27,8 @@ export interface NotificationRepositoryPort {
     templateCode: string;
     recipientHash: string;
     encryptedRecipient?: string | null;
+    toRecipients?: string[] | null;
+    ccRecipients?: string[] | null;
     payload: unknown;
     idempotencyKey: string;
     /** Hold the message until this instant; null or absent sends on the next sweep. */

@@ -15,8 +15,11 @@ import { worldpayFormSchema } from '../../domain/pharmacy-onboarding/worldpay.js
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
-import { queuePharmacyOnboardingSubmitted } from '../../application/pharmacy-onboarding/emails.js';
 import { submitPharmacyOnboardingRequest } from '../../application/pharmacy-onboarding/submit-request.js';
+import { acceptPartnerTerms } from '../../application/pharmacy-onboarding/accept-terms.js';
+import { partnerTermsVersion, pharmsmartTicketSecret } from '../../application/pharmacy-onboarding/onboarding-config.js';
+import { partnerTermsAcceptanceSchema } from '../../domain/pharmacy-onboarding/terms.js';
+import { ipHash } from '../../security/session-utils.js';
 
 type UploadedLicence = { filename: string; declaredType: string; bytes: Buffer };
 
@@ -89,16 +92,27 @@ export function createPublicPharmacyOnboardingRouter(): Router {
         fields,
         licence: submission.licence && submission.licence.bytes.length > 0 ? submission.licence : null,
       });
-      // The form makes a request, not an account: it waits for HHH to activate or hold it.
-      if (record.status === 'PENDING') {
-        try {
-          await queuePharmacyOnboardingSubmitted(notificationRepo, record);
-        } catch (error) {
-          console.error('Pharmacy onboarding email was not queued', error instanceof Error ? error.message : 'unknown');
-        }
-      }
+      // The form makes a request, not an account. Nothing is emailed yet: the Curaleaf
+      // application goes once the Partner Terms are accepted (next route).
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(201).json({ id: record.id, status: publicOnboardingStatus(record.status) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/public/pharmacy-onboarding-terms - the Partner Terms, accepted against the request
+  router.post('/public/pharmacy-onboarding-terms', publicPharmacyOnboardingLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = partnerTermsAcceptanceSchema.parse(req.body);
+      const { acceptance } = await acceptPartnerTerms({
+        repo,
+        notificationRepo,
+        termsVersion: partnerTermsVersion(),
+        ticketSecret: pharmsmartTicketSecret(),
+      }, input, { ipHash: ipHash(req) });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(201).json({ acceptedAt: acceptance.acceptedAt, termsVersion: acceptance.termsVersion });
     } catch (error) {
       next(error);
     }

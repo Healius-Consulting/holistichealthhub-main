@@ -7,6 +7,7 @@ import { declineNewPharmacy } from '../../application/pharmacy-onboarding/declin
 import { safeDownloadName } from '../../application/pharmacy-onboarding/licence-file.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { compactGphcNumber, publicOnboardingStatus, type PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
+import type { PartnerTermsAcceptanceRecord } from '../../domain/pharmacy-onboarding/terms.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
@@ -21,7 +22,26 @@ const idSchema = uuidParam;
 /** Admin-only: the pharmacy never sees the hold reason. */
 const holdSchema = z.object({ reason: z.string().trim().min(2).max(500) });
 
-function toView(record: PharmacyOnboardingRequestRecord, worldpaySubmittedAt: string | null = null) {
+/** What admin sees of a Partner Terms acceptance. The IP hash stays in the database. */
+function termsView(row: PartnerTermsAcceptanceRecord) {
+  return {
+    termsVersion: row.termsVersion,
+    signerName: row.signerName,
+    signerRole: row.signerRole,
+    signerEmail: row.signerEmail,
+    signerGphcNumber: row.signerGphcNumber,
+    registeredCompanyName: row.registeredCompanyName,
+    acceptedAt: row.acceptedAt,
+    source: row.source,
+    nameMatchesPharmsmart: row.nameMatchesPharmsmart,
+  };
+}
+
+function toView(
+  record: PharmacyOnboardingRequestRecord,
+  worldpaySubmittedAt: string | null = null,
+  terms: PartnerTermsAcceptanceRecord[] = [],
+) {
   return {
     id: record.id,
     status: publicOnboardingStatus(record.status),
@@ -47,6 +67,8 @@ function toView(record: PharmacyOnboardingRequestRecord, worldpaySubmittedAt: st
     createdAt: record.createdAt,
     /** Only the date: the Worldpay form itself is emailed and never stored. */
     worldpaySubmittedAt,
+    /** Newest first. Empty until the pharmacy accepts the Partner Terms. */
+    termsAcceptances: terms.map(termsView),
   };
 }
 
@@ -72,11 +94,12 @@ export function createPortalPharmacyOnboardingRouter(): Router {
 
   router.get('/portal/admin/pharmacy-onboarding-requests', requireStaff('admin'), async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const [records, notes] = await Promise.all([repo.list(), repo.listWorldpaySubmissions()]);
+      const [records, notes, acceptances] = await Promise.all([repo.list(), repo.listWorldpaySubmissions(), repo.listTermsAcceptances()]);
       const worldpayFor = worldpayDates(notes);
+      const termsFor = (requestId: string) => acceptances.filter(row => row.onboardingRequestId === requestId);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json({
-        records: records.map(record => toView(record, worldpayFor(record.gphcNumber))),
+        records: records.map(record => toView(record, worldpayFor(record.gphcNumber), termsFor(record.id))),
         // Pharmacies already on the platform can send the Worldpay form too.
         worldpaySubmissions: notes.map(note => ({ gphcNumber: note.gphcNumber, submittedAt: note.submittedAt })),
       });
@@ -162,7 +185,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
       const result = await actions.activate({ id, actorUid: scope.uid });
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json({
-        request: result.request ? toView(result.request) : { id: result.requestId, status: 'activated', organisationId: result.organisation.id },
+        request: result.request ? toView(result.request, null, await repo.findTermsAcceptances(result.requestId)) : { id: result.requestId, status: 'activated', organisationId: result.organisation.id },
         organisation: result.organisation,
       });
     } catch (error) {
@@ -178,7 +201,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
       const { reason } = holdSchema.parse(req.body);
       const held = await actions.hold({ id, reason, actorUid: scope.uid });
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json({ request: toView(held) });
+      res.status(200).json({ request: toView(held, null, await repo.findTermsAcceptances(held.id)) });
     } catch (error) {
       next(error);
     }
@@ -191,7 +214,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
       const id = idSchema.parse(req.params.id);
       const unheld = await actions.unhold({ id });
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json({ request: toView(unheld) });
+      res.status(200).json({ request: toView(unheld, null, await repo.findTermsAcceptances(unheld.id)) });
     } catch (error) {
       next(error);
     }

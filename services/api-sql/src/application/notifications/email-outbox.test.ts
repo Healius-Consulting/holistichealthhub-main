@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { StaffUserRecord } from '../../repositories/ports/identity.port.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
-import { pharmacyEmailContext, pharmacyOwnerRecipients } from './email-outbox.js';
+import { pharmacyEmailContext, pharmacyOwnerRecipients, queueSharedEmail } from './email-outbox.js';
 
 const organisationId = '70913a30-71c3-4a41-952e-d532927af58c';
 
@@ -62,4 +62,31 @@ it('the pharmacy email reaches patients only when the pharmacy chose to show it;
   assert.equal(pharmacyEmailContext({ ...(pharmacy as object), showEmailToPatients: true } as never).pharmacyPublicEmail, 'shop@eastwood.example');
   // The superintendent's own address is never shown in its place.
   assert.equal(pharmacyEmailContext({ ...(pharmacy as object), pharmacyEmail: '', showEmailToPatients: true } as never).pharmacyPublicEmail, '');
+});
+
+describe('queueSharedEmail', () => {
+  it('writes one row naming every To and CC address, under one key', async () => {
+    const rows: Array<Record<string, unknown>> = [];
+    const repo = {
+      enqueue: async (data: Record<string, unknown>) => {
+        if (rows.some(row => row.idempotencyKey === data.idempotencyKey)) return { created: false };
+        rows.push(data);
+        return { created: true };
+      },
+    } as unknown as Parameters<typeof queueSharedEmail>[0];
+    const input = {
+      to: ['A@Curaleaf.test', 'b@curaleaf.test', 'a@curaleaf.test'],
+      cc: ['copy@hhh.test', 'b@curaleaf.test'],
+      templateCode: 'curaleaf_new_account_application' as const,
+      payload: { branchName: 'Eastwood Health' },
+      keyParts: ['curaleaf-new-account-application', 'req-1'],
+    };
+    assert.deepEqual(await queueSharedEmail(repo, input), { queued: true });
+    assert.deepEqual(await queueSharedEmail(repo, input), { queued: false });
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0]!.toRecipients, ['a@curaleaf.test', 'b@curaleaf.test']);
+    assert.deepEqual(rows[0]!.ccRecipients, ['copy@hhh.test']);
+    assert.equal(rows[0]!.encryptedRecipient, 'a@curaleaf.test');
+    assert.equal(rows[0]!.idempotencyKey, 'curaleaf-new-account-application:req-1');
+  });
 });

@@ -24,6 +24,7 @@ export const EMAIL_EVENT_NAMES = [
   'staff.2fa_enabled',
   'staff.2fa_disabled',
   'pharmacy_onboarding.submitted',
+  'pharmacy_onboarding.terms_accepted',
   'pharmacy_onboarding.held',
   'pharmacy_onboarding.activated',
   'pharmacy_onboarding.declined',
@@ -66,7 +67,7 @@ export const EMAIL_TEMPLATE_CODES = [
   'pharmacy_prescription_close_to_expiry',
   'pharmacy_collection_completed',
   'pharmacy_onboarding_submitted',
-  'admin_pharmacy_onboarding_request',
+  'curaleaf_new_account_application',
   'pharmacy_onboarding_held',
   'pharmacy_onboarding_activated',
   'pharmacy_onboarding_declined',
@@ -126,11 +127,11 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_prescription_close_to_expiry: 'orders',
   pharmacy_collection_completed: 'orders',
   pharmacy_onboarding_submitted: 'onboarding',
-  admin_pharmacy_onboarding_request: 'enquiries',
+  curaleaf_new_account_application: 'onboarding',
   pharmacy_onboarding_held: 'onboarding',
   pharmacy_onboarding_activated: 'onboarding',
   pharmacy_onboarding_declined: 'accounts',
-  admin_worldpay_form_submitted: 'enquiries',
+  admin_worldpay_form_submitted: 'onboarding',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -225,6 +226,16 @@ function longDate(value: string) {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parsed);
 }
 
+/** "19 November 2026" and "14:05" in UK time, from an ISO instant. */
+function londonDateAndTime(iso: string) {
+  const at = new Date(iso);
+  if (!iso || Number.isNaN(at.getTime())) return { date: '', time: '' };
+  return {
+    date: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long', year: 'numeric' }).format(at),
+    time: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at),
+  };
+}
+
 function enquirySourceLabel(sourceType: string) {
   if (sourceType === 'GENERAL_HHH_WEBSITE') return 'Website';
   if (sourceType === 'PHARMACY_QR' || sourceType === 'LEGACY_PHARMACY_QR') return 'Pharmacy QR';
@@ -233,7 +244,7 @@ function enquirySourceLabel(sourceType: string) {
 
 export function emailUsesAdminHeader(kind: string, payload: unknown) {
   return kind === 'admin_new_enquiry_received'
-    || kind === 'admin_pharmacy_onboarding_request'
+    || kind === 'curaleaf_new_account_application'
     || kind === 'admin_worldpay_form_submitted'
     || value(payload, 'pharmacyName') === 'HHH admin workspace';
 }
@@ -243,6 +254,7 @@ function isAdminAudience(kind: EmailTemplateCode, payload: unknown) {
 }
 
 function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
+  if (kind === 'curaleaf_new_account_application') return 'Partner onboarding';
   if (admin) return 'Admin alert';
   if (
     kind === 'pharmacy_staff_invite'
@@ -1058,7 +1070,7 @@ export const EMAILS = {
     audience: 'staff',
     events: ['pharmacy_onboarding.submitted'],
     schedule: 'immediate',
-    summary: 'Sent to the pharmacy email when a Curaleaf account form is submitted from the onboarding page. The request waits for HHH to activate or hold it; no account exists yet.',
+    summary: 'Sent to the pharmacy email once it has sent the Curaleaf account form and accepted the Partner Terms (nothing is sent for the form alone). The request waits for HHH to activate or hold it; no account exists yet.',
     replyTo: 'onboarding',
     render: (payload) => {
       const contact = onboardingAddress();
@@ -1120,36 +1132,43 @@ export const EMAILS = {
       });
     },
   },
-  admin_pharmacy_onboarding_request: {
-    audience: 'staff',
-    events: ['pharmacy_onboarding.submitted'],
+  curaleaf_new_account_application: {
+    audience: 'admin',
+    events: ['pharmacy_onboarding.terms_accepted'],
     schedule: 'immediate',
-    summary: 'Sent to partner success and the HHH admin inbox when a pharmacy submits a Curaleaf account form. The request waits in the portal for HHH to activate or hold it; the filled form is attached for Curaleaf. Not sent to every platform admin.',
+    summary: 'One email to Curaleaf Laboratories (To) with partner success copied (CC), sent once the pharmacy accepts the Partner Terms, never at Curaleaf form submission alone. The filled Curaleaf account form is attached. Recipients are set in config.',
+    replyTo: 'onboarding',
     render: (payload) => {
-      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'A pharmacy');
-      const plainName = value(payload, 'pharmacyName') || 'A pharmacy';
+      const branch = value(payload, 'branchName') || 'A pharmacy';
       const gphc = value(payload, 'gphcNumber');
+      const { date, time } = londonDateAndTime(value(payload, 'submittedAt'));
+      const intro = `Please find attached a new account application from ${branch}, submitted through the Holistic Health Hub partner platform on ${date} at ${time}.`;
+      const interim = `${branch} has applied under our interim arrangement, which covers pharmacies that are new to Curaleaf. If the pharmacy already holds a Curaleaf account, please tell us by replying to this email rather than opening a second account. We will then let the pharmacy know.`;
+      const once = 'Please provide us with the PHAR code, API key and referral-portal login.';
+      const questions = 'Send any questions about this application to us by replying to this email.';
       return render({
-        kind: 'admin_pharmacy_onboarding_request',
+        kind: 'curaleaf_new_account_application',
         payload,
-        subject: 'New pharmacy: Curaleaf form received',
-        preheader: `${plainName} is waiting for HHH to activate it.`,
-        title: 'New pharmacy',
+        subject: `New account application: ${branch}, GPhC ${gphc}`,
+        preheader: `New account application from ${branch}.`,
+        title: 'New account application',
         text: [
-          `${plainName}${gphc ? ` (GPhC ${gphc})` : ''} submitted a Curaleaf account form.`,
-          'The filled form is attached. Review the request in the portal and activate it or put it on hold. Activating creates the pharmacy in onboarding; it goes live once Curaleaf\'s PHAR code and API key are entered.',
+          'Hello,',
+          intro,
+          interim,
+          'Once the account is open',
+          once,
+          questions,
+          'Kind regards,\nPartner Onboarding, Holistic Health Hub',
         ].join('\n\n'),
         paragraphs: [
-          `<strong>${pharmacyName}</strong>${gphc ? ` (GPhC ${escapeHtml(gphc)})` : ''} submitted a Curaleaf account form.`,
-          'The filled form is attached. Review the request in the portal and activate it or put it on hold. Activating creates the pharmacy in onboarding; it goes live once Curaleaf\'s PHAR code and API key are entered.',
-        ],
-        cta: { label: 'Open pharmacy requests', href: 'https://portal.holistichealthhub.live/admin/pharmacy-requests' },
-        detailsTitle: 'Request',
-        details: [
-          { label: 'Pharmacy', value: value(payload, 'pharmacyName') },
-          { label: 'GPhC', value: gphc },
-          { label: 'Contact', value: value(payload, 'pharmacistName') },
-          { label: 'Pharmacy email', value: value(payload, 'pharmacyEmail') },
+          'Hello,',
+          escapeHtml(intro),
+          escapeHtml(interim),
+          '<strong>Once the account is open</strong>',
+          escapeHtml(once),
+          escapeHtml(questions),
+          'Kind regards,<br>Partner Onboarding, Holistic Health Hub',
         ],
       });
     },
@@ -1158,7 +1177,7 @@ export const EMAILS = {
     audience: 'staff',
     events: ['pharmacy_onboarding.worldpay_submitted'],
     schedule: 'immediate',
-    summary: 'Sent straight away, not through the outbox, to partner success and the HHH admin inbox when a pharmacy submits the Worldpay form. The filled form is attached as a PDF. Its bank and identity details are never stored.',
+    summary: 'Sent straight away, not through the outbox, to the HHH admin inbox only when a pharmacy submits the Worldpay form. The filled form is attached as a PDF. Never sent to Worldpay. Its bank and identity details are never stored.',
     render: (payload) => {
       const plainName = value(payload, 'tradingName') || 'A pharmacy';
       const gphc = value(payload, 'gphcNumber');

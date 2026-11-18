@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
+import { HttpError } from '../../domain/common/errors.js';
 import { submitWorldpayForm, type WorldpayNoteRepository } from './submit-worldpay.js';
 import { worldpaySections } from './worldpay-pdf.js';
 import { WORLDPAY_DEFAULTS, worldpayFormSchema, type WorldpaySubmissionNote } from '../../domain/pharmacy-onboarding/worldpay.js';
@@ -34,21 +35,23 @@ function sample(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function memory() {
+function memory(termsAcceptedFor: string[] = ['1234567']) {
   const notes: WorldpaySubmissionNote[] = [];
   const sent: ImmediateEmail[] = [];
   const repo: WorldpayNoteRepository = {
     async findWorldpaySubmissionByIdempotencyKey(key) { return notes.find(note => note.idempotencyKey === key) ?? null; },
     async insertWorldpaySubmission(note) { notes.push(note); },
+    async hasAcceptedTermsForGphc(gphcNumber) { return termsAcceptedFor.includes(gphcNumber); },
   };
   return { notes, sent, repo, send: async (email: ImmediateEmail) => { sent.push(email); } };
 }
 
-test('emails the Worldpay form as a PDF to partner success and admin, and keeps only a note', async () => {
+test('emails the Worldpay form as a PDF to the admin inbox only, and keeps only a note', async () => {
   const { notes, sent, repo, send } = memory();
   await submitWorldpayForm(repo, send, sample(), new Date('2026-11-16T10:00:00Z'));
   assert.equal(sent.length, 1);
-  assert.deepEqual([...sent[0]!.to].sort(), ['admin@holistichealthhub.live', 'spatel@healiusconsulting.com']);
+  assert.deepEqual(sent[0]!.to, ['admin@healiusconsulting.com']);
+  assert.equal(sent[0]!.templateCode, 'admin_worldpay_form_submitted');
   const attachment = sent[0]!.attachments[0]!;
   assert.equal(attachment.contentType, 'application/pdf');
   assert.equal(attachment.filename, 'worldpay-shah-pharmacy.pdf');
@@ -60,6 +63,16 @@ test('emails the Worldpay form as a PDF to partner success and admin, and keeps 
   // The stored note has no form answers in it.
   assert.deepEqual(Object.keys(notes[0]!).sort(), ['gphcNumber', 'id', 'idempotencyKey', 'submittedAt', 'tradingName']);
   assert.equal(notes[0]!.gphcNumber, '1234567');
+});
+
+test('refuses the Worldpay form until the Curaleaf form is in and the Partner Terms are accepted', async () => {
+  const { notes, sent, repo, send } = memory([]);
+  await assert.rejects(
+    submitWorldpayForm(repo, send, sample()),
+    (error: unknown) => error instanceof HttpError && error.statusCode === 409 && error.code === 'ONBOARDING_TERMS_REQUIRED',
+  );
+  assert.equal(sent.length, 0);
+  assert.equal(notes.length, 0);
 });
 
 test('a retry with the same key sends nothing more', async () => {

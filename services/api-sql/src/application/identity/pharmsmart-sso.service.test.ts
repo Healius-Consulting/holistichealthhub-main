@@ -4,8 +4,10 @@ import { HttpError } from '../../domain/common/errors.js';
 import type { AppendAuditInput } from '../../repositories/ports/identity.port.js';
 import type { PharmsmartStaffCandidate } from '../../domain/identity/pharmsmart-sso.js';
 import { PharmsmartSsoService } from './pharmsmart-sso.service.js';
+import { readPharmsmartNamesTicket } from '../../domain/pharmacy-onboarding/terms.js';
 
 const organisationId = '70913a30-71c3-4a41-952e-d532927af58c';
+const SECRET = 'test-secret';
 
 function info(overrides: Record<string, unknown> = {}, person: Record<string, unknown> = {}) {
   return JSON.stringify({
@@ -24,7 +26,7 @@ function info(overrides: Record<string, unknown> = {}, person: Record<string, un
 function service(
   body = info(),
   pharmacies?: Array<{ id: string; gphcNumber: string; primaryContactUid?: string | null }>,
-  requests: Record<string, 'PENDING' | 'ON_HOLD' | 'ACTIVATED'> = {},
+  requests: Record<string, 'PENDING' | 'ON_HOLD' | 'ACTIVATED' | 'PENDING_NO_TERMS'> = {},
 ) {
   const lookedUp: string[] = [];
   const audits: AppendAuditInput[] = [];
@@ -49,7 +51,14 @@ function service(
     findLatestOnboardingRequest: async gphcNumber => {
       lookedUp.push(gphcNumber);
       const status = requests[gphcNumber];
-      return status ? { status } : null;
+      if (!status) return null;
+      return {
+        id: '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11',
+        status: status === 'PENDING_NO_TERMS' ? 'PENDING' : status,
+        termsAccepted: status !== 'PENDING_NO_TERMS',
+        pharmacyName: 'Shah Pharmacy',
+        registeredCompanyName: 'Shah Health Ltd',
+      };
     },
     listStaff: async () => staff,
     findEmailOwner: async email => staff.find(member => member.email === email) ?? null,
@@ -120,7 +129,9 @@ describe('PharmSmart redemption', () => {
   it('returns the onboarding guide when no pharmacy account matches the GPhC', async () => {
     const { sso, created, minted, audits } = service(info({ gphc: '5550001' }));
     const result = await sso.redeem('opaque-token', { requestId: 'req-welcome', ipHash: 'ip' });
-    assert.deepEqual(result, {
+    assert.equal(result.status === 'welcome' && typeof result.pharmsmartTicket, 'string');
+    const { pharmsmartTicket: _ticket, ...rest } = result as Extract<typeof result, { status: 'welcome' }>;
+    assert.deepEqual(rest, {
       status: 'welcome',
       firstName: 'Amina',
       lastName: 'Khan',
@@ -129,6 +140,7 @@ describe('PharmSmart redemption', () => {
       pharmsmartPharmacyId: '30',
       prefill: { pharmacyEmail: 'shop@pharmacy.test' },
       onboardingRequest: null,
+      termsRequest: null,
     });
     assert.equal(created.length, 0);
     assert.equal(minted.length, 0);
@@ -147,6 +159,40 @@ describe('PharmSmart redemption', () => {
     assert.deepEqual(lookedUp, ['5550001']);
     assert.equal(created.length, 0);
     assert.equal(minted.length, 0);
+  });
+
+  it('resumes at the Terms step when the request was sent but the Terms were never accepted', async () => {
+    const { sso } = service(info({ gphc: '5550001' }), undefined, { '5550001': 'PENDING_NO_TERMS' });
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status, 'welcome');
+    if (result.status !== 'welcome') return;
+    assert.equal(result.onboardingRequest, 'terms_outstanding');
+    assert.deepEqual(result.termsRequest, {
+      id: '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11',
+      pharmacyName: 'Shah Pharmacy',
+      registeredCompanyName: 'Shah Health Ltd',
+    });
+  });
+
+  it('a pending request with the Terms accepted shows awaiting activation, with no Terms to resume', async () => {
+    const { sso } = service(info({ gphc: '5550001' }), undefined, { '5550001': 'PENDING' });
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status === 'welcome' && result.termsRequest, null);
+  });
+
+  it('signs PharmSmart superintendent and manager names into the welcome for the Terms soft check', async () => {
+    const { sso } = service(info({
+      gphc: '5550001',
+      superintendent: { first_name: 'Asha', last_name: 'Shah' },
+      manager: { first_name: 'Ravi', last_name: 'Patel' },
+    }));
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status, 'welcome');
+    if (result.status !== 'welcome') return;
+    const claims = readPharmsmartNamesTicket(result.pharmsmartTicket, SECRET);
+    assert.equal(claims?.gphcNumber, '5550001');
+    assert.deepEqual(claims?.people, [{ firstName: 'Asha', lastName: 'Shah' }, { firstName: 'Ravi', lastName: 'Patel' }]);
+    assert.equal(readPharmsmartNamesTicket(result.pharmsmartTicket, 'another-secret'), null);
   });
 
   it('returns the on-hold view for a GPhC whose request is on hold', async () => {

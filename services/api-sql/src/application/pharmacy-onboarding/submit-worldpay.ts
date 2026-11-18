@@ -3,19 +3,16 @@ import { HttpError } from '../../domain/common/errors.js';
 import { compactGphcNumber } from '../../domain/pharmacy-onboarding/request.js';
 import type { WorldpayForm, WorldpaySubmissionNote } from '../../domain/pharmacy-onboarding/worldpay.js';
 import type { ImmediateEmail } from '../workers/deliver-messages.js';
-import { keyContact } from '../notifications/key-contacts.js';
-import { onboardingAdminInbox } from './emails.js';
+import { worldpayFormRecipients } from './onboarding-config.js';
 import { renderWorldpayPdf } from './worldpay-pdf.js';
 
 export type WorldpayNoteRepository = {
   findWorldpaySubmissionByIdempotencyKey(idempotencyKey: string): Promise<WorldpaySubmissionNote | null>;
   insertWorldpaySubmission(note: WorldpaySubmissionNote): Promise<void>;
+  hasAcceptedTermsForGphc(gphcNumber: string): Promise<boolean>;
 };
 
-export function worldpayRecipients() {
-  const partnerSuccess = keyContact('healius').emails[0]?.address;
-  return [...new Set([partnerSuccess, onboardingAdminInbox()].filter((address): address is string => Boolean(address)))];
-}
+export const WORLDPAY_BEFORE_TERMS_MESSAGE = 'Send the Curaleaf account form and accept the Partner Terms first. The Worldpay form opens after that.';
 
 function fileSlug(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'pharmacy';
@@ -37,11 +34,15 @@ export async function submitWorldpayForm(
   if (!gphcNumber) throw new HttpError(400, 'Enter the GPhC number.', 'INVALID_INPUT');
   const existing = await repo.findWorldpaySubmissionByIdempotencyKey(form.idempotencyKey);
   if (existing) return existing;
+  // The order is Curaleaf form, then Partner Terms, then Worldpay.
+  if (!(await repo.hasAcceptedTermsForGphc(gphcNumber))) {
+    throw new HttpError(409, WORLDPAY_BEFORE_TERMS_MESSAGE, 'ONBOARDING_TERMS_REQUIRED');
+  }
 
   const pdf = await renderWorldpayPdf({ ...form, gphcNumber }, now);
   await sendEmail({
     templateCode: 'admin_worldpay_form_submitted',
-    to: worldpayRecipients(),
+    to: worldpayFormRecipients(),
     payload: { tradingName: form.tradingName, gphcNumber, contactName: form.contactName },
     attachments: [{ filename: `worldpay-${fileSlug(form.tradingName)}.pdf`, content: pdf, contentType: 'application/pdf' }],
     idempotencyKey: `worldpay-${form.idempotencyKey}`,

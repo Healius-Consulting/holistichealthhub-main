@@ -6,6 +6,7 @@ import type {
 } from '../../domain/pharmacy-onboarding/request.js';
 import type { PharmacyOnboardingDeferralRecord } from '../../domain/pharmacy-onboarding/deferral.js';
 import type { WorldpaySubmissionNote } from '../../domain/pharmacy-onboarding/worldpay.js';
+import type { PartnerTermsAcceptanceRecord } from '../../domain/pharmacy-onboarding/terms.js';
 
 const REQUEST_FIELDS = `
   id
@@ -139,6 +140,8 @@ const LATEST_BY_GPHC_GQL = `
     ) {
       id
       status
+      pharmacyName
+      registeredCompanyName
     }
   }
 `;
@@ -328,6 +331,113 @@ const UNHOLD_GQL = `
   }
 `;
 
+const TERMS_FIELDS = `
+  id
+  onboardingRequestId
+  organisationId
+  termsVersion
+  signerName
+  signerRole
+  signerEmail
+  signerGphcNumber
+  registeredCompanyName
+  acceptedAt
+  ipAddress
+  source
+  nameMatchesPharmsmart
+`;
+
+const TERMS_BY_REQUEST_GQL = `
+  query PartnerTermsAcceptancesByRequest($onboardingRequestId: UUID!) {
+    partnerTermsAcceptances(
+      where: { onboardingRequestId: { eq: $onboardingRequestId } }
+      orderBy: [{ acceptedAt: DESC }]
+    ) {
+      ${TERMS_FIELDS}
+    }
+  }
+`;
+
+const LIST_TERMS_GQL = `
+  query ListPartnerTermsAcceptances($limit: Int!) {
+    partnerTermsAcceptances(orderBy: [{ acceptedAt: DESC }], limit: $limit) {
+      ${TERMS_FIELDS}
+    }
+  }
+`;
+
+const REQUEST_IDS_BY_GPHC_GQL = `
+  query PharmacyOnboardingRequestIdsByGphc($gphcNumber: String!) {
+    pharmacyOnboardingRequests(where: { gphcNumber: { eq: $gphcNumber } }) {
+      id
+    }
+  }
+`;
+
+const TERMS_FOR_REQUESTS_GQL = `
+  query PartnerTermsAcceptedForRequests($ids: [UUID!]!) {
+    partnerTermsAcceptances(where: { onboardingRequestId: { in: $ids } }, limit: 1) {
+      id
+    }
+  }
+`;
+
+/** Append-only: a new row each time. Nothing updates or deletes these rows except the Activate link below. */
+const INSERT_TERMS_GQL = `
+  mutation CreatePartnerTermsAcceptance(
+    $id: UUID!
+    $onboardingRequestId: UUID!
+    $termsVersion: String!
+    $signerName: String!
+    $signerRole: String!
+    $signerEmail: String!
+    $signerGphcNumber: String
+    $registeredCompanyName: String!
+    $acceptedAt: Timestamp!
+    $ipAddress: String
+    $source: String!
+    $nameMatchesPharmsmart: Boolean
+  ) {
+    partnerTermsAcceptance_insert(data: {
+      id: $id
+      onboardingRequestId: $onboardingRequestId
+      termsVersion: $termsVersion
+      signerName: $signerName
+      signerRole: $signerRole
+      signerEmail: $signerEmail
+      signerGphcNumber: $signerGphcNumber
+      registeredCompanyName: $registeredCompanyName
+      acceptedAt: $acceptedAt
+      ipAddress: $ipAddress
+      source: $source
+      nameMatchesPharmsmart: $nameMatchesPharmsmart
+    })
+  }
+`;
+
+/** The one update these rows allow: Activate names the branch the request became. */
+const LINK_TERMS_GQL = `
+  mutation LinkPartnerTermsToOrganisation($onboardingRequestId: UUID!, $organisationId: UUID!) {
+    partnerTermsAcceptance_updateMany(
+      where: { onboardingRequestId: { eq: $onboardingRequestId }, organisationId: { isNull: true } }
+      data: { organisationId: $organisationId }
+    )
+  }
+`;
+
+type RawTerms = Omit<PartnerTermsAcceptanceRecord, 'source'> & { source: string };
+
+function toTerms(row: RawTerms): PartnerTermsAcceptanceRecord {
+  return {
+    ...row,
+    organisationId: row.organisationId ?? null,
+    signerGphcNumber: row.signerGphcNumber ?? null,
+    ipAddress: row.ipAddress ?? null,
+    source: row.source === 'reacceptance' ? 'reacceptance' : 'signup',
+    nameMatchesPharmsmart: row.nameMatchesPharmsmart ?? null,
+  };
+}
+
 export class SqlPharmacyOnboardingRepository {
   async listOrganisationGphcNumbers(): Promise<Array<{ id: string; gphcNumber: string; status?: string }>> {
     const result = await dataConnect.executeGraphql<{
@@ -372,12 +482,17 @@ export class SqlPharmacyOnboardingRepository {
     return row ? { id: row.id, status: asStatus(row.status), idempotencyKey: row.idempotencyKey } : null;
   }
 
-  async findLatestByGphc(gphcNumber: string): Promise<{ id: string; status: PharmacyOnboardingStatus } | null> {
+  async findLatestByGphc(gphcNumber: string): Promise<{
+    id: string;
+    status: PharmacyOnboardingStatus;
+    pharmacyName: string;
+    registeredCompanyName: string;
+  } | null> {
     const result = await dataConnect.executeGraphql<{
-      pharmacyOnboardingRequests: Array<{ id: string; status: string }>;
+      pharmacyOnboardingRequests: Array<{ id: string; status: string; pharmacyName: string; registeredCompanyName: string }>;
     }, { gphcNumber: string }>(LATEST_BY_GPHC_GQL, { variables: { gphcNumber } });
     const row = result.data.pharmacyOnboardingRequests?.[0];
-    return row ? { id: row.id, status: asStatus(row.status) } : null;
+    return row ? { ...row, status: asStatus(row.status) } : null;
   }
 
   async findById(id: string): Promise<PharmacyOnboardingRequestRecord | null> {
@@ -455,5 +570,44 @@ export class SqlPharmacyOnboardingRepository {
 
   async unhold(id: string): Promise<void> {
     await dataConnect.executeGraphql<unknown, { id: string }>(UNHOLD_GQL, { variables: { id: asUuid(id) } });
+  }
+
+  async findTermsAcceptances(onboardingRequestId: string): Promise<PartnerTermsAcceptanceRecord[]> {
+    const result = await dataConnect.executeGraphql<{
+      partnerTermsAcceptances: RawTerms[];
+    }, { onboardingRequestId: string }>(TERMS_BY_REQUEST_GQL, { variables: { onboardingRequestId: asUuid(onboardingRequestId) } });
+    return (result.data.partnerTermsAcceptances ?? []).map(toTerms);
+  }
+
+  async listTermsAcceptances(limit = 500): Promise<PartnerTermsAcceptanceRecord[]> {
+    const result = await dataConnect.executeGraphql<{
+      partnerTermsAcceptances: RawTerms[];
+    }, { limit: number }>(LIST_TERMS_GQL, { variables: { limit } });
+    return (result.data.partnerTermsAcceptances ?? []).map(toTerms);
+  }
+
+  /** Whether any onboarding request for this GPhC has had the Partner Terms accepted. */
+  async hasAcceptedTermsForGphc(gphcNumber: string): Promise<boolean> {
+    const requests = await dataConnect.executeGraphql<{
+      pharmacyOnboardingRequests: Array<{ id: string }>;
+    }, { gphcNumber: string }>(REQUEST_IDS_BY_GPHC_GQL, { variables: { gphcNumber } });
+    const ids = (requests.data.pharmacyOnboardingRequests ?? []).map(row => row.id);
+    if (ids.length === 0) return false;
+    const accepted = await dataConnect.executeGraphql<{
+      partnerTermsAcceptances: Array<{ id: string }>;
+    }, { ids: string[] }>(TERMS_FOR_REQUESTS_GQL, { variables: { ids } });
+    return (accepted.data.partnerTermsAcceptances ?? []).length > 0;
+  }
+
+  async insertTermsAcceptance(record: Omit<PartnerTermsAcceptanceRecord, 'organisationId'>): Promise<void> {
+    await dataConnect.executeGraphql<unknown, Omit<PartnerTermsAcceptanceRecord, 'organisationId'>>(INSERT_TERMS_GQL, {
+      variables: { ...record, id: asUuid(record.id), onboardingRequestId: asUuid(record.onboardingRequestId) },
+    });
+  }
+
+  async linkTermsAcceptances(onboardingRequestId: string, organisationId: string): Promise<void> {
+    await dataConnect.executeGraphql<unknown, { onboardingRequestId: string; organisationId: string }>(LINK_TERMS_GQL, {
+      variables: { onboardingRequestId: asUuid(onboardingRequestId), organisationId: asUuid(organisationId) },
+    });
   }
 }
