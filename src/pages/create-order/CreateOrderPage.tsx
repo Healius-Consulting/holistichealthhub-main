@@ -839,6 +839,8 @@ export default function CreateOrderPage() {
         dispatch({ type: 'START_MANUAL_PAYMENT', orderId: activeOrder.id });
         dispatch({ type: 'ADD_TOAST', message: 'Training pharmacy payment selected. No external record was created.', toastType: 'success' });
       }
+      // Land on Orders with the order just sent already open, rather than leaving staff to find it.
+      dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'order', key: String(activeOrder.id) } });
       dispatch({ type: 'SET_SCREEN', screen: 'orders' });
     } catch (error) {
       dispatch({ type: 'ADD_TOAST', message: error instanceof Error ? error.message : 'The order could not be created.', toastType: 'error' });

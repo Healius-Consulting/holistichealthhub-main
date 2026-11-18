@@ -56,3 +56,12 @@ test('paid orders expose supplier contact without a direct cancellation escape',
   assert.doesNotMatch(ordersSource, /onResolve\('cancel'\)/);
   assert.doesNotMatch(ordersSource, /Curaleaf confirmed cancellation/);
 });
+
+test('sending from Create order lands on Orders with that order already open', () => {
+  const createOrder = readFileSync(new URL('../src/pages/create-order/CreateOrderPage.tsx', import.meta.url), 'utf8');
+  const target = createOrder.indexOf("dispatch({ type: 'SET_NAVIGATION_TARGET', target: { kind: 'order', key: String(activeOrder.id) } });");
+  const toOrders = createOrder.indexOf("dispatch({ type: 'SET_SCREEN', screen: 'orders' });");
+  assert.ok(target > 0, 'the sent order is set as the Orders target');
+  assert.ok(toOrders > target, 'the target is set before switching to Orders, so Orders opens it on arrival');
+  assert.match(ordersSource, /target\?\.kind !== 'order'/);
+});
