@@ -100,6 +100,7 @@ import {
 import { buildOrderTimelineEvents, buildPrescriptionStageRail, type OrderStageStep } from '../utils/orderTimeline';
 import { visiblePaymentGateCheck } from '../utils/quoteGate';
 import RecordDialog, { allocateRecordLayer } from '../components/RecordDialog';
+import { findTargetOrder } from '../utils/orderTarget';
 import {
   collectOrderConsignments,
   consignmentStatusLabel,
@@ -528,9 +529,9 @@ export default function Orders() {
       return;
     }
     if (target?.kind !== 'order') return;
-    const orderId = Number(target.key.split('-')[0]);
-    const targetRecord = records.find(record => record.order.id === orderId);
+    const targetRecord = findTargetOrder(records, target.key);
     if (targetRecord) {
+      const orderId = targetRecord.order.id;
       setActiveFilter(['resolved', 'refunded'].includes(orderCancellationResolution(targetRecord.order)) ? 'cancelled' : 'current');
       setQuery('');
       setOpenOrders(current => {
