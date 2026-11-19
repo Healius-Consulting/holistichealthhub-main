@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiRequestError, submitCuraleafAccountForm, type CompanyLookup } from '../shared/api';
 import type { PharmsmartWelcome } from './types';
-import { Answered, Field, FormBottom, FormIntro, FormTop, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
+import { Answered, RequiredKey, Field, FormBottom, FormIntro, FormTop, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
 import { curaleafFieldsFromCompany } from './company-prefill';
 import { CURALEAF_FIELD_LABELS, curaleafFormProblems, curaleafProblemsFromServer, describeCuraleafProblems, type CuraleafFieldProblem } from './curaleafFormRules';
 
@@ -191,7 +191,6 @@ export function CuraleafAccountForm({
   const HINTS: Partial<Record<keyof Fields, string>> = {
     accountsEmail: 'Main contact for invoices.',
     accountsPhone: 'Main contact for invoices.',
-    faxNumber: 'Optional.',
   };
   const control = (key: keyof Fields, label?: string) => (key === 'invoiceAddress' || key === 'deliveryAddress'
     ? <textarea className="input" name={key} aria-label={label} value={fields[key]} onChange={set(key)} rows={3} {...INPUT[key]} />
@@ -204,7 +203,7 @@ export function CuraleafAccountForm({
     return (
       <Section title={title}>
         {filled.map(key => (
-          <Answered key={key} label={LABELS[key]} value={fields[key] || '—'} problem={problemFor(key)}>
+          <Answered key={key} label={LABELS[key]} value={fields[key] || '—'} problem={problemFor(key)} optional={!INPUT[key].required}>
             {control(key, LABELS[key])}
             {HINTS[key] ? <span className="wpa-field__hint">{HINTS[key]}</span> : null}
           </Answered>
@@ -212,7 +211,7 @@ export function CuraleafAccountForm({
         {open.length ? (
           <div className={filled.length ? 'wpa-grid has-rows-above' : 'wpa-grid'}>
             {open.map(key => (
-              <Field key={key} label={LABELS[key]} hint={HINTS[key]} problem={problemFor(key)} wide={key === 'invoiceAddress' || key === 'deliveryAddress' ? open.length === 1 : false}>
+              <Field key={key} label={LABELS[key]} hint={HINTS[key]} problem={problemFor(key)} optional={!INPUT[key].required} wide={key === 'invoiceAddress' || key === 'deliveryAddress' ? open.length === 1 : false}>
                 {control(key)}
               </Field>
             ))}
@@ -248,6 +247,7 @@ export function CuraleafAccountForm({
             {step === 1 ? (
               <>
                 <FormIntro title="Your details">These go onto the Curaleaf account form, so you can order stock from Curaleaf Laboratories.</FormIntro>
+                <RequiredKey />
                 {filledCount ? (
                   <p className="wpa-note">We filled in {filledCount === 1 ? 'one detail' : `${filledCount} details`} for you. Check each one is right for your pharmacy, and use Change to correct it.</p>
                 ) : null}

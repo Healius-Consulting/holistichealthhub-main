@@ -51,13 +51,13 @@ import { onboardingStatusLabel, onboardingStatusPillClass } from '../utils/onboa
 import { attributedCareLabel, attributedClosedNote, attributedCountForOrganisation, attributedInCare, attributedPatientCounts, attributedStagesForOrganisation, portfolioAttributedCount, splitAttributedRecords } from '../utils/attributedPatients';
 import { formatUkDayDate } from '../utils/ukDates';
 import { useAuth } from '../auth/useAuth';
-import { type ActivatedPharmacyOnboarding, completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, updateAdminPatientDetails, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason } from '../shared/api';
+import { type ActivatedPharmacyOnboarding, completeReferralRecordsCheck, getAdminPartnerTerms, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, updateAdminPatientDetails, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason } from '../shared/api';
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation } from '../shared/contracts';
 import { PharmacyRequestRecord, PharmacyRequestRow, usePharmacyRequests } from './admin/PharmacyRequests';
 import { OnboardingSettings, type SettingsSection } from './admin/OnboardingSettings';
 import { OnboardingEmailLog } from './admin/OnboardingEmailLog';
 import { OnboardingHoldCard, OnboardingHoldPanel } from './admin/OnboardingHold';
-import { holdAvailability, isHeldOrganisationStatus, sendableEmailKinds } from './admin/onboardingAdmin';
+import { holdAvailability, isHeldOrganisationStatus, partnerTermsOn, sendableEmailKinds } from './admin/onboardingAdmin';
 import { formatRequestDate } from './admin/requestFormat';
 import { ActivationChecklist, SuspendPharmacyPanel } from './admin/PharmacyActivation';
 import { PharmacySummary } from './admin/PharmacySummary';
@@ -1021,6 +1021,13 @@ export default function AdminPortal() {
   const overviewManageRef = useRef<HTMLDivElement>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  const [termsOn, setTermsOn] = useState(false);
+  useEffect(() => {
+    if (isLocalPortalPreview) return;
+    let active = true;
+    void partnerTermsOn(getAdminPartnerTerms).then(on => { if (active) setTermsOn(on); });
+    return () => { active = false; };
+  }, []);
 
   const [showAdminDialog, setShowAdminDialog] = useState(false);
   const [adminDialogFocus, setAdminDialogFocus] = useState<AdminDialogFocus>('list');
@@ -2314,6 +2321,7 @@ export default function AdminPortal() {
                         refreshKey={branchEmailsVersion}
                         sendable={sendableEmailKinds({
                           termsAccepted: Boolean(selectedApplication.termsAcceptances?.length),
+                          termsRequired: termsOn,
                           requestStatus: selectedApplication.status,
                           activated: Boolean(selectedApplication.organisationId),
                           live: selectedPharmacy.status === 'live',

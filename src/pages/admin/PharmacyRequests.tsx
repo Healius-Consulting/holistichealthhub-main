@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, FileText } from 'lucide-react';
 import {
+  getAdminPartnerTerms,
   activatePharmacyOnboardingRequest,
   describeApiError,
   listPharmacyOnboardingRequests,
@@ -13,7 +14,7 @@ import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 import { LOCAL_PREVIEW_PHARMACY_REQUESTS } from '../../dev/localPharmacyRequests';
 import { OnboardingEmailLog } from './OnboardingEmailLog';
 import { OnboardingHoldCard, OnboardingHoldPanel } from './OnboardingHold';
-import { holdReasonLabel, sendableEmailKinds } from './onboardingAdmin';
+import { holdReasonLabel, partnerTermsOn, sendableEmailKinds } from './onboardingAdmin';
 
 /**
  * Pharmacy requests (Curaleaf account forms sent from the onboarding page) live
@@ -146,8 +147,15 @@ export function PharmacyRequestRecord({
   const tone = requestTone(request.status);
   const pending = request.status === 'pending';
   const onHold = request.status === 'on_hold';
-  // The sign-up acceptance; re-acceptance rows (a later feature) come after it.
+  // The sign-up acceptance; signatures of later versions (at login) come after it.
   const terms = request.termsAcceptances?.find(row => row.source === 'signup') ?? request.termsAcceptances?.[0] ?? null;
+  const [termsOn, setTermsOn] = useState(false);
+  useEffect(() => {
+    if (isLocalPortalPreview) return;
+    let active = true;
+    void partnerTermsOn(getAdminPartnerTerms).then(on => { if (active) setTermsOn(on); });
+    return () => { active = false; };
+  }, []);
   const licenceIsPdf = request.licenceFilename.toLowerCase().endsWith('.pdf');
 
   // A different request starts clean: no open hold box or file from the last one.
@@ -265,11 +273,13 @@ export function PharmacyRequestRecord({
               <span className="pharmacy-summary__label">Partner Terms</span>
               <span className="pharmacy-summary__value">
                 <span className={`pharmacy-summary__state ${terms ? (terms.nameMatchesPharmsmart === false ? 'is-wait' : 'is-ok') : 'is-off'}`}>
-                  {terms ? (terms.nameMatchesPharmsmart === false ? 'Accepted, name differs' : 'Accepted') : 'Not accepted'}
+                  {terms ? (terms.nameMatchesPharmsmart === false ? 'Accepted, name differs' : 'Accepted') : termsOn ? 'Not accepted' : 'Not required yet'}
                 </span>
                 <small>{terms
                   ? `${formatRequestDate(terms.acceptedAt)} · signed by ${terms.signerName} · version ${terms.termsVersion}`
-                  : 'The Curaleaf form is not sent to Curaleaf until the pharmacy accepts'}</small>
+                  : termsOn
+                    ? 'The Curaleaf form is not sent to Curaleaf until the pharmacy accepts'
+                    : 'The Partner Terms are switched off, so the Curaleaf form went to Curaleaf when it was submitted'}</small>
               </span>
               <span aria-hidden="true" />
             </li>
@@ -303,7 +313,7 @@ export function PharmacyRequestRecord({
         <OnboardingEmailLog
           requestId={request.id}
           refreshKey={emailsVersion}
-          sendable={sendableEmailKinds({ termsAccepted: Boolean(request.termsAcceptances?.length), requestStatus: request.status, activated: Boolean(request.organisationId), live: false })}
+          sendable={sendableEmailKinds({ termsAccepted: Boolean(request.termsAcceptances?.length), termsRequired: termsOn, requestStatus: request.status, activated: Boolean(request.organisationId), live: false })}
         />
 
         {terms ? (

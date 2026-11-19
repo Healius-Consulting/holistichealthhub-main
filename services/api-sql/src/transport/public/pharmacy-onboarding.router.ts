@@ -18,7 +18,11 @@ import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { submitPharmacyOnboardingRequest } from '../../application/pharmacy-onboarding/submit-request.js';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
 import { acceptPartnerTerms } from '../../application/pharmacy-onboarding/accept-terms.js';
-import { acceptedPartnerTermsVersion, pharmsmartTicketSecret } from '../../application/pharmacy-onboarding/onboarding-config.js';
+import { pharmsmartTicketSecret } from '../../application/pharmacy-onboarding/onboarding-config.js';
+import { acceptanceTerms, partnerTermsState } from '../../application/pharmacy-onboarding/partner-terms.service.js';
+import { SqlPartnerTermsRepository } from '../../repositories/sql/partner-terms.sql.js';
+import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
+import { afterTermsSigned } from '../../application/pharmacy-onboarding/partner-terms-signing.js';
 import { readOnboardingContent } from '../../application/pharmacy-onboarding/onboarding-content.js';
 import { sqlOnboardingEmails } from '../../application/pharmacy-onboarding/onboarding-emails.service.js';
 import { partnerTermsAcceptanceSchema } from '../../domain/pharmacy-onboarding/terms.js';
@@ -85,6 +89,8 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   const emails = sqlOnboardingEmails();
   const content = new SqlPlatformContentRepository();
   const demoRepo = new SqlDemoPharmacyRepository();
+  const termsRepo = new SqlPartnerTermsRepository();
+  const termsState = () => partnerTermsState({ content, repo: termsRepo });
 
   router.post('/public/pharmacy-onboarding-requests', publicCuraleafFormLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -102,9 +108,16 @@ export function createPublicPharmacyOnboardingRouter(): Router {
         fields,
         licence: submission.licence && submission.licence.bytes.length > 0 ? submission.licence : null,
       });
-      // The form makes a request, not an account. Nothing is emailed yet: the Curaleaf
-      // application goes once the Partner Terms are accepted (next route).
-      if (record.status === 'PENDING') await sqlClickupHooks().requestSubmitted(record);
+      // The form makes a request, not an account. While the Partner Terms are on, the
+      // Curaleaf application waits for them (next route); while they are off, it goes now.
+      if (record.status === 'PENDING') {
+        await sqlClickupHooks().requestSubmitted(record);
+        if (!(await termsState()).on) {
+          const demo = await isDemoGphc(content, record.gphcNumber);
+          await emails.applicationReceived({ request: record, demo })
+            .catch(error => console.error('Pharmacy onboarding application emails failed', error instanceof Error ? error.message : 'unknown'));
+        }
+      }
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(201).json({ id: record.id, status: publicOnboardingStatus(record.status) });
     } catch (error) {
@@ -119,10 +132,17 @@ export function createPublicPharmacyOnboardingRouter(): Router {
       const { acceptance, request } = await acceptPartnerTerms({
         repo,
         emails,
-        termsVersion: acceptedPartnerTermsVersion(await readOnboardingContent(content)),
+        terms: acceptanceTerms(await termsState()),
         ticketSecret: pharmsmartTicketSecret(),
         isDemo: gphc => isDemoGphc(content, gphc),
       }, input, { ipHash: ipHash(req) });
+      await afterTermsSigned({ storage, terms: termsRepo, acceptances: repo, notifications: new SqlNotificationRepository() }, acceptance, {
+        organisationId: null,
+        onboardingRequestId: request.id,
+        pharmacyName: request.pharmacyName,
+        gphcNumber: request.gphcNumber,
+        pharmacyEmail: request.pharmacyEmail,
+      });
       await sqlClickupHooks().termsAccepted({
         gphcNumber: request.gphcNumber,
         onboardingRequestId: request.id,

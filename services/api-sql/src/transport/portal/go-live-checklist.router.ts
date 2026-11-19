@@ -1,3 +1,6 @@
+import { partnerTermsState } from '../../application/pharmacy-onboarding/partner-terms.service.js';
+import { SqlPartnerTermsRepository } from '../../repositories/sql/partner-terms.sql.js';
+import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-application.sql.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
@@ -39,6 +42,10 @@ export function createPortalGoLiveChecklistRouter(): Router {
     findOrganisation: id => organisationRepo.findOrganisationById(id),
     checklistRepo: new SqlGoLiveChecklistRepository(),
     findWorldpayConnection: id => integrationRepo.findConnection(id, 'WORLDPAY'),
+    partnerTerms: async () => {
+      const state = await partnerTermsState({ content: new SqlPlatformContentRepository(), repo: new SqlPartnerTermsRepository() });
+      return { on: state.on, documentId: state.document?.id ?? null };
+    },
     clickup: sqlClickupHooks(),
   };
 

@@ -39,6 +39,18 @@ const UPSERT_TICK_GQL = `
   }
 `;
 
+const TERMS_FOR_DOCUMENT_GQL = `
+  query PartnerTermsSignedForOrganisation($organisationId: UUID!, $documentId: UUID!) {
+    partnerTermsAcceptances(
+      where: { organisationId: { eq: $organisationId }, documentId: { eq: $documentId } }
+      orderBy: [{ acceptedAt: ASC }]
+      limit: 1
+    ) {
+      acceptedAt
+    }
+  }
+`;
+
 const TERMS_FOR_ORGANISATION_GQL = `
   query PartnerTermsAcceptedForOrganisation($organisationId: UUID!) {
     partnerTermsAcceptances(
@@ -86,12 +98,17 @@ export class SqlGoLiveChecklistRepository {
     });
   }
 
-  /** The first Partner Terms acceptance Activate linked to this branch. */
-  async termsAcceptedAt(organisationId: string): Promise<string | null> {
-    const result = await dataConnect.executeGraphql<{ partnerTermsAcceptances: Array<{ acceptedAt: string }> }, { organisationId: string }>(
-      TERMS_FOR_ORGANISATION_GQL,
-      { variables: { organisationId: asUuid(organisationId) } },
-    );
+  /** When this branch signed the given Terms version; without one, its first acceptance of any version. */
+  async termsAcceptedAt(organisationId: string, documentId?: string | null): Promise<string | null> {
+    const result = documentId
+      ? await dataConnect.executeGraphql<{ partnerTermsAcceptances: Array<{ acceptedAt: string }> }, { organisationId: string; documentId: string }>(
+        TERMS_FOR_DOCUMENT_GQL,
+        { variables: { organisationId: asUuid(organisationId), documentId: asUuid(documentId) } },
+      )
+      : await dataConnect.executeGraphql<{ partnerTermsAcceptances: Array<{ acceptedAt: string }> }, { organisationId: string }>(
+        TERMS_FOR_ORGANISATION_GQL,
+        { variables: { organisationId: asUuid(organisationId) } },
+      );
     return result.data.partnerTermsAcceptances?.[0]?.acceptedAt ?? null;
   }
 

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { describeApiError, getBranchOnboarding, type BranchOnboardingView } from '../shared/api';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 
-/** Local preview has no API: an activated branch that left before the Partner Terms. */
+/** Local preview has no API: an activated branch, with the Partner Terms switched off (as on production until v1.0). */
 const LOCAL_PREVIEW_VIEW: BranchOnboardingView = {
   live: false,
   submittedAt: '2026-11-19T14:05:00.000Z',
-  termsAccepted: false,
+  termsRequired: false,
+  currentTerms: null,
+  termsAccepted: true,
   termsAcceptedAt: null,
   worldpaySubmittedAt: null,
   registeredCompanyName: 'Primary Branch Ltd',

@@ -65,6 +65,8 @@ export type PharmsmartLoginResult =
     hold: OnboardingHoldMessage | null;
     /** The Awaiting activation wording, merged for the branch: set when the request is `pending`. */
     awaiting: OnboardingAwaitingMessage | null;
+    /** Whether a new sign-up must accept the Partner Terms (they are switched on). Off: no Terms step. */
+    termsRequired: boolean;
     /** The request to accept the Terms against, only when `terms_outstanding`. */
     termsRequest: { id: string; pharmacyName: string; registeredCompanyName: string } | null;
     /** Signed PharmSmart superintendent and manager names, for the Terms step's soft check. */
@@ -77,13 +79,19 @@ type LatestOnboardingRequest = {
   id: string;
   status: PharmacyOnboardingStatus;
   termsAccepted: boolean;
+  /**
+   * The request still has to sign at sign-up: the Terms are on and its Curaleaf
+   * application has not gone (a request sent while the Terms were off waits for the
+   * login prompt after Activate instead). Omitted: treated as required.
+   */
+  signupTermsRequired?: boolean;
   pharmacyName: string;
   registeredCompanyName: string;
   holdReason?: OnboardingHoldReason | null;
 };
 
 function onboardingRequestState(request: LatestOnboardingRequest | null | undefined): PharmsmartOnboardingRequestState {
-  if (request?.status === 'PENDING') return request.termsAccepted ? 'pending' : 'terms_outstanding';
+  if (request?.status === 'PENDING') return request.termsAccepted || request.signupTermsRequired === false ? 'pending' : 'terms_outstanding';
   if (request?.status === 'ON_HOLD') return 'on_hold';
   return null;
 }
@@ -116,6 +124,8 @@ export class PharmsmartSsoService {
     branchHoldMessage: (branch: { id: string; name?: string | null }) => Promise<OnboardingHoldMessage>;
     /** The Awaiting activation wording, merged with the branch name. Omitted: the page's own default. */
     awaitingMessage?: (branchName: string) => Promise<OnboardingAwaitingMessage>;
+    /** Whether the Partner Terms are switched on. Omitted: off. */
+    termsRequired?: () => Promise<boolean>;
   }) {}
 
   async redeem(token: string, context: PharmsmartRedeemContext): Promise<PharmsmartLoginResult> {
@@ -164,6 +174,7 @@ export class PharmsmartSsoService {
           onboardingRequest: state,
           hold,
           awaiting,
+          termsRequired: await this.deps.termsRequired?.().catch(() => false) ?? false,
           termsRequest: state === 'terms_outstanding' && request
             ? { id: request.id, pharmacyName: request.pharmacyName, registeredCompanyName: request.registeredCompanyName }
             : null,
@@ -189,6 +200,7 @@ export class PharmsmartSsoService {
         onboardingRequest: 'on_hold',
         hold: await this.deps.branchHoldMessage({ id: branch.id, name: branch.name ?? null }),
         awaiting: null,
+        termsRequired: false,
         termsRequest: null,
         pharmsmartTicket: this.namesTicket(compactGphcNumber(info.gphcNumber) ?? info.gphcNumber, info.prefill),
       };

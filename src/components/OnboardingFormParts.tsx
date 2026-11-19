@@ -56,7 +56,19 @@ export function FormIntro({ title, children }: { title: string; children?: React
   );
 }
 
-export function Field({ label, hint, warn, children, fromCompaniesHouse, wide, problem }: {
+/** A required question gets a red asterisk; an optional one says "Optional". */
+export function NeedMark({ optional = false }: { optional?: boolean }) {
+  return optional
+    ? <span className="wpa-optional">Optional</span>
+    : <><span className="wpa-required" aria-hidden="true">*</span><span className="sr-only"> (required)</span></>;
+}
+
+/** The key the forms show once, near the top: what the asterisk means. */
+export function RequiredKey() {
+  return <p className="wpa-required-key"><span className="wpa-required" aria-hidden="true">*</span> Required</p>;
+}
+
+export function Field({ label, hint, warn, children, fromCompaniesHouse, wide, problem, optional }: {
   label: string;
   hint?: ReactNode;
   warn?: string | null;
@@ -64,11 +76,14 @@ export function Field({ label, hint, warn, children, fromCompaniesHouse, wide, p
   fromCompaniesHouse?: boolean;
   wide?: boolean;
   problem?: string | null;
+  /** Can be left blank. Without it the question is required (red asterisk). */
+  optional?: boolean;
 }) {
   return (
     <label className={['wpa-field', wide ? 'is-wide' : '', problem ? 'has-problem' : ''].filter(Boolean).join(' ')}>
       <span className="wpa-field__label">
         {label}
+        <NeedMark optional={optional} />
         {fromCompaniesHouse ? <span className="wpa-tag">From Companies House</span> : null}
       </span>
       {children}
@@ -80,12 +95,19 @@ export function Field({ label, hint, warn, children, fromCompaniesHouse, wide, p
 }
 
 /** A titled card holding one group of questions. */
-export function Section({ title, description, children, tone }: { title?: string; description?: ReactNode; children: ReactNode; tone?: 'quiet' }) {
+export function Section({ title, description, children, tone, need }: {
+  title?: string;
+  description?: ReactNode;
+  children: ReactNode;
+  tone?: 'quiet';
+  /** For a section that is itself one question: marks its title required or optional. */
+  need?: 'required' | 'optional';
+}) {
   return (
     <section className={tone === 'quiet' ? 'wpa-section is-quiet' : 'wpa-section'}>
       {title ? (
         <header className="wpa-section__head">
-          <h4>{title}</h4>
+          <h4>{title}{need ? <NeedMark optional={need === 'optional'} /> : null}</h4>
           {description ? <p>{description}</p> : null}
         </header>
       ) : null}
@@ -98,13 +120,13 @@ export function Section({ title, description, children, tone }: { title?: string
  * An answer we filled in for the pharmacy: read like Check and send, with Change to
  * edit it. It opens by itself when the answer needs fixing.
  */
-export function Answered({ label, value, children, problem, note }: { label: string; value: ReactNode; children: ReactNode; problem?: string | null; note?: ReactNode }) {
+export function Answered({ label, value, children, problem, note, optional }: { label: string; value: ReactNode; children: ReactNode; problem?: string | null; note?: ReactNode; optional?: boolean }) {
   const [editing, setEditing] = useState(false);
   const open = editing || Boolean(problem);
   return (
     <div className={open ? 'wpa-answered is-open' : 'wpa-answered'}>
       <div className="wpa-answered__row">
-        <span className="wpa-answered__label">{label}</span>
+        <span className="wpa-answered__label">{label}<NeedMark optional={optional} /></span>
         <button type="button" className="wpa-link" aria-expanded={open} onClick={() => setEditing(current => !current)}>{open ? 'Done' : 'Change'}</button>
       </div>
       {open ? <div className="wpa-answered__edit">{children}</div> : <div className="wpa-answered__value">{value}</div>}

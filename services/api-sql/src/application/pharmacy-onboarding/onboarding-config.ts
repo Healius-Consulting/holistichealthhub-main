@@ -1,5 +1,4 @@
 import { config } from '../../bootstrap/config.js';
-import type { OnboardingContent } from '../../domain/pharmacy-onboarding/content.js';
 
 /**
  * Partner onboarding settings that change without a code change. Read on each use,
@@ -29,23 +28,6 @@ export function curaleafApplicationCc() {
 /** The Worldpay form goes here only, never to Worldpay. */
 export function worldpayFormRecipients() {
   return addresses('WORLDPAY_FORM_TO', ['admin@healiusconsulting.com']);
-}
-
-/**
- * The Partner Terms version a pharmacy accepts at sign-up. Change it when the Terms
- * text changes; each acceptance row records the version it was given.
- */
-export function partnerTermsVersion() {
-  return process.env.PARTNER_TERMS_VERSION?.trim() || 'placeholder-2026-11-18';
-}
-
-/**
- * The version recorded on a new acceptance: the published Partner Terms' own version
- * once admin has published them (onboarding.partnerTerms), else the config default.
- */
-export function acceptedPartnerTermsVersion(content: Pick<OnboardingContent, 'partnerTerms'>) {
-  const terms = content.partnerTerms;
-  return terms.published && terms.version.trim() ? terms.version.trim() : partnerTermsVersion();
 }
 
 /** Signs the PharmSmart tickets: the same secret the PharmSmart sign-in uses. */

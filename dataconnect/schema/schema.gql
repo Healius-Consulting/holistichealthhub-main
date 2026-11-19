@@ -1353,6 +1353,44 @@ type PartnerTermsAcceptance @table {
   source: String!
   # Soft check against PharmSmart's superintendent and manager. Null when PharmSmart sent no names.
   nameMatchesPharmsmart: Boolean
+  # The uploaded Terms version signed. Null for acceptances from before the Terms were a file.
+  documentId: UUID @index
+  # The signed copy: the Terms PDF with a stamped signature page. Null until it is made.
+  signedCopyPath: String
+}
+
+# A version of the Partner Terms, uploaded by HHH admin as a PDF. A draft until
+# published; never edited after that. Withdrawn only while nobody has signed it.
+type PartnerTermsDocument @table {
+  id: UUID! @default(expr: "uuidV4()")
+  version: String!
+  storagePath: String!
+  filename: String!
+  sizeBytes: Int!
+  uploadedAt: Timestamp!
+  uploadedByUid: String
+  publishedAt: Timestamp
+  publishedByUid: String
+  withdrawnAt: Timestamp
+  withdrawnByUid: String
+}
+
+# One pharmacy's progress on one Terms version at login: when it was first shown and
+# by whom, skips, the 7-day reminder and the signature.
+type PartnerTermsPrompt @table @unique(fields: ["organisationId", "documentId"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  organisationId: UUID! @index
+  documentId: UUID! @index
+  firstViewedAt: Timestamp
+  firstViewedByUid: String
+  firstViewedByEmail: String
+  lastViewedAt: Timestamp
+  viewCount: Int! @default(value: 0)
+  skipCount: Int! @default(value: 0)
+  lastSkippedAt: Timestamp
+  lastSkippedByUid: String
+  reminderSentAt: Timestamp
+  signedAt: Timestamp
 }
 
 # A note that a pharmacy sent the Worldpay card processing form from the onboarding

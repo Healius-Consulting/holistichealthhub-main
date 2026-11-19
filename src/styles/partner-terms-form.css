@@ -15,3 +15,12 @@
 .partner-terms-form__paragraph + .partner-terms-form__paragraph{
   margin-top: 12px;
 }
+
+/* The uploaded Terms PDF, read in place before signing. */
+.partner-terms-form__pdf{
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--green, #173f33) 14%, transparent);
+  border-radius: 12px;
+  background: #f6f8f6;
+}

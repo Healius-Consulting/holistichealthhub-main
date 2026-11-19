@@ -38,6 +38,8 @@ export const EMAIL_EVENT_NAMES = [
   'pharmacy_onboarding.live',
   'worldpay_application.submitted',
   'curaleaf_placement.prescriber_stuck',
+  'partner_terms.signed',
+  'partner_terms.reminder',
 ] as const;
 
 export type EmailEventName = (typeof EMAIL_EVENT_NAMES)[number];
@@ -82,6 +84,8 @@ export const EMAIL_TEMPLATE_CODES = [
   'pharmacy_onboarding_live',
   'worldpay_application_to_worldpay',
   'admin_curaleaf_prescriber_stuck',
+  'pharmacy_partner_terms_signed',
+  'pharmacy_partner_terms_reminder',
 ] as const;
 
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
@@ -138,6 +142,8 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_onboarding_live: 'onboarding',
   worldpay_application_to_worldpay: 'onboarding',
   admin_curaleaf_prescriber_stuck: 'orders',
+  pharmacy_partner_terms_signed: 'onboarding',
+  pharmacy_partner_terms_reminder: 'onboarding',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -455,6 +461,9 @@ function copyVars(payload: unknown): Record<string, string> {
     'Labs phone': labs.phone ?? '',
     'Labs hours': labs.hours ?? '',
     'Help email': primaryAddress(keyContact('hhhPlatform')),
+    'Terms version': value(payload, 'termsVersion'),
+    'Signer name': value(payload, 'signerName'),
+    'Signed on': value(payload, 'signedOn'),
   };
 }
 
@@ -1363,6 +1372,57 @@ export const EMAILS = {
     schedule: 'immediate',
     summary: 'Sent to the HHH admin inbox (CURALEAF_STUCK_ALERT_TO, default admin@holistichealthhub.live) when paid orders have waited 3 days for Curaleaf to verify their prescriber. One email per pharmacy and prescriber, listing the order numbers, repeated every 3 days while any are still waiting. Written for admin to forward to Curaleaf: pharmacy, Curaleaf customer ID, prescriber name, PIN, GMC/GPhC and Curaleaf prescriber ID. No patient details.',
     render: (payload) => contentEmail('admin_curaleaf_prescriber_stuck', payload, 'Curaleaf prescriber verification needed', 'Paid orders are waiting for Curaleaf to verify their prescriber.'),
+  },
+  pharmacy_partner_terms_signed: {
+    audience: 'pharmacy_owner',
+    events: ['partner_terms.signed'],
+    schedule: 'immediate',
+    replyTo: 'onboarding',
+    summary: 'Sent to the pharmacy email and the person who signed, when a pharmacy signs a version of the Partner Terms (at sign-up or at the login prompt). The signed copy (the Terms PDF with a stamped signature page) is attached. Wording is editable in Onboarding settings.',
+    render: (payload) => {
+      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'your pharmacy');
+      const version = escapeHtml(value(payload, 'termsVersion'));
+      const signer = escapeHtml(value(payload, 'signerName'));
+      const signedOn = escapeHtml(value(payload, 'signedOn'));
+      return render({
+        kind: 'pharmacy_partner_terms_signed',
+        payload,
+        subject: 'Your signed Holistic Health Hub Partner Terms',
+        preheader: 'A copy of the Partner Terms you signed is attached.',
+        title: 'Partner Terms signed',
+        text: `Thank you. ${value(payload, 'signerName')} signed the Holistic Health Hub Partner Terms (version ${value(payload, 'termsVersion')}) for ${value(payload, 'pharmacyName') || 'your pharmacy'} on ${value(payload, 'signedOn')}.\n\nA signed copy is attached, and you can download it at any time from the Onboarding page in your account.`,
+        paragraphs: [
+          `Thank you. <strong>${signer}</strong> signed the Holistic Health Hub Partner Terms (version ${version}) for <strong>${pharmacyName}</strong> on ${signedOn}.`,
+          'A signed copy is attached. You can also download it at any time from the Onboarding page in your account.',
+        ],
+        footerNote: 'If you did not expect this email, reply to it and we will look into it.',
+      });
+    },
+  },
+  pharmacy_partner_terms_reminder: {
+    audience: 'pharmacy_owner',
+    events: ['partner_terms.reminder'],
+    schedule: 'immediate',
+    replyTo: 'onboarding',
+    summary: 'Sent once per Partner Terms version to the pharmacy email and the person who first saw the sign prompt, 7 days after the prompt was first shown at login without being signed. Never sent to a pharmacy that has not logged in since the version was published. Wording is editable in Onboarding settings.',
+    render: (payload) => {
+      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'your pharmacy');
+      const version = escapeHtml(value(payload, 'termsVersion'));
+      return render({
+        kind: 'pharmacy_partner_terms_reminder',
+        payload,
+        subject: 'Please sign the Holistic Health Hub Partner Terms',
+        preheader: 'The updated Partner Terms are waiting to be signed.',
+        title: 'Partner Terms waiting',
+        text: `The Holistic Health Hub Partner Terms (version ${value(payload, 'termsVersion')}) for ${value(payload, 'pharmacyName') || 'your pharmacy'} were shown in your account a week ago and have not been signed yet.\n\nThe superintendent pharmacist, or someone authorised to sign for the company, can sign them the next time they log in.\n\nOpen your account: https://portal.holistichealthhub.live`,
+        paragraphs: [
+          `The Holistic Health Hub Partner Terms (version ${version}) for <strong>${pharmacyName}</strong> were shown in your account a week ago and have not been signed yet.`,
+          'The superintendent pharmacist, or someone authorised to sign for the company, can read and sign them the next time they log in.',
+        ],
+        cta: { label: 'Open your account', href: 'https://portal.holistichealthhub.live' },
+        footerNote: 'If you have a question about the Partner Terms, reply to this email.',
+      });
+    },
   },
   pharmacy_collection_completed: {
     audience: 'pharmacy_owner',

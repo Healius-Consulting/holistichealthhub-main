@@ -80,6 +80,7 @@ function harness(options: {
         return gphc === '1234567' ? options.worldpayFormAt ?? null : null;
       },
     },
+    partnerTerms: async () => ({ on: true, documentId: 'doc-current' }),
     findWorldpayConnection: async id => (id === ORG_A && options.worldpay ? {
       id: 'conn',
       organisationId: id,

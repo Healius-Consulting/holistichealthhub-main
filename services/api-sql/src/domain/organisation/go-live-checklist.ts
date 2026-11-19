@@ -16,7 +16,7 @@ export type ChecklistOwner = 'Pharmacy' | 'HHH' | 'Curaleaf';
 /** auto: ticks itself. self: the pharmacy ticks it. link: done by completing the linked form. */
 export type ChecklistItemKind = 'auto' | 'self' | 'link';
 /** Worldpay items swap over once the pharmacy has started with Worldpay. */
-type ChecklistVisibility = 'always' | 'worldpay_started' | 'worldpay_not_started';
+type ChecklistVisibility = 'always' | 'worldpay_started' | 'worldpay_not_started' | 'terms_required';
 
 export interface ChecklistItemDefinition {
   key: string;
@@ -48,10 +48,11 @@ export const GO_LIVE_CHECKLIST = [
     section: 'required',
     group: 'platform_live',
     label: 'Partner Terms accepted',
-    detail: 'Ticks itself once the Partner Terms are accepted.',
+    detail: 'Ticks itself once the current Partner Terms are signed.',
     owners: ['Pharmacy'],
     kind: 'auto',
-    visibility: 'always',
+    // Hidden, and out of the percentage, while HHH has the Partner Terms switched off.
+    visibility: 'terms_required',
     link: null,
   },
   {
@@ -196,8 +197,10 @@ export interface ChecklistTickRecord {
 export interface ChecklistSignals {
   organisationStatus: string;
   worldpayEnabled: boolean;
-  /** When the Partner Terms were accepted for this branch, or null. */
+  /** When the current Partner Terms version was signed for this branch, or null. */
   termsAcceptedAt: string | null;
+  /** Whether the Partner Terms are switched on. Off (or omitted): the Terms item is not on the checklist. */
+  termsRequired?: boolean;
   /** When the branch last sent the Worldpay form, or null. */
   worldpayFormSubmittedAt: string | null;
   /** When live Worldpay credentials last passed validation, or null. */
@@ -266,6 +269,7 @@ export function worldpayStarted(signals: ChecklistSignals) {
 function visible(definition: ChecklistItemDefinition, signals: ChecklistSignals) {
   if (definition.visibility === 'worldpay_started') return worldpayStarted(signals);
   if (definition.visibility === 'worldpay_not_started') return !worldpayStarted(signals);
+  if (definition.visibility === 'terms_required') return Boolean(signals.termsRequired);
   return true;
 }
 

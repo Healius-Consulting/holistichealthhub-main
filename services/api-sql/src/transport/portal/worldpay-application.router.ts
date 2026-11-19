@@ -90,7 +90,7 @@ export function createPortalWorldpayApplicationRouter(depsFor: (context: Request
         onboardingRepo.findByOrganisationId(organisation.id),
         onboardingRepo.findTermsAcceptancesForOrganisation(organisation.id),
       ]);
-      const view = await loadWorldpayApplication(depsFor(req.context!), owner, worldpayPrefill({ organisation, request, terms: terms.at(-1) ?? null }));
+      const view = await loadWorldpayApplication(depsFor(req.context!), owner, worldpayPrefill({ organisation, request, terms: terms[0] ?? null }));
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(view);
     } catch (error) {

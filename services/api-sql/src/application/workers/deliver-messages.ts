@@ -14,7 +14,7 @@ import {
   senderFor,
   type EmailTemplateCode,
 } from '../notifications/email-catalog.js';
-import { FILLED_FORM_NAME_KEY, FILLED_FORM_PATH_KEY, LICENCE_NAME_KEY, LICENCE_PATH_KEY, LICENCE_TYPE_KEY } from '../pharmacy-onboarding/emails.js';
+import { FILLED_FORM_NAME_KEY, FILLED_FORM_PATH_KEY, LICENCE_NAME_KEY, LICENCE_PATH_KEY, LICENCE_TYPE_KEY, SIGNED_TERMS_NAME_KEY, SIGNED_TERMS_PATH_KEY } from '../pharmacy-onboarding/emails.js';
 import { emailHeaderBackgroundForLogo } from '../notifications/email-logo-background.js';
 import { renderEmailTemplate } from '../notifications/email-renderer.js';
 import type { EmailCopyOverrides } from '../../domain/notifications/email-copy.js';
@@ -119,7 +119,7 @@ function payloadRecord(payload: unknown): Record<string, unknown> {
   return payload as Record<string, unknown>;
 }
 
-const FILE_ATTACHMENT_TEMPLATES = new Set(['curaleaf_new_account_application']);
+const FILE_ATTACHMENT_TEMPLATES = new Set(['curaleaf_new_account_application', 'pharmacy_partner_terms_signed']);
 
 /** A filename from the payload, kept to characters every mail client accepts. */
 function attachmentName(given: string, fallback: string) {
@@ -131,7 +131,9 @@ async function fileAttachmentsFor(record: NotificationOutboxRecord, deps: Messag
   if (!FILE_ATTACHMENT_TEMPLATES.has(record.templateCode) || !deps.storage) return [];
   const formPath = payloadValue(record.payload, FILLED_FORM_PATH_KEY);
   const licencePath = payloadValue(record.payload, LICENCE_PATH_KEY);
+  const signedTermsPath = payloadValue(record.payload, SIGNED_TERMS_PATH_KEY);
   const files = [
+    signedTermsPath ? { path: signedTermsPath, filename: attachmentName(payloadValue(record.payload, SIGNED_TERMS_NAME_KEY), 'partner-terms-signed.pdf'), contentType: 'application/pdf' } : null,
     formPath ? { path: formPath, filename: attachmentName(payloadValue(record.payload, FILLED_FORM_NAME_KEY), 'curaleaf-account.pdf'), contentType: 'application/pdf' } : null,
     licencePath ? {
       path: licencePath,

@@ -312,6 +312,8 @@ export type PharmsmartLoginResult =
     hold?: OnboardingHoldMessage | null;
     /** Set when the request is waiting for activation: the admin-edited Awaiting activation wording. */
     awaiting?: OnboardingAwaitingMessage | null;
+    /** Whether a new sign-up must accept the Partner Terms. */
+    termsRequired?: boolean;
     termsRequest?: PharmsmartTermsRequest | null;
     pharmsmartTicket?: string | null;
   };
@@ -738,6 +740,11 @@ export function deleteDemoPharmacy(gphcNumber: string) {
 export interface BranchOnboardingView {
   live: boolean;
   submittedAt: string | null;
+  /** Whether HHH has the Partner Terms switched on. Off: nothing waits on them. */
+  termsRequired?: boolean;
+  /** The version to sign while on. */
+  currentTerms?: { documentId: string; version: string } | null;
+  /** Signed the current version (always true while the Terms are off). */
   termsAccepted: boolean;
   termsAcceptedAt: string | null;
   worldpaySubmittedAt: string | null;
@@ -925,9 +932,103 @@ export interface OnboardingHoldMessage {
   footer: string;
 }
 
-/** The published Partner Terms; 404 while they are not published. */
-export function getPartnerTerms() {
-  return apiRequest<{ version: string; text: string }>('/v1/public/partner-terms');
+// --- Partner Terms: an uploaded, versioned PDF, switched on by HHH admin ---
+
+/** Whether sign-up must ask for the Partner Terms, and the version it would ask for. */
+export function getPartnerTermsRequirement() {
+  return apiRequest<{ required: boolean; version: string | null }>('/v1/public/partner-terms', { skipGetCache: true });
+}
+
+/** The current Terms PDF for a pharmacy mid sign-up (only while its request still has to sign). */
+export function partnerTermsSignupFileUrl(onboardingRequestId: string) {
+  return `${apiBaseUrl()}/v1/public/partner-terms/file?request=${encodeURIComponent(onboardingRequestId)}`;
+}
+
+export interface PartnerTermsDocumentView {
+  id: string;
+  version: string;
+  filename: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  uploadedByUid: string | null;
+  publishedAt: string | null;
+  publishedByUid: string | null;
+  withdrawnAt: string | null;
+  withdrawnByUid: string | null;
+  /** A pharmacy has signed it, so it can no longer be withdrawn. */
+  signed: boolean;
+}
+
+export interface PartnerTermsPharmacyStatus {
+  organisationId: string;
+  name: string;
+  gphcNumber: string;
+  test: boolean;
+  status: 'signed' | 'skipped' | 'viewed' | 'not_seen';
+  signedAt: string | null;
+  signerName: string | null;
+  firstViewedAt: string | null;
+  skipCount: number;
+  lastSkippedAt: string | null;
+  reminderSentAt: string | null;
+}
+
+export interface PartnerTermsAdminView {
+  settings: { enabled: boolean; currentDocumentId: string | null };
+  currentDocumentId: string | null;
+  documents: PartnerTermsDocumentView[];
+  pharmacies: PartnerTermsPharmacyStatus[];
+}
+
+export function getAdminPartnerTerms() {
+  return apiRequest<PartnerTermsAdminView>('/v1/portal/admin/partner-terms', { skipGetCache: true });
+}
+
+export function uploadPartnerTerms(file: File, version: string) {
+  return apiRequest<PartnerTermsAdminView>('/v1/portal/admin/partner-terms/documents', {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name), 'X-Version': encodeURIComponent(version) },
+  });
+}
+
+export function openAdminPartnerTerms(documentId: string) {
+  return fetchAdminFile(`/v1/portal/admin/partner-terms/documents/${encodeURIComponent(documentId)}/file`, 'The PDF could not be opened.');
+}
+
+export function publishPartnerTerms(documentId: string) {
+  return apiRequest<PartnerTermsAdminView>(`/v1/portal/admin/partner-terms/documents/${encodeURIComponent(documentId)}/publish`, { method: 'POST', body: '{}' });
+}
+
+export function withdrawPartnerTerms(documentId: string) {
+  return apiRequest<PartnerTermsAdminView>(`/v1/portal/admin/partner-terms/documents/${encodeURIComponent(documentId)}/withdraw`, { method: 'POST', body: '{}' });
+}
+
+export function setPartnerTermsEnabled(enabled: boolean) {
+  return apiRequest<PartnerTermsAdminView>('/v1/portal/admin/partner-terms/settings', { method: 'PUT', body: JSON.stringify({ enabled }) });
+}
+
+/** The current Terms PDF for the signed-in pharmacy, as a blob URL. */
+export function openPharmacyPartnerTerms() {
+  return fetchAdminFile('/v1/portal/pharmacy/partner-terms/file', 'The Partner Terms could not be opened.');
+}
+
+export function recordPartnerTermsViewed() {
+  return apiRequest<void>('/v1/portal/pharmacy/partner-terms/viewed', { method: 'POST', body: '{}' });
+}
+
+export function skipPartnerTerms() {
+  return apiRequest<void>('/v1/portal/pharmacy/partner-terms/skip', { method: 'POST', body: '{}' });
+}
+
+export interface SignedPartnerTerms { id: string; version: string; signerName: string; signedAt: string; hasCopy: boolean }
+
+export function getPartnerTermsHistory() {
+  return apiRequest<{ signed: SignedPartnerTerms[] }>('/v1/portal/pharmacy/partner-terms/history', { skipGetCache: true });
+}
+
+export function openSignedPartnerTerms(acceptanceId: string) {
+  return fetchAdminFile(`/v1/portal/pharmacy/partner-terms/history/${encodeURIComponent(acceptanceId)}/file`, 'The signed copy could not be opened.');
 }
 
 export function completeReferralRecordsCheck(submissionId: string, input: { organisationId: string; notes: string }) {

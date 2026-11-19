@@ -150,6 +150,7 @@ describe('PharmSmart redemption', () => {
       onboardingRequest: null,
       hold: null,
       awaiting: null,
+      termsRequired: false,
       termsRequest: null,
     });
     assert.equal(created.length, 0);

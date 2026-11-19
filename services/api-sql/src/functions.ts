@@ -17,6 +17,10 @@ import { maintainPaidOrderFlow } from './application/workers/maintain-orders.js'
 import { processPendingPaymentLifecycle } from './application/workers/payment-lifecycle.js';
 import { pollCuraleafEvents } from './application/workers/poll-curaleaf.js';
 import { retryWaitingCuraleafPlacementsSql } from './application/workers/retry-curaleaf-placements.wiring.js';
+import { remindUnsignedPartnerTerms } from './application/workers/partner-terms-reminder.js';
+import { SqlPartnerTermsRepository } from './repositories/sql/partner-terms.sql.js';
+import { SqlPlatformContentRepository } from './repositories/sql/worldpay-application.sql.js';
+import { sqlClickupHooks } from './application/clickup/clickup-hooks.js';
 import { createApp } from './bootstrap/app.js';
 import { clickupConfig } from './application/clickup/clickup-config.js';
 import { readClickupToken } from './application/clickup/clickup-token.js';
@@ -229,6 +233,31 @@ export const pollCuraleafEventsLondon = onSchedule({
   } catch (error) {
     console.error('Curaleaf placement retry failed', { error: error instanceof Error ? error.message : 'Unknown error' });
   }
+});
+
+/**
+ * The 7-day Partner Terms reminder: once per branch and version, a week after the login
+ * prompt was first shown unsigned. Morning, so the email lands in working hours.
+ */
+export const remindPartnerTermsLondon = onSchedule({
+  schedule: '0 9 * * *',
+  timeZone: 'Europe/London',
+  region: 'europe-west2',
+  timeoutSeconds: 120,
+  memory: '256MiB',
+  maxInstances: 1,
+  retryCount: 1,
+}, async () => {
+  const deps = sqlWorkerDeps();
+  const summary = await remindUnsignedPartnerTerms({
+    content: new SqlPlatformContentRepository(),
+    repo: new SqlPartnerTermsRepository(),
+    acceptances: new SqlPharmacyOnboardingRepository(),
+    findOrganisation: id => deps.organisationRepo.findOrganisationById(id),
+    notifications: deps.notificationRepo,
+    clickup: sqlClickupHooks(),
+  });
+  console.log('Partner Terms reminders complete', summary);
 });
 
 export const cleanupPrescriptionFilesLondon = onSchedule({

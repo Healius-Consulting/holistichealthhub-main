@@ -57,3 +57,11 @@
   .pharmacy-onboarding__action { grid-column: 2; justify-content: flex-start; }
   .pre-live-screen__card { padding: 18px; }
 }
+
+/* Partner Terms: the version waiting, and the signed copies. */
+.pharmacy-onboarding__terms{ display: grid; gap: 12px; }
+.pharmacy-onboarding__terms > .btn{ justify-self: start; }
+.pharmacy-onboarding__signed{ display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pharmacy-onboarding__signed li{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.pharmacy-onboarding__signed span{ display: grid; gap: 2px; }
+.pharmacy-onboarding__signed small{ color: var(--text-secondary); font-size: 12px; }

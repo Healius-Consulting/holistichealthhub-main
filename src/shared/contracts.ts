@@ -1731,6 +1731,8 @@ export interface PortalSession {
   profile: Record<string, unknown> | null;
   organisation: PortalOrganisation | null;
   company?: Company | null;
+  /** The Partner Terms version this branch still has to sign, for the login prompt. */
+  partnerTerms?: { documentId: string; version: string } | null;
 }
 
 export interface PharmacyStaffAccount {

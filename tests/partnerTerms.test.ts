@@ -1,29 +1,31 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { partnerTermsFromResponse, partnerTermsParagraphs } from '../src/onboarding/partnerTerms.ts';
-import { resolvePublicView } from '../apps/public/src/publicRoute.ts';
+import { PARTNERSHIP_LOGOS, PHARMACY_ONBOARDING_PITCH, PHARMSMART_LOGIN_URL } from '../src/auth/pharmsmart-login.ts';
 
-test('blank lines split the Terms into paragraphs; single line breaks stay inside one', () => {
-  assert.deepEqual(partnerTermsParagraphs('1. Parties\r\nHHH and the pharmacy.\n\n\n  2. Term  \n \n3. Fees'), [
-    '1. Parties\nHHH and the pharmacy.',
-    '2. Term',
-    '3. Fees',
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
+
+test('there is no public Partner Terms page: the PDF is only shown in sign-up and the portal', () => {
+  const site = read('../apps/public/src/PublicSite.tsx');
+  assert.doesNotMatch(site, /partner-terms|PartnerTermsPage/);
+});
+
+test('the onboarding page copy follows the 19 Nov 2026 brief', () => {
+  assert.equal(PHARMACY_ONBOARDING_PITCH.lede, 'Holistic Health Hub is a private medical cannabis service that runs through your pharmacy.');
+  assert.deepEqual(PHARMACY_ONBOARDING_PITCH.steps.slice(3), [
+    { title: 'Payment and ordering', body: 'You send the patient a payment link. Stock is ordered once they pay.' },
+    { title: 'Dispense and collect', body: 'You dispense, and the patient collects from your pharmacy each month.' },
   ]);
-  assert.deepEqual(partnerTermsParagraphs('   \n\n  '), []);
+  assert.equal(PHARMSMART_LOGIN_URL, 'https://pharmsmart.co.uk/login.php');
+  assert.deepEqual(PARTNERSHIP_LOGOS.map(logo => logo.alt), ['Curaleaf', 'Pharmsmart']);
+  const guide = read('../src/auth/PharmsmartOnboardingGuide.tsx');
+  assert.match(guide, /Pharmsmart user\? Open from your <a[^>]*>Pharmsmart dashboard<\/a>/);
+  assert.match(guide, /Not on Pharmsmart\? \{signIn\}/);
+  assert.match(guide, /In partnership with/);
 });
 
-test('published Terms carry their version; empty text reads as not published', () => {
-  assert.deepEqual(partnerTermsFromResponse({ version: ' 1.0 ', text: 'One.\n\nTwo.' }), { state: 'published', version: '1.0', paragraphs: ['One.', 'Two.'] });
-  assert.deepEqual(partnerTermsFromResponse({ version: '1.0', text: '  ' }), { state: 'unpublished' });
-  assert.deepEqual(partnerTermsFromResponse(null), { state: 'unpublished' });
-});
-
-test('/partner-terms is a page of the public site, with its own page component', () => {
-  assert.equal(resolvePublicView('/partner-terms', ''), 'site');
-  const site = readFileSync(new URL('../apps/public/src/PublicSite.tsx', import.meta.url), 'utf8');
-  assert.match(site, /path === '\/partner-terms'\) return <PageShell><PartnerTermsPage \/><\/PageShell>/);
-  const page = readFileSync(new URL('../apps/public/src/PartnerTermsPage.tsx', import.meta.url), 'utf8');
-  assert.match(page, /The Partner Terms will be published here soon\./);
-  assert.match(page, /noindex/);
+test('the Partner Terms step only shows in sign-up while HHH has the Terms switched on', () => {
+  const guide = read('../src/auth/PharmsmartOnboardingGuide.tsx');
+  assert.match(guide, /\{setup\.termsRequired \? \(\s*<li/);
+  assert.match(guide, /of \{setup\.termsRequired \? 3 : 2\} done/);
 });

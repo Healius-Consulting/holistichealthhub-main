@@ -313,6 +313,8 @@ const TERMS_FIELDS = `
   ipAddress
   source
   nameMatchesPharmsmart
+  documentId
+  signedCopyPath
 `;
 
 const TERMS_BY_REQUEST_GQL = `
@@ -379,6 +381,7 @@ const INSERT_TERMS_GQL = `
     $ipAddress: String
     $source: String!
     $nameMatchesPharmsmart: Boolean
+    $documentId: UUID
   ) {
     partnerTermsAcceptance_insert(data: {
       id: $id
@@ -395,7 +398,15 @@ const INSERT_TERMS_GQL = `
       ipAddress: $ipAddress
       source: $source
       nameMatchesPharmsmart: $nameMatchesPharmsmart
+      documentId: $documentId
     })
+  }
+`;
+
+/** The second update these rows allow: the signed copy, stored after the signature. */
+const SET_SIGNED_COPY_GQL = `
+  mutation SetPartnerTermsSignedCopy($id: UUID!, $signedCopyPath: String!) {
+    partnerTermsAcceptance_update(key: { id: $id }, data: { signedCopyPath: $signedCopyPath })
   }
 `;
 
@@ -419,6 +430,8 @@ function toTerms(row: RawTerms): PartnerTermsAcceptanceRecord {
     ipAddress: row.ipAddress ?? null,
     source: row.source === 'reacceptance' ? 'reacceptance' : 'signup',
     nameMatchesPharmsmart: row.nameMatchesPharmsmart ?? null,
+    documentId: row.documentId ?? null,
+    signedCopyPath: row.signedCopyPath ?? null,
   };
 }
 
@@ -583,13 +596,22 @@ export class SqlPharmacyOnboardingRepository {
 
   /** organisationId is set only for an acceptance made from the branch's own portal. */
   async insertTermsAcceptance(record: Omit<PartnerTermsAcceptanceRecord, 'organisationId'> & { organisationId?: string | null }): Promise<void> {
-    await dataConnect.executeGraphql<unknown, Omit<PartnerTermsAcceptanceRecord, 'organisationId'> & { organisationId: string | null }>(INSERT_TERMS_GQL, {
+    // The signed copy is stored afterwards (setTermsSignedCopy); it is never part of the insert.
+    const { signedCopyPath: _signedCopy, ...row } = record;
+    await dataConnect.executeGraphql<unknown, Record<string, unknown>>(INSERT_TERMS_GQL, {
       variables: {
-        ...record,
-        id: asUuid(record.id),
-        onboardingRequestId: record.onboardingRequestId ? asUuid(record.onboardingRequestId) : null,
-        organisationId: record.organisationId ? asUuid(record.organisationId) : null,
+        ...row,
+        id: asUuid(row.id),
+        onboardingRequestId: row.onboardingRequestId ? asUuid(row.onboardingRequestId) : null,
+        organisationId: row.organisationId ? asUuid(row.organisationId) : null,
+        documentId: row.documentId ? asUuid(row.documentId) : null,
       },
+    });
+  }
+
+  async setTermsSignedCopy(id: string, signedCopyPath: string): Promise<void> {
+    await dataConnect.executeGraphql<unknown, { id: string; signedCopyPath: string }>(SET_SIGNED_COPY_GQL, {
+      variables: { id: asUuid(id), signedCopyPath },
     });
   }
 

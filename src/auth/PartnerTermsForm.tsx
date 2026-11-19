@@ -3,9 +3,8 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiRequestError, acceptPartnerTerms, describeApiError } from '../shared/api';
 import type { PharmsmartTermsRequest } from './types';
-import { Field, FormBottom, FormIntro, FormTop, PillChoice, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
-import { loadPartnerTerms } from '../onboarding/loadPartnerTerms';
-import type { PartnerTermsLoad } from '../onboarding/partnerTerms';
+import { Field, FormBottom, FormIntro, FormTop, NeedMark, PillChoice, RequiredKey, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
+import { PdfPreview } from '../components/PdfPreview';
 
 const ROLES = [
   { id: 'SUPERINTENDENT_PHARMACIST', label: 'Superintendent pharmacist', pharmacist: true },
@@ -19,9 +18,9 @@ type RoleId = typeof ROLES[number]['id'];
 type Person = { name: string; email: string };
 
 /**
- * The Partner Terms step, between the Curaleaf form and Worldpay. Shows the Terms HHH
- * published in admin, with their version; until they are published it keeps the
- * placeholder block. Accepting is what sends the Curaleaf application.
+ * Signing the Partner Terms: at sign-up (between the Curaleaf form and Worldpay, where
+ * accepting sends the Curaleaf application), and in the portal for a new version. Shows
+ * the uploaded PDF HHH published, with its version.
  */
 export function PartnerTermsForm({
   open,
@@ -33,6 +32,9 @@ export function PartnerTermsForm({
   send,
   intro = 'Your Curaleaf account form is in. Accept the Partner Terms to send it to Curaleaf Laboratories.',
   people,
+  termsFile,
+  termsVersion,
+  acceptNote = 'Accepting sends your Curaleaf form to Curaleaf Laboratories.',
 }: {
   open: boolean;
   request: PharmsmartTermsRequest | null;
@@ -46,6 +48,11 @@ export function PartnerTermsForm({
   intro?: string;
   /** Who PharmSmart says the superintendent and manager are, so choosing that role fills them in. */
   people?: { superintendent?: Person | null; manager?: Person | null };
+  /** Where the Terms PDF comes from (a URL, or a blob URL fetched for the signed-in branch). */
+  termsFile: () => Promise<string>;
+  termsVersion: string | null;
+  /** The line beside the accept button on the last step. */
+  acceptNote?: string;
 }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -66,13 +73,16 @@ export function PartnerTermsForm({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   busyRef.current = busy;
-  const [terms, setTerms] = useState<PartnerTermsLoad>({ state: 'loading' });
+  const [file, setFile] = useState<{ url: string | null; failed: boolean }>({ url: null, failed: false });
+  const termsFileRef = useRef(termsFile);
+  termsFileRef.current = termsFile;
 
-  // Fetched once the form opens; anything but published Terms keeps the placeholder.
+  // Fetched once the form opens.
   useEffect(() => {
     if (!open) return;
     let active = true;
-    void loadPartnerTerms().then(result => { if (active) setTerms(result); });
+    setFile({ url: null, failed: false });
+    void termsFileRef.current().then(url => { if (active) setFile({ url, failed: false }); }).catch(() => { if (active) setFile({ url: null, failed: true }); });
     return () => { active = false; };
   }, [open]);
 
@@ -185,8 +195,9 @@ export function PartnerTermsForm({
             {step === 1 ? (
               <>
                 <FormIntro title="Who is signing">{intro}</FormIntro>
+                <RequiredKey />
                 <Section title="About you" description={`The person accepting the terms on behalf of ${company}.`}>
-                  <span className="wpa-field__label">Your role</span>
+                  <span className="wpa-field__label">Your role<NeedMark /></span>
                   <PillChoice name="Your role" value={role} options={ROLES.map(option => ({ value: option.id, label: option.label }))} onChange={chooseRole} />
                   {problems.role ? <span className="wpa-field__problem">{problems.role}</span> : null}
                   {role === 'OTHER' ? (
@@ -217,16 +228,11 @@ export function PartnerTermsForm({
             ) : (
               <>
                 <FormIntro title="Read and sign">Read the Partner Terms, then sign to accept them for {company}.</FormIntro>
-                <Section title="The terms" description={terms.state === 'published' && terms.version ? `Version ${terms.version}` : undefined} tone="quiet">
-                  <div
-                    className={`partner-terms-form__terms${terms.state === 'published' ? ' is-published' : ''}`}
-                    aria-label="Partner Terms text"
-                    {...(terms.state === 'published' ? { role: 'region', tabIndex: 0 } : {})}
-                  >
-                    {terms.state === 'published'
-                      ? terms.paragraphs.map((paragraph, index) => <p key={index} className="partner-terms-form__paragraph">{paragraph}</p>)
-                      : <p>New item — to be updated here</p>}
+                <Section title="The terms" description={termsVersion ? `Version ${termsVersion}` : undefined} tone="quiet">
+                  <div className="partner-terms-form__pdf" aria-label="Partner Terms">
+                    {file.url ? <PdfPreview href={file.url} /> : file.failed ? <p className="wpa-alert">The Partner Terms could not be opened. Close this and try again.</p> : <p className="wpa-muted">Opening the Partner Terms…</p>}
                   </div>
+                  {file.url ? <a className="wpa-link" href={file.url} target="_blank" rel="noopener noreferrer" download={`Partner-Terms${termsVersion ? `-${termsVersion}` : ''}.pdf`}>Download the Partner Terms (PDF)</a> : null}
                 </Section>
                 <SummaryCard title="Signing as" step={1} onEdit={() => setStep(1)}>
                   <Row label="Name" value={name.trim()} />
@@ -237,7 +243,7 @@ export function PartnerTermsForm({
                 <Section title="Sign">
                   <label className="wpa-check">
                     <input type="checkbox" name="authorised" checked={authorised} onChange={event => setAuthorised(event.target.checked)} />
-                    <span>I confirm I am authorised to accept these terms on behalf of <strong>{company}</strong></span>
+                    <span>I confirm I am authorised to accept these terms on behalf of <strong>{company}</strong><NeedMark /></span>
                   </label>
                   {problems.authorised ? <span className="wpa-field__problem">{problems.authorised}</span> : null}
                   <div className="wpa-signature">
@@ -249,7 +255,7 @@ export function PartnerTermsForm({
             )}
           </div>
         </div>
-        <FormBottom status={<span className="wpa-save">{step === 1 ? 'Nothing is sent until you accept.' : 'Accepting sends your Curaleaf form to Curaleaf Laboratories.'}</span>}>
+        <FormBottom status={<span className="wpa-save">{step === 1 ? 'Nothing is sent until you accept.' : acceptNote}</span>}>
           {step === 2 ? <button type="button" className="wpa-back" onClick={() => { setStep(1); scrollTop(); }} disabled={busy}>Back</button> : null}
           <button className="btn btn-primary wpa-next" type="submit" disabled={busy}>
             {step === 1 ? 'Continue' : busy ? 'Accepting…' : 'Accept and continue'} <span aria-hidden="true">→</span>

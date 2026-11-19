@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Clock3, ExternalLink } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../auth/useAuth';
@@ -8,9 +8,9 @@ import { useDemoMode } from '../components/useDemoMode';
 import { PartnerTermsForm } from '../auth/PartnerTermsForm';
 import { WorldpayApplicationForm } from '../worldpay/WorldpayApplicationForm';
 import { PORTAL_ONBOARDING_QUEUE_UTM, pharmsmartOnboardingBookingUrl } from '../auth/pharmsmart-login';
-import { acceptBranchPartnerTerms } from '../shared/api';
+import { acceptBranchPartnerTerms, getPartnerTermsHistory, openPharmacyPartnerTerms, openSignedPartnerTerms, type SignedPartnerTerms } from '../shared/api';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
-import { onboardingQueueItems, pharmacyAccountState, type OnboardingQueueItem } from '../onboarding/branchOnboarding';
+import { formatOnboardingDate, onboardingQueueItems, pharmacyAccountState, type OnboardingQueueItem } from '../onboarding/branchOnboarding';
 import { useBranchOnboarding } from '../onboarding/useBranchOnboarding';
 
 /** The pharmacy's Onboarding page: its account status, then the onboarding queue. */
@@ -25,6 +25,21 @@ export default function PharmacyOnboarding() {
   const [worldpayOpen, setWorldpayOpen] = useState(false);
   // Sending the Terms or the Worldpay form changes the checklist's own ticks, so it reloads.
   const [checklistVersion, setChecklistVersion] = useState(0);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [signedTerms, setSignedTerms] = useState<SignedPartnerTerms[]>([]);
+  useEffect(() => {
+    if (!pharmacyStaff || isLocalPortalPreview) return;
+    let active = true;
+    void getPartnerTermsHistory().then(result => { if (active) setSignedTerms(result.signed); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [pharmacyStaff, historyVersion]);
+  const openSigned = async (id: string) => {
+    try {
+      window.open(await openSignedPartnerTerms(id), '_blank', 'noopener');
+    } catch {
+      dispatch({ type: 'ADD_TOAST', toastType: 'error', message: 'The signed copy could not be opened. Try again.' });
+    }
+  };
 
   if (!organisation) return null;
   const live = view?.live ?? organisation.status === 'live';
@@ -112,11 +127,38 @@ export default function PharmacyOnboarding() {
         />
       </section>
 
+      {view?.termsRequired || signedTerms.length ? (
+        <section className="card pharmacy-onboarding__terms" aria-labelledby="pharmacy-onboarding-terms-title">
+          <header>
+            <h2 id="pharmacy-onboarding-terms-title">Partner Terms</h2>
+            <p>{view?.termsRequired && !view.termsAccepted
+              ? `Version ${view.currentTerms?.version ?? ''} is waiting to be signed by the superintendent pharmacist or someone authorised to sign for the company.`
+              : 'The versions your pharmacy has signed. Each signed copy includes a signature page.'}</p>
+          </header>
+          {view?.termsRequired && !view.termsAccepted ? (
+            <button type="button" className="btn btn-primary btn-sm" disabled={formsBlocked} onClick={() => setTermsOpen(true)}>Read and sign version {view.currentTerms?.version}</button>
+          ) : null}
+          {signedTerms.length ? (
+            <ul className="pharmacy-onboarding__signed">
+              {signedTerms.map(row => (
+                <li key={row.id}>
+                  <span><strong>Version {row.version}</strong><small>Signed by {row.signerName}, {formatOnboardingDate(row.signedAt)}</small></span>
+                  {row.hasCopy ? <button type="button" className="btn btn-sm" onClick={() => void openSigned(row.id)}>Download signed copy</button> : <small>Signed copy being prepared</small>}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
       <PartnerTermsForm
         open={termsOpen}
         request={{ id: organisation.id, pharmacyName: organisation.name, registeredCompanyName: view?.registeredCompanyName ?? organisation.tradingName }}
         signer={{ name: staff?.name ?? '', email: staff?.email ?? '' }}
-        intro="Accept the Partner Terms for your pharmacy. The Worldpay form opens straight after."
+        intro={`Sign${view?.currentTerms ? ` version ${view.currentTerms.version} of` : ''} the Partner Terms for your pharmacy. The Worldpay form opens straight after.`}
+        termsFile={() => openPharmacyPartnerTerms()}
+        termsVersion={view?.currentTerms?.version ?? null}
+        acceptNote="Accepting signs the Partner Terms for the pharmacy. A signed copy is emailed to you."
         send={async input => {
           if (isLocalPortalPreview) return;
           await acceptBranchPartnerTerms(input);
@@ -126,6 +168,7 @@ export default function PharmacyOnboarding() {
           setTermsOpen(false);
           update({ termsAccepted: true, termsAcceptedAt: new Date().toISOString() });
           setChecklistVersion(version => version + 1);
+          setHistoryVersion(version => version + 1);
           // Straight on to Worldpay, which the pharmacy can close to do later.
           setWorldpayOpen(true);
         }}

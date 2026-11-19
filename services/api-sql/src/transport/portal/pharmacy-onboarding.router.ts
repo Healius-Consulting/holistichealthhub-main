@@ -18,7 +18,10 @@ import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope, assertTenantScope, type RequestContext } from '../../security/request-context.js';
 import { acceptBranchPartnerTerms, branchOnboardingView } from '../../application/pharmacy-onboarding/branch-onboarding.js';
-import { acceptedPartnerTermsVersion } from '../../application/pharmacy-onboarding/onboarding-config.js';
+import { acceptanceTerms, partnerTermsState } from '../../application/pharmacy-onboarding/partner-terms.service.js';
+import { afterTermsSigned } from '../../application/pharmacy-onboarding/partner-terms-signing.js';
+import { SqlPartnerTermsRepository } from '../../repositories/sql/partner-terms.sql.js';
+import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { branchPartnerTermsAcceptanceSchema } from '../../domain/pharmacy-onboarding/terms.js';
 import { ipHash } from '../../security/session-utils.js';
 import { requireStaff } from '../../security/require-staff.js';
@@ -97,6 +100,9 @@ export function createPortalPharmacyOnboardingRouter(): Router {
   const contentRepo = new SqlPlatformContentRepository();
   const emails = sqlOnboardingEmails();
   const storage = new StorageProvider();
+  const termsRepo = new SqlPartnerTermsRepository();
+  const notificationRepo = new SqlNotificationRepository();
+  const termsState = () => partnerTermsState({ content: contentRepo, repo: termsRepo });
   const referralLinks = new ReferralLinkService(organisationRepo);
 
   router.get('/portal/admin/pharmacy-onboarding-requests', requireStaff('admin'), async (_req: Request, res: Response, next: NextFunction) => {
@@ -210,19 +216,19 @@ export function createPortalPharmacyOnboardingRouter(): Router {
     try {
       const { organisation } = await branchFor(req.context!);
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json(await branchOnboardingView(repo, organisation));
+      res.status(200).json(await branchOnboardingView(repo, organisation, await termsState()));
     } catch (error) {
       next(error);
     }
   });
 
-  // POST /v1/portal/pharmacy/onboarding/terms - a branch with no accepted Terms accepts them before Worldpay
+  // POST /v1/portal/pharmacy/onboarding/terms - the branch signs the current Partner Terms version (login prompt or Onboarding page)
   router.post('/portal/pharmacy/onboarding/terms', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { scope, organisation } = await branchFor(req.context!);
       const input = branchPartnerTermsAcceptanceSchema.parse(req.body);
       const { acceptance, created } = await acceptBranchPartnerTerms(
-        { repo, termsVersion: acceptedPartnerTermsVersion(await readOnboardingContent(contentRepo)) },
+        { repo, terms: acceptanceTerms(await termsState()) },
         organisation,
         input,
         { ipHash: ipHash(req) },
@@ -238,7 +244,14 @@ export function createPortalPharmacyOnboardingRouter(): Router {
           requestId: scope.requestId,
           sessionHashPrefix: scope.sessionHash.slice(0, 12),
           surface: scope.surface,
-          details: { termsVersion: acceptance.termsVersion },
+          details: { termsVersion: acceptance.termsVersion, documentId: acceptance.documentId ?? null },
+        });
+        await afterTermsSigned({ storage, terms: termsRepo, acceptances: repo, notifications: notificationRepo }, acceptance, {
+          organisationId: organisation.id,
+          onboardingRequestId: acceptance.onboardingRequestId,
+          pharmacyName: organisation.name,
+          gphcNumber: organisation.gphcNumber || null,
+          pharmacyEmail: organisation.pharmacyEmail || organisation.mainContactEmail || null,
         });
         await sqlClickupHooks().termsAccepted({
           gphcNumber: organisation.gphcNumber,

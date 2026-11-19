@@ -85,7 +85,9 @@ test('only the on_hold organisation status reads as held', () => {
 });
 
 test('an email that applies but was never queued can be sent; one that does not apply cannot', () => {
-  assert.deepEqual(sendableEmailKinds({ termsAccepted: false, requestStatus: 'pending', activated: false, live: false }), []);
+  assert.deepEqual(sendableEmailKinds({ termsAccepted: false, termsRequired: true, requestStatus: 'pending', activated: false, live: false }), []);
+  // Terms switched off: the Curaleaf form alone is enough for Sent and the Curaleaf application.
+  assert.deepEqual(sendableEmailKinds({ termsAccepted: false, requestStatus: 'pending', activated: false, live: false }), ['sent', 'curaleafApplication']);
   assert.deepEqual(sendableEmailKinds({ termsAccepted: true, requestStatus: 'on_hold', activated: false, live: false }), ['sent', 'curaleafApplication', 'hold']);
   assert.deepEqual(sendableEmailKinds({ termsAccepted: true, requestStatus: 'activated', activated: true, live: true }), ['sent', 'curaleafApplication', 'activation', 'live']);
 });

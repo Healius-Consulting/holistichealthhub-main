@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiRequestError, lookUpCompany, type CompanyLookup } from '../shared/api';
-import { Field, FormBottom, FormIntro, FormTop, Section } from '../components/OnboardingFormParts';
+import { Field, FormBottom, FormIntro, FormTop, NeedMark, Section } from '../components/OnboardingFormParts';
 
 /**
  * "Before you start" for partner onboarding: what the three forms are, what to have to
@@ -30,8 +30,10 @@ const STEPS = [
   { title: 'Worldpay card payments', detail: 'Lets patients pay by card through a secure link. You can do this later.', tag: 'Optional' },
 ] as const;
 
-export function OnboardingQuickStart({ open, pharmacyName, company, onClose, onStart }: {
+export function OnboardingQuickStart({ open, pharmacyName, company, onClose, onStart, termsRequired = false }: {
   open: boolean;
+  /** Whether the Partner Terms are a step of sign-up (HHH switched them on). */
+  termsRequired?: boolean;
   pharmacyName: string;
   /** A company already looked up in this visit. */
   company: CompanyLookup | null;
@@ -80,6 +82,8 @@ export function OnboardingQuickStart({ open, pharmacyName, company, onClose, onS
     }
   };
 
+  const steps = STEPS.filter(step => termsRequired || step.title !== 'Partner Terms');
+  const count = steps.length === 3 ? 'three' : 'two';
   const people = found?.people.length ?? 0;
   const message = {
     idle: null,
@@ -96,26 +100,26 @@ export function OnboardingQuickStart({ open, pharmacyName, company, onClose, onS
         <FormTop eyebrow="Set up with Holistic Health Hub" title={pharmacyName || 'Your pharmacy'} titleId={titleId} onClose={onClose} closeLabel="Close" closeRef={closeRef} />
         <div className="wpa-body">
           <div className="wpa-content">
-            <FormIntro title="Before you start">Setting up takes three short forms. What you tell us in one carries into the next, so you only type it once.</FormIntro>
+            <FormIntro title="Before you start">Setting up takes {count} short forms. What you tell us in one carries into the next, so you only type it once.</FormIntro>
 
-            <ol className="wpa-journey" aria-label="The three forms">
-              {STEPS.map((step, index) => (
+            <ol className="wpa-journey" aria-label={`The ${count} forms`}>
+              {steps.map((step, index) => (
                 <li key={step.title}>
                   <span className="wpa-journey__number" aria-hidden="true">{index + 1}</span>
                   <span className="wpa-journey__text">
-                    <strong>{step.title}</strong>
+                    <strong>{step.title}{step.tag === 'Required' ? <NeedMark /> : null}</strong>
                     <span>{step.detail}</span>
                   </span>
-                  <span className={step.tag === 'Optional' ? 'wpa-journey__tag is-optional' : 'wpa-journey__tag'}>{step.tag}</span>
+                  {step.tag === 'Optional' ? <span className="wpa-journey__tag is-optional">Optional</span> : <span aria-hidden="true" />}
                 </li>
               ))}
             </ol>
 
             <Section
               title="Your company number"
-              description="If your pharmacy is a limited company, we look it up at Companies House and use it in all three forms. You can skip this and type your details instead."
+              description={`If your pharmacy is a limited company, we look it up at Companies House and use it in ${count === 'three' ? 'all three forms' : 'both forms'}. You can skip this and type your details instead.`}
             >
-              <Field label="Companies House number">
+              <Field optional label="Companies House number">
                 <span className="wpa-lookup">
                   <input
                     className="input"

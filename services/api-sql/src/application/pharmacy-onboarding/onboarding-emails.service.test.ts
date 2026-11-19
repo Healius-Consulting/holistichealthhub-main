@@ -127,6 +127,7 @@ function harness(options: {
   demo?: boolean;
   failEnqueue?: boolean;
   failContent?: boolean;
+  termsRequired?: boolean;
 } = {}) {
   const rows: Row[] = [];
   const warnings: string[] = [];
@@ -178,6 +179,7 @@ function harness(options: {
     findConnection: async (_id, integration) => connections[integration] ?? null,
     goLiveChecklist: async () => options.checklist ?? checklist([]),
     isDemoGphc: async () => Boolean(options.demo),
+    termsRequired: async () => Boolean(options.termsRequired),
     curaleafRecipients: () => ({ to: ['new@curaleaf.test', 'second@curaleaf.test'], cc: ['spatel@healiusconsulting.com'] }),
     now: () => new Date(clock),
     warn: message => { warnings.push(message); },
@@ -234,14 +236,18 @@ describe('onboarding emails: Sent and the application to Curaleaf', () => {
     assert.doesNotMatch(body, /Card payments are optional/);
   });
 
-  it('links the Partner Terms only once they are published with text', async () => {
-    const published = harness({ content: { [ONBOARDING_CONTENT_KEYS.partnerTerms]: { published: true, version: 'v1.0', text: 'The terms.' } } });
-    await published.emails.applicationReceived({ request: request(), demo: false });
-    assert.match(text(byTemplate(published.rows, 'pharmacy_onboarding_submitted')[0]), /You can read them at any time at https:\/\/holistichealthhub\.live\/partner-terms\./);
+  it('mentions the Partner Terms only when they were accepted; without them it goes to the Curaleaf form signer', async () => {
+    const accepted = harness();
+    await accepted.emails.applicationReceived({ request: request(), demo: false });
+    assert.match(text(byTemplate(accepted.rows, 'pharmacy_onboarding_submitted')[0]), /Your Partner Terms/);
 
-    const empty = harness({ content: { [ONBOARDING_CONTENT_KEYS.partnerTerms]: { published: true, version: 'v1.0', text: '  ' } } });
-    await empty.emails.applicationReceived({ request: request(), demo: false });
-    assert.doesNotMatch(text(byTemplate(empty.rows, 'pharmacy_onboarding_submitted')[0]), /partner-terms/);
+    // Terms switched off: no acceptance at all. The form's own signer and the pharmacy email.
+    const off = harness({ acceptances: [], request: request({ signatureName: 'Ravi Patel', pharmacistName: 'Asha Shah' }) });
+    await off.emails.applicationReceived({ request: request({ signatureName: 'Ravi Patel', pharmacistName: 'Asha Shah' }), demo: false });
+    const row = byTemplate(off.rows, 'pharmacy_onboarding_submitted')[0]!;
+    assert.doesNotMatch(text(row), /Partner Terms/);
+    assert.match(text(row), /Hello Ravi,/);
+    assert.deepEqual(row.toRecipients, ['shop@shah.test']);
   });
 
   it('sends the application to Curaleaf with the renamed form, the licence and the Healius Reply-To', async () => {
@@ -425,12 +431,16 @@ describe('onboarding emails: failures, resend and the send log', () => {
     await assert.rejects(h.emails.resend({ requestId: REQUEST_ID, kind: 'activation', actorUid: 'a' }), { statusCode: 409 });
     await assert.rejects(h.emails.resend({ requestId: REQUEST_ID, kind: 'hold', actorUid: 'a' }), { statusCode: 409 });
     await assert.rejects(h.emails.resend({ requestId: 'f0000000-0000-4000-8000-000000000000', kind: 'sent', actorUid: 'a' }), { statusCode: 404 });
-    // Never to Curaleaf (or the pharmacy) before the Partner Terms are accepted.
-    const noTerms = harness({ acceptances: [] });
+    // While the Partner Terms are on: never to Curaleaf (or the pharmacy) before they are accepted.
+    const noTerms = harness({ acceptances: [], termsRequired: true });
     for (const kind of ['sent', 'curaleafApplication'] as const) {
       await assert.rejects(noTerms.emails.resend({ requestId: REQUEST_ID, kind, actorUid: 'a' }), { statusCode: 409 });
     }
     assert.equal(noTerms.rows.length, 0);
+    // While they are off, the Curaleaf form alone is enough.
+    const termsOff = harness({ acceptances: [] });
+    await termsOff.emails.resend({ requestId: REQUEST_ID, kind: 'curaleafApplication', actorUid: 'a' });
+    assert.equal(termsOff.rows.length, 1);
     const onHold = harness({ request: request({ status: 'ON_HOLD', holdReason: 'EXISTING_CURALEAF_CUSTOMER', heldAt: '2026-11-19T15:00:00.000Z' }) });
     await onHold.emails.resend({ requestId: REQUEST_ID, kind: 'hold', actorUid: 'a' });
     assert.match(onHold.rows[0]!.idempotencyKey, /^onboarding-hold:.*:2026-11-19T15:00:00\.000Z:resend:/);

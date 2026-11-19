@@ -17,6 +17,9 @@ export const CLICKUP_EVENTS = [
   'terms_accepted',
   'worldpay_submitted',
   'worldpay_validated',
+  'terms_skipped',
+  'terms_overdue',
+  'terms_version_published',
 ] as const;
 
 export type ClickupEvent = typeof CLICKUP_EVENTS[number];
@@ -141,6 +144,11 @@ export function clickupStageFor(
     case 'terms_accepted':
     case 'worldpay_submitted':
     case 'worldpay_validated':
+      return card.exists ? null : 'awaiting_curaleaf';
+    case 'terms_skipped':
+    case 'terms_overdue':
+    case 'terms_version_published':
+      // A comment on the card; the column never moves for the Terms.
       return card.exists ? null : 'awaiting_curaleaf';
   }
 }

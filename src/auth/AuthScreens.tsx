@@ -6,7 +6,7 @@ import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, LoaderCircle, LockKey
 import { firebaseConfiguration, mfaRequired } from './firebase';
 import { requireFirebaseAuth } from './firebase';
 import { totpQrDataUrl } from './totpQr';
-import { pharmsmartLoginQuery } from './pharmsmart-login';
+import { PHARMSMART_LOGIN_URL, pharmsmartLoginQuery } from './pharmsmart-login';
 import { PharmsmartWelcome } from './PharmsmartOnboardingGuide';
 import { OnboardingHoldPage } from '../onboarding/OnboardingHold';
 import { useAuth } from './useAuth';
@@ -149,6 +149,9 @@ export function StaffLogin() {
 
   return (
     <AuthShell>
+      {import.meta.env.VITE_APP_SURFACE !== 'admin' ? (
+        <p className="staff-login-pharmsmart">Pharmsmart user? Open Holistic Health Hub from your <a href={PHARMSMART_LOGIN_URL} target="_blank" rel="noopener noreferrer">Pharmsmart dashboard</a>.</p>
+      ) : null}
       <form className="card staff-login-card" onSubmit={submit}>
         <div className="staff-login-heading"><div className="resource-icon"><LockKeyhole size={20} aria-hidden="true" /></div><div><p className="staff-login-kicker">Staff access</p><h2>{resetMode ? 'Reset your password' : 'Sign in to Holistic Health Hub'}</h2></div></div>
         {state.notice && <div className="banner banner-blue" role="status"><CheckCircle2 size={15} /> {state.notice}</div>}

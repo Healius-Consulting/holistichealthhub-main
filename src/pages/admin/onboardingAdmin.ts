@@ -98,14 +98,25 @@ export function isHeldOrganisationStatus(status: string | null | undefined) {
  */
 export function sendableEmailKinds(input: {
   termsAccepted: boolean;
+  /** Whether HHH has the Partner Terms switched on. Off (or omitted): Sent and the Curaleaf application need no acceptance. */
+  termsRequired?: boolean;
   requestStatus: 'pending' | 'on_hold' | 'activated';
   activated: boolean;
   live: boolean;
 }): OnboardingEmailKind[] {
   const kinds: OnboardingEmailKind[] = [];
-  if (input.termsAccepted) kinds.push('sent', 'curaleafApplication');
+  if (input.termsAccepted || !input.termsRequired) kinds.push('sent', 'curaleafApplication');
   if (input.activated) kinds.push('activation');
   if (input.requestStatus === 'on_hold') kinds.push('hold');
   if (input.live) kinds.push('live');
   return kinds;
+}
+
+// One read per admin page load: whether the Partner Terms are switched on.
+let termsOnCache: Promise<boolean> | null = null;
+
+/** Whether the Partner Terms are switched on (cached for the page). Local preview: off. */
+export function partnerTermsOn(load: () => Promise<{ settings: { enabled: boolean }; currentDocumentId: string | null }>): Promise<boolean> {
+  termsOnCache ??= load().then(view => view.settings.enabled && Boolean(view.currentDocumentId)).catch(() => false);
+  return termsOnCache;
 }

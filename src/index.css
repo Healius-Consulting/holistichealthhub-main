@@ -18533,11 +18533,7 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   .onb__how li{ padding: 11px 0; }
   .onb__pitch .onb__eyebrow{ line-height: 20px; }
 }
-/* Wide enough for the steps to fit: the box takes no height of its own (contain: size), so the
-   pitch sets the row and the box ends exactly where the brochure card ends. Narrower, it keeps its height. */
-@media (min-width: 1100px){
-  .onb__how{ contain: size; }
-}
+/* The box stretches to the pitch's height, and grows past it when the steps need more room (five steps since the 19 Nov 2026 brief). */
 
 @media (max-width: 559px){
   .onb .onb__choices{ display: grid; grid-template-columns: 1fr 1fr; }
@@ -22462,3 +22458,34 @@ strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }
 .demo-pharmacy__state{ display: grid; gap: 2px; min-width: 0; }
 .demo-pharmacy__state span{ color: var(--ink-muted); font-size: 13px; }
 .demo-pharmacy__actions{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+
+/* Pharmacy onboarding: the two sign-in routes and the partnership line (19 Nov 2026 brief). */
+.onb__account--routes{ display: grid; gap: 2px; justify-items: end; text-align: right; }
+.onb__account--routes p{ margin: 0; }
+@media (max-width: 640px){ .onb__account--routes{ justify-items: start; text-align: left; } }
+.onb__partners{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 0;
+  /* The same text style and colour as the hero paragraph above it. */
+  color: var(--ink-muted);
+  font-size: clamp(17px, 1.4vw, 19px);
+  line-height: 1.55;
+}
+.onb__partner-logos{ display: inline-flex; flex-wrap: wrap; align-items: center; gap: 24px; }
+.onb__partner-logos img{ display: block; width: auto; height: 24px; }
+.staff-login-pharmsmart{ margin: 0 0 14px; color: var(--ink-muted, #506159); font-size: 14px; line-height: 1.5; }
+.staff-login-pharmsmart a{ color: var(--green, #173f33); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Onboarding forms: a red asterisk for required questions, "Optional" for the rest. */
+.wpa-required{ margin-left: 3px; font-weight: 700; }
+/* Doubled class: list styles (e.g. ".wpa-journey__text span") must not recolour it. */
+.wpa-required.wpa-required{ color: #c62828; }
+.wpa-field__label > .wpa-required{ margin-left: -5px; }
+.wpa-optional.wpa-optional{ display: inline-block; margin-left: 6px; padding: 1px 8px; color: #5a6662; font-size: 11.5px; font-weight: 600; background: #eef1f0; border-radius: 999px; vertical-align: middle; }
+.wpa-field__label > .wpa-optional.wpa-optional{ margin-left: -2px; }
+.wpa-required-key{ margin: 0; color: var(--ink-muted, #506159); font-size: 12.5px; }
+html[data-theme='dark'] .wpa-required.wpa-required{ color: #ff8a80; }
+html[data-theme='dark'] .wpa-optional.wpa-optional{ color: #c5d4cc; background: #254338; }

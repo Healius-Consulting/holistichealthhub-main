@@ -16,8 +16,8 @@ export type AcceptPartnerTermsDeps = {
   repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'findTermsAcceptances' | 'insertTermsAcceptance'>;
   /** The "Sent" email to the pharmacy and the application to Curaleaf. Never throws. */
   emails: Pick<OnboardingEmails, 'applicationReceived'>;
-  /** The version recorded on a new acceptance (acceptedPartnerTermsVersion). */
-  termsVersion: string;
+  /** The current Terms version (partner-terms.service acceptanceTerms). Null while the Terms are switched off. */
+  terms: { version: string; documentId: string } | null;
   /** Verifies the PharmSmart names ticket the welcome page carried. */
   ticketSecret: string;
   /** A demo pharmacy's Curaleaf application goes to HHH only. */
@@ -46,6 +46,9 @@ export async function acceptPartnerTerms(
   if (request.status !== 'PENDING') {
     throw new HttpError(409, 'This application has already been decided, so the terms cannot be accepted here.', 'ONBOARDING_REQUEST_DECIDED');
   }
+  if (!deps.terms) {
+    throw new HttpError(409, 'The Partner Terms are not being asked for at the moment.', 'PARTNER_TERMS_OFF');
+  }
 
   const claims = input.pharmsmartTicket ? readPharmsmartNamesTicket(input.pharmsmartTicket, deps.ticketSecret) : null;
   const sameBranch = claims && normaliseGphcNumber(claims.gphcNumber) === normaliseGphcNumber(request.gphcNumber);
@@ -54,7 +57,8 @@ export async function acceptPartnerTerms(
     id: randomUUID(),
     onboardingRequestId: request.id,
     organisationId: null,
-    termsVersion: deps.termsVersion,
+    termsVersion: deps.terms.version,
+    documentId: deps.terms.documentId,
     signerName: input.signerName.trim(),
     signerRole: input.signerRole,
     signerRoleOther: input.signerRole === 'OTHER' ? input.signerRoleOther?.trim() || null : null,

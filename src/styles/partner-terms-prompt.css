@@ -1,0 +1,24 @@
+/* The Partner Terms sign-or-skip prompt at login. */
+.terms-prompt__scrim{ position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; padding: 16px; background: rgba(15, 23, 42, .5); }
+.terms-prompt{
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  width: min(820px, 100%);
+  max-height: calc(100vh - 32px);
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .3);
+}
+.terms-prompt__head{ display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.terms-prompt__icon{ display: grid; place-items: center; width: 40px; height: 40px; color: var(--tenant-primary, #173f33); background: var(--tenant-primary-soft, #e6f2eb); border-radius: 12px; }
+.terms-prompt__head small{ color: var(--text-tertiary); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.terms-prompt__head h3{ margin: 2px 0 0; color: var(--text-primary); font-size: 18px; }
+.terms-prompt__head p{ margin: 6px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.terms-prompt__pdf{ min-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-subtle, #f6f8f6); }
+.terms-prompt__note{ margin: 0; padding: 24px; color: var(--text-secondary); font-size: 13px; }
+.terms-prompt__foot{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.terms-prompt__actions{ display: flex; flex-wrap: wrap; gap: 8px; }
+.terms-prompt__download{ color: var(--tenant-primary, #173f33); font-size: 13px; font-weight: 600; }

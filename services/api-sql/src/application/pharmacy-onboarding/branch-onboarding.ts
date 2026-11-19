@@ -9,6 +9,7 @@ import {
 } from '../../domain/pharmacy-onboarding/terms.js';
 import type { WorldpaySubmissionNote } from '../../domain/pharmacy-onboarding/worldpay.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
+import { owesSignature, type PartnerTermsState } from './partner-terms.service.js';
 
 /**
  * The pharmacy portal's Onboarding page, for a branch HHH has activated. It looks the
@@ -32,7 +33,11 @@ export type BranchOnboardingView = {
   live: boolean;
   /** When the onboarding forms were submitted. Null for a branch HHH added by hand. */
   submittedAt: string | null;
-  /** Whether the Partner Terms are in; the portal offers them before Worldpay when not. */
+  /** Whether the Partner Terms are switched on (partner-terms.service). Off: no Terms step anywhere. */
+  termsRequired: boolean;
+  /** The version to sign while on. */
+  currentTerms: { documentId: string; version: string } | null;
+  /** Signed the current version (always true while the Terms are off, so nothing waits on them). */
   termsAccepted: boolean;
   termsAcceptedAt: string | null;
   worldpaySubmittedAt: string | null;
@@ -48,42 +53,44 @@ function registeredCompany(branch: Branch, request: PharmacyOnboardingRequestRec
   return request?.registeredCompanyName || branch.tradingName || branch.name;
 }
 
-/** Newest acceptance for the branch, whether it was linked at Activate or accepted from the portal. */
-async function latestAcceptance(repo: BranchOnboardingRepo, branch: Branch, request: PharmacyOnboardingRequestRecord | null) {
+/** Every acceptance the branch has: linked at Activate, signed from the portal, or on its request. Newest first. */
+export async function branchAcceptances(repo: Pick<BranchOnboardingRepo, 'findByOrganisationId' | 'findTermsAcceptances' | 'findTermsAcceptancesForOrganisation'>, branch: Pick<Branch, 'id'>, request?: PharmacyOnboardingRequestRecord | null) {
+  const forRequest = request === undefined ? await repo.findByOrganisationId(branch.id) : request;
   const rows = [
     ...(await repo.findTermsAcceptancesForOrganisation(branch.id)),
-    ...(request ? await repo.findTermsAcceptances(request.id) : []),
-  ].sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt));
-  return rows[0] ?? null;
+    ...(forRequest ? await repo.findTermsAcceptances(forRequest.id) : []),
+  ];
+  const unique = [...new Map(rows.map(row => [row.id, row])).values()];
+  return unique.sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt));
 }
 
-export async function branchOnboardingView(repo: BranchOnboardingRepo, branch: Branch): Promise<BranchOnboardingView> {
+export async function branchOnboardingView(repo: BranchOnboardingRepo, branch: Branch, terms: PartnerTermsState): Promise<BranchOnboardingView> {
   const request = await repo.findByOrganisationId(branch.id);
-  const [acceptance, worldpay] = await Promise.all([
-    latestAcceptance(repo, branch, request),
+  const [acceptances, worldpay] = await Promise.all([
+    branchAcceptances(repo, branch, request),
     repo.findWorldpaySubmissionForBranch(branch.id, branchGphc(branch)),
   ]);
-  // An acceptance on another request for the same GPhC also opens Worldpay (as the server checks it).
-  const termsAccepted = Boolean(acceptance) || await repo.hasAcceptedTermsForGphc(branchGphc(branch));
+  const current = terms.document ? acceptances.find(row => row.documentId === terms.document!.id) ?? null : null;
   return {
     live: branch.status === 'LIVE',
     submittedAt: request?.createdAt ?? null,
-    termsAccepted,
-    termsAcceptedAt: acceptance?.acceptedAt ?? null,
+    termsRequired: terms.on,
+    currentTerms: terms.on && terms.document ? { documentId: terms.document.id, version: terms.document.version } : null,
+    termsAccepted: !owesSignature(terms, branch, acceptances),
+    termsAcceptedAt: current?.acceptedAt ?? acceptances[0]?.acceptedAt ?? null,
     worldpaySubmittedAt: worldpay?.submittedAt ?? null,
     registeredCompanyName: registeredCompany(branch, request),
   };
 }
 
 /**
- * An activated branch that never accepted the Partner Terms (an older branch, or a
- * public-page pharmacy that left before them) accepts them here, so its Worldpay form
- * is no longer refused. The row carries the branch id, and its onboarding request when
- * there is one. A repeat returns the acceptance already there. Nothing is emailed: the
- * branch is already activated, so HHH sends Curaleaf anything still needed by hand.
+ * An activated branch signs the current Partner Terms version from its portal: at the
+ * login prompt, or from its Onboarding page. Once per branch and version; a repeat
+ * returns the signature already there. The row carries the branch id, its onboarding
+ * request when there is one, and the version's document id.
  */
 export async function acceptBranchPartnerTerms(
-  deps: { repo: BranchOnboardingRepo; termsVersion: string },
+  deps: { repo: BranchOnboardingRepo; terms: { version: string; documentId: string } | null },
   branch: Branch,
   input: BranchPartnerTermsAcceptanceInput,
   context: { ipHash: string | null; now?: Date },
@@ -91,15 +98,17 @@ export async function acceptBranchPartnerTerms(
   if (branch.status !== 'ONBOARDING' && branch.status !== 'INTAKE_LIVE' && branch.status !== 'LIVE') {
     throw new HttpError(409, 'The Partner Terms cannot be accepted for this pharmacy right now.', 'TERMS_NOT_ALLOWED');
   }
+  if (!deps.terms) throw new HttpError(409, 'The Partner Terms are not being asked for at the moment.', 'PARTNER_TERMS_OFF');
   const request = await deps.repo.findByOrganisationId(branch.id);
-  const earlier = await latestAcceptance(deps.repo, branch, request);
+  const earlier = (await branchAcceptances(deps.repo, branch, request)).find(row => row.documentId === deps.terms!.documentId);
   if (earlier) return { acceptance: earlier, created: false };
 
   const acceptance: PartnerTermsAcceptanceRecord = {
     id: randomUUID(),
     onboardingRequestId: request?.id ?? null,
     organisationId: branch.id,
-    termsVersion: deps.termsVersion,
+    termsVersion: deps.terms.version,
+    documentId: deps.terms.documentId,
     signerName: input.signerName.trim(),
     signerRole: input.signerRole,
     signerRoleOther: input.signerRole === 'OTHER' ? input.signerRoleOther?.trim() || null : null,
@@ -110,7 +119,7 @@ export async function acceptBranchPartnerTerms(
     registeredCompanyName: registeredCompany(branch, request),
     acceptedAt: (context.now ?? new Date()).toISOString(),
     ipAddress: context.ipHash,
-    source: 'signup',
+    source: 'reacceptance',
     // No PharmSmart ticket in the portal, so the soft name check is "not checked".
     nameMatchesPharmsmart: null,
   };

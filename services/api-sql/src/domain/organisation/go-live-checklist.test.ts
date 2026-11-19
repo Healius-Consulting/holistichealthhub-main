@@ -17,6 +17,7 @@ function signals(overrides: Partial<ChecklistSignals> = {}): ChecklistSignals {
     organisationStatus: 'ONBOARDING',
     worldpayEnabled: false,
     termsAcceptedAt: null,
+    termsRequired: true,
     worldpayFormSubmittedAt: null,
     worldpayValidatedAt: null,
     ...overrides,
@@ -177,4 +178,12 @@ describe('checklistItemId', () => {
     assert.notEqual(checklistItemId(branch, 'sops_approved'), checklistItemId(branch, 'staff_training'));
     assert.notEqual(checklistItemId(branch, 'sops_approved'), checklistItemId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'sops_approved'));
   });
+});
+
+it('the Partner Terms item is off the checklist, and out of the percentage, while HHH has the Terms switched off', () => {
+  const on = buildGoLiveChecklist(ORG, signals(), []);
+  const off = buildGoLiveChecklist(ORG, signals({ termsRequired: false }), []);
+  assert.ok(on.items.some(item => item.key === 'partner_terms_accepted'));
+  assert.ok(!off.items.some(item => item.key === 'partner_terms_accepted'));
+  assert.equal(off.items.length, on.items.length - 1);
 });

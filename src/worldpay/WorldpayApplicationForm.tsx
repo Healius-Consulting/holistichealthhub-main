@@ -32,7 +32,7 @@ import {
   type WorldpayProblem,
 } from './applicationLogic';
 import { WorldpayApplicationStatusPanel } from './WorldpayApplicationStatus';
-import { Answered, Field, FormBottom, FormIntro, FormTop, OptionCards, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
+import { Answered, Field, FormBottom, FormIntro, FormTop, OptionCards, RequiredKey, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
 
 /**
  * The Worldpay merchant application (spec 01, 18 Nov 2026): "Before you start" and
@@ -371,6 +371,7 @@ function StartStep({ answers, view, onChoose }: { answers: WorldpayAnswers; view
   return (
     <>
       <FormIntro title="Apply for a Worldpay account">This lets your pharmacy take card payments by payment link through Holistic Health Hub.</FormIntro>
+      <RequiredKey />
       <div className="wpa-start">
         <section className="wpa-price" aria-label="What it costs">
           <span className="wpa-price__label">{panel.label}</span>
@@ -392,7 +393,7 @@ function StartStep({ answers, view, onChoose }: { answers: WorldpayAnswers; view
           </ul>
         </section>
       </div>
-      <Section title="Does this pharmacy already have a Worldpay account?" description="Choose the second option only if you activated online payments with Worldpay yourself. If your account was set up through an agent, choose No.">
+      <Section need="required" title="Does this pharmacy already have a Worldpay account?" description="Choose the second option only if you activated online payments with Worldpay yourself. If your account was set up through an agent, choose No.">
         <OptionCards name="Existing Worldpay account" value={answers.existingAccount} options={EXISTING} onChange={onChoose} />
         {answers.existingAccount === 'online' ? (
           <div className="wpa-banner is-green">
@@ -438,6 +439,7 @@ function BusinessStep({ answers, update, problemFor, warnFor, lookup, onLookup }
   return (
     <>
       <FormIntro title="Your business">Company details first, then the pharmacy’s trading details.</FormIntro>
+      <RequiredKey />
 
       <Section title="The company">
         <div className="wpa-grid">
@@ -473,7 +475,7 @@ function BusinessStep({ answers, update, problemFor, warnFor, lookup, onLookup }
           <Field label="Registered address" problem={problemFor('business.registeredAddress')} fromCompaniesHouse={tagged('business.registeredAddress')}>
             <textarea className="input" rows={3} value={b.registeredAddress} onChange={set('registeredAddress')} />
           </Field>
-          <Field label="VAT registration number" problem={problemFor('business.vatNumber')} hint="Leave blank if not VAT registered.">
+          <Field optional label="VAT registration number" problem={problemFor('business.vatNumber')} hint="Leave blank if not VAT registered.">
             <input className="input" value={b.vatNumber} onChange={set('vatNumber')} placeholder="GB123456789" />
           </Field>
         </div>
@@ -513,6 +515,7 @@ function BusinessStep({ answers, update, problemFor, warnFor, lookup, onLookup }
       </Section>
 
       <Section
+        need="required"
         title="Does your pharmacy have its own website?"
         description="A website counts only if it is in your pharmacy’s trading name and shows the pharmacy’s name and address. A group or head-office page, a branch-finder entry, an NHS listing or a social media page does not count: choose No."
       >
@@ -542,7 +545,7 @@ function BusinessStep({ answers, update, problemFor, warnFor, lookup, onLookup }
           <Field label="Contact phone" problem={problemFor('business.contactPhone')}>
             <input className="input" type="tel" value={b.contactPhone} onChange={set('contactPhone')} />
           </Field>
-          <Field label="Contact email" problem={problemFor('business.contactEmail')} hint="Only needed if different from the business email.">
+          <Field optional label="Contact email" problem={problemFor('business.contactEmail')} hint="Only needed if different from the business email.">
             <input className="input" type="email" value={b.contactEmail} onChange={set('contactEmail')} />
           </Field>
         </div>
@@ -572,6 +575,7 @@ function PeopleStep({ answers, update, problemFor }: { answers: WorldpayAnswers;
           : partnership ? <>Worldpay need details for <b>every partner</b> in the business.</>
             : <>Worldpay need details for <b>every director</b>, and for <b>every shareholder who owns 25% or more</b> of the company. If no one owns 25% or more, list <b>every shareholder</b>.</>}
       </FormIntro>
+      <RequiredKey />
       {company && lookup ? (
         <div className="wpa-notes">
           <p className="wpa-note">We started this list from Companies House: current directors, and anyone recorded as owning 25% or more. Check it, complete each person, and add anyone missing.</p>
@@ -731,6 +735,7 @@ function FinancialsStep({ answers, update, problemFor, warnFor }: { answers: Wor
   return (
     <>
       <FormIntro title="Financials">Your turnover, what you expect to take by payment link, and where the money settles.</FormIntro>
+      <RequiredKey />
       <Section title="Annual business turnover" description="Whole company, all branches, most recent financial year, including NHS income. If the company has not completed a financial year, choose your expected first-year figure.">
         <div className="wpa-grid">
           <Field label="Turnover" problem={problemFor('financials.turnoverBand')}>

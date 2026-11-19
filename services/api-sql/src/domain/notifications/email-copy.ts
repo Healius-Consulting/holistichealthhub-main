@@ -372,6 +372,36 @@ export const EMAIL_COPY_SPECS = {
     sample: { ...ORDER_SAMPLE, summary: 'Collected by the patient.' },
   },
 
+  pharmacy_partner_terms_signed: {
+    name: 'Partner Terms signed',
+    group: 'pharmacy',
+    when: 'To the pharmacy email and the signer when a pharmacy signs a version of the Partner Terms. The signed copy is attached automatically.',
+    fields: ['Pharmacy name', 'Terms version', 'Signer name', 'Signed on'],
+    defaults: {
+      subject: 'Your signed Holistic Health Hub Partner Terms',
+      preheader: 'A copy of the Partner Terms you signed is attached.',
+      title: 'Partner Terms signed',
+      body: 'Thank you. **[Signer name]** signed the Holistic Health Hub Partner Terms (version [Terms version]) for **[Pharmacy name]** on [Signed on].\n\nA signed copy is attached. You can also download it at any time from the Onboarding page in your account.',
+      footer: 'If you did not expect this email, reply to it and we will look into it.',
+    },
+    sample: { ...PHARMACY_SAMPLE, termsVersion: 'v1.0', signerName: 'Asha Shah', signedOn: '19 November 2026 at 10:42 GMT' },
+  },
+  pharmacy_partner_terms_reminder: {
+    name: 'Partner Terms waiting (7 days)',
+    group: 'pharmacy',
+    when: 'Once per version, to the pharmacy email and whoever first saw the sign prompt, 7 days after it was first shown unsigned.',
+    fields: ['Pharmacy name', 'Terms version'],
+    defaults: {
+      subject: 'Please sign the Holistic Health Hub Partner Terms',
+      preheader: 'The updated Partner Terms are waiting to be signed.',
+      title: 'Partner Terms waiting',
+      body: 'The Holistic Health Hub Partner Terms (version [Terms version]) for **[Pharmacy name]** were shown in your account a week ago and have not been signed yet.\n\nThe superintendent pharmacist, or someone authorised to sign for the company, can read and sign them the next time they log in.',
+      button: 'Open your account',
+      footer: 'If you have a question about the Partner Terms, reply to this email.',
+    },
+    sample: { ...PHARMACY_SAMPLE, termsVersion: 'v1.0' },
+  },
+
   pharmacy_staff_invite: {
     name: 'Staff invitation',
     group: 'staff',

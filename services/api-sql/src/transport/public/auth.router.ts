@@ -23,6 +23,10 @@ import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy
 import { toPortalOrganisation } from '../portal/pharmacy-contracts.js';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
 import { sqlHoldMessages } from '../../application/pharmacy-onboarding/hold-message.js';
+import { owesSignature, partnerTermsState } from '../../application/pharmacy-onboarding/partner-terms.service.js';
+import { branchAcceptances } from '../../application/pharmacy-onboarding/branch-onboarding.js';
+import { SqlPartnerTermsRepository } from '../../repositories/sql/partner-terms.sql.js';
+import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-application.sql.js';
 
 const sessionInputSchema = z.object({
   idToken: z.string().min(100).max(20_000),
@@ -67,6 +71,8 @@ export function createAuthRouter(): Router {
   const integrationRepo = new SqlIntegrationRepository();
   const notificationRepo = new SqlNotificationRepository();
   const onboardingRepo = new SqlPharmacyOnboardingRepository();
+  const platformContent = new SqlPlatformContentRepository();
+  const partnerTermsRepo = new SqlPartnerTermsRepository();
   const holdMessages = sqlHoldMessages();
   const markPharmsmartAccount = async (input: {
     uid: string;
@@ -102,8 +108,14 @@ export function createAuthRouter(): Router {
       const request = await onboardingRepo.findLatestByGphc(gphcNumber);
       if (!request) return null;
       const terms = await onboardingRepo.findTermsAcceptances(request.id);
-      return { ...request, termsAccepted: terms.length > 0 };
+      const on = (await partnerTermsState({ content: platformContent, repo: partnerTermsRepo })).on;
+      // A request whose application already went (sent while the Terms were off) signs at the login prompt instead.
+      const applicationSent = on && terms.length === 0
+        ? ((await notificationRepo.listForOnboardingRequest?.(request.id)) ?? []).some(row => row.templateCode === 'curaleaf_new_account_application')
+        : false;
+      return { ...request, termsAccepted: terms.length > 0, signupTermsRequired: on && !applicationSent };
     },
+    termsRequired: async () => (await partnerTermsState({ content: platformContent, repo: partnerTermsRepo })).on,
     listStaff: organisationId => identityRepo.listPharmacyStaffByOrganisationId(organisationId),
     findEmailOwner: async email => {
       try {
@@ -245,10 +257,18 @@ export function createAuthRouter(): Router {
         throw new HttpError(403, 'The pharmacy account is not fully provisioned.', 'TENANT_REQUIRED');
       }
       const csrfToken = issueCsrf(req, res);
+      // The Partner Terms version this branch still has to sign, for the login prompt. A failure never blocks the session.
+      const partnerTerms = await (async () => {
+        const state = await partnerTermsState({ content: platformContent, repo: partnerTermsRepo });
+        if (!state.on || !state.document) return null;
+        const acceptances = await branchAcceptances(onboardingRepo, organisation);
+        return owesSignature(state, organisation, acceptances) ? { documentId: state.document.id, version: state.document.version } : null;
+      })().catch(() => null);
       res.status(200).json({
         ...payload,
         csrfToken,
         pharmacyId: scope.organisationId,
+        partnerTerms,
         profile: {
           uid: staff.uid,
           organisationId: staff.organisationId,

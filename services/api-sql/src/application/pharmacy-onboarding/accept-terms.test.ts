@@ -7,9 +7,7 @@ import {
   partnerTermsAcceptanceSchema,
   type PartnerTermsAcceptanceRecord,
 } from '../../domain/pharmacy-onboarding/terms.js';
-import { ONBOARDING_CONTENT_DEFAULTS } from '../../domain/pharmacy-onboarding/content.js';
 import { acceptPartnerTerms } from './accept-terms.js';
-import { acceptedPartnerTermsVersion, partnerTermsVersion } from './onboarding-config.js';
 
 const REQUEST_ID = '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11';
 const SECRET = 'terms-test-secret';
@@ -45,7 +43,7 @@ function request(status: PharmacyOnboardingStatus = 'PENDING'): PharmacyOnboardi
   };
 }
 
-function harness(status: PharmacyOnboardingStatus = 'PENDING', options: { emailThrowsOnce?: boolean; demo?: boolean } = {}) {
+function harness(status: PharmacyOnboardingStatus = 'PENDING', options: { emailThrowsOnce?: boolean; demo?: boolean; termsOff?: boolean } = {}) {
   const rows: PartnerTermsAcceptanceRecord[] = [];
   const emails: Array<{ request: PharmacyOnboardingRequestRecord; demo: boolean }> = [];
   let throwOnce = options.emailThrowsOnce ?? false;
@@ -66,7 +64,7 @@ function harness(status: PharmacyOnboardingStatus = 'PENDING', options: { emailT
         }
       },
     },
-    termsVersion: 'v-test',
+    terms: options.termsOff ? null : { version: 'v-test', documentId: '2b2c8a3e-6f21-4f5a-9b0e-3d1f2e4a5b6c' },
     ticketSecret: SECRET,
     isDemo: async () => options.demo ?? false,
   };
@@ -179,12 +177,17 @@ describe('acceptPartnerTerms', () => {
     assert.equal(h.emails.length, 2);
   });
 
-  it('records the published Partner Terms version once admin has published one, else the config default', () => {
-    const terms = ONBOARDING_CONTENT_DEFAULTS.partnerTerms;
-    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: terms }), partnerTermsVersion());
-    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: { ...terms, published: false, version: '2026-12' } }), partnerTermsVersion());
-    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: { ...terms, published: true, version: ' ' } }), partnerTermsVersion());
-    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: { ...terms, published: true, version: '2026-12' } }), '2026-12');
+  it('records the current version and its document, and refuses while the Terms are switched off', async () => {
+    const on = harness();
+    await acceptPartnerTerms(on.deps, input(), { ipHash: null });
+    assert.equal(on.rows[0]!.documentId, '2b2c8a3e-6f21-4f5a-9b0e-3d1f2e4a5b6c');
+    const off = harness('PENDING', { termsOff: true });
+    await assert.rejects(
+      acceptPartnerTerms(off.deps, input(), { ipHash: null }),
+      (error: unknown) => error instanceof HttpError && error.code === 'PARTNER_TERMS_OFF',
+    );
+    assert.equal(off.rows.length, 0);
+    assert.equal(off.emails.length, 0, 'nothing goes to Curaleaf from a refused acceptance');
   });
 
   it('refuses an unknown request and a request already decided, sending nothing', async () => {

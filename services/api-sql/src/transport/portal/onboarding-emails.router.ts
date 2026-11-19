@@ -163,13 +163,13 @@ export function createPortalOnboardingEmailsRouter(depsFor: (context: RequestCon
       const value = ONBOARDING_CONTENT_SCHEMAS[key].parse((req.body as { value?: unknown })?.value);
       const deps = depsFor(req.context!);
       await deps.content.write(ONBOARDING_CONTENT_KEYS[key], value, scope.uid);
-      // Which piece changed, never its text: the Terms text alone can be 100k characters.
+      // Which piece changed, never its text.
       await deps.audit({
         scope,
         event: 'onboarding_content.updated',
         recordType: 'PlatformContent',
         recordId: ONBOARDING_CONTENT_KEYS[key],
-        details: { key, ...(key === 'partnerTerms' ? { published: (value as { published: boolean }).published, version: (value as { version: string }).version } : {}) },
+        details: { key },
       }).catch(() => undefined);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(await contentView(deps.content));

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="132" height="32" viewBox="0 0 132 32" role="img" aria-label="Curaleaf">
+  <!-- PLACEHOLDER: replace this file with HHH's production Curaleaf logo (SVG, or a PNG at least 600px wide, transparent), unaltered. -->
+  <path d="M14 4c6 3 9 9 7 16-1 4-4 7-7 8-3-1-6-4-7-8-2-7 1-13 7-16z" fill="#3a8a5c"/>
+  <path d="M14 8v18" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/>
+  <text x="28" y="22" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" fill="#1f3b2d">Curaleaf</text>
+</svg>

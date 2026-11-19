@@ -67,6 +67,12 @@ export interface ClickupHooks {
     version: string;
     signerName: string;
   }): Promise<void>;
+  /** Someone at a branch skipped signing the current Partner Terms version at login. */
+  termsSkipped(input: { organisation: Pick<BranchForClickup, 'id' | 'gphcNumber' | 'classification'>; version: string; skippedBy: string; skipCount: number; at: string }): Promise<void>;
+  /** The 7-day reminder went: the branch saw the Terms a week ago and has not signed. */
+  termsOverdue(input: { organisation: Pick<BranchForClickup, 'id' | 'gphcNumber' | 'classification'>; version: string; firstViewedAt: string }): Promise<void>;
+  /** A new Partner Terms version is waiting for this branch to sign. */
+  termsVersionPublished(input: { organisation: Pick<BranchForClickup, 'id' | 'gphcNumber' | 'classification'>; version: string; documentId: string }): Promise<void>;
   /** A Worldpay application was submitted: payment route Worldpay, and a comment with the reference. */
   worldpaySubmitted(input: {
     gphcNumber: string;
@@ -225,6 +231,34 @@ export function clickupHooks(deps: ClickupHooksDeps): ClickupHooks {
         termsAcceptedAt: input.acceptedAt,
         termsVersion: input.version,
         termsSigner: input.signerName,
+        comment: `Partner Terms ${input.version} signed by ${input.signerName}, ${londonDay(input.acceptedAt)}`,
+      },
+    )),
+    termsSkipped: input => bestEffort('Terms skipped', async () => isRealPharmacy(input.organisation) && enqueue(
+      'terms_skipped',
+      `${input.organisation.id}:${input.version}:${input.at}`,
+      {
+        gphcNumber: input.organisation.gphcNumber,
+        branchId: input.organisation.id,
+        comment: `Partner Terms ${input.version} skipped by ${input.skippedBy}, ${londonDay(input.at)} (skip ${input.skipCount})`,
+      },
+    )),
+    termsOverdue: input => bestEffort('Terms overdue', async () => isRealPharmacy(input.organisation) && enqueue(
+      'terms_overdue',
+      `${input.organisation.id}:${input.version}`,
+      {
+        gphcNumber: input.organisation.gphcNumber,
+        branchId: input.organisation.id,
+        comment: `Partner Terms ${input.version} not signed 7 days after first shown (${londonDay(input.firstViewedAt)}). Reminder email sent.`,
+      },
+    )),
+    termsVersionPublished: input => bestEffort('Terms published', async () => isRealPharmacy(input.organisation) && enqueue(
+      'terms_version_published',
+      `${input.organisation.id}:${input.documentId}`,
+      {
+        gphcNumber: input.organisation.gphcNumber,
+        branchId: input.organisation.id,
+        comment: `Partner Terms ${input.version} published: waiting for this pharmacy to sign at its next login`,
       },
     )),
     worldpaySubmitted: input => bestEffort('Worldpay application', () => enqueue(

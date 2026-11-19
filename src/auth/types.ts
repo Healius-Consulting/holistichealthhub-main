@@ -72,6 +72,8 @@ export interface PharmsmartWelcome {
   hold?: OnboardingHoldMessage | null;
   /** Set when `onboardingRequest` is `pending`: the admin-edited Awaiting activation wording, merged for the branch. */
   awaiting?: OnboardingAwaitingMessage | null;
+  /** Whether sign-up asks for the Partner Terms (HHH switched them on). Undefined: the page asks the API. */
+  termsRequired?: boolean;
   /** The request whose Partner Terms are still to accept, when `onboardingRequest` is `terms_outstanding`. */
   termsRequest?: PharmsmartTermsRequest | null;
   /** Server-signed PharmSmart names, sent back with the Terms for the soft name check. */

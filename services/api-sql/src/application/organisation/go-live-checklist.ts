@@ -16,7 +16,8 @@ export type GoLiveChecklistDeps = {
   checklistRepo: {
     listTicks(organisationId: string): Promise<ChecklistTickRecord[]>;
     saveTick(tick: ChecklistTickRecord): Promise<void>;
-    termsAcceptedAt(organisationId: string): Promise<string | null>;
+    /** When this branch signed the given Terms version (any version when omitted). */
+    termsAcceptedAt(organisationId: string, documentId?: string | null): Promise<string | null>;
     /**
      * When the branch sent the Worldpay form. Today this reads the GPhC-keyed
      * PharmacyWorldpaySubmission note; a per-branch "form submitted" record plugs in here.
@@ -24,6 +25,8 @@ export type GoLiveChecklistDeps = {
     worldpayFormSubmittedAt(compactGphc: string, organisationId?: string): Promise<string | null>;
   };
   findWorldpayConnection(organisationId: string): Promise<IntegrationConnectionRecord | null>;
+  /** Whether the Partner Terms are on, and the version to sign. Omitted: off. */
+  partnerTerms?: () => Promise<{ on: boolean; documentId: string | null }>;
   clickup: Pick<ClickupHooks, 'checklistProgress'>;
   now?: () => Date;
 };
@@ -36,9 +39,10 @@ async function organisationOrThrow(deps: GoLiveChecklistDeps, organisationId: st
 
 async function checklistFor(deps: GoLiveChecklistDeps, organisation: OrganisationRecord): Promise<GoLiveChecklistView> {
   const gphc = compactGphcNumber(organisation.gphcNumber);
+  const terms = await deps.partnerTerms?.().catch(() => ({ on: false, documentId: null })) ?? { on: false, documentId: null };
   const [ticks, termsAcceptedAt, worldpayFormSubmittedAt, worldpay] = await Promise.all([
     deps.checklistRepo.listTicks(organisation.id),
-    deps.checklistRepo.termsAcceptedAt(organisation.id),
+    terms.on ? deps.checklistRepo.termsAcceptedAt(organisation.id, terms.documentId) : Promise.resolve(null),
     gphc ? deps.checklistRepo.worldpayFormSubmittedAt(gphc, organisation.id) : Promise.resolve(null),
     deps.findWorldpayConnection(organisation.id),
   ]);
@@ -46,6 +50,7 @@ async function checklistFor(deps: GoLiveChecklistDeps, organisation: Organisatio
     organisationStatus: organisation.status,
     worldpayEnabled: organisation.worldpayEnabled,
     termsAcceptedAt,
+    termsRequired: terms.on,
     worldpayFormSubmittedAt,
     worldpayValidatedAt: worldpayValidatedAt(worldpay),
   }, ticks);

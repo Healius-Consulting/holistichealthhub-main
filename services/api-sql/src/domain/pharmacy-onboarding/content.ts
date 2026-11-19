@@ -21,7 +21,6 @@ export const ONBOARDING_CONTENT_KEYS = {
   awaitingPage: 'onboarding.awaitingPage',
   addresses: 'onboarding.addresses',
   links: 'onboarding.links',
-  partnerTerms: 'onboarding.partnerTerms',
 } as const;
 export type OnboardingContentKey = keyof typeof ONBOARDING_CONTENT_KEYS;
 
@@ -78,13 +77,6 @@ const linksSchema = z.object({
   /** Blank leaves the booking sentence out of the Activation email. */
   trainingBookingUrl: url,
 });
-const partnerTermsSchema = z.object({
-  /** Off until the final Terms text is in. While off there is no public page and the emails leave the link out. */
-  published: z.boolean(),
-  version: z.string().trim().max(60),
-  /** The Terms text; blank lines separate paragraphs. */
-  text: z.string().max(100_000),
-});
 
 export const ONBOARDING_CONTENT_SCHEMAS = {
   sent: emailTemplateSchema,
@@ -96,13 +88,10 @@ export const ONBOARDING_CONTENT_SCHEMAS = {
   awaitingPage: awaitingPageSchema,
   addresses: addressesSchema,
   links: linksSchema,
-  partnerTerms: partnerTermsSchema,
 } as const;
 
 export type OnboardingContent = { [K in OnboardingContentKey]: z.infer<(typeof ONBOARDING_CONTENT_SCHEMAS)[K]> };
 
-/** The public page the Partner Terms link points to once the Terms are published. */
-export const PARTNER_TERMS_PATH = '/partner-terms';
 
 const paragraphs = (...parts: string[]) => parts.join('\n\n');
 const SIGN_OFF = 'Kind regards,\nPartner Onboarding, Holistic Health Hub';
@@ -116,8 +105,8 @@ export const ONBOARDING_CONTENT_DEFAULTS: OnboardingContent = {
       'What happens next',
       'Curaleaf Laboratories open your account, which usually takes three to five days. We will email you when your account is ready to try in demonstration mode, and again when it is live. You do not need to do anything further on the application. If Curaleaf need more information, we will contact you.',
       '[If no worldpay]Card payments are optional. You can take payment in the pharmacy from day one, and you can apply for online card payments from the checklist at any time.[/If][If worldpay submitted]Worldpay will email you separately about your application.[/If]',
-      'Your Partner Terms',
-      '[Signer full name] accepted the Holistic Health Hub Partner Terms (version [Terms version]) for [Registered company name] on [Acceptance date].[If terms link] You can read them at any time at [Partner Terms link].[/If]',
+      '[If terms accepted]Your Partner Terms[/If]',
+      '[If terms accepted][Signer full name] accepted the Holistic Health Hub Partner Terms (version [Terms version]) for [Registered company name] on [Acceptance date]. A signed copy is in your account.[/If]',
       'If you have a question, reply to this email.',
       SIGN_OFF,
     ),
@@ -139,7 +128,7 @@ export const ONBOARDING_CONTENT_DEFAULTS: OnboardingContent = {
     body: paragraphs(
       'Hello [Signer first name],',
       'Thank you for applying to join Holistic Health Hub. Your application for [Branch name] is on hold.',
-      '[If existing curaleaf customer]Curaleaf Laboratories have told us that [Branch name] already has an account with them. For now, our agreement with Curaleaf Laboratories covers only pharmacies that are new to them, so we are not able to set up your Holistic Health Hub account yet.\n\nHolistic Health Hub may be available to existing Curaleaf pharmacies in the near future. We will keep your application and contact you as soon as we can go ahead. You do not need to apply again, and your acceptance of the Partner Terms stays on record.\n\nYour existing Curaleaf Laboratories account is not affected, and you can carry on ordering from them as you do today.[/If]',
+      '[If existing curaleaf customer]Curaleaf Laboratories have told us that [Branch name] already has an account with them. For now, our agreement with Curaleaf Laboratories covers only pharmacies that are new to them, so we are not able to set up your Holistic Health Hub account yet.\n\nHolistic Health Hub may be available to existing Curaleaf pharmacies in the near future. We will keep your application and contact you as soon as we can go ahead. You do not need to apply again.\n\nYour existing Curaleaf Laboratories account is not affected, and you can carry on ordering from them as you do today.[/If]',
       '[If more information needed]We need some more information before your account can be opened.\n\nHealius Consulting will be in touch with you about this.\n\nYou do not need to apply again.[/If]',
       '[If curaleaf declined]Curaleaf Laboratories were not able to open an account for [Branch name], so we cannot set up your Holistic Health Hub account at the moment.\n\nHealius Consulting will be in touch about what happens next. You do not need to do anything for now.[/If]',
       '[If worldpay submitted]Your Worldpay application is not affected and continues as normal.[/If]',
@@ -207,18 +196,13 @@ export const ONBOARDING_CONTENT_DEFAULTS: OnboardingContent = {
   links: {
     trainingBookingUrl: 'https://calendly.com/spatel-72k/30min',
   },
-  partnerTerms: {
-    published: false,
-    version: '',
-    text: '',
-  },
 };
 
 /** The merge fields and flags each email is given, for the admin screen's help text. */
 export const ONBOARDING_EMAIL_MERGE_HELP: Record<OnboardingEmailKind, { fields: string[]; flags: string[] }> = {
   sent: {
-    fields: ['Branch name', 'Signer first name', 'Signer full name', 'Registered company name', 'Submission date', 'Terms version', 'Acceptance date', 'Partner Terms link'],
-    flags: ['no worldpay', 'worldpay submitted', 'terms link'],
+    fields: ['Branch name', 'Signer first name', 'Signer full name', 'Registered company name', 'Submission date', 'Terms version', 'Acceptance date'],
+    flags: ['no worldpay', 'worldpay submitted', 'terms accepted'],
   },
   curaleafApplication: {
     fields: ['Branch name', 'GPhC premises no.', 'Submission date', 'Submission time'],
@@ -248,9 +232,4 @@ export function onboardingContentFrom(stored: Record<string, unknown>): Onboardi
     if (parsed.success) out[name] = parsed.data;
   }
   return out as OnboardingContent;
-}
-
-/** The Partner Terms link for emails: blank until the Terms are published. */
-export function partnerTermsLink(content: OnboardingContent, publicOrigin = 'https://holistichealthhub.live') {
-  return content.partnerTerms.published && content.partnerTerms.text.trim() ? `${publicOrigin}${PARTNER_TERMS_PATH}` : '';
 }

@@ -23,7 +23,6 @@ import {
   ONBOARDING_CONTENT_DEFAULTS,
   ONBOARDING_EMAIL_MERGE_HELP,
   ONBOARDING_HOLD_REASONS,
-  PARTNER_TERMS_PATH,
 } from '../../../services/api-sql/src/domain/pharmacy-onboarding/content.ts';
 import { mergeSubject, mergeTemplate } from '../../../services/api-sql/src/domain/common/content-template.ts';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
@@ -40,6 +39,7 @@ import {
   type EmailCopySpec,
 } from '../../../services/api-sql/src/domain/notifications/email-copy.ts';
 import { DemoPharmaciesPanel } from './DemoPharmaciesPanel';
+import { PartnerTermsPanel } from './PartnerTermsPanel';
 import { WorldpayApplicationsPanel, WorldpayWordingPanel } from './WorldpayAdminPanels';
 import { flagLabel, newBlock, normalizeTemplate, parseTemplate, serializeTemplate, unknownFields, type TemplateBlock } from './templateBlocks';
 import { BlockEditor, EmailPreview, FieldChips, RenderedEmail, ScenarioSwitches, useInsertTarget, useServerPreview, type Scenario } from './settingsParts';
@@ -109,14 +109,14 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
     items: [
       { id: 'demo', label: 'Demo pharmacies', keys: [] },
       { id: 'addresses', label: 'Addresses and links', keys: ['addresses', 'links'] },
-      { id: 'terms', label: 'Partner Terms', keys: ['partnerTerms'] },
+      { id: 'terms', label: 'Partner Terms', keys: [] },
     ],
   },
 ];
 
 const EMAIL_WHEN: Record<OnboardingEmailKind, string> = {
-  sent: 'Sent to the Partner Terms signer and the branch’s address when the pharmacy accepts the Partner Terms.',
-  curaleafApplication: 'Sent to Curaleaf with the filled form attached, at the same time as Application sent. Their replies go to the Curaleaf Reply-To.',
+  sent: 'Sent to the branch’s address and the person who signed when the Curaleaf application goes: at the Curaleaf form while the Partner Terms are switched off, or when the pharmacy accepts them while they are on.',
+  curaleafApplication: 'Sent to Curaleaf with the filled form attached, at the same time as Application sent (the Curaleaf form while the Terms are off, the Terms acceptance while they are on). Their replies go to the Curaleaf Reply-To.',
   activation: 'Sent once per branch when you click Activate: the account is ready to try in demonstration mode.',
   hold: 'Sent each time you put a branch on hold or change its reason. Each reason has its own paragraphs below.',
   live: 'Sent once per branch when its PHAR code and API key are saved and it goes live.',
@@ -141,7 +141,7 @@ const SAMPLE_FIELDS: Record<string, string> = {
 type OnboardingScenario = { label: string; options: Array<{ label: string; flags: string[] }> };
 const WORLDPAY: OnboardingScenario = { label: 'Worldpay', options: [{ label: 'Not applied', flags: ['no worldpay'] }, { label: 'Applied', flags: ['worldpay submitted'] }] };
 const SCENARIOS: Record<OnboardingEmailKind, OnboardingScenario[]> = {
-  sent: [WORLDPAY, { label: 'Partner Terms', options: [{ label: 'Published', flags: ['terms link'] }, { label: 'Not published', flags: [] }] }],
+  sent: [WORLDPAY, { label: 'Partner Terms', options: [{ label: 'Accepted', flags: ['terms accepted'] }, { label: 'Not asked (switched off)', flags: [] }] }],
   curaleafApplication: [],
   activation: [{ label: 'Training link', options: [{ label: 'Set', flags: ['training link'] }, { label: 'Not set', flags: ['no training link'] }] }, WORLDPAY],
   hold: [
@@ -209,8 +209,7 @@ function EmailEditor({
 
   const previewFields = {
     ...SAMPLE_FIELDS,
-    'Terms version': content.partnerTerms.version || '1.0',
-    'Partner Terms link': `https://holistichealthhub.live${PARTNER_TERMS_PATH}`,
+    'Terms version': 'v1.0',
     'Training booking link': content.links.trainingBookingUrl || 'https://calendly.com/…',
   };
   const activeFlags = Object.fromEntries(SCENARIOS[kind].flatMap((scenario, index) => scenario.options[choices[index] ?? 0]!.flags.map(flag => [flag, true])));
@@ -591,7 +590,6 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<OnboardingContentKey | null>(null);
-  const [confirmPublish, setConfirmPublish] = useState(false);
   const [copySaved, setCopySaved] = useState<EmailCopyOverrides | null>(null);
   const [copyDraft, setCopyDraft] = useState<Partial<Record<EditableEmailCode, CopySlots>>>({});
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -620,7 +618,6 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
   useEffect(() => {
     if (!open) return;
     setNotice(null);
-    setConfirmPublish(false);
     if (requested) setSection(requested);
     load();
   }, [open, requested, load]);
@@ -647,15 +644,9 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
   const set = <K extends OnboardingContentKey>(key: K, value: OnboardingContent[K]) => {
     setDraft(current => (current ? { ...current, [key]: value } : current));
     setNotice(null);
-    if (key === 'partnerTerms') setConfirmPublish(false);
   };
-  const save = async (key: OnboardingContentKey, label: string, confirmed = false) => {
+  const save = async (key: OnboardingContentKey, label: string) => {
     if (!draft || !view) return;
-    if (key === 'partnerTerms') {
-      const terms = draft.partnerTerms;
-      if (terms.published && (!terms.text.trim() || !terms.version.trim())) { setError('Add the Terms text and a version before publishing.'); return; }
-      if (terms.published && !view.content.partnerTerms.published && !confirmed) { setConfirmPublish(true); return; }
-    }
     setBusy(key);
     setError(null);
     setNotice(null);
@@ -668,7 +659,6 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
       setDraft(current => (current ? { ...current, [key]: next.content[key] } : next.content));
       setVersion(current => current + 1);
       setNotice(`${label} saved. The next email or page uses it.`);
-      setConfirmPublish(false);
     } catch (cause) {
       setError(message(cause, `${label} could not be saved.`));
     } finally {
@@ -679,7 +669,6 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
     if (!view) return;
     setDraft(current => (current ? keys.reduce((next, key) => ({ ...next, [key]: view.content[key] }), current) : current));
     setVersion(current => current + 1);
-    setConfirmPublish(false);
   };
 
   const saveCopy = async (code: EditableEmailCode) => {
@@ -739,6 +728,7 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
     if (section === 'worldpay') return <WorldpayApplicationsPanel />;
     if (section === 'worldpayWording') return <WorldpayWordingPanel />;
     if (section === 'demo') return <DemoPharmaciesPanel />;
+    if (section === 'terms') return <PartnerTermsPanel />;
     if (section.startsWith('copy:')) {
       const code = section.slice('copy:'.length) as EditableEmailCode;
       if (!copySaved) {
@@ -814,32 +804,7 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
         </>
       );
     }
-    const terms = draft.partnerTerms;
-    const wasPublished = view.content.partnerTerms.published;
-    return (
-      <>
-        <div className="onb-settings__form">
-          <p className={`wpa-banner ${wasPublished ? 'is-green' : 'is-amber'}`} role="status">
-            {wasPublished
-              ? <>Published at holistichealthhub.live{PARTNER_TERMS_PATH}, and linked from the Application sent email.</>
-              : <>Not published: there is no public page, and the Application sent email leaves the link out.</>}
-          </p>
-          <label className="onb-content__toggle">
-            <input type="checkbox" checked={terms.published} onChange={event => set('partnerTerms', { ...terms, published: event.target.checked })} />
-            <span><strong>Published</strong><small>When on and saved, the public page goes live and every Application sent email from then on links to it.</small></span>
-          </label>
-          <label className="wpa-field"><span className="wpa-field__label">Version</span><input className="input" value={terms.version} onChange={event => set('partnerTerms', { ...terms, version: event.target.value })} /></label>
-          <label className="wpa-field"><span className="wpa-field__label">Terms text</span><textarea className="input" rows={18} value={terms.text} onChange={event => set('partnerTerms', { ...terms, text: event.target.value })} /><span className="wpa-field__hint">A blank line starts a new paragraph.</span></label>
-        </div>
-        {confirmPublish ? (
-          <div className="onb-settings__savebar is-dirty" role="alert">
-            <span>Publish the Partner Terms? The public page goes live for anyone with the link.</span>
-            <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => setConfirmPublish(false)}>Cancel</button>
-            <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} onClick={() => void save('partnerTerms', 'Partner Terms', true)}>{busy === 'partnerTerms' ? 'Publishing…' : 'Yes, publish'}</button>
-          </div>
-        ) : saveBar(['partnerTerms'], 'Partner Terms')}
-      </>
-    );
+    return null;
   };
 
   const go = (next: SettingsSection) => {
@@ -888,7 +853,7 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
           </header>
           {error && view ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
           {copyError && section.startsWith('copy:') ? <p className="wpa-banner is-red" role="alert">{copyError}</p> : null}
-          {error && !view && !['worldpay', 'worldpayWording', 'demo'].includes(section) ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
+          {error && !view && !['worldpay', 'worldpayWording', 'demo', 'terms'].includes(section) ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
           <div className="onb-settings__content">{body()}</div>
         </section>
       </div>

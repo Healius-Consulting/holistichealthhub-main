@@ -1,8 +1,9 @@
 import { ArrowRight, FileText } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import HhhBrandMark from '../components/HhhBrandMark';
+import { PdfPreview as OnboardingPdfPreview } from '../components/PdfPreview';
+import { NeedMark } from '../components/OnboardingFormParts';
 import { CuraleafAccountForm } from './CuraleafAccountForm';
 import { OnboardingQuickStart } from './OnboardingQuickStart';
 import { PartnerTermsForm } from './PartnerTermsForm';
@@ -18,12 +19,14 @@ import {
 } from './onboarding-flow';
 import {
   PHARMACY_ONBOARDING_CHOICES,
+  PARTNERSHIP_LOGOS,
   PHARMACY_ONBOARDING_PITCH,
+  PHARMSMART_LOGIN_URL,
   PHARMSMART_ONBOARDING_PACKETS,
   pharmsmartOnboardingBookingUrl,
   type PharmacyOnboardingChoice,
 } from './pharmsmart-login';
-import { recordPharmacyOnboardingDeferral } from '../shared/api';
+import { getPartnerTermsRequirement, partnerTermsSignupFileUrl, recordPharmacyOnboardingDeferral } from '../shared/api';
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 import { OnboardingHoldPage } from '../onboarding/OnboardingHold';
 import { OnboardingAwaitingPage } from '../onboarding/OnboardingAwaiting';
@@ -31,84 +34,6 @@ import { OnboardingAwaitingPage } from '../onboarding/OnboardingAwaiting';
 const BROCHURE = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.title === 'Brochure')!;
 
 
-
-function OnboardingPdfPreview({ href }: { href: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const documentRef = useRef<PDFDocumentProxy | null>(null);
-  const loadingTaskRef = useRef<PDFDocumentLoadingTask | null>(null);
-  const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(0);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setFailed(false);
-    setPage(1);
-    setPages(0);
-    void (async () => {
-      const pdfjs = await import('pdfjs-dist');
-      const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-      pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-      const response = await fetch(href);
-      if (!response.ok) throw new Error('The document could not be opened.');
-      const data = new Uint8Array(await response.arrayBuffer());
-      const task = pdfjs.getDocument({ data });
-      loadingTaskRef.current = task;
-      const document = await task.promise;
-      if (cancelled) return;
-      documentRef.current = document;
-      setPages(document.numPages);
-    })().catch(() => { if (!cancelled) setFailed(true); });
-    return () => {
-      cancelled = true;
-      const task = loadingTaskRef.current;
-      loadingTaskRef.current = null;
-      documentRef.current = null;
-      if (task && typeof task.destroy === 'function') void task.destroy().catch(() => undefined);
-    };
-  }, [href]);
-
-  useEffect(() => {
-    const document = documentRef.current;
-    const canvas = canvasRef.current;
-    if (!document || !canvas || pages < 1) return;
-    let cancelled = false;
-    let cancelRender = () => {};
-    void (async () => {
-      const pdfPage = await document.getPage(page);
-      if (cancelled) return;
-      const stage = canvas.parentElement;
-      const maxWidth = Math.max((stage?.clientWidth ?? 800) - 32, 280);
-      const base = pdfPage.getViewport({ scale: 1 });
-      const viewport = pdfPage.getViewport({ scale: maxWidth / base.width });
-      const context = canvas.getContext('2d');
-      if (!context) return;
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-      const task = pdfPage.render({ canvasContext: context, canvas, viewport });
-      cancelRender = () => task.cancel();
-      await task.promise;
-    })().catch(() => undefined);
-    return () => {
-      cancelled = true;
-      try { cancelRender(); } catch { /* a finished page has nothing left to cancel */ }
-    };
-  }, [page, pages]);
-
-  if (failed) return <p className="pharmsmart-guide__preview-status">This document could not be opened here. Download it instead.</p>;
-  return (
-    <div className="onboarding-pdf">
-      <div className="onboarding-pdf__toolbar">
-        <button type="button" onClick={() => setPage(current => Math.max(1, current - 1))} disabled={page <= 1}>Previous page</button>
-        <span>{pages ? `Page ${page} of ${pages}` : 'Opening…'}</span>
-        <button type="button" onClick={() => setPage(current => Math.min(pages || current, current + 1))} disabled={!pages || page >= pages}>Next page</button>
-      </div>
-      <div className="onboarding-pdf__stage">
-        <canvas ref={canvasRef} aria-label={pages ? `Page ${page} of ${pages}` : 'Opening document'} />
-      </div>
-    </div>
-  );
-}
 
 /** The partner brochure, opened in the preview on this page. */
 function BrochureCard({ onOpen }: { onOpen: () => void }) {
@@ -152,6 +77,19 @@ export function PharmsmartWelcome({
   // Curaleaf form, then Partner Terms, then Worldpay (skippable). A pharmacy that left
   // before the Terms comes back straight to them.
   const [setup, setSetup] = useState(() => initialSetupState(welcome));
+  const [termsVersion, setTermsVersion] = useState<string | null>(null);
+  // The public page has no PharmSmart welcome to say whether the Terms are on, so it asks.
+  useEffect(() => {
+    let active = true;
+    void getPartnerTermsRequirement()
+      .then(result => {
+        if (!active) return;
+        setTermsVersion(result.version);
+        if (welcome.termsRequired === undefined) setSetup(current => (current.termsRequest ? current : { ...current, termsRequired: result.required }));
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [welcome.termsRequired]);
   const [termsOpen, setTermsOpen] = useState(() => setup.termsRequest !== null);
   const [worldpayOpen, setWorldpayOpen] = useState(false);
   // Set up is open from the start; Book a demo and Not yet are a click away.
@@ -250,7 +188,10 @@ export function PharmsmartWelcome({
               <small>Pharmacy onboarding</small>
             </span>
           </div>
-          <p className="onb__account">Already on Holistic Health Hub? {signIn}</p>
+          <div className="onb__account onb__account--routes">
+            <p>Pharmsmart user? Open from your <a className="onb__signin" href={PHARMSMART_LOGIN_URL} target="_blank" rel="noopener noreferrer">Pharmsmart dashboard</a></p>
+            <p>Not on Pharmsmart? {signIn}</p>
+          </div>
         </header>
 
         <section className="onb__hero" aria-labelledby="onb-title">
@@ -258,6 +199,12 @@ export function PharmsmartWelcome({
             <p className="onb__eyebrow">{PHARMACY_ONBOARDING_PITCH.eyebrow}</p>
             <h1 id="onb-title">{PHARMACY_ONBOARDING_PITCH.title}</h1>
             <p className="onb__lede">{PHARMACY_ONBOARDING_PITCH.lede}</p>
+            <p className="onb__partners">
+              <span>In partnership with</span>
+              <span className="onb__partner-logos">
+                {PARTNERSHIP_LOGOS.map(logo => <img key={logo.alt} src={logo.src} alt={logo.alt} height={24} />)}
+              </span>
+            </p>
             <ul className="onb__facts">
               {PHARMACY_ONBOARDING_PITCH.facts.map(fact => <li key={fact}>{fact}</li>)}
             </ul>
@@ -295,8 +242,8 @@ export function PharmsmartWelcome({
           {choice === 'setup' ? (
             <section className="onb__panel" aria-labelledby="onb-setup">
               <div className="onb__panel-head">
-                <h2 id="onb-setup">{finished ? 'You are all set' : 'Three steps to set up'}</h2>
-                <span className="onb__progress">{Number(submitted) + Number(termsAccepted) + Number(setup.worldpay === 'sent')} of 3 done</span>
+                <h2 id="onb-setup">{finished ? 'You are all set' : setup.termsRequired ? 'Three steps to set up' : 'Two steps to set up'}</h2>
+                <span className="onb__progress">{Number(submitted) + (setup.termsRequired ? Number(termsAccepted) : 0) + Number(setup.worldpay === 'sent')} of {setup.termsRequired ? 3 : 2} done</span>
               </div>
               <p>
                 {finished
@@ -306,25 +253,27 @@ export function PharmsmartWelcome({
               <ol className="onb__forms">
                 <li className={submitted ? 'is-done' : undefined}>
                   <div>
-                    <h3>Curaleaf account</h3>
+                    <h3>Curaleaf account<NeedMark /></h3>
                     <p>Opens your account with Curaleaf Laboratories, so you can order stock. You will need your GPhC premises number, company name, invoice and delivery addresses, and an accounts contact.</p>
                   </div>
                   {submitted
                     ? <p className="onb__done">Sent</p>
                     : <button type="button" className="onb__button onb__button--primary" onClick={() => setQuickStartOpen(true)}>Fill in</button>}
                 </li>
-                <li className={termsAccepted ? 'is-done' : undefined}>
-                  <div>
-                    <h3>Partner Terms</h3>
-                    <p>Confirm you can accept our terms for the pharmacy and sign with your name. This sends your Curaleaf form to Curaleaf Laboratories.</p>
-                  </div>
-                  {termsAccepted
-                    ? <p className="onb__done">Accepted</p>
-                    : <button type="button" className="onb__button onb__button--primary" onClick={() => setTermsOpen(true)} disabled={!submitted}>Read and accept</button>}
-                </li>
+                {setup.termsRequired ? (
+                  <li className={termsAccepted ? 'is-done' : undefined}>
+                    <div>
+                      <h3>Partner Terms<NeedMark /></h3>
+                      <p>Read our terms, confirm you can accept them for the pharmacy and sign with your name. This sends your Curaleaf form to Curaleaf Laboratories.</p>
+                    </div>
+                    {termsAccepted
+                      ? <p className="onb__done">Accepted</p>
+                      : <button type="button" className="onb__button onb__button--primary" onClick={() => setTermsOpen(true)} disabled={!submitted}>Read and accept</button>}
+                  </li>
+                ) : null}
                 <li className={setup.worldpay === 'sent' ? 'is-done' : undefined}>
                   <div>
-                    <h3>Worldpay card payments</h3>
+                    <h3>Worldpay card payments<NeedMark optional /></h3>
                     <p>Lets patients pay by card through a secure link. You will need the bank account for payouts and each owner's date of birth and home address. You can skip this and do it later.</p>
                   </div>
                   {setup.worldpay === 'sent'
@@ -389,6 +338,7 @@ export function PharmsmartWelcome({
           ) : null}
           <OnboardingQuickStart
             open={quickStartOpen}
+            termsRequired={setup.termsRequired}
             pharmacyName={welcome.prefill?.pharmacyName ?? ''}
             company={company}
             onClose={() => setQuickStartOpen(false)}
@@ -411,8 +361,10 @@ export function PharmsmartWelcome({
                 pharmacyName: values.pharmacyName,
                 registeredCompanyName: values.registeredCompanyName,
               }));
-              // Straight on to the Terms, with no stop on this page in between.
-              setTermsOpen(true);
+              // Straight on to the next step, with no stop on this page in between:
+              // the Terms when they are asked for, otherwise Worldpay (the application has gone).
+              if (setup.termsRequired) setTermsOpen(true);
+              else setWorldpayOpen(true);
             }}
           />
           <PartnerTermsForm
@@ -424,6 +376,8 @@ export function PharmsmartWelcome({
               superintendent: personFromPrefill(welcome.prefill?.superintendentFirstName, welcome.prefill?.superintendentLastName, welcome.prefill?.superintendentEmail),
               manager: personFromPrefill(welcome.prefill?.managerFirstName, welcome.prefill?.managerLastName, welcome.prefill?.managerEmail),
             }}
+            termsFile={async () => partnerTermsSignupFileUrl(setup.termsRequest!.id)}
+            termsVersion={termsVersion}
             onClose={() => setTermsOpen(false)}
             onAccepted={() => {
               setTermsOpen(false);

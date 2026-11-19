@@ -37,7 +37,7 @@ import LocalPortalSwitcher from './dev/LocalPortalSwitcher';
 import CommandPalette from './components/CommandPalette';
 import WorkspaceTour from './components/WorkspaceTour';
 import { DemoModeBanner, DemoModeSessionBridge } from './components/DemoMode';
-import { GoLiveChecklistPrompt } from './components/GoLiveChecklist';
+import { LoginPrompts } from './components/PartnerTermsPrompt';
 import { appPathPrefix, isCurrentSurfacePath } from './auth/surface-path';
 import { surfaceRelativePath, surfaceRoutePath } from './routing/surfaceRoute';
 
@@ -340,7 +340,7 @@ function StaffWorkspace() {
         <div id="pharmacy-main-content" className="page-container" tabIndex={-1}>{renderScreen()}</div>
       </div>
       <WorkspaceTour />
-      {!isLocalPortalPreview && <GoLiveChecklistPrompt />}
+      {!isLocalPortalPreview && <LoginPrompts />}
       {isLocalPortalPreview && <LocalPortalSwitcher />}
       <CommandPalette />
       <ToastContainer />

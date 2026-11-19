@@ -6,7 +6,6 @@ import {
   HOLD_REASON_FLAG,
   ONBOARDING_EMAIL_KINDS,
   ONBOARDING_HOLD_REASONS,
-  partnerTermsLink,
   type OnboardingContent,
   type OnboardingEmailKind,
   type OnboardingHoldReason,
@@ -21,6 +20,8 @@ import { SqlGoLiveChecklistRepository } from '../../repositories/sql/go-live-che
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
+import { SqlPartnerTermsRepository } from '../../repositories/sql/partner-terms.sql.js';
+import { partnerTermsState } from './partner-terms.service.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { SqlPlatformContentRepository, SqlWorldpayApplicationRepository } from '../../repositories/sql/worldpay-application.sql.js';
 import { messageIdempotencyKey, type EmailTemplateCode } from '../notifications/email-catalog.js';
@@ -70,6 +71,8 @@ export interface OnboardingEmailsDeps {
   isDemoGphc(gphcNumber: string): Promise<boolean>;
   /** Curaleaf's new-accounts addresses and the HHH copy (config). */
   curaleafRecipients?: () => { to: string[]; cc: string[] };
+  /** Whether the Partner Terms are switched on. Off (or omitted): Sent and the Curaleaf application need no acceptance. */
+  termsRequired?: () => Promise<boolean>;
   now?: () => Date;
   warn?: (message: string, details: Record<string, unknown>) => void;
 }
@@ -178,17 +181,16 @@ export function createOnboardingEmails(deps: OnboardingEmailsDeps): OnboardingEm
       signerFor(request, null),
       worldpaySubmitted(request.id, request.organisationId),
     ]);
-    const termsLink = partnerTermsLink(content);
     const fields = {
       'Branch name': request.pharmacyName,
-      'Signer first name': firstWord(signer?.signerName) || firstWord(request.pharmacistName),
-      'Signer full name': signer?.signerName?.trim() || request.pharmacistName,
+      'Signer first name': firstWord(signer?.signerName) || firstWord(request.signatureName) || firstWord(request.pharmacistName),
+      // Without a Terms acceptance (Terms switched off), the person who signed the Curaleaf form.
+      'Signer full name': signer?.signerName?.trim() || request.signatureName?.trim() || request.pharmacistName,
       'Registered company name': signer?.registeredCompanyName?.trim() || request.registeredCompanyName,
-      // The day the application went to Curaleaf, which is when the Terms were accepted.
+      // The day the application went to Curaleaf: the Terms acceptance, or the Curaleaf form when Terms are off.
       'Submission date': londonDate(signer?.acceptedAt ?? request.createdAt),
-      'Terms version': signer?.termsVersion ?? content.partnerTerms.version,
+      'Terms version': signer?.termsVersion ?? '',
       'Acceptance date': londonDate(signer?.acceptedAt),
-      'Partner Terms link': termsLink,
     };
     return {
       to: uniqueAddresses([signer?.signerEmail, request.pharmacyEmail]),
@@ -196,7 +198,7 @@ export function createOnboardingEmails(deps: OnboardingEmailsDeps): OnboardingEm
       payload: pharmacyPayload(content, content.sent, fields, {
         'no worldpay': !worldpay,
         'worldpay submitted': worldpay,
-        'terms link': Boolean(termsLink),
+        'terms accepted': Boolean(signer),
       }),
       organisationId: request.organisationId,
       onboardingRequestId: request.id,
@@ -249,7 +251,7 @@ export function createOnboardingEmails(deps: OnboardingEmailsDeps): OnboardingEm
     const training = content.links.trainingBookingUrl.trim();
     const fields = {
       'Branch name': request.pharmacyName,
-      'Signer first name': firstWord(signer?.signerName) || firstWord(request.pharmacistName),
+      'Signer first name': firstWord(signer?.signerName) || firstWord(request.signatureName) || firstWord(request.pharmacistName),
       'Training booking link': training,
     };
     return {
@@ -274,7 +276,7 @@ export function createOnboardingEmails(deps: OnboardingEmailsDeps): OnboardingEm
     ]);
     const fields = {
       'Branch name': request.pharmacyName,
-      'Signer first name': firstWord(signer?.signerName) || firstWord(request.pharmacistName),
+      'Signer first name': firstWord(signer?.signerName) || firstWord(request.signatureName) || firstWord(request.pharmacistName),
     };
     // Only the chosen reason's block: every reason flag is set, true for one.
     const flags: Record<string, boolean> = Object.fromEntries(
@@ -308,7 +310,7 @@ export function createOnboardingEmails(deps: OnboardingEmailsDeps): OnboardingEm
     const validated = Boolean(worldpayValidatedAt(worldpay));
     const fields = {
       'Branch name': organisation.name || request?.pharmacyName || '',
-      'Signer first name': firstWord(signer?.signerName) || firstWord(request?.pharmacistName) || firstWord(organisation.mainContactName),
+      'Signer first name': firstWord(signer?.signerName) || firstWord(request?.signatureName) || firstWord(request?.pharmacistName) || firstWord(organisation.mainContactName),
       // The Curaleaf customer id only. The API key is a secret and is never read here.
       'PHAR code': curaleaf?.externalCustomerId?.trim() ?? '',
       'Outstanding required items': required.join('\n'),
@@ -386,8 +388,10 @@ export function createOnboardingEmails(deps: OnboardingEmailsDeps): OnboardingEm
       if (!request) throw new HttpError(404, 'Onboarding request not found.', 'NOT_FOUND');
       const resend = ['resend', now().toISOString()];
       const notYet = (message: string) => new HttpError(409, message, 'ONBOARDING_EMAIL_NOT_APPLICABLE');
-      // Sent and the application to Curaleaf go only once the Partner Terms are accepted, resent or not.
-      if ((kind === 'sent' || kind === 'curaleafApplication') && (await deps.requests.findTermsAcceptances(request.id)).length === 0) {
+      // While the Partner Terms are on, Sent and the application to Curaleaf go only once they are accepted.
+      if ((kind === 'sent' || kind === 'curaleafApplication')
+        && (await deps.termsRequired?.() ?? false)
+        && (await deps.requests.findTermsAcceptances(request.id)).length === 0) {
         throw notYet('The pharmacy has not accepted the Partner Terms, so this email has not been sent yet.');
       }
       let built: Built;
@@ -485,10 +489,15 @@ export function sqlOnboardingEmails(): OnboardingEmails {
       findOrganisation: orgId => organisations.findOrganisationById(orgId),
       checklistRepo,
       findWorldpayConnection: orgId => integrations.findConnection(orgId, 'WORLDPAY'),
+      partnerTerms: async () => {
+        const state = await partnerTermsState({ content, repo: new SqlPartnerTermsRepository() });
+        return { on: state.on, documentId: state.document?.id ?? null };
+      },
       // Reading the checklist never reports progress to ClickUp.
       clickup: { checklistProgress: async () => undefined },
     }, id),
     isDemoGphc: gphc => isDemoGphc(content, gphc),
+    termsRequired: async () => (await partnerTermsState({ content, repo: new SqlPartnerTermsRepository() })).on,
   });
   return shared;
 }

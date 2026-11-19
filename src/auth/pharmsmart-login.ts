@@ -17,7 +17,7 @@ export const PHARMSMART_ONBOARDING_CALENDLY = 'https://calendly.com/spatel-72k/3
 export const PHARMACY_ONBOARDING_PITCH = {
   eyebrow: 'For community pharmacies',
   title: 'The clinic prescribes. You dispense. We handle everything in between.',
-  lede: 'Holistic Health Hub is a private medical cannabis service that runs through your pharmacy. Curaleaf Clinic assesses and prescribes, and you dispense on terms we have already negotiated with Curaleaf Laboratories.',
+  lede: 'Holistic Health Hub is a private medical cannabis service that runs through your pharmacy.',
   facts: [
     'No cost to join',
     'No monthly fees or lock-in',
@@ -27,9 +27,22 @@ export const PHARMACY_ONBOARDING_PITCH = {
     { title: 'Intake', body: 'A patient fills in a short eligibility form through your pharmacy\'s own link or QR code.' },
     { title: 'Remote onboarding', body: 'Our team checks eligibility and refers the patient to Curaleaf Clinic.' },
     { title: 'Clinical review', body: 'A specialist consults remotely and sends the prescription to your pharmacy.' },
-    { title: 'Dispense and collect', body: 'You send a payment link, order on the platform, and the patient collects from you each month.' },
+    { title: 'Payment and ordering', body: 'You send the patient a payment link. Stock is ordered once they pay.' },
+    { title: 'Dispense and collect', body: 'You dispense, and the patient collects from your pharmacy each month.' },
   ],
 } as const;
+
+/** Pharmsmart pharmacies launch Holistic Health Hub from inside Pharmsmart (19 Nov 2026 brief, section 2). */
+export const PHARMSMART_LOGIN_URL = 'https://pharmsmart.co.uk/login.php';
+
+/**
+ * The "In partnership with" logos under the hero (brief section 5). Placeholders until
+ * HHH supplies the production files: replace the files at these paths, unaltered.
+ */
+export const PARTNERSHIP_LOGOS = [
+  { src: '/partners/curaleaf.svg', alt: 'Curaleaf' },
+  { src: '/partners/pharmsmart.svg', alt: 'Pharmsmart' },
+] as const;
 
 export const PHARMACY_ONBOARDING_CHOICES = [
   { id: 'setup', label: 'Set up now' },
@@ -78,6 +91,7 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
         hold: holdMessageFromDetails<OnboardingHoldMessage>(result),
         // Waiting for activation: the admin-edited wording, or the page's default when missing.
         awaiting: awaitingMessageFrom(result.awaiting),
+        termsRequired: Boolean(result.termsRequired),
       },
     };
   }

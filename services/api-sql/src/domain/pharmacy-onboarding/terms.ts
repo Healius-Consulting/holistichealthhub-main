@@ -71,6 +71,10 @@ export type PartnerTermsAcceptanceRecord = {
   ipAddress: string | null;
   source: 'signup' | 'reacceptance';
   nameMatchesPharmsmart: boolean | null;
+  /** The uploaded Terms version signed (PartnerTermsDocument). Absent for acceptances from before the Terms were a file. */
+  documentId?: string | null;
+  /** The stored signed copy (the Terms PDF plus a stamped signature page), once made. */
+  signedCopyPath?: string | null;
 };
 
 function nameTokens(value: string) {
