@@ -187,13 +187,14 @@ describe('Worldpay application', () => {
     assert.match(await sheet.file('xl/worksheets/sheet2.xml')!.async('string'), /<c r="D5" s="57" t="inlineStr"><is><t xml:space="preserve">1234567<\/t>/);
   });
 
-  it('adds the service information PDF for a pharmacy with no website, and fails safe without it', async () => {
-    const withPack = harness({ [WORLDPAY_CONTENT_KEYS.servicePdf]: { storagePath: 'worldpay/service-info.pdf', filename: 'HHH-service-information.pdf', uploadedAt: NOW.toISOString() } });
-    await submitted(withPack);
-    assert.equal(withPack.sent[0]?.attachments.length, 3);
-    assert.equal(withPack.sent[0]?.attachments[2]?.filename, 'HHH-service-information.pdf');
-    assert.match(String(withPack.sent[0]!.payload.paragraphs), /does not have a website/);
-    assert.doesNotMatch(String(withPack.sent[0]!.payload.paragraphs), /Website: /);
+  it('sends the PDF and spreadsheet only, giving the HHH website when the pharmacy has none', async () => {
+    const noSite = harness();
+    await submitted(noSite);
+    assert.equal(noSite.sent[0]?.templateCode, 'worldpay_application_to_worldpay');
+    assert.equal(noSite.sent[0]?.attachments.length, 2);
+    assert.match(String(noSite.sent[0]!.payload.paragraphs), /does not have a website/);
+    assert.doesNotMatch(String(noSite.sent[0]!.payload.paragraphs), /attached Holistic Health Hub|service information/);
+    assert.doesNotMatch(String(noSite.sent[0]!.payload.paragraphs), /Website: /);
 
     const ownSite = harness();
     const answers = completeAnswers();
@@ -202,13 +203,6 @@ describe('Worldpay application', () => {
     await submitted(ownSite, answers);
     assert.equal(ownSite.sent[0]?.attachments.length, 2);
     assert.match(String(ownSite.sent[0]!.payload.paragraphs), /Website: https:\/\/shahpharmacy\.example/);
-
-    const missing = harness();
-    const record = await submitted(missing);
-    assert.equal(record.status, 'SUBMITTED');
-    assert.equal(record.sentAt, null);
-    assert.match(record.deliveryError ?? '', /service information PDF/);
-    assert.equal(missing.sent[0]?.templateCode, 'worldpay_application_confirmation', 'the pharmacy is still told it is received');
   });
 
   it('numbers references within the year and goes straight to With Worldpay when admin sends to Worldpay', async () => {

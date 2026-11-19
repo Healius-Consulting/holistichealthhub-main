@@ -1,4 +1,4 @@
-import express, { Router, type NextFunction, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
   loadWorldpayApplication,
@@ -38,7 +38,6 @@ const statusSchema = z.object({
   status: z.enum(['SUBMITTED', 'WITH_WORLDPAY', 'QUERY', 'ACCOUNT_OPEN', 'WITHDRAWN', 'DECLINED']),
   note: z.string().trim().max(1000).nullable().default(null),
 });
-const MAX_SERVICE_PDF_BYTES = 10 * 1024 * 1024;
 
 /** The admin list row: names and dates only, never the answers. */
 export function adminRow(record: WorldpayApplicationRecord) {
@@ -49,7 +48,7 @@ export function adminRow(record: WorldpayApplicationRecord) {
     tradingName: record.tradingName,
     gphcNumber: record.gphcNumber,
     organisationId: record.organisationId,
-    websiteRoute: record.usesHhhWebsite ? 'HHH website and service information' : 'Own website',
+    websiteRoute: record.usesHhhWebsite ? 'HHH website' : 'Own website',
     status: record.status,
     statusNote: record.statusNote,
     submittedAt: record.submittedAt,
@@ -60,12 +59,6 @@ export function adminRow(record: WorldpayApplicationRecord) {
     companyNameDiffers: Boolean(record.companyName && record.legalName && record.companyName.trim().toLowerCase() !== record.legalName.trim().toLowerCase()),
     cleared: Boolean(record.sensitiveDeletedAt),
   };
-}
-
-function requestRawBody(req: Request) {
-  const raw = (req as Request & { rawBody?: Buffer | Uint8Array }).rawBody;
-  if (raw) return Buffer.from(raw);
-  return Buffer.isBuffer(req.body) ? req.body : null;
 }
 
 export function createPortalWorldpayApplicationRouter(depsFor: (context: RequestContext) => WorldpayDeps = context => sqlWorldpayDeps(worldpayHooks(context))): Router {
@@ -226,56 +219,11 @@ export function createPortalWorldpayApplicationRouter(depsFor: (context: Request
   router.put('/portal/admin/worldpay-content/:key', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertPlatformScope(req.context!);
-      const key = z.enum(['recipients', 'wp01', 'wp02', 'pricingPanel', 'schemeAnswers', 's04Note']).parse(req.params.key) as Exclude<WorldpayContentKey, 'servicePdf'>;
+      const key = z.enum(['recipients', 'wp01', 'wp02', 'pricingPanel', 'schemeAnswers', 's04Note']).parse(req.params.key) as WorldpayContentKey;
       const value = WORLDPAY_CONTENT_SCHEMAS[key].parse((req.body as { value?: unknown })?.value);
       await depsFor(req.context!).content.write(WORLDPAY_CONTENT_KEYS[key], value, scope.uid);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(await readWorldpayContent(depsFor(req.context!).content));
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  // PUT /v1/portal/admin/worldpay-service-pdf - replace the service information PDF (raw PDF body)
-  router.put(
-    '/portal/admin/worldpay-service-pdf',
-    requireCsrf,
-    requireStaff('admin'),
-    express.raw({ type: 'application/pdf', limit: MAX_SERVICE_PDF_BYTES }),
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        const scope = assertPlatformScope(req.context!);
-        const bytes = requestRawBody(req);
-        if (!bytes || bytes.length === 0) throw new HttpError(400, 'Choose a PDF to upload.', 'INVALID_INPUT');
-        if (bytes.length > MAX_SERVICE_PDF_BYTES) throw new HttpError(413, 'The PDF must be 10 MB or smaller.', 'FILE_TOO_LARGE');
-        if (bytes.subarray(0, 5).toString('latin1') !== '%PDF-') throw new HttpError(400, 'That file is not a PDF.', 'INVALID_FILE');
-        const rawName = String(req.headers['x-filename'] ?? 'Holistic-Health-Hub-service-information.pdf');
-        const filename = decodeURIComponent(rawName).replace(/[^A-Za-z0-9 ._&'-]/g, '').slice(0, 120).replace(/\.pdf$/i, '') + '.pdf';
-        const deps = depsFor(req.context!);
-        const uploadedAt = new Date().toISOString();
-        const storagePath = `worldpay-content/service-information-${uploadedAt.replace(/[^0-9]/g, '')}.pdf`;
-        await deps.storage.saveObject(storagePath, bytes, 'application/pdf');
-        await deps.content.write(WORLDPAY_CONTENT_KEYS.servicePdf, { storagePath, filename, uploadedAt }, scope.uid);
-        res.setHeader('Cache-Control', 'private, no-store');
-        res.status(200).json(await readWorldpayContent(deps.content));
-      } catch (error) {
-        next(error);
-      }
-    },
-  );
-
-  // GET /v1/portal/admin/worldpay-service-pdf - the current service information PDF
-  router.get('/portal/admin/worldpay-service-pdf', requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      assertPlatformScope(req.context!);
-      const deps = depsFor(req.context!);
-      const content = await readWorldpayContent(deps.content);
-      if (!content.servicePdf) throw new HttpError(404, 'No service information PDF has been uploaded.', 'NOT_FOUND');
-      const file = await deps.storage.downloadFile(content.servicePdf.storagePath);
-      res.setHeader('Cache-Control', 'private, no-store');
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${content.servicePdf.filename.replace(/"/g, '')}"`);
-      res.status(200).send(file.bytes);
     } catch (error) {
       next(error);
     }

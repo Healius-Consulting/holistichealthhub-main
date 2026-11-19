@@ -243,8 +243,8 @@ function mergeFields(record: WorldpayApplicationRecord) {
 }
 
 /**
- * WP-01: the application to Worldpay's route, with the PDF, the spreadsheet and, for a
- * pharmacy with no website of its own, the service information PDF. Records the send
+ * WP-01: the application to Worldpay's route, with the PDF and the spreadsheet. A
+ * pharmacy with no website of its own gives the HHH website. Records the send
  * or the failure; a failure leaves the application Submitted for admin to Resend.
  */
 export async function sendApplicationToWorldpay(deps: WorldpayDeps, record: WorldpayApplicationRecord, attempt = 'first'): Promise<boolean> {
@@ -260,11 +260,6 @@ export async function sendApplicationToWorldpay(deps: WorldpayDeps, record: Worl
       { filename: `${base}.pdf`, content: pdf.bytes, contentType: 'application/pdf' },
       { filename: `${base}.xlsx`, content: xlsx.bytes, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
     ];
-    if (noWebsite) {
-      if (!content.servicePdf) throw new Error('No service information PDF is uploaded in admin, and this pharmacy has no website. Upload it, then press Resend.');
-      const pack = await deps.storage.downloadFile(content.servicePdf.storagePath);
-      attachments.push({ filename: content.servicePdf.filename, content: pack.bytes, contentType: 'application/pdf' });
-    }
     await deps.sendEmail({
       templateCode: 'worldpay_application_to_worldpay',
       to: content.recipients.to,

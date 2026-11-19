@@ -630,7 +630,6 @@ export interface WorldpayContentSettings {
   pricingPanel: WorldpayPricingPanel;
   schemeAnswers: { s01: string; s02: string; s03: string; s04: string; s05: string };
   s04Note: string;
-  servicePdf: { storagePath: string; filename: string; uploadedAt: string } | null;
 }
 
 export function listWorldpayApplications() {
@@ -673,26 +672,14 @@ export function openWorldpayApplicationFile(id: string, kind: 'pdf' | 'xlsx') {
   return fetchAdminFile(`/v1/portal/admin/worldpay-applications/${encodeURIComponent(id)}/files/${kind}`, 'The file could not be opened.');
 }
 
-export function openWorldpayServicePdf() {
-  return fetchAdminFile('/v1/portal/admin/worldpay-service-pdf', 'The service information PDF could not be opened.');
-}
-
 export function getWorldpayContent() {
   return apiRequest<WorldpayContentSettings>('/v1/portal/admin/worldpay-content', { skipGetCache: true });
 }
 
-export function saveWorldpayContent<K extends Exclude<keyof WorldpayContentSettings, 'servicePdf'>>(key: K, value: WorldpayContentSettings[K]) {
+export function saveWorldpayContent<K extends keyof WorldpayContentSettings>(key: K, value: WorldpayContentSettings[K]) {
   return apiRequest<WorldpayContentSettings>(`/v1/portal/admin/worldpay-content/${encodeURIComponent(key)}`, {
     method: 'PUT',
     body: JSON.stringify({ value }),
-  });
-}
-
-export async function uploadWorldpayServicePdf(file: File) {
-  return apiRequest<WorldpayContentSettings>('/v1/portal/admin/worldpay-service-pdf', {
-    method: 'PUT',
-    body: file,
-    headers: { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name) },
   });
 }
 

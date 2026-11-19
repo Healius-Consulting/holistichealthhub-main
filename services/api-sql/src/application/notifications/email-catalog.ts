@@ -1232,7 +1232,7 @@ export const EMAILS = {
     audience: 'admin',
     events: ['worldpay_application.submitted'],
     schedule: 'immediate',
-    summary: 'WP-01. Sent straight away, from the Worldpay mailbox, to the recipients set in admin when a pharmacy submits its Worldpay application. The application PDF and spreadsheet are attached, plus the service information PDF when the pharmacy has no website. Subject and wording are edited in admin; no personal or bank details are written in the body.',
+    summary: 'WP-01. Sent straight away, from the Worldpay mailbox, to the recipients set in admin when a pharmacy submits its Worldpay application. The application PDF and spreadsheet are attached. Subject and wording are edited in admin; no personal or bank details are written in the body.',
     replyTo: 'worldpay',
     render: (payload) => contentEmail('worldpay_application_to_worldpay', payload, 'Worldpay application', 'Please find attached a card processing application from a Holistic Health Hub partner pharmacy.'),
   },
