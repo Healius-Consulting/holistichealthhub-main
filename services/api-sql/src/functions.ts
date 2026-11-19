@@ -16,6 +16,7 @@ import { deliverPatientMessages } from './application/workers/deliver-messages.j
 import { maintainPaidOrderFlow } from './application/workers/maintain-orders.js';
 import { processPendingPaymentLifecycle } from './application/workers/payment-lifecycle.js';
 import { pollCuraleafEvents } from './application/workers/poll-curaleaf.js';
+import { retryWaitingCuraleafPlacementsSql } from './application/workers/retry-curaleaf-placements.wiring.js';
 import { createApp } from './bootstrap/app.js';
 import { clickupConfig } from './application/clickup/clickup-config.js';
 import { readClickupToken } from './application/clickup/clickup-token.js';
@@ -219,6 +220,14 @@ export const pollCuraleafEventsLondon = onSchedule({
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }
+  }
+  // Curaleaf's event feeds can miss changes (a verified prescriber never appeared in
+  // /v1/prescriber-events/), so paid orders still waiting are also checked directly.
+  try {
+    const summary = await retryWaitingCuraleafPlacementsSql(connections.filter(connection => connection.secretResourceName), deps);
+    if (summary && (summary.checked || summary.errors)) console.log('Curaleaf placement retry complete', summary);
+  } catch (error) {
+    console.error('Curaleaf placement retry failed', { error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
 

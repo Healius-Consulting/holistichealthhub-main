@@ -2257,10 +2257,9 @@ function PlacementStatusPanel({ order }: { order: PatientOrder }) {
         detail: 'The prescription remains on the same supplier record. Upload a legible copy after the pharmacy call; do not create a replacement prescription or refund while Curaleaf is waiting for the image.',
       }
     : placement.stage === 'AWAITING_PRESCRIBER_VERIFICATION'
-      ? { title: 'Awaiting Curaleaf prescriber verification', detail: 'No prescription or purchase order will be sent until Curaleaf marks the prescriber as verified.' }
+      ? { title: 'Awaiting Curaleaf prescriber verification', detail: 'No prescription or purchase order will be sent until Curaleaf marks the prescriber as verified. We check with Curaleaf automatically and send the order as soon as they do.' }
       : placement.stage === 'AWAITING_PRESCRIPTION_ACTIVATION'
-        ? { title: 'Awaiting Curaleaf prescription approval', detail: 'This is a normal waiting state. The paid order remains open and will continue when the prescription becomes active.' }
-        : placement.stage === 'CORRECTION_REQUIRED'
+        ? { title: 'Awaiting Curaleaf prescription approval', detail: 'This is a normal waiting state. The paid order remains open and will continue when the prescription becomes active.' }        : placement.stage === 'CORRECTION_REQUIRED'
           ? { title: 'Supplier details need correction', detail: 'Placement is paused. Review the recorded pharmacy task before retrying; no automatic refund has been started.' }
           : placement.stage === 'TERMINAL'
             ? { title: 'Supplier resolution required', detail: 'Placement cannot continue automatically. Review replacement and refund gates before resolving the order.' }

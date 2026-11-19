@@ -410,6 +410,55 @@ const LIST_PAID_OPEN_ORDERS_GQL = `
   }
 `;
 
+/**
+ * Paid orders not yet with Curaleaf (or only partly, for multi-prescription orders),
+ * newest first, for the placement retry sweep.
+ */
+const LIST_PAID_UNPLACED_ORDERS_GQL = `
+  query ListPaidUnplacedOrders($limit: Int!) {
+    orders(
+      where: {
+        paymentStatus: { eq: PAID }
+        status: { in: [SUBMITTED, PROCESSING] }
+        fulfilmentStatus: { in: [SUPPLIER_PENDING, SUPPLIER_PROCESSING] }
+        archivedAt: { isNull: true }
+      }
+      orderBy: { createdAt: DESC }
+      limit: $limit
+    ) {
+      id
+      organisationId
+      patientId
+      draftId
+      redoOfId
+      orderNumber
+      status
+      paymentStatus
+      fulfilmentStatus
+      paymentRoute
+      currency
+      medicineTotalPence
+      dispensingFeePence
+      pharmacyDeliveryPence
+      deliveryPence
+      taxPence
+      totalPence
+      quoteSnapshot
+      version
+      submittedAt
+      paidAt
+      collectedAt
+      cancelledAt
+      resolutionStatus
+      resolutionReason
+      resolvedAt
+      archivedAt
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
 const UPDATE_ORDER_SNAPSHOT_GQL = `
   mutation UpdateOrderSnapshot($id: UUID!, $quoteSnapshot: Any, $fulfilmentStatus: FulfilmentStatus, $dispensingFeePence: Int64, $medicineTotalPence: Int64) {
     order_update(
@@ -573,6 +622,14 @@ export class SqlOrderRepository implements OrderRepositoryPort {
     const result = await dataConnect.executeGraphql<{ orders: OrderRecord[] }, any>(
       LIST_TENANT_ORDERS_GQL,
       { variables: { organisationId, limit } }
+    );
+    return result.data.orders ?? [];
+  }
+
+  async listPaidUnplacedOrders(limit = 500): Promise<OrderRecord[]> {
+    const result = await dataConnect.executeGraphql<{ orders: OrderRecord[] }, any>(
+      LIST_PAID_UNPLACED_ORDERS_GQL,
+      { variables: { limit } },
     );
     return result.data.orders ?? [];
   }

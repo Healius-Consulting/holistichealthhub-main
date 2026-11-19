@@ -85,6 +85,8 @@ export interface OrderRepositoryPort {
   setPaymentStatus(id: string, paymentStatus: 'NONE' | 'PENDING' | 'PAID' | 'FAILED' | 'CANCELLED' | 'REFUND_REQUIRED' | 'REFUNDED'): Promise<void>;
   listTenantOrders(organisationId: string, limit?: number): Promise<OrderRecord[]>;
   listPaidOpenOrders(limit?: number): Promise<OrderRecord[]>;
+  /** Paid orders not yet (fully) placed with Curaleaf, newest first. */
+  listPaidUnplacedOrders(limit?: number): Promise<OrderRecord[]>;
   updateQuoteSnapshot(data: {
     id: string;
     organisationId: string;
