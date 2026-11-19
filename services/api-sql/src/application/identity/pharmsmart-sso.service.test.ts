@@ -188,10 +188,14 @@ describe('PharmSmart redemption', () => {
     });
   });
 
-  it('a pending request with the Terms accepted shows awaiting activation, with no Terms to resume', async () => {
+  it('a pending request with the Terms accepted shows awaiting activation, carrying the request for the optional Worldpay form', async () => {
     const { sso } = service(info({ gphc: '5550001' }), undefined, { '5550001': 'PENDING' });
     const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
-    assert.equal(result.status === 'welcome' && result.termsRequest, null);
+    assert.equal(result.status, 'welcome');
+    if (result.status !== 'welcome') return;
+    assert.equal(result.onboardingRequest, 'pending');
+    // The page resumes nothing (no Terms step); the request id only lets it offer the Worldpay form.
+    assert.ok(result.termsRequest?.id);
   });
 
   it('signs PharmSmart superintendent and manager names into the welcome for the Terms soft check', async () => {

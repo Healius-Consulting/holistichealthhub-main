@@ -31,6 +31,7 @@ import { getPartnerTermsRequirement, loadWorldpayApplication, partnerTermsSignup
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 import { OnboardingHoldPage } from '../onboarding/OnboardingHold';
 import { OnboardingAwaitingPage } from '../onboarding/OnboardingAwaiting';
+import { AwaitingWorldpayOffer } from '../worldpay/AwaitingWorldpayOffer';
 
 const BROCHURE = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.title === 'Brochure')!;
 
@@ -225,6 +226,7 @@ export function PharmsmartWelcome({
         person={knownName ? { name: knownName, gphcNumber: welcome.gphcNumber } : null}
         account={<>Already on Holistic Health Hub? {signIn}</>}
         bookingUrl={bookingUrl}
+        worldpay={welcome.termsRequest ? <AwaitingWorldpayOffer onboardingRequestId={welcome.termsRequest.id} /> : null}
       />
     );
   }

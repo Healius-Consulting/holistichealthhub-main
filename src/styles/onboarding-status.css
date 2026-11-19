@@ -302,3 +302,22 @@ html[data-theme='dark'] .onb-status__mark{ background: #15332a; }
 
 .onb-status-page.is-preview .onb-status{ padding: 22px; }
 .onb-status-page.is-preview .onb-status__card{ animation: none; }
+
+/* Awaiting activation: the optional Worldpay application, while the pharmacy waits. */
+.onb-status__worldpay{
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  max-width: 60ch;
+  padding: 18px 20px;
+  background: color-mix(in srgb, var(--status-progress-soft) 55%, transparent);
+  border: 1px solid var(--status-line);
+  border-radius: 16px;
+}
+.onb-status__worldpay p{ margin: 0; color: var(--ink-muted); font-size: 15px; line-height: 1.55; }
+.onb-status__worldpay-title{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ink) !important; }
+.onb-status__worldpay-title svg{ color: var(--green); }
+.onb-status__worldpay-title span{ padding: 2px 8px; color: var(--ink-muted); font-size: 12px; font-weight: 600; background: #fff; border-radius: 999px; }
+.onb-status__worldpay .onb-status__worldpay-note{ font-size: 13.5px; }
+.onb-status__worldpay .onb-status__button{ cursor: pointer; font: inherit; font-size: 15px; font-weight: 600; }
+.onb-status__worldpay .wpa-banner{ margin: 0; }

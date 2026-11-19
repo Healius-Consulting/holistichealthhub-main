@@ -67,7 +67,10 @@ export type PharmsmartLoginResult =
     awaiting: OnboardingAwaitingMessage | null;
     /** Whether a new sign-up must accept the Partner Terms (they are switched on). Off: no Terms step. */
     termsRequired: boolean;
-    /** The request to accept the Terms against, only when `terms_outstanding`. */
+    /**
+     * The request to accept the Terms against when `terms_outstanding`, and the request the
+     * optional Worldpay application belongs to while `pending` (the awaiting page offers it).
+     */
     termsRequest: { id: string; pharmacyName: string; registeredCompanyName: string } | null;
     /** Signed PharmSmart superintendent and manager names, for the Terms step's soft check. */
     pharmsmartTicket: string;
@@ -175,7 +178,7 @@ export class PharmsmartSsoService {
           hold,
           awaiting,
           termsRequired: await this.deps.termsRequired?.().catch(() => false) ?? false,
-          termsRequest: state === 'terms_outstanding' && request
+          termsRequest: (state === 'terms_outstanding' || state === 'pending') && request
             ? { id: request.id, pharmacyName: request.pharmacyName, registeredCompanyName: request.registeredCompanyName }
             : null,
           pharmsmartTicket: this.namesTicket(gphcNumber ?? info.gphcNumber, info.prefill),

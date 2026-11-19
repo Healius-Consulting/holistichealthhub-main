@@ -24,6 +24,7 @@ export function OnboardingAwaitingPage({
   account,
   bookingUrl,
   preview,
+  worldpay,
 }: {
   message: HoldMessageView | null | undefined;
   branchName?: string;
@@ -31,6 +32,8 @@ export function OnboardingAwaitingPage({
   account?: ReactNode;
   bookingUrl?: string | null;
   preview?: boolean;
+  /** The optional Worldpay application, when the pharmacy hasn't sent it yet. */
+  worldpay?: ReactNode;
 }) {
   const shown = message ?? defaultAwaitingMessage(branchName);
   const footer = splitHoldFooter(shown.footer);
@@ -50,6 +53,7 @@ export function OnboardingAwaitingPage({
         </a>
       ) : null}
       preview={preview}
+      extra={worldpay}
     >
       {shown.paragraphs.map((paragraph, index) => <p key={index}><HoldLine line={paragraph} /></p>)}
     </OnboardingStatusPage>

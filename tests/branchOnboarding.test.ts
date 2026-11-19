@@ -185,3 +185,13 @@ test('the portal shows one Awaiting Curaleaf banner, and the Onboarding page emb
   const header = readFileSync(new URL('../src/components/Header.tsx', import.meta.url), 'utf8');
   assert.match(header, /screen: 'onboarding'/);
 });
+
+test('a branch whose Worldpay keys are connected has no Worldpay form to send', () => {
+  const item = onboardingQueueItems({ live: true, termsAccepted: true, worldpaySubmittedAt: null, worldpayConnected: true, demoActive: false })
+    .find(entry => entry.id === 'worldpay')!;
+  assert.equal(item.state, 'done');
+  assert.equal(item.status, 'Connected');
+  assert.equal(item.action, null);
+  const open = onboardingQueueItems({ live: true, termsAccepted: true, worldpaySubmittedAt: null, demoActive: false }).find(entry => entry.id === 'worldpay')!;
+  assert.equal(open.action?.kind, 'worldpay');
+});

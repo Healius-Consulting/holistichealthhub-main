@@ -350,14 +350,18 @@ function StaffWorkspace() {
 
 function AppContent() {
   const { state: authState } = useAuth();
-  const [showOnboardingPreview, setShowOnboardingPreview] = useState(
-    () => import.meta.env.DEV && new URLSearchParams(window.location.search).get('onboarding-preview') === '1',
+  // Dev only: `?onboarding-preview=1` shows the sign-up page, `=awaiting` the awaiting activation page.
+  const [showOnboardingPreview, setShowOnboardingPreview] = useState<string | null>(
+    () => (import.meta.env.DEV ? new URLSearchParams(window.location.search).get('onboarding-preview') : null),
   );
-  if (showOnboardingPreview) {
+  if (showOnboardingPreview === '1' || showOnboardingPreview === 'awaiting') {
+    const awaiting = showOnboardingPreview === 'awaiting';
     return (
       <PharmsmartWelcome
-        welcome={{ firstName: null, lastName: null, email: null }}
-        onUseEmail={() => setShowOnboardingPreview(false)}
+        welcome={awaiting
+          ? { firstName: 'Shaylen', lastName: 'Patel', email: null, gphcNumber: '9012605', onboardingRequest: 'pending', termsRequest: { id: '00000000-0000-4000-8000-000000000001', pharmacyName: 'Monivea Road', registeredCompanyName: 'Monivea Road Ltd' } }
+          : { firstName: null, lastName: null, email: null }}
+        onUseEmail={() => setShowOnboardingPreview(null)}
       />
     );
   }

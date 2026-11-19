@@ -64,7 +64,9 @@ export function WorldpayApplicationEntry({ onOpenPayments }: { onOpenPayments?: 
             <small>
               {draft
                 ? 'Your answers are saved. Pick up where you left off, or discard them and start again.'
-                : 'Apply through Holistic Health Hub. Have the company bank details and each director’s details to hand.'}
+                : closed
+                  ? 'Apply through Holistic Health Hub. Have the company bank details and each director’s details to hand.'
+                  : 'Apply through Holistic Health Hub. Have the company bank details and each director’s details to hand. Already sent us a Worldpay form by email? You don’t need to do it again.'}
             </small>
           </span>
           <button type="button" className="btn btn-sm btn-primary" onClick={() => setOpen(closed ? 'fresh' : 'continue')}>

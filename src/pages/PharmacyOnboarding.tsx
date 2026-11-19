@@ -48,6 +48,7 @@ export default function PharmacyOnboarding() {
     live,
     termsAccepted: view?.termsAccepted ?? false,
     worldpaySubmittedAt: view?.worldpaySubmittedAt ?? null,
+    worldpayConnected: organisation.worldpay.status === 'connected',
     demoActive: state.demoMode,
   });
   const staff = authState.staff;

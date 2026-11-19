@@ -57,6 +57,7 @@ export function OnboardingStatusPage({
   contact = ONBOARDING_CONTACT,
   contactLine,
   actions,
+  extra,
   account,
   preview = false,
 }: {
@@ -74,6 +75,8 @@ export function OnboardingStatusPage({
   contactLine?: ReactNode;
   /** Extra ways forward, beside the contact button. */
   actions?: ReactNode;
+  /** A box between the message and the contact line (the awaiting page's Worldpay offer). */
+  extra?: ReactNode;
   /** "Already on Holistic Health Hub? Sign in", where it applies. */
   account?: ReactNode;
   /** Shown inside the admin editor: no full-height page, no live region. */
@@ -107,6 +110,7 @@ export function OnboardingStatusPage({
               </p>
             ) : null}
             <div className="onb-status__body">{children}</div>
+            {extra}
             <div className="onb-status__contact">
               {contactLine ? <p>{contactLine}</p> : null}
               <div className="onb-status__actions">

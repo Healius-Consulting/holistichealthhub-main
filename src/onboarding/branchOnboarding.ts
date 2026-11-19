@@ -167,6 +167,8 @@ export type OnboardingQueueInput = {
   live: boolean;
   termsAccepted: boolean;
   worldpaySubmittedAt: string | null;
+  /** Worldpay keys are saved and Worldpay has answered: nothing left to apply for. */
+  worldpayConnected?: boolean;
   demoActive: boolean;
 };
 
@@ -200,8 +202,18 @@ export const ONBOARDING_QUEUE: readonly QueueEntry[] = [
   {
     // The server refuses Worldpay until the Partner Terms are in, so a branch without them accepts them first.
     id: 'worldpay',
-    build: ({ termsAccepted, worldpaySubmittedAt }) => {
+    build: ({ termsAccepted, worldpaySubmittedAt, worldpayConnected }) => {
       const date = formatOnboardingDate(worldpaySubmittedAt);
+      // Keys already connected (e.g. a form sent outside the platform): no form to send.
+      if (worldpayConnected) {
+        return {
+          title: 'Worldpay card payments',
+          detail: 'Your Worldpay account is connected. Payment links can use it.',
+          state: 'done',
+          status: 'Connected',
+          action: null,
+        };
+      }
       if (worldpaySubmittedAt) {
         return {
           title: 'Worldpay card payments',
@@ -214,7 +226,7 @@ export const ONBOARDING_QUEUE: readonly QueueEntry[] = [
       return {
         title: 'Worldpay card payments',
         detail: termsAccepted
-          ? 'Lets patients pay by card through a secure link. You will need the bank account for payouts and each owner\'s date of birth and home address.'
+          ? 'Lets patients pay by card through a secure link. You will need the bank account for payouts and each owner\'s date of birth and home address. Already sent us a Worldpay form by email? You don\'t need to do it again.'
           : 'Accept the Partner Terms first. The Worldpay form opens straight after.',
         state: 'open',
         status: null,
