@@ -15,7 +15,7 @@ import { compactGphcNumber, PHARMACY_ON_HOLD_MESSAGE, type PharmacyOnboardingSta
 import { issuePharmsmartNamesTicket } from '../../domain/pharmacy-onboarding/terms.js';
 import type { AppendAuditInput } from '../../repositories/ports/identity.port.js';
 import type { OnboardingHoldReason } from '../../domain/pharmacy-onboarding/content.js';
-import type { OnboardingHoldMessage } from '../pharmacy-onboarding/onboarding-content.js';
+import type { OnboardingAwaitingMessage, OnboardingHoldMessage } from '../pharmacy-onboarding/onboarding-content.js';
 import { bestEffort, type ClickupHooks } from '../clickup/clickup-hooks.js';
 
 export type PharmsmartRedeemContext = {
@@ -63,6 +63,8 @@ export type PharmsmartLoginResult =
      * forms or the account.
      */
     hold: OnboardingHoldMessage | null;
+    /** The Awaiting activation wording, merged for the branch: set when the request is `pending`. */
+    awaiting: OnboardingAwaitingMessage | null;
     /** The request to accept the Terms against, only when `terms_outstanding`. */
     termsRequest: { id: string; pharmacyName: string; registeredCompanyName: string } | null;
     /** Signed PharmSmart superintendent and manager names, for the Terms step's soft check. */
@@ -112,6 +114,8 @@ export class PharmsmartSsoService {
     holdMessage: (reason: OnboardingHoldReason | null, branchName: string) => Promise<OnboardingHoldMessage>;
     /** The hold message for an activated branch on hold (its request's reason). */
     branchHoldMessage: (branch: { id: string; name?: string | null }) => Promise<OnboardingHoldMessage>;
+    /** The Awaiting activation wording, merged with the branch name. Omitted: the page's own default. */
+    awaitingMessage?: (branchName: string) => Promise<OnboardingAwaitingMessage>;
   }) {}
 
   async redeem(token: string, context: PharmsmartRedeemContext): Promise<PharmsmartLoginResult> {
@@ -145,6 +149,10 @@ export class PharmsmartSsoService {
         const hold = state === 'on_hold' && request
           ? await this.deps.holdMessage(request.holdReason ?? null, request.pharmacyName)
           : null;
+        // Wording is admin content; a read failure falls back to the page's own default.
+        const awaiting = state === 'pending' && request && this.deps.awaitingMessage
+          ? await this.deps.awaitingMessage(request.pharmacyName).catch(() => null)
+          : null;
         return {
           status: 'welcome',
           email: info.email,
@@ -155,6 +163,7 @@ export class PharmsmartSsoService {
           prefill: info.prefill,
           onboardingRequest: state,
           hold,
+          awaiting,
           termsRequest: state === 'terms_outstanding' && request
             ? { id: request.id, pharmacyName: request.pharmacyName, registeredCompanyName: request.registeredCompanyName }
             : null,
@@ -179,6 +188,7 @@ export class PharmsmartSsoService {
         prefill: info.prefill,
         onboardingRequest: 'on_hold',
         hold: await this.deps.branchHoldMessage({ id: branch.id, name: branch.name ?? null }),
+        awaiting: null,
         termsRequest: null,
         pharmsmartTicket: this.namesTicket(compactGphcNumber(info.gphcNumber) ?? info.gphcNumber, info.prefill),
       };

@@ -310,6 +310,8 @@ export type PharmsmartLoginResult =
     onboardingRequest?: PharmsmartOnboardingRequestState;
     /** Set when on hold (a request, or an activated branch): the hold message, merged for the branch. */
     hold?: OnboardingHoldMessage | null;
+    /** Set when the request is waiting for activation: the admin-edited Awaiting activation wording. */
+    awaiting?: OnboardingAwaitingMessage | null;
     termsRequest?: PharmsmartTermsRequest | null;
     pharmsmartTicket?: string | null;
   };
@@ -871,6 +873,48 @@ export function saveOnboardingContent<K extends OnboardingContentKey>(key: K, va
     method: 'PUT',
     body: JSON.stringify({ value }),
   });
+}
+
+/** An email drawn by the server's own renderer, for the admin preview. */
+export type EmailPreviewView = { subject: string; html: string };
+
+/** An onboarding email as it would be sent, from its merged subject and paragraphs. */
+export function previewOnboardingEmail(kind: OnboardingEmailKind, email: { subject: string; paragraphs: string[]; fromName?: string }) {
+  return apiRequest<EmailPreviewView>(`/v1/portal/admin/onboarding-content/preview/${encodeURIComponent(kind)}`, {
+    method: 'POST',
+    body: JSON.stringify(email),
+  });
+}
+
+export type { EditableEmailCode, EmailCopyOverrides, EmailCopySlot } from '../../services/api-sql/src/domain/notifications/email-copy.ts';
+import type { EditableEmailCode, EmailCopyOverrides, EmailCopySlot } from '../../services/api-sql/src/domain/notifications/email-copy.ts';
+
+/** The wording admins have saved for the platform's other emails (only edited pieces). */
+export function getEmailCopy() {
+  return apiRequest<{ copy: EmailCopyOverrides }>('/v1/portal/admin/email-copy', { skipGetCache: true });
+}
+
+/** Saves one email's edited pieces; pieces left out go back to the code's wording. */
+export function saveEmailCopy(code: EditableEmailCode, slots: Partial<Record<EmailCopySlot, string>>) {
+  return apiRequest<{ copy: EmailCopyOverrides }>(`/v1/portal/admin/email-copy/${encodeURIComponent(code)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ slots }),
+  });
+}
+
+/** One email drawn with unsaved wording and made-up details. `sample` switches its version. */
+export function previewEmailCopy(code: EditableEmailCode, slots: Partial<Record<EmailCopySlot, string>>, sample?: Record<string, string | number>) {
+  return apiRequest<EmailPreviewView>(`/v1/portal/admin/email-copy/${encodeURIComponent(code)}/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ slots, sample }),
+  });
+}
+
+/** The Awaiting activation page wording, already merged for the branch. */
+export interface OnboardingAwaitingMessage {
+  heading: string;
+  paragraphs: string[];
+  footer: string;
 }
 
 /** The hold message a pharmacy sees, already merged for its branch. */

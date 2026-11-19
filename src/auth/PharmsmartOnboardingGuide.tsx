@@ -26,19 +26,11 @@ import {
 import { recordPharmacyOnboardingDeferral } from '../shared/api';
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 import { OnboardingHoldPage } from '../onboarding/OnboardingHold';
+import { OnboardingAwaitingPage } from '../onboarding/OnboardingAwaiting';
 
 const BROCHURE = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.title === 'Brochure')!;
 
-const ONBOARDING_ADDRESS = 'onboarding@holistichealthhub.live';
-const onboardingMail = <a className="onb__address" href={`mailto:${ONBOARDING_ADDRESS}`}>{ONBOARDING_ADDRESS}</a>;
 
-/** What a GPhC with a request already in sees instead of the forms. On hold has its own page. */
-const REQUEST_STATE_VIEWS = {
-  pending: {
-    title: 'Awaiting activation',
-    body: <>Awaiting activation. Please check back in a few days, or contact {onboardingMail} for more details.</>,
-  },
-} as const;
 
 function OnboardingPdfPreview({ href }: { href: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -236,31 +228,17 @@ export function PharmsmartWelcome({
   if (requestState === 'on_hold' || welcome.hold) {
     return <OnboardingHoldPage hold={welcome.hold} person={knownName ? { name: knownName, gphcNumber: welcome.gphcNumber } : null} />;
   }
-  const requestView = requestState ? REQUEST_STATE_VIEWS[requestState] : null;
-  if (requestView) {
+  if (requestState === 'pending') {
     return (
-      <div className="staff-login-page auth-page staff-login-page--guide">
-        <div className="onb">
-          <header className="onb__top">
-            <div className="staff-login-lockup" aria-label="Holistic Health Hub">
-              <HhhBrandMark />
-              <span>
-                <strong>Holistic Health Hub</strong>
-                <small>Pharmacy onboarding</small>
-              </span>
-            </div>
-            <p className="onb__account">Already on Holistic Health Hub? {signIn}</p>
-          </header>
-          <section className="onb__panel" aria-labelledby="onb-request-state" role="status">
-            <h1 id="onb-request-state">{requestView.title}</h1>
-            {knownName ? <p className="onb__person">Signed in from PharmSmart as <strong>{knownName}</strong>{welcome.gphcNumber ? <> · GPhC {welcome.gphcNumber}</> : null}</p> : null}
-            <p>{requestView.body}</p>
-          </section>
-        </div>
-      </div>
+      <OnboardingAwaitingPage
+        message={welcome.awaiting}
+        branchName={welcome.prefill?.pharmacyName || 'your pharmacy'}
+        person={knownName ? { name: knownName, gphcNumber: welcome.gphcNumber } : null}
+        account={<>Already on Holistic Health Hub? {signIn}</>}
+        bookingUrl={bookingUrl}
+      />
     );
   }
-
   return (
     <div className="staff-login-page auth-page staff-login-page--guide">
       <div className="onb">

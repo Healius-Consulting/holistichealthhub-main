@@ -22,3 +22,13 @@ export function holdMessageFor(content: OnboardingContent, reason: OnboardingHol
   };
 }
 export type OnboardingHoldMessage = ReturnType<typeof holdMessageFor>;
+
+/** What a pharmacy whose application is waiting for activation sees, merged for its branch. */
+export function awaitingMessageFor(content: OnboardingContent, branchName: string) {
+  return {
+    heading: content.awaitingPage.heading,
+    paragraphs: mergeTemplate(content.awaitingPage.body, { 'Branch name': branchName }, {}),
+    footer: content.awaitingPage.footer,
+  };
+}
+export type OnboardingAwaitingMessage = ReturnType<typeof awaitingMessageFor>;

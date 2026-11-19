@@ -90,6 +90,7 @@ function service(
       branchHolds.push(branch);
       return { reason: 'MORE_INFORMATION_NEEDED', heading: 'Your application is on hold', paragraphs: [`${branch.name} needs more information`], footer: 'Questions?' };
     },
+    awaitingMessage: async branchName => ({ heading: 'We’re setting up your account', paragraphs: [`${branchName} is with Curaleaf`], footer: 'Questions?' }),
   });
   return { sso, audits, created, adopted, minted, staff, lookedUp, branchHolds };
 }
@@ -148,6 +149,7 @@ describe('PharmSmart redemption', () => {
       prefill: { pharmacyEmail: 'shop@pharmacy.test' },
       onboardingRequest: null,
       hold: null,
+      awaiting: null,
       termsRequest: null,
     });
     assert.equal(created.length, 0);
@@ -164,6 +166,9 @@ describe('PharmSmart redemption', () => {
     assert.equal(result.status, 'welcome');
     if (result.status !== 'welcome') return;
     assert.equal(result.onboardingRequest, 'pending');
+    assert.equal(result.awaiting?.heading, 'We’re setting up your account', 'the admin-edited Awaiting activation wording');
+    assert.match(result.awaiting?.paragraphs[0] ?? '', /is with Curaleaf$/);
+    assert.equal(result.hold, null);
     assert.deepEqual(lookedUp, ['5550001']);
     assert.equal(created.length, 0);
     assert.equal(minted.length, 0);

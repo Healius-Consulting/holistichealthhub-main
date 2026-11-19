@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useId, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   ApiRequestError,
   getAdminWorldpayApplication,
@@ -16,6 +15,7 @@ import {
   type WorldpayContentSettings,
 } from '../../shared/api';
 import type { WorldpayAnswers } from '../../worldpay/applicationLogic';
+import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 
 /**
  * HHH admin: Worldpay merchant applications (spec §3.5) and the content that can
@@ -43,35 +43,16 @@ function openBlob(url: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export function WorldpayApplicationsAdmin({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const titleId = useId();
-  const [tab, setTab] = useState<'applications' | 'settings'>('applications');
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-  if (!open) return null;
-  return createPortal(
-    <div className="onboarding-dialog" role="presentation">
-      <button className="onboarding-dialog__backdrop" type="button" aria-label="Close" onClick={onClose} />
-      <div className="onboarding-dialog__panel wpa" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <header>
-          <h2 id={titleId}>Worldpay applications</h2>
-          <button type="button" onClick={onClose}>Close</button>
-        </header>
-        <div className="wpa-body">
-          <div className="wpa-chips" role="tablist" aria-label="Worldpay admin">
-            <button type="button" role="tab" aria-selected={tab === 'applications'} className={tab === 'applications' ? 'wpa-chip is-active' : 'wpa-chip'} onClick={() => setTab('applications')}>Applications</button>
-            <button type="button" role="tab" aria-selected={tab === 'settings'} className={tab === 'settings' ? 'wpa-chip is-active' : 'wpa-chip'} onClick={() => setTab('settings')}>Emails and wording</button>
-          </div>
-          {tab === 'applications' ? <ApplicationsTab /> : <SettingsTab />}
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
+/** Shown in Onboarding settings: the submitted applications. */
+export function WorldpayApplicationsPanel() {
+  if (isLocalPortalPreview) return <p className="wpa-muted">Worldpay applications load from the API, which local preview does not run.</p>;
+  return <ApplicationsTab />;
+}
+
+/** Shown in Onboarding settings: WP-01 recipients, the service PDF and the Worldpay wording. */
+export function WorldpayWordingPanel() {
+  if (isLocalPortalPreview) return <p className="wpa-muted">The Worldpay wording loads from the API, which local preview does not run.</p>;
+  return <SettingsTab />;
 }
 
 function ApplicationsTab() {

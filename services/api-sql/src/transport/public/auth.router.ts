@@ -141,6 +141,7 @@ export function createAuthRouter(): Router {
     recordFirstVisit: sqlClickupHooks().firstVisit,
     holdMessage: (reason, branchName) => holdMessages.forReason(reason, branchName),
     branchHoldMessage: branch => holdMessages.forBranch(branch),
+    awaitingMessage: branchName => holdMessages.awaiting(branchName),
   });
 
   // GET /v1/auth/csrf - Issue or refresh CSRF token

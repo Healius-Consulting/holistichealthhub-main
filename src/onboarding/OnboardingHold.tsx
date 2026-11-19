@@ -1,5 +1,5 @@
 import '../styles/onboarding-hold.css';
-import HhhBrandMark from '../components/HhhBrandMark';
+import { applicationSteps, OnboardingStatusPage } from './OnboardingStatusPage';
 import { holdMessageOrGeneric, textWithEmailLinks, type HoldMessageView } from './branchOnboarding';
 
 /** A line of hold wording, with any email address in it as a mailto link. */
@@ -23,6 +23,14 @@ export function OnboardingHoldBody({ hold }: { hold: HoldMessageView }) {
   );
 }
 
+/** The footer's address for the contact button, and its words without it ("Questions?"). */
+export function splitHoldFooter(footer: string): { address: string | null; line: string } {
+  const email = textWithEmailLinks(footer).find(part => part.kind === 'email');
+  if (!email || email.kind !== 'email') return { address: null, line: footer };
+  const line = footer.replace(email.address, '').replace(/\s*(?:email|e-mail|write to|contact)?\s*(?:us)?\s*(?:at|on)?\s*[:.]?\s*$/i, '').trim();
+  return { address: email.address, line };
+}
+
 /**
  * What a branch on hold sees after PharmSmart or a password sign-in: the message for
  * its hold reason and nothing else. No forms, demo account, eligibility link or way
@@ -31,31 +39,29 @@ export function OnboardingHoldBody({ hold }: { hold: HoldMessageView }) {
 export function OnboardingHoldPage({
   hold,
   person,
+  preview,
 }: {
   /** The server's message, merged for the branch. Missing: the generic message. */
   hold: HoldMessageView | null | undefined;
   /** Who signed in from PharmSmart, when known. */
   person?: { name: string; gphcNumber?: string | null } | null;
+  /** Inside the admin editor. */
+  preview?: boolean;
 }) {
   const message = holdMessageOrGeneric(hold);
+  const footer = splitHoldFooter(message.footer);
   return (
-    <div className="staff-login-page auth-page staff-login-page--guide">
-      <div className="onb onboarding-hold">
-        <header className="onb__top">
-          <div className="staff-login-lockup" aria-label="Holistic Health Hub">
-            <HhhBrandMark />
-            <span>
-              <strong>Holistic Health Hub</strong>
-              <small>Pharmacy onboarding</small>
-            </span>
-          </div>
-        </header>
-        <section className="onb__panel onboarding-hold__panel" aria-labelledby="onboarding-hold-title" role="status">
-          <h1 id="onboarding-hold-title">{message.heading}</h1>
-          {person?.name ? <p className="onb__person">Signed in from PharmSmart as <strong>{person.name}</strong>{person.gphcNumber ? <> · GPhC {person.gphcNumber}</> : null}</p> : null}
-          <OnboardingHoldBody hold={message} />
-        </section>
-      </div>
-    </div>
+    <OnboardingStatusPage
+      tone="hold"
+      badge="On hold"
+      heading={message.heading}
+      person={person}
+      steps={applicationSteps('on_hold')}
+      contact={footer.address ?? undefined}
+      contactLine={footer.address ? footer.line : <HoldLine line={footer.line} />}
+      preview={preview}
+    >
+      {message.paragraphs.map((paragraph, index) => <p key={index}><HoldLine line={paragraph} /></p>)}
+    </OnboardingStatusPage>
   );
 }

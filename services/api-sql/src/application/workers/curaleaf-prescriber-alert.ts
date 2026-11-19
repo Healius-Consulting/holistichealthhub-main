@@ -3,6 +3,10 @@ import { snapshotRxList } from '../prescriptions/snapshot-rx.js';
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
 import type { OrderRecord } from '../../repositories/ports/order.port.js';
 import { pendingPlacements, placementRetrySkipReason } from './retry-curaleaf-placements.js';
+import { mergeCopy, mergeCopyLine, type EmailCopySlot } from '../../domain/notifications/email-copy.js';
+
+/** Saved admin wording for this email (Onboarding settings → Emails); missing pieces keep the code's. */
+export type PrescriberAlertCopy = Partial<Record<EmailCopySlot, string>>;
 
 /**
  * When paid orders have waited 3 days for Curaleaf to verify their prescriber, email
@@ -74,18 +78,31 @@ export function prescriberAlertEmail(
   pharmacy: { name: string; gphcNumber: string | null },
   connection: Pick<IntegrationConnectionRecord, 'externalCustomerId' | 'environment'>,
   now: Date,
+  copy: PrescriberAlertCopy = {},
 ) {
   const prescriberName = group.prescriber.name || 'the prescriber';
   const days = Math.floor((now.getTime() - Date.parse(group.orders[0]!.waitingSince)) / DAY);
   const count = group.orders.length;
   const ordersWord = count === 1 ? 'order' : 'orders';
   const test = connection.environment === 'TEST';
+  const vars = { Pharmacy: pharmacy.name, Prescriber: prescriberName, 'Order count': String(count), 'Orders word': ordersWord, Days: String(days) };
+  const edited = (template: string) => mergeCopy(template, vars, {}).map(paragraph => paragraph.replace(/\*\*/g, ''));
+  const subject = copy.subject
+    ? mergeCopyLine(copy.subject, vars, {})
+    : `Please verify prescriber ${prescriberName} for ${pharmacy.name} (${count} ${ordersWord} waiting)`;
+  const intro = copy.body ? edited(copy.body) : [
+    `${count} paid ${ordersWord} at ${pharmacy.name} ${count === 1 ? 'has' : 'have'} waited ${days} days for Curaleaf to verify the prescriber. Nothing can go to Curaleaf until they do. Forward this email to Curaleaf; everything they need is below.`,
+    'Hello Curaleaf team,',
+    `Please could you verify the prescriber below on our account. We have ${count} paid ${ordersWord} waiting on them.`,
+  ];
+  const closing = copy.footer ? edited(copy.footer) : [
+    'Once the prescriber is verified, the orders are sent to you automatically within the hour.',
+    'Thank you,\nHolistic Health Hub',
+  ];
   return {
-    subject: `${test ? '[Curaleaf UAT] ' : ''}Please verify prescriber ${prescriberName} for ${pharmacy.name} (${count} ${ordersWord} waiting)`,
+    subject: `${test ? '[Curaleaf UAT] ' : ''}${subject}`,
     paragraphs: [
-      `${count} paid ${ordersWord} at ${pharmacy.name} ${count === 1 ? 'has' : 'have'} waited ${days} days for Curaleaf to verify the prescriber. Nothing can go to Curaleaf until they do. Forward this email to Curaleaf; everything they need is below.`,
-      'Hello Curaleaf team,',
-      `Please could you verify the prescriber below on our account. We have ${count} paid ${ordersWord} waiting on them.`,
+      ...intro,
       [
         `Pharmacy: ${pharmacy.name}${pharmacy.gphcNumber ? ` (GPhC ${pharmacy.gphcNumber})` : ''}`,
         `Curaleaf customer ID: ${connection.externalCustomerId || 'not recorded'}`,
@@ -99,8 +116,7 @@ export function prescriberAlertEmail(
         `Curaleaf prescriber ID: ${group.prescriberId}`,
       ].join('\n'),
       [`Orders waiting:`, ...group.orders.map(entry => `${entry.orderNumber} (paid ${ukDate(entry.waitingSince)})`)].join('\n'),
-      'Once the prescriber is verified, the orders are sent to you automatically within the hour.',
-      'Thank you,\nHolistic Health Hub',
+      ...closing,
     ],
   };
 }
@@ -111,6 +127,8 @@ export type PrescriberAlertDeps = {
   curaleafGet(connection: IntegrationConnectionRecord, path: string): Promise<unknown>;
   pharmacy(organisationId: string): Promise<{ name: string; gphcNumber: string | null } | null>;
   send(email: { to: string[]; subject: string; paragraphs: string[]; idempotencyKey: string }): Promise<void>;
+  /** Saved admin wording for this email. Omitted: the code's own. */
+  copy?: () => Promise<PrescriberAlertCopy>;
 };
 
 export const prescriberAlertKey = (organisationId: string, prescriberId: string) =>
@@ -124,6 +142,7 @@ export async function alertStuckPrescribers(
 ) {
   const summary = { stuck: 0, sent: 0, errors: 0 };
   const byOrganisation = new Map(connections.map(connection => [connection.organisationId, connection]));
+  let copy: PrescriberAlertCopy | null = null;
   for (const group of stuckPrescriberGroups(orders, now)) {
     const connection = byOrganisation.get(group.organisationId);
     if (!connection) continue;
@@ -140,7 +159,8 @@ export async function alertStuckPrescribers(
       if (state !== 'UNVERIFIED') continue;
       const pharmacy = await deps.pharmacy(group.organisationId);
       if (!pharmacy) continue;
-      const email = prescriberAlertEmail(group, pharmacy, connection, now);
+      copy ??= deps.copy ? await deps.copy().catch(() => ({})) : {};
+      const email = prescriberAlertEmail(group, pharmacy, connection, now, copy);
       await deps.send({
         to: prescriberAlertRecipients(),
         ...email,

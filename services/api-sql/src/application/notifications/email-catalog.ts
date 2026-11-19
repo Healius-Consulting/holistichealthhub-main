@@ -2,6 +2,14 @@ import { z } from 'zod';
 import { brandedEmail, escapeHtml, resolveEmailHeader, safeHttpUrl } from './email-layout.js';
 import { enquiryDisplayFields } from './email-mask.js';
 import { keyContact, telHref, type KeyContact } from './key-contacts.js';
+import {
+  emailCopySpec,
+  mergeCopy,
+  mergeCopyLine,
+  type EmailCopyOverrides,
+  type EmailCopySlot,
+  type EmailCopySpec,
+} from '../../domain/notifications/email-copy.js';
 
 export const EMAIL_EVENT_NAMES = [
   'enquiry.submitted',
@@ -352,7 +360,7 @@ function contentEmail(kind: EmailTemplateCode, payload: unknown, fallbackSubject
   });
 }
 
-function render(input: {
+type RenderInput = {
   kind: EmailTemplateCode;
   payload: unknown;
   subject: string;
@@ -368,7 +376,10 @@ function render(input: {
   footerNote?: string;
   /** The Reply-To this message is sent with, when it is not the template's own. */
   replyTo?: string | null;
-}): RenderedEmail {
+};
+
+function render(given: RenderInput): RenderedEmail {
+  const input = applyEmailCopy(given);
   const admin = isAdminAudience(input.kind, input.payload);
   return {
     subject: input.subject,
@@ -408,6 +419,151 @@ function render(input: {
       },
     }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Admin-edited wording (domain/notifications/email-copy.ts). Set for the length of
+// one renderEmailTemplate call: rendering is synchronous, so it cannot leak into
+// another email.
+
+let activeCopy: Partial<Record<EmailCopySlot, string>> | null = null;
+
+/** The merge fields every editable email can draw on, from its payload. */
+function copyVars(payload: unknown): Record<string, string> {
+  const clinic = keyContact('clinic');
+  const labs = keyContact('curaleafLabs');
+  const amountPence = Number(value(payload, 'amountPence') || 0);
+  return {
+    'First name': value(payload, 'firstName') || value(payload, 'patientFirstName') || 'there',
+    'Pharmacy name': value(payload, 'pharmacyName') || 'the pharmacy',
+    'Pharmacy address': value(payload, 'pharmacyAddress'),
+    'Pharmacy GPhC': value(payload, 'pharmacyGphcNumber'),
+    'Order number': value(payload, 'orderNumber'),
+    Amount: amountPence > 0 ? money(amountPence, value(payload, 'currency') || 'GBP') : '',
+    'Case reference': value(payload, 'caseReference'),
+    Summary: value(payload, 'summary'),
+    'Ready packs': value(payload, 'readyPacks'),
+    'Total packs': value(payload, 'totalPacks'),
+    'Purchase order': value(payload, 'purchaseOrderId'),
+    'Patient name': enquiryDisplayFields(payload).name,
+    Clinic: clinic.org,
+    'Clinic email': primaryAddress(clinic),
+    'Clinic phone': clinic.phone ?? '',
+    'Clinic hours': clinic.hours ?? '',
+    'Clinic sign-in link': clinic.portalUrl ?? '',
+    Labs: labs.org,
+    'Labs phone': labs.phone ?? '',
+    'Labs hours': labs.hours ?? '',
+    'Help email': primaryAddress(keyContact('hhhPlatform')),
+  };
+}
+
+/** The conditions every editable email can use, from its payload. */
+function copyFlags(payload: unknown): Record<string, boolean> {
+  const ready = Number(value(payload, 'readyPacks') || 0);
+  const total = Number(value(payload, 'totalPacks') || 0);
+  const partial = value(payload, 'partialReady') === 'true' && ready > 0 && total > ready;
+  const variant = value(payload, 'variant');
+  const summary = Boolean(value(payload, 'summary').trim());
+  const purchaseOrder = Boolean(value(payload, 'purchaseOrderId').trim());
+  const patientName = Boolean(enquiryDisplayFields(payload).name);
+  return {
+    amount: Number(value(payload, 'amountPence') || 0) > 0,
+    'order number': Boolean(value(payload, 'orderNumber').trim()),
+    'case reference': Boolean(value(payload, 'caseReference').trim()),
+    summary,
+    'no summary': !summary,
+    partial,
+    'all ready': !partial,
+    'purchase order': purchaseOrder,
+    'no purchase order': !purchaseOrder,
+    'patient name': patientName,
+    'no patient name': !patientName,
+    'pharmacy named': Boolean(value(payload, 'pharmacyName').trim()),
+    declined: variant !== 'incomplete' && variant !== 'withdrawn',
+    incomplete: variant === 'incomplete',
+    withdrawn: variant === 'withdrawn',
+  };
+}
+
+/** One merged paragraph as HTML: escaped, `**bold**`, addresses and links clickable, line breaks kept. */
+function copyHtml(paragraph: string) {
+  return escapeHtml(paragraph)
+    .replace(/https?:\/\/[^\s<]+[^\s<.,;:)]/g, url => `<a href="${url}">${url}</a>`)
+    .replace(/(^|[\s(>])([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g, (_, lead: string, address: string) => `${lead}<a href="mailto:${address}">${address}</a>`)
+    .replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*\*/g, '')
+    .replace(/\n/g, '<br>');
+}
+
+const plainCopy = (text: string) => text.replace(/\*\*/g, '').trim();
+
+function htmlToText(html: string) {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+}
+
+/** The plain-text part, rebuilt from the email's pieces once its wording has been edited. */
+function textFromParts(input: RenderInput) {
+  const steps = (input.nextSteps ?? []).map((step, index) => (typeof step === 'string'
+    ? `${index + 1}. ${step}`
+    : `${index + 1}. ${step.title}${step.body ? `\n   ${step.body}` : ''}`));
+  return [
+    ...input.paragraphs.map(htmlToText),
+    input.highlight ? `${input.highlight.label}: ${input.highlight.value}` : '',
+    input.cta ? `${input.cta.label}: ${input.cta.href}` : '',
+    input.details?.length
+      ? [input.detailsTitle ?? '', ...input.details.filter(row => row.value).map(row => `${row.label}: ${row.value}`)].filter(Boolean).join('\n')
+      : '',
+    ...steps,
+    input.footerNote ? htmlToText(input.footerNote) : '',
+  ].filter(Boolean).join('\n\n');
+}
+
+/** Swaps in each piece of wording an admin has saved for this email; the rest is untouched. */
+function applyEmailCopy(input: RenderInput): RenderInput {
+  const copy = activeCopy;
+  const spec: EmailCopySpec | null = copy ? emailCopySpec(input.kind) : null;
+  if (!copy || !spec || !Object.keys(copy).length) return input;
+  const vars = copyVars(input.payload);
+  const flags = copyFlags(input.payload);
+  const line = (template: string) => mergeCopyLine(template, vars, flags);
+  const next: RenderInput = { ...input };
+  if (copy.subject) {
+    const subject = line(copy.subject);
+    next.subject = spec.subjectPrefix ? patientSubject(input.payload, subject) : subject;
+  }
+  if (copy.preheader) next.preheader = line(copy.preheader);
+  if (copy.title) next.title = line(copy.title);
+  if (copy.button && input.cta) next.cta = { ...input.cta, label: line(copy.button) };
+  if (copy.body) {
+    next.paragraphs = mergeCopy(copy.body, vars, flags).map(copyHtml);
+    if (spec.signature === 'body') next.paragraphs.push(signatureHtml(input.payload));
+  }
+  if (copy.steps && input.nextSteps) {
+    const steps = mergeCopy(copy.steps, vars, flags);
+    next.nextSteps = spec.stepTitles
+      ? steps.map(step => {
+        const [title = '', ...rest] = step.split('\n');
+        return { title: plainCopy(title), body: plainCopy(rest.join(' ')) };
+      })
+      : steps.map(plainCopy);
+  }
+  if (copy.footer) {
+    const footer = mergeCopy(copy.footer, vars, flags).map(copyHtml);
+    if (spec.signature === 'footer') footer.push(signatureHtml(input.payload));
+    next.footerNote = footer.join('<br><br>');
+  }
+  if (copy.body || copy.steps || copy.footer || copy.button) next.text = textFromParts(next);
+  return next;
 }
 
 function fields(payload: unknown) {
@@ -985,7 +1141,7 @@ export const EMAILS = {
     schedule: 'immediate',
     summary: 'Sent when HHH admin activates a referred patient for that pharmacy. Carries the patient name and contact details.',
     render: (payload) => {
-      const { pharmacyName, caseReference, enquiry } = fields(payload);
+      const { pharmacyName, enquiry } = fields(payload);
       // An identifier the pharmacy checks against its own records, so it is written the way they store it.
       const dob = shortDate(value(payload, 'dob'));
       const patientDetails = [
@@ -1255,8 +1411,18 @@ export function templatesForEvent(event: EmailEventName): EmailTemplateCode[] {
   return EMAIL_TEMPLATE_CODES.filter(code => (EMAILS[code].events as readonly EmailEventName[]).includes(event));
 }
 
-export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown): RenderedEmail {
-  return EMAILS[kind].render(payload);
+/**
+ * Renders one email. `copy` is the wording admins have saved (Onboarding settings →
+ * Emails); without it, or for a piece nobody has edited, the email is the code's own.
+ */
+export function renderEmailTemplate(kind: EmailTemplateCode, payload: unknown, copy?: EmailCopyOverrides): RenderedEmail {
+  const previous = activeCopy;
+  activeCopy = (copy as Partial<Record<string, Partial<Record<EmailCopySlot, string>>>> | undefined)?.[kind] ?? null;
+  try {
+    return EMAILS[kind].render(payload);
+  } finally {
+    activeCopy = previous;
+  }
 }
 
 export function messageIdempotencyKey(parts: Array<string | number | null | undefined>) {

@@ -13,6 +13,10 @@ test('the send log and onboarding content are admin-only, and every write is CSR
     'post /portal/admin/pharmacy-onboarding-requests/:id/emails/:kind/resend',
     'get /portal/admin/onboarding-content',
     'put /portal/admin/onboarding-content/:key',
+    'post /portal/admin/onboarding-content/preview/:kind',
+    'get /portal/admin/email-copy',
+    'put /portal/admin/email-copy/:code',
+    'post /portal/admin/email-copy/:code/preview',
   ]);
   for (const route of routes) {
     assert.match(route.guards, /requireStaff\('admin'\)/, `${route.path} is admin-only`);
@@ -21,4 +25,6 @@ test('the send log and onboarding content are admin-only, and every write is CSR
   assert.match(source, /'pharmacy_onboarding\.email_resent'/);
   assert.match(source, /'onboarding_content\.updated'/);
   assert.match(source, /ONBOARDING_CONTENT_SCHEMAS\[key\]\.parse/);
+  assert.match(source, /'email_copy\.updated'/);
+  assert.match(source, /parseEmailCopy\(code, /, 'saved email wording is validated against the email’s own pieces');
 });

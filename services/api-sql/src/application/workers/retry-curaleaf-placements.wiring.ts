@@ -73,6 +73,7 @@ function sqlPrescriberAlertDeps(deps: ReturnType<typeof sqlWorkerDeps>): Prescri
       attachments: [],
       idempotencyKey,
     }),
+    copy: async () => (await deps.emailCopy()).admin_curaleaf_prescriber_stuck ?? {},
   };
 }
 

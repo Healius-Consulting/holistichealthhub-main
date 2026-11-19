@@ -74,6 +74,11 @@ function isHoldMessage(value: unknown): value is HoldMessageView {
     && typeof candidate.footer === 'string';
 }
 
+/** The Awaiting activation wording the server sent, when it is usable. */
+export function awaitingMessageFrom(value: unknown): HoldMessageView | null {
+  return isHoldMessage(value) ? { heading: value.heading, paragraphs: value.paragraphs, footer: value.footer } : null;
+}
+
 /** The hold message from a PHARMACY_ON_HOLD refusal's `details: { hold }`, or null. */
 export function holdMessageFromDetails<T extends HoldMessageView = HoldMessageView>(details: unknown): T | null {
   if (!details || typeof details !== 'object') return null;

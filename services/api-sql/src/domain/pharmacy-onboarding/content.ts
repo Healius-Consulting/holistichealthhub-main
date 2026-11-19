@@ -18,6 +18,7 @@ export const ONBOARDING_CONTENT_KEYS = {
   live: 'onboarding.email.live',
   curaleafApplication: 'onboarding.email.curaleafApplication',
   holdPage: 'onboarding.holdPage',
+  awaitingPage: 'onboarding.awaitingPage',
   addresses: 'onboarding.addresses',
   links: 'onboarding.links',
   partnerTerms: 'onboarding.partnerTerms',
@@ -57,6 +58,13 @@ const holdPageSchema = z.object({
   CURALEAF_DECLINED: z.string().trim().min(1).max(3000),
   footer: z.string().trim().max(500),
 });
+const awaitingPageSchema = z.object({
+  heading: z.string().trim().min(1).max(200),
+  /** Paragraphs, split on blank lines; [Branch name] merges. */
+  body: z.string().trim().min(1).max(3000),
+  /** The contact line; an email address in it becomes the contact button. */
+  footer: z.string().trim().max(500),
+});
 const addressesSchema = z.object({
   /** Reply-To on the Sent, Activation, Hold and Live emails (From stays the verified onboarding@ alias). */
   pharmacyReplyTo: email,
@@ -85,6 +93,7 @@ export const ONBOARDING_CONTENT_SCHEMAS = {
   live: emailTemplateSchema,
   curaleafApplication: emailTemplateSchema,
   holdPage: holdPageSchema,
+  awaitingPage: awaitingPageSchema,
   addresses: addressesSchema,
   links: linksSchema,
   partnerTerms: partnerTermsSchema,
@@ -181,6 +190,14 @@ export const ONBOARDING_CONTENT_DEFAULTS: OnboardingContent = {
       'Healius Consulting will be in touch about what happens next. You do not need to do anything for now.',
     ),
     footer: 'Questions? Email onboarding@holistichealthhub.live',
+  },
+  awaitingPage: {
+    heading: 'We’re setting up your account',
+    body: paragraphs(
+      'Thank you for applying. Your application for [Branch name] is with Curaleaf Laboratories, who usually open new accounts in three to five days.',
+      'We will email you when your account is ready to try, and again when it goes live. You do not need to do anything else for now.',
+    ),
+    footer: 'Questions about your application? Email onboarding@holistichealthhub.live',
   },
   addresses: {
     pharmacyReplyTo: 'onboarding@holistichealthhub.live',

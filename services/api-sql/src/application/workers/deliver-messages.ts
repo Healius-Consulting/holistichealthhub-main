@@ -17,6 +17,7 @@ import {
 import { FILLED_FORM_NAME_KEY, FILLED_FORM_PATH_KEY, LICENCE_NAME_KEY, LICENCE_PATH_KEY, LICENCE_TYPE_KEY } from '../pharmacy-onboarding/emails.js';
 import { emailHeaderBackgroundForLogo } from '../notifications/email-logo-background.js';
 import { renderEmailTemplate } from '../notifications/email-renderer.js';
+import type { EmailCopyOverrides } from '../../domain/notifications/email-copy.js';
 import { readOrganisationLogoBytes } from '../organisation/brand-logo.js';
 import type { StorageProvider } from '../../providers/storage/storage.provider.js';
 import type { NotificationOutboxRecord, NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
@@ -26,6 +27,8 @@ export type MessageDeliveryDeps = {
   /** Reads pharmacy logo uploads. Omitted in tests; every email then sends unbranded. */
   storage?: Pick<StorageProvider, 'listPaths' | 'downloadFile'>;
   fetchImpl?: typeof fetch;
+  /** Wording admins have saved for the emails. Omitted in tests; every email is then the code's own. */
+  emailCopy?: () => Promise<EmailCopyOverrides>;
 };
 
 /**
@@ -163,6 +166,7 @@ async function deliverOne(
   deps: MessageDeliveryDeps,
   provider: ProviderConfig,
   loadBrandLogo: (organisationId: string) => Promise<string | null>,
+  copy: EmailCopyOverrides = {},
 ) {
   if (record.status !== 'PENDING') return 'skipped' as const;
   if (!isEmailTemplateCode(record.templateCode)) return 'deferred' as const;
@@ -182,7 +186,7 @@ async function deliverOne(
           [BRAND_HEADER_BACKGROUND_PAYLOAD_KEY]: emailHeaderBackgroundForLogo(Buffer.from(brandLogo, 'base64')),
         }
         : visible;
-      const rendered = renderEmailTemplate(templateCode, payload);
+      const rendered = renderEmailTemplate(templateCode, payload, copy);
       const fileAttachments = await fileAttachmentsFor(record, deps);
       // Only templates whose copy invites a reply carry one, so a patient never
       // writes into the unmonitored From address. The partner onboarding emails take
@@ -253,9 +257,16 @@ export async function deliverPatientMessages(deps: MessageDeliveryDeps, limit = 
     return summary;
   }
   const loadBrandLogo = await brandLogoLoader(deps);
+  // One read per sweep. Unreadable wording falls back to the code's own, never holds mail.
+  const copy = pending.length && deps.emailCopy
+    ? await deps.emailCopy().catch(error => {
+      console.warn('Email wording unavailable; sending the default wording', error instanceof Error ? error.message : 'unknown');
+      return {} as EmailCopyOverrides;
+    })
+    : {};
   for (const record of pending) {
     try {
-      const result = await deliverOne(record, deps, provider, loadBrandLogo);
+      const result = await deliverOne(record, deps, provider, loadBrandLogo, copy);
       if (result === 'sent') summary.sent += 1;
       else summary.deferred += 1;
     } catch (error) {

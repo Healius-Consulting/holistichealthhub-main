@@ -1,5 +1,5 @@
 import type { OnboardingHoldMessage, PharmsmartLoginResult } from '../shared/api';
-import { holdMessageFromDetails } from '../onboarding/branchOnboarding';
+import { awaitingMessageFrom, holdMessageFromDetails } from '../onboarding/branchOnboarding';
 import type { PharmsmartWelcome } from './types';
 
 /**
@@ -76,6 +76,8 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
         pharmsmartTicket: result.pharmsmartTicket ?? null,
         // On hold (a request, or an activated branch): the message for the reason, merged for the branch.
         hold: holdMessageFromDetails<OnboardingHoldMessage>(result),
+        // Waiting for activation: the admin-edited wording, or the page's default when missing.
+        awaiting: awaitingMessageFrom(result.awaiting),
       },
     };
   }

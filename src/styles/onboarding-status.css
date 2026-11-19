@@ -1,0 +1,304 @@
+/* Awaiting activation and On hold: the status page a pharmacy sees in place of the forms or its account. */
+
+.onb-status-page{
+  --status-progress: #3d8d65;
+  --status-progress-soft: #e6f2eb;
+  --status-hold: #b45a1f;
+  --status-hold-soft: #fbeee2;
+  --status-line: color-mix(in srgb, var(--green) 12%, transparent);
+  background:
+    radial-gradient(ellipse 70% 55% at 100% 0%, rgba(211, 226, 218, 0.55), transparent 60%),
+    radial-gradient(ellipse 60% 45% at 0% 100%, rgba(238, 230, 218, 0.7), transparent 65%),
+    var(--cream);
+}
+
+html[data-theme='dark'] .onb-status-page{
+  --status-progress: #7dbe99;
+  --status-progress-soft: #1d3a2f;
+  --status-hold: #e39a68;
+  --status-hold-soft: #3a291f;
+  background:
+    radial-gradient(ellipse 70% 55% at 100% 0%, rgba(61, 141, 101, 0.16), transparent 60%),
+    #0f2b23;
+}
+
+.onb-status{
+  width: min(100%, 1040px);
+  gap: clamp(28px, 5vw, 56px);
+}
+
+.onb-status__card{
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  /* clip, not hidden: a scroll container may shrink below its content inside the page grid. */
+  overflow: clip;
+  background: #fff;
+  border: 1px solid var(--status-line);
+  border-radius: 28px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 30px 70px -28px rgba(21, 56, 44, 0.28);
+  animation: onbStatusIn 520ms var(--ease-out) both;
+}
+
+html[data-theme='dark'] .onb-status__card{ background: #15332a; }
+
+@media (min-width: 880px){
+  .onb-status__card{ grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); }
+}
+
+.onb-status__main{
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: clamp(26px, 4.5vw, 52px);
+}
+
+.onb-status__badge{
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  padding: 6px 12px 6px 10px;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 999px;
+}
+
+.onb-status__badge.is-progress{ color: var(--status-progress); background: var(--status-progress-soft); }
+.onb-status__badge.is-hold{ color: var(--status-hold); background: var(--status-hold-soft); }
+
+.onb-status__badge-dot{
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.onb-status__badge.is-progress .onb-status__badge-dot{ animation: onbStatusPulse 2.2s ease-in-out infinite; }
+
+.onb-status__main h1{
+  max-width: 18ch;
+  margin: 0;
+  color: var(--green);
+  font-family: var(--serif);
+  font-size: clamp(34px, 5.2vw, 54px);
+  font-weight: 500;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.onb-status__person{
+  margin: -4px 0 0;
+  color: var(--ink-subtle);
+  font-size: 14px;
+}
+
+.onb-status__person strong{ color: var(--ink); font-weight: 600; }
+
+.onb-status__body{
+  display: grid;
+  gap: 14px;
+  max-width: 60ch;
+}
+
+.onb-status__body p{
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 17px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.onb-status__body p:first-child{
+  color: var(--ink);
+  font-size: 18.5px;
+}
+
+.onb-status__contact{
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 22px;
+  border-top: 1px solid var(--status-line);
+}
+
+.onb-status__contact > p{
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 15px;
+}
+
+.onb-status__actions{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.onb-status__button{
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 46px;
+  padding: 0 18px;
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--green) 22%, transparent);
+  border-radius: 999px;
+  transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out), background 160ms;
+}
+
+.onb-status__button:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px -12px rgba(21, 56, 44, 0.45); }
+.onb-status__button:focus-visible{ outline: 3px solid color-mix(in srgb, var(--bright) 55%, transparent); outline-offset: 2px; }
+
+.onb-status__button.is-primary{
+  color: #fff;
+  background: var(--green);
+  border-color: var(--green);
+}
+
+html[data-theme='dark'] .onb-status__button{ background: transparent; }
+html[data-theme='dark'] .onb-status__button.is-primary{ color: #0f2b23; background: var(--green); }
+
+/* Where the application is. */
+.onb-status__aside{
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: clamp(26px, 4vw, 44px);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mint-light) 85%, #fff), var(--mint-light));
+  border-top: 1px solid var(--status-line);
+}
+
+.onb-status__card.is-hold .onb-status__aside{
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sand) 45%, #fff), color-mix(in srgb, var(--sand) 70%, #fff));
+}
+
+html[data-theme='dark'] .onb-status__aside,
+html[data-theme='dark'] .onb-status__card.is-hold .onb-status__aside{ background: #12291f; }
+
+@media (min-width: 880px){
+  .onb-status__aside{ border-top: 0; border-left: 1px solid var(--status-line); }
+}
+
+.onb-status__aside h2{
+  margin: 0;
+  color: var(--ink-subtle);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.onb-status__steps{
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onb-status__steps li{
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 14px;
+  padding-bottom: 22px;
+}
+
+.onb-status__steps li:last-child{ padding-bottom: 0; }
+
+/* The line joining one stage to the next. */
+.onb-status__steps li:not(:last-child)::after{
+  content: "";
+  position: absolute;
+  top: 32px;
+  bottom: 2px;
+  left: 14px;
+  width: 2px;
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border-radius: 2px;
+}
+
+.onb-status__steps li.is-done:not(:last-child)::after{ background: var(--status-progress); }
+
+.onb-status__mark{
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--ink-subtle);
+  font-size: 13px;
+  font-weight: 650;
+  background: #fff;
+  border: 1.5px solid color-mix(in srgb, var(--green) 18%, transparent);
+  border-radius: 50%;
+}
+
+html[data-theme='dark'] .onb-status__mark{ background: #15332a; }
+
+.is-done > .onb-status__mark{ color: #fff; background: var(--status-progress); border-color: var(--status-progress); }
+.is-current > .onb-status__mark{ background: var(--status-progress-soft); border-color: var(--status-progress); }
+.is-paused > .onb-status__mark{ color: #fff; background: var(--status-hold); border-color: var(--status-hold); }
+
+.onb-status__pulse{
+  width: 10px;
+  height: 10px;
+  background: var(--status-progress);
+  border-radius: 50%;
+  animation: onbStatusPulse 2.2s ease-in-out infinite;
+}
+
+.onb-status__step{
+  display: grid;
+  gap: 3px;
+  padding-top: 4px;
+}
+
+.onb-status__step strong{
+  color: var(--ink);
+  font-size: 15.5px;
+  font-weight: 650;
+}
+
+.onb-status__step small{
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.is-todo .onb-status__step strong{ color: var(--ink-subtle); font-weight: 550; }
+.is-todo .onb-status__step small{ color: var(--ink-subtle); }
+.is-paused .onb-status__step strong{ color: var(--status-hold); }
+.is-current .onb-status__step strong{ color: var(--status-progress); }
+
+@keyframes onbStatusIn{
+  from{ opacity: 0; transform: translateY(14px); }
+  to{ opacity: 1; transform: none; }
+}
+
+@keyframes onbStatusPulse{
+  0%, 100%{ box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-progress) 45%, transparent); }
+  50%{ box-shadow: 0 0 0 7px color-mix(in srgb, var(--status-progress) 0%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .onb-status__card,
+  .onb-status__pulse,
+  .onb-status__badge-dot{ animation: none !important; }
+}
+
+/* Inside the admin editor's preview pane. */
+.onb-status-page.is-preview{
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.onb-status-page.is-preview .onb-status{ padding: 22px; }
+.onb-status-page.is-preview .onb-status__card{ animation: none; }

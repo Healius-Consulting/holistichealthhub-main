@@ -10,6 +10,9 @@ import { SqlPaymentRepository } from '../../repositories/sql/payment.sql.js';
 import { SqlPrescriptionRepository } from '../../repositories/sql/prescription.sql.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 
+import { readEmailCopy } from '../notifications/email-copy.service.js';
+import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-application.sql.js';
+
 export function sqlWorkerDeps() {
   const paymentRepo = new SqlPaymentRepository();
   const orderRepo = new SqlOrderRepository();
@@ -36,5 +39,7 @@ export function sqlWorkerDeps() {
     notificationRepo,
     organisationRepo,
     prescriptionRepo,
+    // Admin-edited email wording, read once per delivery sweep.
+    emailCopy: () => readEmailCopy(new SqlPlatformContentRepository()),
   };
 }

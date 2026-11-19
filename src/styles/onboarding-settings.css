@@ -1,0 +1,593 @@
+/* HHH admin: Onboarding settings. Section list on the left, editor and live preview on the right. */
+
+.onb-settings .onb-settings__window{
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  width: min(1380px, 100%);
+  height: min(94vh, 100%);
+  font-family: var(--sans);
+  color: var(--ink);
+}
+
+/* Section list. */
+.onb-settings__nav{
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 14px;
+  overflow-y: auto;
+  background: #f4f7f5;
+  border-right: 1px solid color-mix(in srgb, var(--green) 10%, transparent);
+}
+
+.onb-settings .onb-settings__nav h2{
+  padding: 0 10px;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.onb-settings__group{
+  display: grid;
+  gap: 2px;
+}
+
+.onb-settings__group > span{
+  padding: 0 10px 4px;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.onb-settings__group button{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.onb-settings__group button:hover{ background: #e8efeb; }
+.onb-settings__group button.is-active{ color: #fff; font-weight: 600; background: var(--green); }
+
+.onb-settings__dot{
+  width: 8px;
+  height: 8px;
+  background: #d08a2c;
+  border-radius: 50%;
+}
+
+/* Main column. */
+.onb-settings__main{
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.onb-settings .onb-settings__head{
+  justify-content: space-between;
+  padding: 14px 18px 14px 24px;
+}
+
+.onb-settings__head h3{
+  margin: 0;
+  color: var(--green);
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.onb-settings .onb-settings__head .wpa-close{
+  min-height: 0;
+  padding: 8px;
+}
+
+.onb-settings__main > .wpa-banner{ margin: 12px 24px 0; }
+
+.onb-settings__content{
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.onb-settings__content > .wpa-muted,
+.onb-settings__content > .btn,
+.onb-settings__content > .wpa-admin,
+.onb-settings__content > .wpa-admin-settings,
+.onb-settings__content > .onb-settings__panel,
+.onb-settings__content > .wpa-banner{
+  margin: 20px 24px;
+}
+
+.onb-settings__content > .btn{ align-self: flex-start; }
+.onb-settings__panel{ display: grid; gap: 14px; max-width: 760px; }
+
+.onb-settings__when{
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* Editor | preview. */
+.onb-settings__split{
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.1fr);
+  min-height: 0;
+}
+
+.onb-settings__editor{
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 20px 24px 28px;
+  overflow-y: auto;
+}
+
+.onb-settings__preview{
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 20px 24px 28px;
+  overflow-y: auto;
+  background: #eef3f1;
+  border-left: 1px solid color-mix(in srgb, var(--green) 10%, transparent);
+}
+
+@media (max-width: 1080px){
+  .onb-settings .onb-settings__window{ grid-template-columns: 200px minmax(0, 1fr); }
+  .onb-settings__split{ grid-template-columns: minmax(0, 1fr); }
+  .onb-settings__preview{ border-top: 1px solid color-mix(in srgb, var(--green) 10%, transparent); border-left: 0; }
+}
+
+@media (max-width: 720px){
+  .onb-settings .onb-settings__window{ grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .onb-settings__nav{ flex-direction: row; gap: 10px; padding: 12px; overflow-x: auto; border-right: 0; border-bottom: 1px solid color-mix(in srgb, var(--green) 10%, transparent); }
+  .onb-settings .onb-settings__nav h2{ display: none; }
+  .onb-settings__group{ display: flex; }
+  .onb-settings__group > span{ display: none; }
+  .onb-settings__group button{ white-space: nowrap; }
+}
+
+/* Blocks. */
+.onb-settings__blocks{ display: grid; gap: 10px; }
+
+.onb-block{
+  display: grid;
+  gap: 6px;
+}
+
+.onb-block.is-conditional{
+  padding: 10px;
+  background: #fdf8ef;
+  border: 1px dashed #e2c48f;
+  border-radius: 12px;
+}
+
+.onb-block__when{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #7a520e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.onb-block__when select{
+  padding: 4px 8px;
+  color: #5c3d08;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  background: #fff;
+  border: 1px solid #e2c48f;
+  border-radius: 8px;
+}
+
+.onb-block__row{
+  position: relative;
+}
+
+.onb-block__row textarea{
+  width: 100%;
+  padding-right: 40px;
+  font-size: 14px;
+  line-height: 1.55;
+  resize: vertical;
+  field-sizing: content;
+  min-height: 3.6em;
+}
+
+.onb-block__remove{
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--ink-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.onb-block:hover .onb-block__remove,
+.onb-block__remove:focus-visible{ opacity: 1; }
+.onb-block__remove:hover{ color: #b42318; background: #fef0ee; }
+
+.onb-block__warn{
+  margin: 0;
+  color: #9a3412;
+  font-size: 12.5px;
+}
+
+.onb-block__warn code{ margin-left: 4px; padding: 1px 5px; background: #fff1e6; border-radius: 5px; }
+
+.onb-settings__add{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.onb-settings__add select{ width: auto; min-height: 32px; padding: 4px 10px; font-size: 13px; }
+
+/* Merge field chips: stay in view while scrolling the editor. */
+.onb-settings__chips{
+  position: sticky;
+  bottom: -28px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 -24px -28px;
+  padding: 12px 24px 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), #fff 30%);
+  border-top: 1px solid color-mix(in srgb, var(--green) 10%, transparent);
+}
+
+.onb-settings__chips.is-inline{
+  position: static;
+  margin: -6px 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+.onb-settings__chips > span{
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.onb-settings__chips button{
+  padding: 4px 10px;
+  color: #185fa5;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: #e9f2fb;
+  border: 1px solid #cfe1f5;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.onb-settings__chips button:hover{ background: #d9e9f9; }
+
+/* Preview switches. */
+.onb-settings__scenarios{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+.onb-settings__scenario{
+  display: grid;
+  gap: 4px;
+}
+
+.onb-settings__scenario > span{
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.onb-settings__scenario > div,
+.onb-settings__reasons{
+  display: inline-flex;
+  flex-wrap: wrap;
+  padding: 3px;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
+  border-radius: 10px;
+}
+
+.onb-settings__scenario button,
+.onb-settings__reasons button{
+  padding: 5px 10px;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.onb-settings__scenario button.is-active,
+.onb-settings__reasons button.is-active{ color: #fff; background: var(--green); }
+
+.onb-settings__reasons{ justify-self: start; }
+
+/* The email, drawn like the sent one. */
+.onb-mail{
+  /* clip, not hidden: inside the scrolling preview a scroll container would shrink to fit. */
+  overflow: clip;
+  background: #fff;
+  border: 1px solid #d9e2e0;
+  border-radius: 14px;
+  box-shadow: 0 14px 34px -22px rgba(15, 43, 35, 0.45);
+}
+
+.onb-mail__meta{
+  display: grid;
+  gap: 4px;
+  padding: 12px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid #e6ecea;
+}
+
+.onb-mail__meta span{ display: flex; gap: 10px; }
+.onb-mail__meta small{ width: 54px; flex: none; color: var(--ink-muted); font-size: 12px; }
+
+.onb-mail__canvas{
+  padding: 22px;
+  background: #f3f8f7;
+}
+
+.onb-mail__card{
+  overflow: clip;
+  max-width: 600px;
+  margin: 0 auto;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #1f2725;
+  background: #fcfdfc;
+  border: 1px solid #d9e2e0;
+  border-radius: 14px;
+}
+
+.onb-mail__header{
+  display: grid;
+  place-items: center;
+  padding: 26px;
+  background: #123f36;
+}
+
+.onb-mail__header img{ width: 150px; height: auto; }
+
+.onb-mail__body{
+  display: grid;
+  gap: 14px;
+  padding: 30px 32px 28px;
+}
+
+.onb-mail__body h1{
+  margin: 0 0 4px;
+  color: #1d2321;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.onb-mail__body h2{
+  margin: 6px 0 -4px;
+  color: #1d2321;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 15.5px;
+  font-weight: 700;
+}
+
+.onb-mail__body p{
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.onb-mail__footer{
+  padding: 16px;
+  color: #dce9e5;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+  background: #123f36;
+}
+
+/* The hold page, scaled down. */
+.onb-settings__page{
+  overflow: clip;
+  border: 1px solid #d9e2e0;
+  border-radius: 14px;
+  box-shadow: 0 14px 34px -22px rgba(15, 43, 35, 0.45);
+  zoom: 0.62;
+}
+
+.onb-settings__split.is-page{ grid-template-columns: minmax(320px, 0.75fr) minmax(0, 1.25fr); }
+
+@media (max-width: 1080px){
+  .onb-settings__split.is-page{ grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The dialog's own header and h2 rules must not reach the page inside the preview. */
+.onb-settings__page header.onb__top{ padding: 0; border: 0; }
+.onb-settings__page .onb-status__aside h2{
+  color: var(--ink-subtle);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+/* Plain forms (addresses, Terms). */
+.onb-settings__form{
+  display: grid;
+  gap: 12px;
+  max-width: 720px;
+  padding: 20px 24px 28px;
+}
+
+.onb-settings__form h3{
+  margin: 8px 0 0;
+  font-size: 16px;
+}
+
+/* Save bar, pinned to the bottom of the section. */
+.onb-settings__savebar{
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding: 12px 24px;
+  background: #fff;
+  border-top: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
+}
+
+.onb-settings__savebar > span{
+  margin-right: auto;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.onb-settings__savebar.is-dirty{ background: #fffaf0; }
+.onb-settings__savebar.is-dirty > span{ color: #8a5a10; font-weight: 600; }
+
+.onb-block__note{
+  margin: 0;
+  color: #7a520e;
+  font-size: 12.5px;
+}
+
+.onb-block__note code{ padding: 1px 5px; background: #fbf2e2; border-radius: 5px; }
+
+/* Find an email or page. */
+.onb-settings__search{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -6px 0 -4px;
+  padding: 0 10px;
+  color: var(--ink-muted);
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--green) 14%, transparent);
+  border-radius: 9px;
+}
+
+.onb-settings__search input{
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 13.5px;
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.onb-settings__edited-mark{
+  padding: 1px 7px;
+  color: #185fa5;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 700;
+  background: #e9f2fb;
+  border-radius: 999px;
+}
+
+.onb-settings__group button.is-active .onb-settings__edited-mark{ color: var(--green); background: #fff; }
+
+/* One editable piece, with "Original" to go back to today's wording. */
+.onb-settings__slot{ position: relative; }
+
+.onb-settings__reset{
+  position: absolute;
+  top: -2px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  color: #185fa5;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.onb-settings__reset:hover{ background: #e9f2fb; }
+
+.onb-settings__edited{
+  margin: 0;
+  padding: 8px 12px;
+  color: #185fa5;
+  font-size: 13px;
+  background: #eef5fc;
+  border-radius: 9px;
+}
+
+.wpa-field__label small{ color: var(--ink-muted); font-weight: 500; }
+
+/* The server-drawn email. */
+.onb-mail__frame{
+  display: block;
+  width: 100%;
+  background: #f3f8f7;
+  border: 0;
+}
+
+.onb-mail.is-loading .onb-mail__frame{ opacity: 0.6; transition: opacity 150ms; }
+
+.onb-settings__page .onb__top .onb__signin{
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  text-decoration: underline;
+}

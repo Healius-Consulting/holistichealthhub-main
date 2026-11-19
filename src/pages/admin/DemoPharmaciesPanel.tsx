@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useId, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, deleteDemoPharmacy, getDemoPharmacies, saveDemoPharmacies, type DemoPharmaciesView } from '../../shared/api';
-import { FormBottom, FormIntro, FormTop, Section } from '../../components/OnboardingFormParts';
+import { Section } from '../../components/OnboardingFormParts';
+import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 
 /**
  * HHH admin: demo pharmacies. GPhC numbers used to walk through onboarding on
@@ -12,8 +12,8 @@ import { FormBottom, FormIntro, FormTop, Section } from '../../components/Onboar
 const day = (iso: string) => new Date(iso).toLocaleString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 const message = (error: unknown, fallback: string) => (error instanceof ApiRequestError ? error.message : fallback);
 
-export function DemoPharmaciesAdmin({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const titleId = useId();
+/** Shown in Onboarding settings. */
+export function DemoPharmaciesPanel() {
   const [view, setView] = useState<DemoPharmaciesView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -22,16 +22,11 @@ export function DemoPharmaciesAdmin({ open, onClose }: { open: boolean; onClose:
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
+    setError(null);
+    if (isLocalPortalPreview) { setView({ gphcNumbers: [], pharmacies: [] }); return; }
     getDemoPharmacies().then(setView).catch(cause => setError(message(cause, 'The demo pharmacies could not be loaded.')));
   }, []);
-  useEffect(() => { if (open) { setError(null); setNotice(null); setConfirming(null); load(); } }, [open, load]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-  if (!open) return null;
+  useEffect(() => { load(); }, [load]);
 
   const save = async (gphcNumbers: string[], done: string) => {
     setBusy('save');
@@ -67,17 +62,12 @@ export function DemoPharmaciesAdmin({ open, onClose }: { open: boolean; onClose:
     }
   };
 
-  return createPortal(
-    <div className="onboarding-dialog" role="presentation">
-      <button className="onboarding-dialog__backdrop" type="button" aria-label="Close" onClick={onClose} />
-      <div className="onboarding-dialog__panel wpa" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <FormTop eyebrow="Admin" title="Demo pharmacies" titleId={titleId} onClose={onClose} closeLabel="Close" />
-        <div className="wpa-body">
-          <div className="wpa-content">
-            <FormIntro title="Show onboarding on production">A demo pharmacy goes through the real journey, but its Curaleaf application goes to HHH only, never to Curaleaf. When it sends a new Curaleaf form, its previous run is deleted first, so you can show the process again.</FormIntro>
+  return (
+    <div className="onb-settings__panel">
+            <p className="onb-settings__when">A demo pharmacy goes through the real onboarding journey, but its Curaleaf application goes to HHH only, never to Curaleaf. When it sends a new Curaleaf form, its previous run is deleted first, so you can show the process again.</p>
             {notice ? <p className="wpa-banner is-green" role="status">{notice}</p> : null}
             {error ? <p className="wpa-alert" role="alert">{error}</p> : null}
-            {!view ? <p className="wpa-muted">Loading…</p> : (
+            {!view ? (error ? <button type="button" className="btn btn-sm" onClick={load}>Try again</button> : <p className="wpa-muted">Loading…</p>) : (
               <>
                 {view.pharmacies.map(item => (
                   <Section key={item.gphcNumber} title={`GPhC ${item.gphcNumber}`}>
@@ -117,13 +107,7 @@ export function DemoPharmaciesAdmin({ open, onClose }: { open: boolean; onClose:
                 </Section>
               </>
             )}
-          </div>
-        </div>
-        <FormBottom status={<span className="wpa-save">The same delete runs from scripts/delete-demo-pharmacy.</span>}>
-          <button type="button" className="btn btn-primary wpa-next" onClick={onClose}>Done</button>
-        </FormBottom>
-      </div>
-    </div>,
-    document.body,
+      <p className="wpa-muted">The same delete runs from scripts/delete-demo-pharmacy.</p>
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { OnboardingHoldMessage } from '../shared/api';
+import type { OnboardingAwaitingMessage, OnboardingHoldMessage } from '../shared/api';
 export type StaffRole = 'hhh_admin' | 'pharmacy_staff';
 
 export interface AuthenticatedStaff {
@@ -70,6 +70,8 @@ export interface PharmsmartWelcome {
    * of the forms or the account.
    */
   hold?: OnboardingHoldMessage | null;
+  /** Set when `onboardingRequest` is `pending`: the admin-edited Awaiting activation wording, merged for the branch. */
+  awaiting?: OnboardingAwaitingMessage | null;
   /** The request whose Partner Terms are still to accept, when `onboardingRequest` is `terms_outstanding`. */
   termsRequest?: PharmsmartTermsRequest | null;
   /** Server-signed PharmSmart names, sent back with the Terms for the soft name check. */

@@ -2,7 +2,7 @@ import type { OnboardingContent, OnboardingHoldReason } from '../../domain/pharm
 import type { PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-application.sql.js';
-import { holdMessageFor, readOnboardingContent, type OnboardingHoldMessage } from './onboarding-content.js';
+import { awaitingMessageFor, holdMessageFor, readOnboardingContent, type OnboardingHoldMessage } from './onboarding-content.js';
 
 /**
  * A held branch whose request carries no reason (no request, or a hold half-written
@@ -40,5 +40,6 @@ export function sqlHoldMessages() {
     }, branch),
     forReason: async (reason: OnboardingHoldReason | null, branchName: string) =>
       holdMessageFor(await readContent(), reason ?? LEGACY_HOLD_REASON, branchName),
+    awaiting: async (branchName: string) => awaitingMessageFor(await readContent(), branchName),
   };
 }

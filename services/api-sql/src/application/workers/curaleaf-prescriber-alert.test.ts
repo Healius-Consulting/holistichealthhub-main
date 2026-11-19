@@ -131,3 +131,17 @@ describe('stuck prescriber alert', () => {
     }
   });
 });
+
+describe('stuck prescriber alert wording', () => {
+  it('uses saved admin wording around the pharmacy, prescriber and order details', async () => {
+    const { deps, sent } = harness();
+    deps.copy = async () => ({ subject: 'Verify [Prescriber] please', body: 'Hi team,\n\n[Pharmacy] has [Order count] [Orders word] waiting [Days] days.' });
+    await alertStuckPrescribers([connection], [order('a', '2026-11-12T15:36:50.000Z')], deps, NOW);
+    const email = sent[0]!;
+    assert.equal(email.subject, 'Verify Dr. Prescriber please');
+    assert.equal(email.paragraphs[0], 'Hi team,');
+    assert.equal(email.paragraphs[1], 'Primary Branch has 1 order waiting 6 days.');
+    assert.match(email.paragraphs.join('\n'), /Curaleaf prescriber ID: presc-1/, 'the details stay automatic');
+    assert.match(email.paragraphs.at(-1)!, /Holistic Health Hub/, 'the closing note was not edited, so it is the code’s');
+  });
+});
