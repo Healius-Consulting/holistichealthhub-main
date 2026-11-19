@@ -18528,6 +18528,15 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
     grid-template-areas: "pitch how" "panel panel";
     column-gap: 56px;
   }
+  /* Level with the headline (the eyebrow's line and the pitch gap sit above it), and as tall as the pitch. */
+  .onb__how{ align-self: stretch; align-content: space-between; gap: 12px; margin-top: 40px; }
+  .onb__how li{ padding: 11px 0; }
+  .onb__pitch .onb__eyebrow{ line-height: 20px; }
+}
+/* Wide enough for the steps to fit: the box takes no height of its own (contain: size), so the
+   pitch sets the row and the box ends exactly where the brochure card ends. Narrower, it keeps its height. */
+@media (min-width: 1100px){
+  .onb__how{ contain: size; }
 }
 
 @media (max-width: 559px){
@@ -22181,3 +22190,275 @@ strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }
 .screening-reminder strong{ color: var(--text-primary); font-size: 13px; }
 .screening-reminder small{ color: var(--text-secondary); font-size: 12px; }
 @container (max-width: 520px){ .screening-reminder{ grid-template-columns: auto minmax(0, 1fr); } .screening-reminder .btn{ grid-column: 2; justify-self: start; } }
+
+/* --- Worldpay application (spec 01): five-step form in the onboarding dialog --- */
+.wpa{ width: min(980px, 100%); background: #f8f9f6; }
+
+/* Top bar: what this is, for which pharmacy, a close button, then the step bar. All on the content column. */
+.wpa-top{ flex: 0 0 auto; background: #fff; border-bottom: 1px solid #eceee9; }
+.wpa .wpa-top{ display: block; padding: 0; gap: 0; }
+.wpa-top__inner{ max-width: 760px; margin: 0 auto; padding: 18px 24px 16px; }
+.wpa-top__row{ display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 18px; }
+.wpa-top__title{ display: grid; gap: 2px; min-width: 0; }
+.wpa-top__title small{ color: var(--ink-muted); font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.wpa .wpa-top__title h2{ overflow: hidden; margin: 0; color: var(--ink); font-family: inherit; font-size: 18px; font-weight: 700; line-height: 1.25; white-space: nowrap; text-overflow: ellipsis; }
+.wpa .wpa-close{ display: grid; flex: 0 0 auto; place-items: center; width: 38px; min-height: 0; height: 38px; padding: 0; color: var(--ink-muted); background: #f4f6f2; border: 0; border-radius: 50%; cursor: pointer; transition: background .15s, color .15s; }
+.wpa .wpa-close:hover{ color: var(--ink); background: #e8ece6; }
+
+/* The step bar: numbered dots on a thin line; "Step 2 of 5" on a phone. */
+.wpa-stepper__now{ display: none; margin: 0 0 10px; color: var(--green); font-size: 13px; font-weight: 700; }
+.wpa-stepper__now span{ color: var(--ink-muted); font-weight: 500; }
+.wpa-stepper ol{ display: flex; margin: 0 -8px; padding: 0; list-style: none; }
+.wpa-stepper li{ position: relative; flex: 1 1 0; min-width: 0; }
+.wpa-stepper li + li::before{ content: ""; position: absolute; top: 13px; left: calc(-50% + 20px); right: calc(50% + 20px); height: 2px; background: #e3e6e2; border-radius: 2px; }
+.wpa-stepper li.is-done::before, .wpa-stepper li.is-current::before{ background: #9fcfba; }
+.wpa .wpa-stepper button{ display: grid; justify-items: center; gap: 7px; width: 100%; min-height: 0; padding: 0; color: var(--ink-muted); font: inherit; font-weight: 400; text-decoration: none; background: none; border: 0; border-radius: 0; cursor: pointer; }
+.wpa .wpa-stepper button:hover{ background: none; }
+.wpa .wpa-stepper button:disabled{ cursor: default; opacity: 1; }
+.wpa-stepper__dot{ display: grid; place-items: center; width: 28px; height: 28px; font-size: 12.5px; font-weight: 700; background: #fff; border: 2px solid #d9ded9; border-radius: 50%; transition: background .15s, border-color .15s; }
+.wpa-stepper__name{ max-width: 100%; padding: 0 4px; overflow: hidden; font-size: 12.5px; line-height: 1.3; text-align: center; text-overflow: ellipsis; }
+.wpa-stepper .is-done .wpa-stepper__dot{ color: #0f6e56; background: #e1f5ee; border-color: #e1f5ee; }
+.wpa-stepper .is-current .wpa-stepper__dot{ color: #fff; background: var(--green); border-color: var(--green); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 14%, transparent); }
+.wpa-stepper .is-current .wpa-stepper__name{ color: var(--ink); font-weight: 700; }
+.wpa-stepper button:not(:disabled):hover .wpa-stepper__dot{ border-color: color-mix(in srgb, var(--green) 45%, #d9ded9); }
+
+.wpa-body{ flex: 1 1 auto; overflow-y: auto; }
+.wpa-content{ max-width: 760px; margin: 0 auto; padding: 28px 24px 40px; color: var(--ink); font-size: 14.5px; line-height: 1.55; }
+.wpa-content > h4{ margin: 26px 0 12px; color: var(--green); font-family: var(--serif); font-size: 20px; font-weight: 500; }
+.wpa-intro{ margin: 0 0 22px; }
+.wpa-intro h3, .wpa-title{ margin: 0 0 6px; color: var(--green); font-family: var(--serif); font-size: 28px; font-weight: 500; line-height: 1.15; }
+.wpa-intro p{ max-width: 64ch; margin: 0; color: var(--ink-muted); font-size: 15px; }
+.wpa-muted{ margin: 0 0 12px; color: var(--ink-muted); }
+.wpa-tiny{ color: var(--ink-muted); font-size: 12px; }
+
+/* Sections: one calm card per group of questions. */
+.wpa-section{ margin: 0 0 18px; padding: 22px 24px; background: #fff; border: 1px solid #e8ebe7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15, 43, 35, .04); }
+.wpa-section.is-quiet{ background: #f2f4f0; border-color: #e7eae4; box-shadow: none; }
+/* The dialog styles every <header> as its title bar; these headers are only labels. */
+.wpa .wpa-section__head, .wpa .wpa-person__head{ min-height: 0; padding: 0; border: 0; }
+.wpa .wpa-section__head{ display: block; margin: 0 0 16px; }
+.wpa .wpa-person__head :is(button, a){ min-height: 0; padding: 0; border: 0; border-radius: 0; }
+.wpa-section__head h4{ margin: 0 0 4px; color: var(--ink); font-family: inherit; font-size: 16px; font-weight: 700; }
+.wpa-section__head p{ max-width: 66ch; margin: 0; color: var(--ink-muted); font-size: 13.5px; }
+.wpa-section > .wpa-field + .wpa-banner, .wpa-section > .wpa-options + .wpa-banner, .wpa-section > .wpa-options + .wpa-field{ margin-top: 16px; }
+
+.wpa-grid{ display: grid; gap: 18px 20px; }
+@media (min-width: 640px){
+  .wpa-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wpa-grid.is-three{ grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .wpa-grid.is-four{ grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.wpa-field{ display: grid; gap: 6px; align-content: start; min-width: 0; }
+.wpa-field.is-wide{ grid-column: 1 / -1; }
+.wpa-field__label{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; }
+.wpa-field__hint{ color: var(--ink-muted); font-size: 12.5px; line-height: 1.45; }
+.wpa-field__warn{ color: #8a5a10; font-size: 12.5px; font-weight: 600; }
+.wpa-field__problem{ display: block; color: #a32d2d; font-size: 12.5px; font-weight: 600; }
+.wpa-field.has-problem :is(.input, select, textarea){ border-color: #d99a9a; background: #fffafa; }
+.wpa-content textarea.input{ resize: vertical; }
+.wpa-tag{ display: inline-flex; padding: 2px 8px; color: #185fa5; font-size: 11px; font-weight: 600; background: #e9f2fb; border-radius: 999px; }
+.wpa-pill{ display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; font-size: 12px; border-radius: 8px; }
+.wpa-pill.is-ok{ color: #0f6e56; background: #e1f5ee; }
+.wpa-pill.is-info{ color: #185fa5; background: #e6f1fb; font-weight: 600; }
+.wpa-inline{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.wpa-inline .input{ flex: 1 1 140px; min-width: 0; }
+.wpa-lookup{ display: flex; gap: 8px; }
+.wpa-lookup .input{ flex: 1 1 auto; min-width: 0; }
+.wpa-found{ color: #0f6e56; font-size: 13px; font-weight: 600; }
+.wpa-found span{ color: var(--ink-muted); font-weight: 500; }
+.wpa-dob{ display: flex; gap: 8px; }
+.wpa-dob .input{ flex: 0 0 64px; min-width: 0; text-align: center; }
+.wpa-dob .input:last-child{ flex-basis: 88px; }
+.wpa .wpa-dob .input.is-attention{ border-color: #d4a017; background: #fffaf0; box-shadow: 0 0 0 3px #faeeda; }
+
+/* Answers we filled in: read like Check and send, Change to edit. */
+.wpa-answered{ padding: 14px 0; border-top: 1px solid #e3e7e1; }
+.wpa-section > .wpa-answered:first-of-type{ padding-top: 0; border-top: 0; }
+.wpa-answered__row{ display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.wpa-answered__label{ color: var(--ink-muted); font-size: 13px; font-weight: 600; }
+.wpa-answered__value{ margin-top: 3px; white-space: pre-line; }
+.wpa-answered__edit{ display: grid; gap: 8px; margin-top: 10px; }
+.wpa-answered .wpa-note{ margin-top: 10px; }
+.wpa-link{ flex: 0 0 auto; padding: 0; color: var(--green); font: inherit; font-size: 13px; font-weight: 700; background: none; border: 0; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
+.wpa-link:hover{ text-decoration-color: currentColor; }
+.wpa-link.is-danger{ color: #a32d2d; }
+
+/* Choices as cards. */
+.wpa-options{ display: grid; gap: 10px; }
+.wpa-options.is-compact{ grid-template-columns: repeat(2, minmax(0, 170px)); }
+.wpa-option{ display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 14px 16px; color: var(--ink); font: inherit; text-align: left; background: #fff; border: 1.5px solid #e1e5e0; border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s; }
+.wpa-option:hover{ border-color: color-mix(in srgb, var(--green) 40%, #e1e5e0); }
+.wpa-option.is-active{ background: #f1f8f4; border-color: var(--green); }
+.wpa-option__dot{ flex: 0 0 auto; width: 18px; height: 18px; margin-top: 2px; background: #fff; border: 2px solid #c6cdc7; border-radius: 50%; }
+.wpa-option.is-active .wpa-option__dot{ background: var(--green); border-color: var(--green); box-shadow: inset 0 0 0 3px #fff; }
+.wpa-option__text{ display: grid; gap: 2px; }
+.wpa-option__text strong{ font-weight: 600; }
+.wpa-option__text small{ color: var(--ink-muted); }
+
+/* Before you start. */
+.wpa-start{ display: grid; gap: 16px; margin: 0 0 18px; }
+@media (min-width: 720px){ .wpa-start{ grid-template-columns: 1.1fr 1fr; } }
+.wpa-price{ display: grid; gap: 6px; align-content: start; padding: 22px 24px; color: #fff; background: linear-gradient(160deg, var(--green), color-mix(in srgb, var(--green) 70%, #2f8f6c)); border-radius: 16px; }
+.wpa-price__label{ font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.wpa-price__big{ font-size: 28px; font-weight: 700; line-height: 1.2; }
+.wpa-price__note{ opacity: .85; }
+.wpa-price__ticks{ display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; padding: 0; list-style: none; }
+.wpa-price__ticks li{ padding: 4px 11px; font-size: 12.5px; background: rgba(255, 255, 255, .14); border-radius: 999px; }
+.wpa-price__ticks li::before{ content: "✓ "; }
+.wpa-price__pci{ display: grid; gap: 2px; margin-top: 10px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, .2); }
+.wpa-price__pci span{ font-size: 13px; opacity: .85; }
+.wpa-price small{ margin-top: 8px; font-size: 12px; opacity: .7; }
+.wpa-handy{ padding: 22px 24px; background: #fff; border: 1px solid #e8ebe7; border-radius: 16px; }
+.wpa-handy h4{ margin: 0 0 12px; font-size: 16px; font-weight: 700; }
+.wpa-handy ul{ display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.wpa-handy li{ position: relative; padding-left: 28px; }
+.wpa-handy li::before{ content: "✓"; position: absolute; top: 1px; left: 0; display: grid; place-items: center; width: 19px; height: 19px; color: #0f6e56; font-size: 11px; font-weight: 700; background: #e1f5ee; border-radius: 50%; }
+
+/* Notes and alerts. */
+.wpa-notes{ display: grid; gap: 8px; margin: 0 0 18px; }
+.wpa-note{ margin: 0; padding: 10px 14px; color: #1d5a92; font-size: 13.5px; background: #edf4fb; border-radius: 10px; }
+.wpa-note.is-amber{ color: #7a520e; background: #fbf2e2; }
+.wpa-alert{ margin: 0 0 18px; padding: 14px 16px; color: #7f1d1d; background: #fff6f6; border: 1px solid #f2d3d3; border-left: 4px solid #c24141; border-radius: 12px; }
+.wpa-alert ul{ margin: 6px 0 0; padding-left: 18px; }
+.wpa-banner{ display: grid; gap: 4px; margin: 0 0 12px; padding: 12px 15px; font-size: 13.5px; border-radius: 12px; }
+.wpa-banner ul{ margin: 4px 0 0; padding-left: 18px; }
+.wpa-banner small{ font-size: 12px; opacity: .85; }
+.wpa-banner .btn{ justify-self: start; margin-top: 4px; }
+.wpa-banner.is-red{ color: #7f1d1d; background: #fef2f2; }
+.wpa-banner.is-green{ color: #0f5c48; background: #e5f5ee; }
+.wpa-banner.is-amber{ color: #7a520e; background: #fbf2e2; }
+.wpa-banner.is-info{ color: #1d5a92; background: #edf4fb; }
+
+/* People. */
+.wpa-person{ margin: 0 0 16px; padding: 20px 24px 22px; background: #fff; border: 1px solid #e8ebe7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15, 43, 35, .04); }
+.wpa-person__head{ display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.wpa-person__avatar{ display: grid; flex: 0 0 auto; place-items: center; width: 40px; height: 40px; color: #0f6e56; font-size: 14px; font-weight: 700; background: #e1f5ee; border-radius: 50%; }
+.wpa-person__who{ display: grid; min-width: 0; }
+.wpa-person__who strong{ font-size: 15.5px; }
+.wpa-person__who small{ color: var(--ink-muted); font-size: 12.5px; }
+.wpa-person__head .wpa-link{ margin-left: auto; }
+.wpa-roles{ display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 4px; }
+.wpa-toggle{ padding: 7px 14px; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; background: #fff; border: 1.5px solid #dfe3de; border-radius: 999px; cursor: pointer; }
+.wpa-toggle.is-on{ color: #fff; background: var(--green); border-color: var(--green); }
+.wpa-subhead{ margin: 22px 0 12px; color: var(--ink-muted); font-size: 11.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.wpa-add{ display: block; width: 100%; margin: 0 0 18px; padding: 14px; color: var(--green); font: inherit; font-weight: 700; background: transparent; border: 1.5px dashed #c5d0c8; border-radius: 14px; cursor: pointer; }
+.wpa-add:hover{ background: #f1f8f4; }
+.wpa-check{ display: flex; gap: 10px; align-items: flex-start; margin: 0 0 10px; cursor: pointer; }
+.wpa-check input{ margin-top: 4px; }
+.wpa-total{ margin: 0 0 12px; color: var(--ink-muted); font-size: 13.5px; }
+.wpa-total strong{ color: var(--ink); }
+.wpa-total.is-good{ color: #0f6e56; font-weight: 600; }
+.wpa-total.is-bad{ color: #a32d2d; font-weight: 600; }
+.wpa-answered__edit .wpa-total{ margin: 0; }
+
+/* Check and send, the admin window and the status panel. */
+.wpa-card{ margin: 0 0 12px; padding: 18px 20px; background: #fff; border: 1px solid #e8ebe7; border-radius: 16px; }
+.wpa-card.is-soft{ background: #f2f4f0; border-color: #e7eae4; }
+.wpa-card ul, .wpa-card ol{ margin: 6px 0 0; padding-left: 20px; }
+.wpa-summary table{ width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.wpa-summary th, .wpa-summary td{ padding: 8px 6px; text-align: left; vertical-align: top; border-bottom: 1px solid #eef0ee; }
+.wpa-summary tr:last-child :is(th, td){ border-bottom: 0; }
+.wpa-summary th{ width: 38%; color: var(--ink-muted); font-weight: 500; }
+.wpa-summary__head{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.wpa-chips{ display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+.wpa-chip{ padding: 8px 13px; color: var(--ink); font: inherit; font-size: 13px; background: #fff; border: 1px solid #d8ddd9; border-radius: 999px; cursor: pointer; }
+.wpa-chip.is-active{ color: #fff; background: var(--green); border-color: var(--green); }
+
+
+/* Footer: on the content column. Save status and "finish later" on the left, Back and Continue on the right. */
+.wpa-bottom{ flex: 0 0 auto; background: #fff; border-top: 1px solid #eceee9; }
+.wpa-bottom__inner{ display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 760px; margin: 0 auto; padding: 14px 24px; }
+.wpa-bottom__status{ display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; min-width: 0; }
+.wpa-save{ color: var(--ink-muted); font-size: 13px; }
+.wpa-save.is-good::before{ content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; vertical-align: 1px; background: #3d9a73; border-radius: 50%; }
+.wpa-save.is-bad{ color: #a32d2d; font-weight: 600; }
+.wpa-bottom__actions{ display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
+.wpa-back{ padding: 10px 16px; color: var(--ink); font: inherit; font-weight: 600; background: transparent; border: 0; border-radius: 999px; cursor: pointer; }
+.wpa-back:hover{ background: #f2f4f0; }
+.wpa-next{ min-width: 140px; }
+.wpa-next span{ margin-left: 4px; }
+
+@media (max-width: 639px){
+  .wpa-top__inner{ padding: 14px 16px 12px; }
+  .wpa-top__row{ margin-bottom: 12px; }
+  .wpa-bottom__inner{ padding: 12px 16px; }
+  .wpa-bottom__status .wpa-link{ display: none; }
+  .wpa-next{ min-width: 0; }
+  .wpa-stepper__now{ display: block; }
+  .wpa-stepper__name{ display: none; }
+  .wpa-stepper__dot{ width: 22px; height: 22px; font-size: 11px; }
+  .wpa-stepper li + li::before{ top: 10px; left: calc(-50% + 15px); right: calc(50% + 15px); }
+  .wpa-content{ padding: 20px 16px 32px; }
+  .wpa-intro h3, .wpa-title{ font-size: 24px; }
+  .wpa-section, .wpa-person{ padding: 18px 16px; border-radius: 14px; }
+  .wpa-grid.is-four, .wpa-grid.is-three{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.wpa-entry{ margin: 12px 0 4px; }
+.wpa-entry__row{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: #f4f6f2; border-radius: 12px; }
+.wpa-entry__row > span{ display: grid; gap: 2px; }
+.wpa-entry__row small{ color: var(--ink-muted); }
+.wpa-admin{ display: grid; gap: 14px; }
+.wpa-admin__table{ width: 100%; border-collapse: collapse; font-size: 13px; }
+.wpa-admin__table th, .wpa-admin__table td{ padding: 8px 6px; text-align: left; border-bottom: 1px solid #eef0ee; }
+.wpa-admin__table th{ color: var(--ink-muted); font-weight: 600; }
+.wpa-admin__table tbody tr{ cursor: pointer; }
+.wpa-admin__table tbody tr:hover, .wpa-admin__table tbody tr.is-selected{ background: #f4f6f2; }
+.wpa-tag.is-amber{ color: #854f0b; background: #faeeda; margin-left: 6px; }
+.wpa-admin-settings > div, .wpa-admin-settings > .btn{ margin-bottom: 8px; }
+.wpa-admin-settings .wpa-field{ margin-bottom: 10px; }
+@media (max-width: 720px){ .wpa-admin__table{ display: block; overflow-x: auto; } }
+.wpa-top__row.is-alone{ margin-bottom: 0; }
+.wpa .partner-terms-form__terms{ margin: 0; }
+.wpa .curaleaf-account-form__sign{ margin: 0; }
+.wpa .wpa-section > .wpa-check + .wpa-field{ margin-top: 16px; }
+/* The Companies House lookup and the PharmSmart prefill note, inside the shared form look. */
+.wpa .company-lookup{ margin: 0 0 18px; padding: 22px 24px; background: #fff; border: 1px solid #e8ebe7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15, 43, 35, .04); }
+.wpa .company-lookup__intro{ color: var(--ink-muted); font-size: 13.5px; }
+.wpa .company-lookup__intro strong{ margin-bottom: 4px; color: var(--ink); font-size: 16px; }
+.wpa .prefill-review-banner{ margin: 0 0 18px; padding: 12px 15px; border: 0; border-radius: 12px; }
+@media (max-width: 639px){ .wpa .company-lookup{ padding: 18px 16px; border-radius: 14px; } }
+@media (min-width: 640px){ .wpa-options.is-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.wpa-grid.has-rows-above{ margin-top: 16px; padding-top: 16px; border-top: 1px solid #e3e7e1; }
+.wpa .curaleaf-account-form__sign strong{ display: block; }
+.wpa-content > .wpa-note{ margin: 0 0 14px; }
+.wpa-pills{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.wpa-toggle:hover:not(.is-on){ border-color: color-mix(in srgb, var(--green) 40%, #dfe3de); }
+.wpa-grid.has-gap-above{ margin-top: 20px; }
+.wpa-signature{ margin-top: 16px; }
+.wpa-note.has-gap-above{ margin-top: 16px; }
+/* The partner brochure, as a card (hero and "Not yet"). */
+.onb__brochure-card{ display: flex; align-items: center; gap: 14px; width: 100%; max-width: 460px; margin-top: 20px; padding: 14px 16px; color: var(--ink); font: inherit; text-align: left; background: #fff; border: 1px solid color-mix(in srgb, var(--green) 16%, transparent); border-radius: 14px; box-shadow: 0 1px 2px rgba(15, 43, 35, .05); cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.onb__brochure-card:hover{ border-color: color-mix(in srgb, var(--green) 40%, transparent); box-shadow: 0 6px 18px rgba(15, 43, 35, .08); transform: translateY(-1px); }
+.onb__brochure-card:focus-visible{ outline: 3px solid color-mix(in srgb, var(--green) 35%, transparent); outline-offset: 2px; }
+.onb__brochure-icon{ display: grid; flex: 0 0 auto; place-items: center; width: 42px; height: 42px; color: var(--green); background: #e8f3ee; border-radius: 12px; }
+.onb__brochure-text{ display: grid; flex: 1 1 auto; gap: 2px; min-width: 0; }
+.onb__brochure-text strong{ font-size: 15px; }
+.onb__brochure-text span{ color: var(--ink-muted); font-size: 13px; }
+.onb__brochure-arrow{ flex: 0 0 auto; color: var(--green); transition: transform .15s; }
+.onb__brochure-card:hover .onb__brochure-arrow{ transform: translateX(3px); }
+.onb__panel .onb__brochure-card{ margin-top: 14px; }
+/* "Before you start" for onboarding: the three forms, then the company lookup. */
+.wpa-journey{ display: grid; gap: 0; margin: 0 0 18px; padding: 6px 24px; list-style: none; background: #fff; border: 1px solid #e8ebe7; border-radius: 16px; box-shadow: 0 1px 2px rgba(15, 43, 35, .04); }
+.wpa-journey li{ display: flex; align-items: center; gap: 14px; padding: 14px 0; }
+.wpa-journey li + li{ border-top: 1px solid #eef0ee; }
+.wpa-journey__number{ display: grid; flex: 0 0 auto; place-items: center; width: 30px; height: 30px; color: #fff; font-size: 13px; font-weight: 700; background: var(--green); border-radius: 50%; }
+.wpa-journey__text{ display: grid; flex: 1 1 auto; gap: 1px; min-width: 0; }
+.wpa-journey__text span{ color: var(--ink-muted); font-size: 13.5px; }
+.wpa-journey__tag{ flex: 0 0 auto; padding: 3px 10px; color: #0f6e56; font-size: 12px; font-weight: 600; background: #e1f5ee; border-radius: 999px; }
+.wpa-journey__tag.is-optional{ color: var(--ink-muted); background: #f1f3ef; }
+.wpa-company{ display: grid; gap: 8px; margin-top: 16px; padding: 16px 18px; background: #f4f9f6; border: 1px solid #d6eadf; border-radius: 14px; }
+.wpa-company__head{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.wpa-company__head strong{ font-size: 16px; }
+.wpa-company__meta{ color: var(--ink-muted); font-size: 13px; }
+.wpa-company__uses{ display: grid; gap: 6px; margin: 4px 0 2px; padding: 0; list-style: none; font-size: 13.5px; }
+.wpa-company__uses li{ position: relative; padding-left: 22px; color: var(--ink-muted); }
+.wpa-company__uses li::before{ content: "✓"; position: absolute; left: 0; color: #0f6e56; font-weight: 700; }
+.wpa-company__uses b{ margin-right: 6px; color: var(--ink); }
+.wpa-company .wpa-link{ justify-self: start; }
+.wpa-pill.is-warn{ color: #854f0b; background: #faeeda; text-transform: capitalize; }
+@media (max-width: 639px){ .wpa-journey{ padding: 4px 16px; } .wpa-journey__tag{ display: none; } }
+/* Admin: demo pharmacies. */
+.demo-pharmacy{ display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.demo-pharmacy__state{ display: grid; gap: 2px; min-width: 0; }
+.demo-pharmacy__state span{ color: var(--ink-muted); font-size: 13px; }
+.demo-pharmacy__actions{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }

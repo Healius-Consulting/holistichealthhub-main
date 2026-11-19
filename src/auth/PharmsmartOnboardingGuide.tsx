@@ -1,11 +1,12 @@
+import { ArrowRight, FileText } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
 import HhhBrandMark from '../components/HhhBrandMark';
-import { CuraleafAccountForm, type CuraleafFormValues } from './CuraleafAccountForm';
+import { CuraleafAccountForm } from './CuraleafAccountForm';
+import { OnboardingQuickStart } from './OnboardingQuickStart';
 import { PartnerTermsForm } from './PartnerTermsForm';
-import { WorldpayForm } from './WorldpayForm';
-import { worldpayPrincipalsFrom, worldpayStartFromWelcome } from './worldpay-start';
+import { WorldpayApplicationForm } from '../worldpay/WorldpayApplicationForm';
 import type { CompanyLookup } from '../shared/api';
 import {
   afterCuraleafSent,
@@ -120,6 +121,26 @@ function OnboardingPdfPreview({ href }: { href: string }) {
   );
 }
 
+/** The partner brochure, opened in the preview on this page. */
+function BrochureCard({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button type="button" className="onb__brochure-card" onClick={onOpen}>
+      <span className="onb__brochure-icon" aria-hidden="true"><FileText size={20} /></span>
+      <span className="onb__brochure-text">
+        <strong>Read the partner brochure</strong>
+        <span>Everything on this page in more detail, as a PDF you can download.</span>
+      </span>
+      <ArrowRight size={18} aria-hidden="true" className="onb__brochure-arrow" />
+    </button>
+  );
+}
+
+/** A person PharmSmart named, when it sent at least a name. */
+function personFromPrefill(first?: string | null, last?: string | null, email?: string | null) {
+  const name = [first, last].filter(Boolean).join(' ').trim();
+  return name ? { name, email: email?.trim() ?? '' } : null;
+}
+
 export function PharmsmartWelcome({
   welcome,
   onUseEmail,
@@ -136,14 +157,18 @@ export function PharmsmartWelcome({
   const knownName = [welcome.firstName, welcome.lastName].filter(Boolean).join(' ');
   const [viewing, setViewing] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [curaleafValues, setCuraleafValues] = useState<CuraleafFormValues | null>(null);
+  // "Before you start" comes first: it explains the three forms and looks the company up once for all of them.
+  const [quickStartOpen, setQuickStartOpen] = useState(false);
   const [company, setCompany] = useState<CompanyLookup | null>(null);
   // Curaleaf form, then Partner Terms, then Worldpay (skippable). A pharmacy that left
   // before the Terms comes back straight to them.
   const [setup, setSetup] = useState(() => initialSetupState(welcome));
   const [termsOpen, setTermsOpen] = useState(() => setup.termsRequest !== null);
   const [worldpayOpen, setWorldpayOpen] = useState(false);
-  const [choice, setChoice] = useState<PharmacyOnboardingChoice | null>(() => (setup.termsRequest ? 'setup' : null));
+  // Set up is open from the start; Book a demo and Not yet are a click away.
+  const [choice, setChoice] = useState<PharmacyOnboardingChoice | null>('setup');
+  /** Only scroll to the panel after the visitor has done something, never on arrival. */
+  const interacted = useRef(false);
   const submitted = setup.termsRequest !== null;
   const termsAccepted = setup.termsAccepted;
   const worldpayReady = worldpayUnlocked(setup);
@@ -154,21 +179,19 @@ export function PharmsmartWelcome({
   const panelRef = useRef<HTMLDivElement>(null);
 
   const choose = (next: PharmacyOnboardingChoice) => {
+    interacted.current = true;
     setChoice(next);
     if (next === 'later') void recordNotYet();
   };
 
   // The chosen panel sits below the hero; bring it into view, mostly for phones.
   useEffect(() => {
-    if (!choice || formOpen || termsOpen || worldpayOpen) return;
+    if (formOpen || quickStartOpen || termsOpen || worldpayOpen) { interacted.current = true; return; }
+    if (!choice || !interacted.current) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
-  }, [choice, formOpen, termsOpen, worldpayOpen]);
+  }, [choice, formOpen, quickStartOpen, termsOpen, worldpayOpen]);
 
-  // Whatever the pharmacy has already told us, and Companies House when they looked the
-  // company up on the Curaleaf form, carries into the Worldpay form.
-  const worldpayPrefill = worldpayStartFromWelcome(welcome, curaleafValues, company);
-  const worldpayPrincipals = worldpayPrincipalsFrom(welcome, company);
 
   // Only a PharmSmart visit says who chose "Not yet"; an anonymous visit records nothing.
   const recordNotYet = async () => {
@@ -274,9 +297,7 @@ export function PharmsmartWelcome({
                 </button>
               ))}
             </div>
-            <p className="onb__brochure">
-              Want the detail first? <button type="button" onClick={() => setViewing(BROCHURE.href)}>Read the brochure</button>
-            </p>
+            <BrochureCard onOpen={() => setViewing(BROCHURE.href)} />
           </div>
 
           <aside className="onb__how" aria-labelledby="onb-how">
@@ -311,7 +332,7 @@ export function PharmsmartWelcome({
                   </div>
                   {submitted
                     ? <p className="onb__done">Sent</p>
-                    : <button type="button" className="onb__button onb__button--primary" onClick={() => setFormOpen(true)}>Fill in</button>}
+                    : <button type="button" className="onb__button onb__button--primary" onClick={() => setQuickStartOpen(true)}>Fill in</button>}
                 </li>
                 <li className={termsAccepted ? 'is-done' : undefined}>
                   <div>
@@ -359,6 +380,7 @@ export function PharmsmartWelcome({
             <section className="onb__panel" aria-labelledby="onb-later">
               <h2 id="onb-later">No problem</h2>
               <p>Nothing has been set up for this pharmacy. Come back to this page whenever you are ready, or read the brochure in the meantime.</p>
+              <BrochureCard onOpen={() => setViewing(BROCHURE.href)} />
               {deferral === 'failed'
                 ? <p className="onb__error">We could not save your answer. <button type="button" onClick={() => void recordNotYet()}>Try again</button></p>
                 : null}
@@ -386,14 +408,25 @@ export function PharmsmartWelcome({
             </div>,
             document.body,
           ) : null}
+          <OnboardingQuickStart
+            open={quickStartOpen}
+            pharmacyName={welcome.prefill?.pharmacyName ?? ''}
+            company={company}
+            onClose={() => setQuickStartOpen(false)}
+            onStart={found => {
+              setCompany(found);
+              setQuickStartOpen(false);
+              setFormOpen(true);
+            }}
+          />
           <CuraleafAccountForm
             open={formOpen}
+            company={company}
             welcome={welcome}
             onClose={() => setFormOpen(false)}
             onSubmitted={(values, requestId, found) => {
               setFormOpen(false);
-              setCuraleafValues(values);
-              setCompany(found);
+              if (found) setCompany(found);
               setSetup(current => afterCuraleafSent(current, {
                 id: requestId,
                 pharmacyName: values.pharmacyName,
@@ -408,6 +441,10 @@ export function PharmsmartWelcome({
             request={setup.termsRequest}
             pharmsmartTicket={welcome.pharmsmartTicket}
             signer={{ name: knownName, email: welcome.email ?? '' }}
+            people={{
+              superintendent: personFromPrefill(welcome.prefill?.superintendentFirstName, welcome.prefill?.superintendentLastName, welcome.prefill?.superintendentEmail),
+              manager: personFromPrefill(welcome.prefill?.managerFirstName, welcome.prefill?.managerLastName, welcome.prefill?.managerEmail),
+            }}
             onClose={() => setTermsOpen(false)}
             onAccepted={() => {
               setTermsOpen(false);
@@ -416,15 +453,18 @@ export function PharmsmartWelcome({
               setWorldpayOpen(true);
             }}
           />
-          <WorldpayForm
-            open={worldpayOpen}
-            prefill={worldpayPrefill}
-            principalsStart={worldpayPrincipals}
-            companyNumber={company?.companyNumber}
-            prefillSource={company ? 'your PharmSmart account, Curaleaf form and Companies House' : undefined}
-            onClose={() => setWorldpayOpen(false)}
-            onSubmitted={() => { setWorldpayOpen(false); setSetup(current => ({ ...current, worldpay: 'sent' })); }}
-          />
+          {setup.termsRequest ? (
+            <WorldpayApplicationForm
+              open={worldpayOpen}
+              owner={{ kind: 'request', onboardingRequestId: setup.termsRequest.id }}
+              // A company looked up on the Curaleaf form starts a new application already filled in.
+              startWithCompany={company}
+              onClose={() => setWorldpayOpen(false)}
+              onChanged={change => {
+                if (change.status && change.status !== 'DRAFT') setSetup(current => ({ ...current, worldpay: 'sent' }));
+              }}
+            />
+          ) : null}
       </div>
     </div>
   );

@@ -263,6 +263,8 @@ export async function deliverPatientMessages(deps: MessageDeliveryDeps, limit = 
 export type ImmediateEmail = {
   templateCode: EmailTemplateCode;
   to: string[];
+  /** Copied in, on the same message. */
+  cc?: string[];
   payload: Record<string, unknown>;
   attachments: Array<{ filename: string; content: Buffer; contentType: string }>;
   /** Resend keeps this for 24 hours, so a retried submit cannot send twice. */
@@ -295,6 +297,7 @@ export async function sendEmailNow(email: ImmediateEmail, fetchImpl: typeof fetc
       from: `Holistic Health Hub <${fromAddressFor(email.templateCode)}>`,
       ...(replyToFor(email.templateCode) ? { reply_to: replyToFor(email.templateCode) } : {}),
       to: email.to,
+      ...(email.cc?.length ? { cc: email.cc } : {}),
       subject: rendered.subject,
       html: rendered.html,
       text: rendered.text,

@@ -64,6 +64,13 @@ class MockClickup implements ClickupClient {
     this.maybeFail();
     this.tasks.get(taskId)!.fields.set(fieldId, value);
   }
+
+  comments: Array<[string, string]> = [];
+  async addComment(taskId: string, text: string) {
+    this.calls.push({ op: 'comment', args: [taskId, text] });
+    this.maybeFail();
+    this.comments.push([taskId, text]);
+  }
 }
 
 const request = {
@@ -155,6 +162,21 @@ describe('syncClickup', () => {
     assert.equal(clickup.calls.filter(call => call.op === 'create').length, 1);
     assert.equal(repo.cards.get('1234567')!.clickupTaskId, 'task-1');
     assert.equal(repo.cards.get('1234567')!.organisationId, branch.id);
+  });
+
+  it('marks a Worldpay application on the card: payment route, a comment with the reference, then validated', async () => {
+    const { clickup, hooks, run } = setup({ config: { ...config, fields: { ...config.fields, worldpayValidated: 'f-wp-valid', paymentRoute: 'f-payment' } } });
+    await hooks.activated({ requestId: request.id, organisation: branch });
+    await run();
+    await hooks.worldpaySubmitted({ gphcNumber: '1234567', organisationId: branch.id, reference: 'HHH-WP-2026-0001', submittedAt: '2026-11-18T12:00:00.000Z' });
+    await run();
+    const task = clickup.tasks.get('task-1')!;
+    assert.equal(task.status, 'Awaiting Curaleaf', 'a Worldpay event never moves the column');
+    assert.equal(task.fields.get('f-payment'), 'WORLDPAY');
+    assert.deepEqual(clickup.comments, [['task-1', 'Worldpay application HHH-WP-2026-0001 submitted 18 November 2026']]);
+    await hooks.worldpayValidated({ gphcNumber: '1234567', organisationId: branch.id });
+    await run();
+    assert.equal(task.fields.get('f-wp-valid'), true);
   });
 
   it('creates the card at Awaiting activation when the pharmacy never came through PharmSmart', async () => {

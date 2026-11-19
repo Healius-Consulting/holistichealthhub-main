@@ -102,6 +102,7 @@ export async function acceptBranchPartnerTerms(
     termsVersion: deps.termsVersion,
     signerName: input.signerName.trim(),
     signerRole: input.signerRole,
+    signerRoleOther: input.signerRole === 'OTHER' ? input.signerRoleOther?.trim() || null : null,
     signerEmail: input.signerEmail.trim().toLowerCase(),
     signerGphcNumber: signerRoleIsPharmacist(input.signerRole)
       ? normaliseGphcNumber(input.signerGphcNumber ?? '') || null

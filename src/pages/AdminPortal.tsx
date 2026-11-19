@@ -52,6 +52,8 @@ import { useAuth } from '../auth/useAuth';
 import { type ActivatedPharmacyOnboarding, completeReferralRecordsCheck, createOrganisation, createPharmacyStaffInvitation, describeApiError, createPlatformAdminInvitation, getAdminGeneralIntake, getAdminPatientRegister, getAdminPharmacyReferralIntake, updateAdminPatientDetails, getAdminReferralFinance, getPharmacyStaff, getPlatformAdmins, getReferralLink, queueReferralPatientEmail, recordPatientRegisterExport, recordReferralDecision, assignPharmacyOwner, removePharmacyStaff, removePlatformAdmin, resendPharmacyStaffInvitation, resendPlatformAdminInvitation, resetPharmacyStaffMfa, updateAdminPatientConditions, updateEligibilityPharmacyReason } from '../shared/api';
 import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferralFinanceReport, type DuplicateRecordMatch, type PatientRegisterExportResult, type PatientRegisterExportRow, type PharmacyStaffAccount, type PharmacyStaffInvitation, type PlatformAdminAccount, type PlatformAdminInvitation } from '../shared/contracts';
 import { PharmacyRequestRecord, PharmacyRequestRow, usePharmacyRequests } from './admin/PharmacyRequests';
+import { WorldpayApplicationsAdmin } from './admin/WorldpayApplicationsAdmin';
+import { DemoPharmaciesAdmin } from './admin/DemoPharmaciesAdmin';
 import { formatRequestDate } from './admin/requestFormat';
 import { ActivationChecklist, DeclinePharmacyPanel, NotAvailablePanel, SuspendPharmacyPanel } from './admin/PharmacyActivation';
 import { PharmacySummary } from './admin/PharmacySummary';
@@ -1013,6 +1015,8 @@ export default function AdminPortal() {
   }, [dispatch, state.organisations]);
   const overviewManageRef = useRef<HTMLDivElement>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWorldpayAdmin, setShowWorldpayAdmin] = useState(false);
+  const [showDemoPharmacies, setShowDemoPharmacies] = useState(false);
 
   const [showAdminDialog, setShowAdminDialog] = useState(false);
   const [adminDialogFocus, setAdminDialogFocus] = useState<AdminDialogFocus>('list');
@@ -1599,6 +1603,8 @@ export default function AdminPortal() {
     { label: 'Patient register', detail: 'Cross-pharmacy patient ownership', group: 'Navigate', icon: <Users size={16} />, run: () => { setView('patients'); } },
     { label: 'Referral finance', detail: '£50 first dispenses and £40 annual fees', group: 'Navigate', icon: <PoundSterling size={16} />, run: () => { setView('finance'); } },
     { label: 'Pharmacy requests', detail: 'New pharmacies waiting to be activated', group: 'Navigate', icon: <Building2 size={16} />, run: () => { setView('overview'); setOverviewFilter('requests'); setQuery(''); } },
+    { label: 'Demo pharmacies', detail: 'GPhC numbers used to show onboarding: delete one to start again', group: 'Navigate', icon: <Building2 size={16} />, run: () => setShowDemoPharmacies(true) },
+    { label: 'Worldpay applications', detail: 'Submitted merchant applications, emails and wording', group: 'Navigate', icon: <Building2 size={16} />, run: () => setShowWorldpayAdmin(true) },
     { label: 'Invite admin', detail: 'Add another HHH administrator account', group: 'Actions', icon: <UserPlus size={16} />, run: () => { setAdminDialogFocus('invite'); setShowAdminDialog(true); } },
     { label: 'View admins', detail: 'HHH administrator accounts', group: 'Navigate', icon: <Users size={16} />, run: () => { setAdminDialogFocus('list'); setShowAdminDialog(true); } },
     { label: 'Onboard pharmacy (Legacy)', detail: 'Create a pharmacy by hand. New pharmacies now join from the onboarding page.', group: 'Actions', icon: <Plus size={16} />, run: () => { setView('overview'); setShowOnboarding(true); } },
@@ -1958,6 +1964,12 @@ export default function AdminPortal() {
               aria-label="Search pharmacies"
             />
           </div>
+            <button type="button" className="btn btn-sm" onClick={() => setShowDemoPharmacies(true)}>
+              Demo pharmacies
+            </button>
+            <button type="button" className="btn btn-sm" onClick={() => setShowWorldpayAdmin(true)}>
+              Worldpay applications
+            </button>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowOnboarding(true)}>
               <Plus size={14} /> Onboard pharmacy (Legacy)
             </button>
@@ -3219,6 +3231,8 @@ export default function AdminPortal() {
           {view === 'finance' && renderFinance()}
         </div>
       </div>
+      <WorldpayApplicationsAdmin open={showWorldpayAdmin} onClose={() => setShowWorldpayAdmin(false)} />
+      <DemoPharmaciesAdmin open={showDemoPharmacies} onClose={() => setShowDemoPharmacies(false)} />
       {showOnboarding && <OnboardPharmacy onClose={() => setShowOnboarding(false)} onCreated={id => { setShowOnboarding(false); openPharmacyOnOverview(id, 'identity'); }} />}
       {showAdminDialog ? <PlatformAdminDialog onClose={() => setShowAdminDialog(false)} focusInvite={adminDialogFocus === 'invite'} /> : null}
       {referralDialog && (

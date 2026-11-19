@@ -29,6 +29,7 @@ export const EMAIL_EVENT_NAMES = [
   'pharmacy_onboarding.activated',
   'pharmacy_onboarding.declined',
   'pharmacy_onboarding.worldpay_submitted',
+  'worldpay_application.submitted',
 ] as const;
 
 export type EmailEventName = (typeof EMAIL_EVENT_NAMES)[number];
@@ -72,6 +73,8 @@ export const EMAIL_TEMPLATE_CODES = [
   'pharmacy_onboarding_activated',
   'pharmacy_onboarding_declined',
   'admin_worldpay_form_submitted',
+  'worldpay_application_to_worldpay',
+  'worldpay_application_confirmation',
 ] as const;
 
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
@@ -85,7 +88,7 @@ export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
  * Copy must never invite a reply unless the template names an alias here, or the
  * patient is writing to a mailbox nobody reads.
  */
-export type EmailAlias = 'referrals' | 'IT' | 'support' | 'onboarding';
+export type EmailAlias = 'referrals' | 'IT' | 'support' | 'onboarding' | 'worldpay';
 
 export function emailAliasDomain() {
   return process.env.EMAIL_ALIAS_DOMAIN?.trim() || 'holistichealthhub.live';
@@ -101,7 +104,7 @@ export function replyToFor(kind: EmailTemplateCode): string | null {
   return definition.replyTo ? `${definition.replyTo}@${emailAliasDomain()}` : null;
 }
 
-export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 'enquiries' | 'onboarding';
+export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 'enquiries' | 'onboarding' | 'worldpay';
 
 const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   patient_enquiry_declined: 'referrals',
@@ -132,6 +135,8 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_onboarding_activated: 'onboarding',
   pharmacy_onboarding_declined: 'accounts',
   admin_worldpay_form_submitted: 'onboarding',
+  worldpay_application_to_worldpay: 'worldpay',
+  worldpay_application_confirmation: 'worldpay',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -265,6 +270,27 @@ function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
   if (kind === 'patient_referred' || kind === 'patient_existing_clinic') return 'Your pharmacy';
   if (kind.startsWith('patient_')) return 'Patient order update';
   return 'Pharmacy update';
+}
+
+/**
+ * An email whose subject and paragraphs were written in admin and merged before
+ * sending (the Worldpay application emails). The payload carries `subject` and
+ * `paragraphs`; anything missing falls back to the given wording.
+ */
+function contentEmail(kind: EmailTemplateCode, payload: unknown, fallbackSubject: string, fallbackParagraph: string): RenderedEmail {
+  const subject = value(payload, 'subject') || fallbackSubject;
+  const given = payload && typeof payload === 'object' ? (payload as { paragraphs?: unknown }).paragraphs : undefined;
+  const paragraphs = Array.isArray(given) ? given.filter((item): item is string => typeof item === 'string' && item.trim() !== '') : [];
+  const lines = paragraphs.length ? paragraphs : [fallbackParagraph];
+  return render({
+    kind,
+    payload,
+    subject,
+    preheader: lines[0] ?? subject,
+    title: subject,
+    text: lines.join('\n\n'),
+    paragraphs: lines.map(paragraph => escapeHtml(paragraph).replace(/\n/g, '<br>')),
+  });
 }
 
 function render(input: {
@@ -1149,7 +1175,7 @@ export const EMAILS = {
       return render({
         kind: 'curaleaf_new_account_application',
         payload,
-        subject: `New account application: ${branch}, GPhC ${gphc}`,
+        subject: `${payload && typeof payload === 'object' && (payload as { demo?: unknown }).demo === true ? 'DEMO, not sent to Curaleaf: ' : ''}New account application: ${branch}, GPhC ${gphc}`,
         preheader: `New account application from ${branch}.`,
         title: 'New account application',
         text: [
@@ -1201,6 +1227,22 @@ export const EMAILS = {
         ],
       });
     },
+  },
+  worldpay_application_to_worldpay: {
+    audience: 'admin',
+    events: ['worldpay_application.submitted'],
+    schedule: 'immediate',
+    summary: 'WP-01. Sent straight away, from the Worldpay mailbox, to the recipients set in admin when a pharmacy submits its Worldpay application. The application PDF and spreadsheet are attached, plus the service information PDF when the pharmacy has no website. Subject and wording are edited in admin; no personal or bank details are written in the body.',
+    replyTo: 'worldpay',
+    render: (payload) => contentEmail('worldpay_application_to_worldpay', payload, 'Worldpay application', 'Please find attached a card processing application from a Holistic Health Hub partner pharmacy.'),
+  },
+  worldpay_application_confirmation: {
+    audience: 'pharmacy_owner',
+    events: ['worldpay_application.submitted'],
+    schedule: 'immediate',
+    summary: 'WP-02. Sent straight away to whoever submitted the Worldpay application and to the branch email, saying it has gone to Worldpay and what happens next. No attachment and no personal or bank details. Wording is edited in admin.',
+    replyTo: 'worldpay',
+    render: (payload) => contentEmail('worldpay_application_confirmation', payload, 'Your Worldpay application has been sent', 'We have received your Worldpay application and passed it to Worldpay. If Worldpay ask you something you are unsure about, reply to this email.'),
   },
   pharmacy_onboarding_declined: {
     audience: 'staff',

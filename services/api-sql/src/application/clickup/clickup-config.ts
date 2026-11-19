@@ -20,10 +20,11 @@ export type ClickupConfig = {
 };
 
 export type ClickupFieldName =
-  | Exclude<keyof ClickupCardFields, 'tradingName'>
+  | Exclude<keyof ClickupCardFields, 'tradingName' | 'comment'>
   | 'pharCodeEntered'
   | 'apiKeyEntered'
-  | 'setupComplete';
+  | 'setupComplete'
+  | 'worldpayValidated';
 
 const STATUS_ENV: Record<ClickupStage, [string, string]> = {
   interest: ['CLICKUP_STATUS_INTEREST', 'Interest'],
@@ -51,6 +52,7 @@ export const CLICKUP_FIELD_ENV: Record<ClickupFieldName, string> = {
   pharCodeEntered: 'CLICKUP_FIELD_PHAR_CODE_ENTERED',
   apiKeyEntered: 'CLICKUP_FIELD_API_KEY_ENTERED',
   setupComplete: 'CLICKUP_FIELD_SETUP_COMPLETE',
+  worldpayValidated: 'CLICKUP_FIELD_WORLDPAY_VALIDATED',
 };
 
 /** Null until HHH sets the list id: the worker then leaves every event queued. */

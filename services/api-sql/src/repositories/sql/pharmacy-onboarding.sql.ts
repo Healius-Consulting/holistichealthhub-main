@@ -1,4 +1,5 @@
 import { dataConnect } from '../../bootstrap/firebase.js';
+import { SqlWorldpayApplicationRepository } from './worldpay-application.sql.js';
 import { asUuid } from '../../domain/common/uuid.js';
 import type {
   PharmacyOnboardingRequestRecord,
@@ -347,6 +348,7 @@ const TERMS_FIELDS = `
   termsVersion
   signerName
   signerRole
+  signerRoleOther
   signerEmail
   signerGphcNumber
   registeredCompanyName
@@ -412,6 +414,7 @@ const INSERT_TERMS_GQL = `
     $termsVersion: String!
     $signerName: String!
     $signerRole: String!
+    $signerRoleOther: String
     $signerEmail: String!
     $signerGphcNumber: String
     $registeredCompanyName: String!
@@ -427,6 +430,7 @@ const INSERT_TERMS_GQL = `
       termsVersion: $termsVersion
       signerName: $signerName
       signerRole: $signerRole
+      signerRoleOther: $signerRoleOther
       signerEmail: $signerEmail
       signerGphcNumber: $signerGphcNumber
       registeredCompanyName: $registeredCompanyName
@@ -462,6 +466,11 @@ function toTerms(row: RawTerms): PartnerTermsAcceptanceRecord {
 }
 
 export class SqlPharmacyOnboardingRepository {
+  /** At activation, a Worldpay application started on the onboarding page moves to the branch. */
+  async linkWorldpayApplications(onboardingRequestId: string, organisationId: string) {
+    await new SqlWorldpayApplicationRepository().linkRequestToOrganisation(onboardingRequestId, organisationId);
+  }
+
   async listOrganisationGphcNumbers(): Promise<Array<{ id: string; gphcNumber: string; status?: string }>> {
     const result = await dataConnect.executeGraphql<{
       organisations: Array<{ id: string; gphcNumber: string; status?: string }>;

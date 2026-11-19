@@ -1,0 +1,47 @@
+# Delete every record of a demo or test pharmacy by its GPhC premises number, so the
+# onboarding journey can be walked through again on production. See README.md.
+#
+# FindDemoPharmacy lists what will go. DeleteDemoPharmacy removes it in one
+# transaction: if anything still points at the branch (patients, orders, payments),
+# the database refuses and nothing at all is deleted.
+
+query FindDemoPharmacy($gphc: String!) @auth(level: NO_ACCESS) {
+  organisations(where: { gphcNumber: { eq: $gphc } }, limit: 5) { id name gphcNumber status createdAt }
+  pharmacyOnboardingRequests(where: { gphcNumber: { eq: $gphc } }, limit: 20) { id pharmacyName status organisationId filledFormStoragePath licenceStoragePath createdAt }
+  clickupCards(where: { gphcNumber: { eq: $gphc } }, limit: 1) { gphcNumber clickupTaskId }
+}
+
+query FindDemoPharmacyLinks($organisationIds: [UUID!]!) @auth(level: NO_ACCESS) {
+  staffUsers(where: { organisationId: { in: $organisationIds } }, limit: 50) { uid email role }
+  patients(where: { organisationId: { in: $organisationIds } }, limit: 1) { id }
+  orders(where: { organisationId: { in: $organisationIds } }, limit: 1) { id }
+}
+
+mutation DeleteDemoPharmacy(
+  $gphc: String!
+  $organisationIds: [UUID!]!
+  $requestIds: [UUID!]!
+  $staffUids: [String!]!
+) @auth(level: NO_ACCESS) @transaction {
+  sessionsByBranch: staffSession_deleteMany(where: { organisationId: { in: $organisationIds } })
+  sessionsByStaff: staffSession_deleteMany(where: { staffUid: { in: $staffUids } })
+  auditByBranch: auditLog_deleteMany(where: { organisationId: { in: $organisationIds } })
+  auditByStaff: auditLog_deleteMany(where: { actorUid: { in: $staffUids } })
+  setupTasks: setupTask_deleteMany(where: { organisationId: { in: $organisationIds } })
+  checklist: organisationChecklistItem_deleteMany(where: { organisationId: { in: $organisationIds } })
+  domains: organisationDomain_deleteMany(where: { organisationId: { in: $organisationIds } })
+  referralTokens: referralToken_deleteMany(where: { organisationId: { in: $organisationIds } })
+  integrations: integrationConnection_deleteMany(where: { organisationId: { in: $organisationIds } })
+  staffTasks: staffTask_deleteMany(where: { organisationId: { in: $organisationIds } })
+  directory: pharmacyDirectoryProfile_deleteMany(where: { organisationId: { in: $organisationIds } })
+  termsByRequest: partnerTermsAcceptance_deleteMany(where: { onboardingRequestId: { in: $requestIds } })
+  termsByBranch: partnerTermsAcceptance_deleteMany(where: { organisationId: { in: $organisationIds } })
+  worldpayNotes: pharmacyWorldpaySubmission_deleteMany(where: { gphcNumber: { eq: $gphc } })
+  requests: pharmacyOnboardingRequest_deleteMany(where: { id: { in: $requestIds } })
+  staff: staffUser_deleteMany(where: { organisationId: { in: $organisationIds } })
+  clickupOutbox: clickupOutbox_deleteMany(where: { gphcNumber: { eq: $gphc } })
+  clickupCard: clickupCard_deleteMany(where: { gphcNumber: { eq: $gphc } })
+  visits: pharmacyOnboardingVisit_deleteMany(where: { gphcNumber: { eq: $gphc } })
+  deferrals: pharmacyOnboardingDeferral_deleteMany(where: { gphcNumber: { eq: $gphc } })
+  branches: organisation_deleteMany(where: { id: { in: $organisationIds } })
+}

@@ -1,3 +1,6 @@
+import { markWorldpayAccount } from '../../application/worldpay-application/applications.js';
+import { worldpayHooks } from '../../application/worldpay-application/hooks.js';
+import { sqlWorldpayDeps } from '../../application/worldpay-application/sql-deps.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { HttpError } from '../../domain/common/errors.js';
@@ -301,6 +304,17 @@ export function createPortalIntegrationRouter(): Router {
         await integrationRepo.recordSuccessfulCall(organisationId, 'WORLDPAY');
       } catch (error) {
         console.warn(`Could not record WORLDPAY success for ${organisationId}:`, error);
+      }
+      // Validated live keys: the branch's Worldpay application is Connected and ClickUp's
+      // "Worldpay validated" is ticked (directly, for a branch that never applied through us).
+      try {
+        const connected = await markWorldpayAccount(sqlWorldpayDeps(worldpayHooks()), organisationId, 'CONNECTED');
+        if (!connected) {
+          const organisation = await organisationRepo.findOrganisationById(organisationId);
+          if (organisation) await sqlClickupHooks().worldpayValidated({ gphcNumber: organisation.gphcNumber, organisationId });
+        }
+      } catch (error) {
+        console.warn('Could not mark the Worldpay application connected', error instanceof Error ? error.message : 'unknown');
       }
       res.status(200).json(worldpayStatusPayload(restored, {
         checkedAt: validation.checkedAt,

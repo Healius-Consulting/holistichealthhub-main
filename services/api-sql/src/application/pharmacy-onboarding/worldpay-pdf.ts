@@ -213,24 +213,33 @@ export function layoutWorldpaySections(
 }
 
 export async function renderWorldpayPdf(form: WorldpayForm, submittedAt: Date) {
+  return renderQuestionnairePdf({
+    title: `Worldpay card processing questionnaire - ${form.tradingName}`,
+    heading: form.tradingName,
+    subline: `Submitted to Holistic Health Hub on ${londonLongDate(submittedAt)} for Worldpay`,
+  }, worldpaySections(form));
+}
+
+/** Draws questionnaire sections (label and answer rows under banded headings) as an A4 PDF. */
+export async function renderQuestionnairePdf(meta: { title: string; heading: string; subline: string; kicker?: string }, sections: Section[]) {
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`Worldpay card processing questionnaire - ${clean(form.tradingName)}`);
+  pdf.setTitle(clean(meta.title));
   pdf.setAuthor('Holistic Health Hub');
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
 
   const first = pdf.addPage([PAGE.width, PAGE.height]);
   let y = PAGE.height - MARGIN;
-  first.drawText('CARD PROCESSING QUESTIONNAIRE', { x: MARGIN, y, size: 8.5, font: bold, color: MUTED });
+  first.drawText(clean(meta.kicker ?? 'CARD PROCESSING QUESTIONNAIRE'), { x: MARGIN, y, size: 8.5, font: bold, color: MUTED });
   y -= 24;
-  first.drawText(clean(form.tradingName), { x: MARGIN, y, size: 20, font: bold, color: GREEN });
+  first.drawText(clean(meta.heading), { x: MARGIN, y, size: 20, font: bold, color: GREEN });
   y -= 18;
-  first.drawText(clean(`Submitted to Holistic Health Hub on ${londonLongDate(submittedAt)} for Worldpay`), {
+  first.drawText(clean(meta.subline), {
     x: MARGIN, y, size: SIZE, font: regular, color: MUTED,
   });
   y -= 22;
 
-  const ops = layoutWorldpaySections(worldpaySections(form), {
+  const ops = layoutWorldpaySections(sections, {
     wrapLabel: text => wrap(text, regular, SIZE, LABEL_WIDTH),
     wrapValue: text => wrap(text, bold, SIZE, VALUE_WIDTH),
   }, y);

@@ -21,13 +21,18 @@ const signerFields = {
   /** The typed-name e-signature. */
   signerName: z.string().trim().min(2).max(160),
   signerRole: z.enum(PARTNER_TERMS_SIGNER_ROLES),
+  /** The role in the signer's words, when they chose Other. */
+  signerRoleOther: z.string().trim().max(80).optional().or(z.literal('')),
   signerEmail: z.string().trim().toLowerCase().email().max(254),
   signerGphcNumber: z.string().trim().max(40).optional().or(z.literal('')),
   /** "I confirm I am authorised to accept these terms on behalf of [registered company name]". */
   authorised: z.literal(true, { message: 'Confirm you are authorised to accept the terms.' }),
 };
 
-function requirePharmacistGphc(input: { signerRole: PartnerTermsSignerRole; signerGphcNumber?: string }, context: z.RefinementCtx) {
+function requirePharmacistGphc(input: { signerRole: PartnerTermsSignerRole; signerGphcNumber?: string; signerRoleOther?: string }, context: z.RefinementCtx) {
+  if (input.signerRole === 'OTHER' && !input.signerRoleOther?.trim()) {
+    context.addIssue({ code: 'custom', path: ['signerRoleOther'], message: 'Type your role.' });
+  }
   if (!signerRoleIsPharmacist(input.signerRole)) return;
   const gphc = normaliseGphcNumber(input.signerGphcNumber ?? '');
   if (!gphc || !/^\d{7}$/.test(gphc)) {
@@ -57,6 +62,8 @@ export type PartnerTermsAcceptanceRecord = {
   termsVersion: string;
   signerName: string;
   signerRole: string;
+  /** The typed role when `signerRole` is OTHER. */
+  signerRoleOther: string | null;
   signerEmail: string;
   signerGphcNumber: string | null;
   registeredCompanyName: string;

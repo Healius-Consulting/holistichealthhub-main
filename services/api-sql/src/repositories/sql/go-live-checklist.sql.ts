@@ -1,3 +1,4 @@
+import { SqlWorldpayApplicationRepository } from './worldpay-application.sql.js';
 import { dataConnect } from '../../bootstrap/firebase.js';
 import { asUuid } from '../../domain/common/uuid.js';
 import { checklistItemId, type ChecklistTickRecord } from '../../domain/organisation/go-live-checklist.js';
@@ -94,12 +95,23 @@ export class SqlGoLiveChecklistRepository {
     return result.data.partnerTermsAcceptances?.[0]?.acceptedAt ?? null;
   }
 
-  /** The latest Worldpay form note for this GPhC (stored compact, as the form writes it). */
-  async worldpayFormSubmittedAt(compactGphc: string): Promise<string | null> {
-    const result = await dataConnect.executeGraphql<{ pharmacyWorldpaySubmissions: Array<{ submittedAt: string }> }, { gphcNumber: string }>(
-      WORLDPAY_FORM_FOR_GPHC_GQL,
-      { variables: { gphcNumber: compactGphc } },
-    );
-    return result.data.pharmacyWorldpaySubmissions?.[0]?.submittedAt ?? null;
+  /**
+   * When this branch started with Worldpay: the latest old-form note for this GPhC
+   * (stored compact, as that form writes it), or its Worldpay application once
+   * submitted, or once it said it already takes online payments with Worldpay
+   * (spec G-01). From then the checklist shows "Worldpay credentials validated".
+   */
+  async worldpayFormSubmittedAt(compactGphc: string, organisationId?: string): Promise<string | null> {
+    const [result, application] = await Promise.all([
+      dataConnect.executeGraphql<{ pharmacyWorldpaySubmissions: Array<{ submittedAt: string }> }, { gphcNumber: string }>(
+        WORLDPAY_FORM_FOR_GPHC_GQL,
+        { variables: { gphcNumber: compactGphc } },
+      ),
+      organisationId ? new SqlWorldpayApplicationRepository().findForOrganisation(organisationId).catch(() => null) : Promise.resolve(null),
+    ]);
+    const note = result.data.pharmacyWorldpaySubmissions?.[0]?.submittedAt ?? null;
+    const applied = application?.submittedAt
+      ?? (application?.status === 'DRAFT' && application.answers.existingAccount === 'online' ? application.updatedAt : null);
+    return [note, applied].filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
   }
 }

@@ -55,6 +55,16 @@ export interface ClickupHooks {
     version: string;
     signerName: string;
   }): Promise<void>;
+  /** A Worldpay application was submitted: payment route Worldpay, and a comment with the reference. */
+  worldpaySubmitted(input: {
+    gphcNumber: string;
+    organisationId?: string | null;
+    onboardingRequestId?: string | null;
+    reference: string;
+    submittedAt: string;
+  }): Promise<void>;
+  /** The branch's Worldpay credentials validated: ticks Worldpay validated. */
+  worldpayValidated(input: { gphcNumber: string; organisationId: string }): Promise<void>;
 }
 
 export type BranchForClickup = {
@@ -204,7 +214,28 @@ export function clickupHooks(deps: ClickupHooksDeps): ClickupHooks {
         termsSigner: input.signerName,
       },
     )),
+    worldpaySubmitted: input => bestEffort('Worldpay application', () => enqueue(
+      'worldpay_submitted',
+      `${cardKey(input.gphcNumber)}:${input.reference}`,
+      {
+        gphcNumber: input.gphcNumber,
+        branchId: input.organisationId,
+        onboardingRequestId: input.onboardingRequestId,
+        paymentRoute: 'WORLDPAY',
+        comment: `Worldpay application ${input.reference} submitted ${londonDay(input.submittedAt)}`,
+      },
+    )),
+    worldpayValidated: input => bestEffort('Worldpay validated', () => enqueue(
+      'worldpay_validated',
+      `${cardKey(input.gphcNumber)}:${input.organisationId}`,
+      { gphcNumber: input.gphcNumber, branchId: input.organisationId },
+    )),
   };
+}
+
+function londonDay(iso: string) {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 let shared: ClickupHooks | null = null;

@@ -21,7 +21,7 @@ export type GoLiveChecklistDeps = {
      * When the branch sent the Worldpay form. Today this reads the GPhC-keyed
      * PharmacyWorldpaySubmission note; a per-branch "form submitted" record plugs in here.
      */
-    worldpayFormSubmittedAt(compactGphc: string): Promise<string | null>;
+    worldpayFormSubmittedAt(compactGphc: string, organisationId?: string): Promise<string | null>;
   };
   findWorldpayConnection(organisationId: string): Promise<IntegrationConnectionRecord | null>;
   clickup: Pick<ClickupHooks, 'checklistProgress'>;
@@ -39,7 +39,7 @@ async function checklistFor(deps: GoLiveChecklistDeps, organisation: Organisatio
   const [ticks, termsAcceptedAt, worldpayFormSubmittedAt, worldpay] = await Promise.all([
     deps.checklistRepo.listTicks(organisation.id),
     deps.checklistRepo.termsAcceptedAt(organisation.id),
-    gphc ? deps.checklistRepo.worldpayFormSubmittedAt(gphc) : Promise.resolve(null),
+    gphc ? deps.checklistRepo.worldpayFormSubmittedAt(gphc, organisation.id) : Promise.resolve(null),
     deps.findWorldpayConnection(organisation.id),
   ]);
   return buildGoLiveChecklist(organisation.id, {

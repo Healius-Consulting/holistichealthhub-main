@@ -74,6 +74,7 @@ export function clickupFieldValues(
   if ((flags.event === 'phar_code_entered' || flags.event === 'api_key_entered') && flags.pharCodeEntered && flags.apiKeyEntered) {
     add('setupComplete', true);
   }
+  if (flags.event === 'worldpay_validated') add('worldpayValidated', true);
   return values;
 }
 
@@ -116,6 +117,7 @@ async function applyEvent(record: ClickupOutboxRecord, config: ClickupConfig, cl
       customFields: values,
     });
     await repo.saveCard({ ...saved, clickupTaskId: created, stage: stage ?? 'awaiting_curaleaf' });
+    if (fields.comment) await client.addComment(created, fields.comment);
     return;
   }
 
@@ -124,6 +126,7 @@ async function applyEvent(record: ClickupOutboxRecord, config: ClickupConfig, cl
   if (fields.tradingName) change.name = cardName({ ...fields, gphcNumber });
   if (change.name || change.status) await client.updateTask(taskId, change);
   for (const value of values) await client.setField(taskId, value.id, value.value);
+  if (fields.comment) await client.addComment(taskId, fields.comment);
   await repo.saveCard({ ...saved, clickupTaskId: taskId });
 }
 

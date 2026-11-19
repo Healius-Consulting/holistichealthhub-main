@@ -502,6 +502,7 @@ export function acceptPartnerTerms(input: {
   onboardingRequestId: string;
   signerName: string;
   signerRole: string;
+  signerRoleOther?: string;
   signerEmail: string;
   signerGphcNumber: string;
   authorised: true;
@@ -513,29 +514,213 @@ export function acceptPartnerTerms(input: {
   });
 }
 
-/** Emailed to HHH as a PDF; the server keeps only the date it was sent. */
-export function submitWorldpayForm(input: Record<string, unknown>) {
-  return apiRequest<{ submittedAt: string }>('/v1/public/pharmacy-onboarding-worldpay', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
 /** A company's public Companies House record, shaped for the onboarding forms. */
 export interface CompanyLookup {
   companyNumber: string;
   companyName: string;
   status: string;
   active: boolean;
+  /** Companies House's own type, e.g. `ltd`, `plc`, `llp`, `private-unlimited`. */
+  companyType: string;
   businessType: 'Ltd Co' | 'LLP' | 'PLC' | null;
   incorporatedOn: string | null;
   registeredAddress: string;
+  /** Current directors and owners, each once. */
+  people: CompanyPerson[];
   directors: Array<{ firstNames: string; surname: string; nationality: string; countryOfResidence: string }>;
+  /** Companies, legal bodies and protected persons that cannot be listed as people. */
+  notListed: string[];
+  /** The owners list was read and has no one with 25% or more. */
+  noSignificantOwners: boolean;
+}
+
+export interface CompanyPerson {
+  roles: Array<'director' | 'shareholder'>;
+  title: 'Mr' | 'Mrs' | 'Miss' | 'Ms' | 'Dr' | 'Other' | null;
+  titleOther: string;
+  firstNames: string;
+  surname: string;
+  birthMonth: number | null;
+  birthYear: number | null;
+  nationality: string;
+  countryOfResidence: string;
+  ownershipBand: '25-50' | '50-75' | '75-100' | null;
 }
 
 /** Looked up on the server, which holds the Companies House key. Nothing is stored. */
 export function lookUpCompany(companyNumber: string) {
   return apiRequest<CompanyLookup>(`/v1/public/pharmacy-onboarding-company/${encodeURIComponent(companyNumber.trim())}`, { skipGetCache: true });
+}
+
+// --- Worldpay merchant application (spec 01) ---------------------------------------
+
+export type WorldpayApplicationStatus = 'DRAFT' | 'SUBMITTED' | 'WITH_WORLDPAY' | 'QUERY' | 'ACCOUNT_OPEN' | 'CONNECTED' | 'WITHDRAWN' | 'DECLINED';
+
+export interface WorldpayPricingPanel {
+  label: string;
+  price: string;
+  priceNote: string;
+  ticks: string[];
+  pciLine: string;
+  pciNote: string;
+  footnote: string;
+}
+
+export interface WorldpayApplicationView<Answers = unknown> {
+  id: string | null;
+  status: WorldpayApplicationStatus | null;
+  version: number;
+  reference: string | null;
+  /** Null on the public route once the application has been sent. */
+  answers: Answers | null;
+  submittedAt: string | null;
+  statusNote: string | null;
+  statusChangedAt: string | null;
+  contactName: string;
+  contactEmail: string;
+  content: { pricingPanel: WorldpayPricingPanel; s04Note: string };
+}
+
+/** Where the application belongs: the signed-in branch, or the onboarding request before the branch exists. */
+export type WorldpayApplicationOwner = { kind: 'branch' } | { kind: 'request'; onboardingRequestId: string };
+
+export function loadWorldpayApplication<Answers>(owner: WorldpayApplicationOwner) {
+  return owner.kind === 'branch'
+    ? apiRequest<WorldpayApplicationView<Answers>>('/v1/portal/pharmacy/worldpay-application', { skipGetCache: true })
+    : apiRequest<WorldpayApplicationView<Answers>>('/v1/public/worldpay-application/load', { method: 'POST', body: JSON.stringify({ onboardingRequestId: owner.onboardingRequestId }) });
+}
+
+export function saveWorldpayApplication(owner: WorldpayApplicationOwner, input: { id: string | null; version: number; answers: unknown }) {
+  return owner.kind === 'branch'
+    ? apiRequest<{ id: string; version: number }>('/v1/portal/pharmacy/worldpay-application', { method: 'PUT', body: JSON.stringify(input) })
+    : apiRequest<{ id: string; version: number }>('/v1/public/worldpay-application', { method: 'PUT', body: JSON.stringify({ ...input, onboardingRequestId: owner.onboardingRequestId }) });
+}
+
+export function submitWorldpayApplication(owner: WorldpayApplicationOwner, input: { id: string; version: number; answers: unknown; declaration: unknown }) {
+  const body = owner.kind === 'branch' ? input : { ...input, onboardingRequestId: owner.onboardingRequestId };
+  return apiRequest<{ id: string; status: WorldpayApplicationStatus; reference: string | null; submittedAt: string | null }>(
+    owner.kind === 'branch' ? '/v1/portal/pharmacy/worldpay-application/submit' : '/v1/public/worldpay-application/submit',
+    { method: 'POST', body: JSON.stringify(body) },
+  );
+}
+
+export interface AdminWorldpayApplicationRow {
+  id: string;
+  reference: string | null;
+  legalName: string | null;
+  tradingName: string | null;
+  gphcNumber: string;
+  organisationId: string | null;
+  websiteRoute: string;
+  status: WorldpayApplicationStatus;
+  statusNote: string | null;
+  submittedAt: string | null;
+  sentAt: string | null;
+  deliveryError: string | null;
+  companyNumber: string | null;
+  companyStatus: string | null;
+  companyNameDiffers: boolean;
+  cleared: boolean;
+}
+
+export interface WorldpayContentSettings {
+  recipients: { to: string[]; cc: string[] };
+  wp01: { subject: string; body: string };
+  wp02: { subject: string; body: string };
+  pricingPanel: WorldpayPricingPanel;
+  schemeAnswers: { s01: string; s02: string; s03: string; s04: string; s05: string };
+  s04Note: string;
+  servicePdf: { storagePath: string; filename: string; uploadedAt: string } | null;
+}
+
+export function listWorldpayApplications() {
+  return apiRequest<{ records: AdminWorldpayApplicationRow[] }>('/v1/portal/admin/worldpay-applications', { skipGetCache: true });
+}
+
+export function getAdminWorldpayApplication<Answers>(id: string) {
+  return apiRequest<AdminWorldpayApplicationRow & { answers: Answers; signerName: string | null; signerPosition: string | null; submitterName: string | null; submitterEmail: string | null }>(
+    `/v1/portal/admin/worldpay-applications/${encodeURIComponent(id)}`,
+    { skipGetCache: true },
+  );
+}
+
+export function setWorldpayApplicationStatus(id: string, status: Exclude<WorldpayApplicationStatus, 'DRAFT' | 'CONNECTED'>, note: string | null) {
+  return apiRequest<{ record: AdminWorldpayApplicationRow }>(`/v1/portal/admin/worldpay-applications/${encodeURIComponent(id)}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status, note }),
+  });
+}
+
+export function resendWorldpayApplication(id: string) {
+  return apiRequest<{ record: AdminWorldpayApplicationRow }>(`/v1/portal/admin/worldpay-applications/${encodeURIComponent(id)}/resend`, { method: 'POST', body: '{}' });
+}
+
+async function fetchAdminFile(path: string, fallback: string) {
+  const securityHeaders = securityTokenProvider ? await securityTokenProvider() : {};
+  const response = await fetch(`${apiBaseUrl()}${path}`, {
+    credentials: 'include',
+    headers: { ...securityHeaders, ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { code?: string; message?: string } | null;
+    throw new ApiRequestError(response.status, payload?.code ?? 'REQUEST_FAILED', payload?.message ?? fallback);
+  }
+  return URL.createObjectURL(await response.blob());
+}
+
+/** A blob URL for the application PDF or spreadsheet, while it is retained. */
+export function openWorldpayApplicationFile(id: string, kind: 'pdf' | 'xlsx') {
+  return fetchAdminFile(`/v1/portal/admin/worldpay-applications/${encodeURIComponent(id)}/files/${kind}`, 'The file could not be opened.');
+}
+
+export function openWorldpayServicePdf() {
+  return fetchAdminFile('/v1/portal/admin/worldpay-service-pdf', 'The service information PDF could not be opened.');
+}
+
+export function getWorldpayContent() {
+  return apiRequest<WorldpayContentSettings>('/v1/portal/admin/worldpay-content', { skipGetCache: true });
+}
+
+export function saveWorldpayContent<K extends Exclude<keyof WorldpayContentSettings, 'servicePdf'>>(key: K, value: WorldpayContentSettings[K]) {
+  return apiRequest<WorldpayContentSettings>(`/v1/portal/admin/worldpay-content/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+}
+
+export async function uploadWorldpayServicePdf(file: File) {
+  return apiRequest<WorldpayContentSettings>('/v1/portal/admin/worldpay-service-pdf', {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name) },
+  });
+}
+
+// --- Demo pharmacies: GPhC numbers HHH walks through onboarding with, on production ---
+
+export interface DemoPharmaciesView {
+  gphcNumbers: string[];
+  pharmacies: Array<{
+    gphcNumber: string;
+    branch: { name: string; status: string; createdAt: string } | null;
+    request: { pharmacyName: string; status: string; createdAt: string } | null;
+    hasPatientsOrOrders: boolean;
+  }>;
+}
+
+export function getDemoPharmacies() {
+  return apiRequest<DemoPharmaciesView>('/v1/portal/admin/demo-pharmacies', { skipGetCache: true });
+}
+
+export function saveDemoPharmacies(gphcNumbers: string[]) {
+  return apiRequest<DemoPharmaciesView>('/v1/portal/admin/demo-pharmacies', { method: 'PUT', body: JSON.stringify({ gphcNumbers }) });
+}
+
+export function deleteDemoPharmacy(gphcNumber: string) {
+  return apiRequest<DemoPharmaciesView & { result: { deleted: Record<string, number>; files: number } }>(
+    `/v1/portal/admin/demo-pharmacies/${encodeURIComponent(gphcNumber)}/delete`,
+    { method: 'POST', body: '{}' },
+  );
 }
 
 /** Where an activated branch is in onboarding, for its portal Onboarding page and banner. */
@@ -556,19 +741,12 @@ export function getBranchOnboarding() {
 export function acceptBranchPartnerTerms(input: {
   signerName: string;
   signerRole: string;
+  signerRoleOther?: string;
   signerEmail: string;
   signerGphcNumber: string;
   authorised: true;
 }) {
   return apiRequest<{ acceptedAt: string; termsVersion: string }>('/v1/portal/pharmacy/onboarding/terms', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
-/** Portal: the Worldpay form, recorded against the signed-in branch. */
-export function submitBranchWorldpayForm(input: Record<string, unknown>) {
-  return apiRequest<{ submittedAt: string }>('/v1/portal/pharmacy/onboarding/worldpay', {
     method: 'POST',
     body: JSON.stringify(input),
   });

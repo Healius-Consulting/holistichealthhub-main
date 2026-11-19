@@ -47,6 +47,8 @@ export const publicCompanyLookupLimiter = publicLimiter(60 * 60 * 1000, 30, {
   code: 'RATE_LIMITED',
   message: 'Too many company lookups. Fill the form in yourself, or try again in an hour.',
 });
+/** Worldpay application drafts autosave as the pharmacy types (debounced), so the allowance is generous. */
+export const publicWorldpayDraftLimiter = publicLimiter(60 * 60 * 1000, 600);
 /** "Not yet" is one click per visit. Ten an hour allows a few retries and stops scripts. */
 export const publicPharmacyOnboardingDeferralLimiter = publicLimiter(60 * 60 * 1000, 10);
 export const publicPaymentStatusLimiter = publicLimiter(15 * 60 * 1000, 90);

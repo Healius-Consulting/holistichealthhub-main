@@ -70,7 +70,9 @@ test('the Curaleaf, Terms and Worldpay forms show which fields the server refuse
   const curaleaf = readFileSync(new URL('../src/auth/CuraleafAccountForm.tsx', import.meta.url), 'utf8');
   assert.match(curaleaf, /curaleafFormProblems\(fields\)/);
   assert.match(curaleaf, /curaleafProblemsFromServer\(cause\.details, fields\)/);
-  for (const file of ['PartnerTermsForm.tsx', 'WorldpayForm.tsx']) {
-    assert.match(readFileSync(new URL(`../src/auth/${file}`, import.meta.url), 'utf8'), /describeApiError\(cause,/, file);
-  }
+  assert.match(readFileSync(new URL('../src/auth/PartnerTermsForm.tsx', import.meta.url), 'utf8'), /describeApiError\(cause,/, 'PartnerTermsForm.tsx');
+  // The Worldpay application runs the server's own rules before each step, and lists the server's refusals.
+  const worldpay = readFileSync(new URL('../src/worldpay/WorldpayApplicationForm.tsx', import.meta.url), 'utf8');
+  assert.match(worldpay, /stepProblems\(answers, step\)/);
+  assert.match(worldpay, /error\.details\.map\(/);
 });

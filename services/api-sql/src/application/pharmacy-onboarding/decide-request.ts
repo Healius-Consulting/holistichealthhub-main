@@ -29,7 +29,7 @@ export type ActivatedPharmacy = {
 };
 
 export async function activatePharmacyOnboardingRequest(
-  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'listOrganisationGphcNumbers' | 'activate' | 'linkTermsAcceptances'>,
+  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'listOrganisationGphcNumbers' | 'activate' | 'linkTermsAcceptances'> & { linkWorldpayApplications?: (requestId: string, organisationId: string) => Promise<void> },
   organisations: Pick<OrganisationRepositoryPort, 'createOrganisation'>,
   referralLinks: ReferralLinks,
   input: { id: string; actorUid: string; now?: Date },
@@ -68,6 +68,8 @@ export async function activatePharmacyOnboardingRequest(
   await repo.activate(request.id, id, now.toISOString(), input.actorUid);
   // The Partner Terms were accepted against the request; they now belong to the branch too.
   await repo.linkTermsAcceptances(request.id, id);
+  // So does a Worldpay application started on the onboarding page.
+  await repo.linkWorldpayApplications?.(request.id, id);
   return {
     requestId: request.id,
     organisation: {

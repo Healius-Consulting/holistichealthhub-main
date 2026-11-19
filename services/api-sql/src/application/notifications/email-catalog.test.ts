@@ -18,7 +18,7 @@ const rosterPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..
 
 describe('email catalog', () => {
   it('keeps every template renderable, with an audience, events, and a schedule', () => {
-    assert.equal(EMAIL_TEMPLATE_CODES.length, 28);
+    assert.equal(EMAIL_TEMPLATE_CODES.length, 30);
     for (const code of EMAIL_TEMPLATE_CODES) {
       const entry = EMAILS[code];
       assert.equal(typeof entry.render, 'function');

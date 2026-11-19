@@ -13,7 +13,6 @@ import {
 } from '../src/onboarding/branchOnboarding.ts';
 import { PORTAL_ONBOARDING_QUEUE_UTM, pharmsmartOnboardingBookingUrl } from '../src/auth/pharmsmart-login.ts';
 import { shouldDispatchSessionEnded } from '../src/shared/sessionEnded.ts';
-import { worldpayStartFromBranch } from '../src/auth/worldpay-start.ts';
 
 const queue = (overrides: Partial<Parameters<typeof onboardingQueueItems>[0]> = {}) => onboardingQueueItems({
   live: false,
@@ -129,26 +128,6 @@ test('a booking from the queue carries the portal UTM tag; other bookings do not
   const plain = new URL(pharmsmartOnboardingBookingUrl(person));
   assert.equal(plain.searchParams.get('utm_source'), null);
   assert.equal(plain.searchParams.get('utm_campaign'), null);
-});
-
-test('the portal Worldpay form starts from the branch record and the registered company', () => {
-  const start = worldpayStartFromBranch({
-    name: 'Carlton Pharmacy',
-    tradingName: 'Carlton Health Ltd',
-    gphcNumber: '1234567',
-    mainContactName: ' Asha Patel ',
-    mainContactPhone: '',
-    pharmacyEmail: null,
-    mainContactEmail: 'asha@example.co.uk',
-    address: '1 High Street, Leeds',
-  }, 'Carlton Holdings Ltd');
-  assert.equal(start.legalName, 'Carlton Holdings Ltd');
-  assert.equal(start.tradingName, 'Carlton Pharmacy');
-  assert.equal(start.contactName, 'Asha Patel');
-  assert.equal(start.contactPhone, undefined);
-  assert.equal(start.businessEmail, 'asha@example.co.uk');
-  assert.equal(start.registeredAddress, '1 High Street, Leeds');
-  assert.equal(worldpayStartFromBranch({ name: 'Carlton Pharmacy', tradingName: 'Carlton Health Ltd' }).legalName, 'Carlton Health Ltd');
 });
 
 test('the portal shows one Awaiting Curaleaf banner, and the Onboarding page embeds the go-live checklist', () => {

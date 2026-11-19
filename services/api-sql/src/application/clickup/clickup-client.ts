@@ -13,6 +13,7 @@ export interface ClickupClient {
   }): Promise<string>;
   updateTask(taskId: string, change: { name?: string; status?: string }): Promise<void>;
   setField(taskId: string, fieldId: string, value: ClickupFieldValue): Promise<void>;
+  addComment(taskId: string, text: string): Promise<void>;
 }
 
 export class ClickupHttpError extends Error {
@@ -63,6 +64,9 @@ export function httpClickupClient(token: string, fetchImpl: typeof fetch = fetch
     },
     async setField(taskId, fieldId, value) {
       await call('POST', `/task/${encodeURIComponent(taskId)}/field/${encodeURIComponent(fieldId)}`, { value });
+    },
+    async addComment(taskId, text) {
+      await call('POST', `/task/${encodeURIComponent(taskId)}/comment`, { comment_text: text, notify_all: false });
     },
   };
 }

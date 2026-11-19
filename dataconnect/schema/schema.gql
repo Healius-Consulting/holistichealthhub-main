@@ -1323,6 +1323,8 @@ type PartnerTermsAcceptance @table {
   termsVersion: String!
   signerName: String!
   signerRole: String!
+  # The role the signer typed when they chose Other.
+  signerRoleOther: String
   signerEmail: String!
   # The signer's own GPhC registration, required when they sign as a pharmacist.
   signerGphcNumber: String
@@ -1428,4 +1430,74 @@ type OrganisationChecklistItem @table @unique(fields: ["organisationId", "itemKe
   # Who last ticked or unticked it, and when.
   tickedByUid: String
   tickedAt: Timestamp
+}
+
+# --- Worldpay merchant application (spec 01, 18 Nov 2026) --------------------------
+
+enum WorldpayApplicationStatus {
+  DRAFT
+  SUBMITTED
+  WITH_WORLDPAY
+  QUERY
+  ACCOUNT_OPEN
+  CONNECTED
+  WITHDRAWN
+  DECLINED
+}
+
+# One Worldpay merchant application per pharmacy branch. Started on the onboarding
+# page it belongs to the onboarding request (organisationId empty) and moves to the
+# branch when the request is activated. `answers` holds the whole form as JSON,
+# including directors' dates of birth, home addresses and bank details: never copy
+# those into logs, ClickUp or email bodies, and the retention job empties them (and
+# the files) 30 days after the application closes; drafts untouched for 90 days go.
+type WorldpayApplication @table {
+  id: UUID! @default(expr: "uuidV4()")
+  organisationId: UUID @index
+  onboardingRequestId: UUID @index
+  gphcNumber: String! @index
+  status: WorldpayApplicationStatus! @default(value: DRAFT) @index
+  # HHH-WP-YYYY-NNNN, given at submission.
+  reference: String @unique
+  answers: Any!
+  version: Int! @default(value: 1)
+  # Copied out of `answers` for the admin list.
+  legalName: String
+  tradingName: String
+  usesHhhWebsite: Boolean
+  # The Companies House lookup the pharmacy ran (stored for admin, not sent to Worldpay).
+  companyNumber: String
+  companyStatus: String
+  companyLookedUpAt: Timestamp
+  companyName: String
+  # Declaration and submission.
+  submittedAt: Timestamp
+  submittedByUid: String
+  submitterName: String
+  submitterEmail: String
+  signerName: String
+  signerPosition: String
+  pdfStoragePath: String
+  xlsxStoragePath: String
+  # WP-01 delivery: sent time, or the last failure (shown to admin with Resend).
+  sentAt: Timestamp
+  deliveryError: String
+  # Admin status changes; the note is shown to the pharmacy for Query, Withdrawn and Declined.
+  statusNote: String
+  statusChangedAt: Timestamp
+  statusChangedByUid: String
+  # When the retention job emptied the sensitive answers and deleted the files.
+  sensitiveDeletedAt: Timestamp
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}
+
+# Small pieces of admin-editable content and settings, so wording, recipients and
+# attachments can change without a release. Keys are fixed in code
+# (services/api-sql/src/domain/content/platform-content.ts); `value` is JSON.
+type PlatformContent @table(key: "key") {
+  key: String!
+  value: Any!
+  updatedAt: Timestamp! @default(expr: "request.time")
+  updatedByUid: String
 }

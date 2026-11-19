@@ -68,6 +68,7 @@ const acceptance = (overrides: Partial<PartnerTermsAcceptanceRecord> = {}): Part
   termsVersion: '2026-11-draft',
   signerName: 'Asha Shah',
   signerRole: 'DIRECTOR',
+  signerRoleOther: null,
   signerEmail: 'asha@shah.test',
   signerGphcNumber: null,
   registeredCompanyName: 'Shah Health Limited',

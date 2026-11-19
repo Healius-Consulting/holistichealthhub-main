@@ -107,6 +107,9 @@ describe('Partner Terms validation', () => {
 
   it('refuses an unknown role and a bad email', () => {
     assert.throws(() => input({ signerRole: 'OWNER' }));
+    // Other needs the role in the signer's own words.
+    assert.throws(() => input({ signerRole: 'OTHER', signerRoleOther: ' ' }), /Type your role/);
+    assert.doesNotThrow(() => input({ signerRole: 'OTHER', signerRoleOther: 'Company secretary' }));
     assert.throws(() => input({ signerEmail: 'not-an-email' }));
   });
 });

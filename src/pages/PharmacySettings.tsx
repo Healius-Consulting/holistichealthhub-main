@@ -27,6 +27,7 @@ import { ApiRequestError, describeApiError, getCuraleafConnectionStatus, getRefe
 import type { CuraleafConnectionStatus } from '../shared/contracts';
 import { curaleafCatalogueEstateLabel } from '../utils/catalogueEstate';
 import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
+import { WorldpayApplicationEntry } from '../worldpay/WorldpayApplicationEntry';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { POSTER_TEMPLATES_READY, posterPackAvailable } from '../utils/posterPackRules';
@@ -626,6 +627,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
               ) : (
                 <p className="pharmacy-details__note"><ShieldCheck size={14} aria-hidden="true" /> Worldpay is optional. Connect the merchant below when you are ready.</p>
               )}
+              {organisation.worldpay.status !== 'connected' && !sandboxPortal ? <WorldpayApplicationEntry /> : null}
               {organisation.worldpay.status === 'connected' ? (
                 <div className="pharmacy-details__actions is-start">
                   <button type="button" className="btn btn-sm" disabled={!worldpayRefreshControl || worldpayRefreshControl.busy} onClick={() => worldpayRefreshControl?.refresh()}>

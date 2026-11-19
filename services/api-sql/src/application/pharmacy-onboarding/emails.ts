@@ -18,6 +18,8 @@ export async function queuePharmacyApplicationEmails(
   notificationRepo: NotificationRepositoryPort,
   request: PharmacyOnboardingRequestRecord,
   acceptedAt: string,
+  /** A demo pharmacy (see domain/pharmacy-onboarding/demo.ts): the application goes to HHH only, never Curaleaf. */
+  options: { demo?: boolean } = {},
 ) {
   await queueEmailToRecipients(
     notificationRepo,
@@ -32,10 +34,11 @@ export async function queuePharmacyApplicationEmails(
     ['pharmacy-onboarding-submitted', request.id],
   );
   await queueSharedEmail(notificationRepo, {
-    to: curaleafApplicationTo(),
-    cc: curaleafApplicationCc(),
+    to: options.demo ? curaleafApplicationCc() : curaleafApplicationTo(),
+    cc: options.demo ? [] : curaleafApplicationCc(),
     templateCode: 'curaleaf_new_account_application',
     payload: {
+      ...(options.demo ? { demo: true } : {}),
       branchName: request.pharmacyName,
       gphcNumber: request.gphcNumber,
       // When the Curaleaf form was submitted, the date it carries; the acceptance time if unknown.

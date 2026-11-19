@@ -14,6 +14,8 @@ export const CLICKUP_EVENTS = [
   'checklist_progress',
   'not_available',
   'terms_accepted',
+  'worldpay_submitted',
+  'worldpay_validated',
 ] as const;
 
 export type ClickupEvent = typeof CLICKUP_EVENTS[number];
@@ -51,6 +53,8 @@ export type ClickupCardFields = {
   termsVersion?: string | null;
   termsSigner?: string | null;
   checklistPercent?: number | null;
+  /** Not a custom field: posted as a comment on the card (Worldpay submission). No personal or bank data. */
+  comment?: string | null;
 };
 
 export const CLICKUP_FIELD_KEYS = [
@@ -90,6 +94,7 @@ export function clickupCardFields(input: Partial<Record<string, unknown>> & { gp
     const text = String(value).trim();
     if (text) fields[key] = text.slice(0, 200);
   }
+  if (typeof input.comment === 'string' && input.comment.trim()) fields.comment = input.comment.trim().slice(0, 300);
   return fields;
 }
 
@@ -130,6 +135,8 @@ export function clickupStageFor(
       return 'existing_curaleaf_hold';
     case 'checklist_progress':
     case 'terms_accepted':
+    case 'worldpay_submitted':
+    case 'worldpay_validated':
       return card.exists ? null : 'awaiting_curaleaf';
   }
 }

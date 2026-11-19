@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Circle, ExternalLink, Lock, X } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
 import { useApp } from '../context/AppContext';
-import { describeApiError, getGoLiveChecklist, setGoLiveChecklistItem } from '../shared/api';
+import { describeApiError, getGoLiveChecklist, loadWorldpayApplication, setGoLiveChecklistItem } from '../shared/api';
 import {
   ownerLabel,
   sectionSummary,
@@ -69,12 +69,14 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm }: {
+function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm, worldpayDraft }: {
   item: GoLiveChecklistItem;
   saving: boolean;
   demo: boolean;
   onToggle: (done: boolean) => void;
   onOpenWorldpayForm?: () => void;
+  /** A Worldpay application is saved but not sent: the item reads "Continue your Worldpay application". */
+  worldpayDraft?: boolean;
 }) {
   const id = `go-live-item-${item.key}`;
   const doneOn = item.done ? formatDate(item.doneAt) : null;
@@ -94,7 +96,9 @@ function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm }: {
         </span>
       )}
       <span className="go-live-checklist__text">
-        {item.kind === 'self' ? <label htmlFor={id}>{item.label}</label> : <strong>{item.label}</strong>}
+        {item.kind === 'self'
+          ? <label htmlFor={id}>{item.label}</label>
+          : <strong>{item.link === 'worldpay_form' && worldpayDraft ? 'Continue your Worldpay application' : item.label}</strong>}
         {item.detail ? <small>{item.detail}</small> : null}
         <small className="go-live-checklist__meta">
           Owner: {ownerLabel(item.owners)}
@@ -105,7 +109,7 @@ function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm }: {
       {item.link === 'worldpay_form' ? (
         onOpenWorldpayForm && !demo ? (
           <button type="button" className="btn btn-sm" onClick={onOpenWorldpayForm}>
-            Open form <ExternalLink size={12} aria-hidden="true" />
+            {worldpayDraft ? 'Continue' : 'Open form'} <ExternalLink size={12} aria-hidden="true" />
           </button>
         ) : (
           <small className="go-live-checklist__hint">{demo ? 'Not sent from demo mode.' : 'Send it from the Onboarding page.'}</small>
@@ -115,12 +119,13 @@ function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm }: {
   );
 }
 
-export function GoLiveChecklistView({ checklist, saving, demo, onToggle, onOpenWorldpayForm }: {
+export function GoLiveChecklistView({ checklist, saving, demo, onToggle, onOpenWorldpayForm, worldpayDraft }: {
   checklist: Checklist;
   saving: string | null;
   demo: boolean;
   onToggle: (itemKey: string, done: boolean) => void;
   onOpenWorldpayForm?: () => void;
+  worldpayDraft?: boolean;
 }) {
   return (
     <div className="go-live-checklist">
@@ -149,6 +154,7 @@ export function GoLiveChecklistView({ checklist, saving, demo, onToggle, onOpenW
                       demo={demo}
                       onToggle={done => onToggle(item.key, done)}
                       onOpenWorldpayForm={onOpenWorldpayForm}
+                      worldpayDraft={worldpayDraft}
                     />
                   ))}
                 </ul>
@@ -162,15 +168,30 @@ export function GoLiveChecklistView({ checklist, saving, demo, onToggle, onOpenW
 }
 
 /** The checklist with its own loading and saving, for embedding (e.g. the portal Onboarding page). */
+/** Whether the branch has a Worldpay application saved but not yet sent. */
+function useWorldpayDraft(enabled: boolean) {
+  const [draft, setDraft] = useState(false);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    loadWorldpayApplication({ kind: 'branch' })
+      .then(view => { if (!cancelled) setDraft(view.status === 'DRAFT' && Boolean(view.id)); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [enabled]);
+  return draft;
+}
+
 export default function GoLiveChecklist({ onOpenWorldpayForm }: { onOpenWorldpayForm?: () => void }) {
   const { checklist, error, saving, toggle, demo } = useGoLiveChecklist();
+  const worldpayDraft = useWorldpayDraft(Boolean(onOpenWorldpayForm) && !demo);
   if (!checklist) {
     return error ? <p className="go-live-checklist__error" role="alert">{error}</p> : <p className="go-live-checklist__loading">Loading the go-live checklist…</p>;
   }
   return (
     <>
       {error ? <p className="go-live-checklist__error" role="alert">{error}</p> : null}
-      <GoLiveChecklistView checklist={checklist} saving={saving} demo={demo} onToggle={(key, done) => void toggle(key, done)} onOpenWorldpayForm={onOpenWorldpayForm} />
+      <GoLiveChecklistView checklist={checklist} saving={saving} demo={demo} onToggle={(key, done) => void toggle(key, done)} onOpenWorldpayForm={onOpenWorldpayForm} worldpayDraft={worldpayDraft} />
     </>
   );
 }

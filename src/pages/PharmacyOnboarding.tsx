@@ -6,10 +6,9 @@ import PharmacyAccountStatus from '../components/PharmacyAccountStatus';
 import GoLiveChecklist from '../components/GoLiveChecklist';
 import { useDemoMode } from '../components/useDemoMode';
 import { PartnerTermsForm } from '../auth/PartnerTermsForm';
-import { WorldpayForm } from '../auth/WorldpayForm';
-import { worldpayStartFromBranch } from '../auth/worldpay-start';
+import { WorldpayApplicationForm } from '../worldpay/WorldpayApplicationForm';
 import { PORTAL_ONBOARDING_QUEUE_UTM, pharmsmartOnboardingBookingUrl } from '../auth/pharmsmart-login';
-import { acceptBranchPartnerTerms, submitBranchWorldpayForm } from '../shared/api';
+import { acceptBranchPartnerTerms } from '../shared/api';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
 import { onboardingQueueItems, pharmacyAccountState, type OnboardingQueueItem } from '../onboarding/branchOnboarding';
 import { useBranchOnboarding } from '../onboarding/useBranchOnboarding';
@@ -129,17 +128,18 @@ export default function PharmacyOnboarding() {
           setWorldpayOpen(true);
         }}
       />
-      <WorldpayForm
+      <WorldpayApplicationForm
         open={worldpayOpen}
-        prefill={worldpayStartFromBranch(organisation, view?.registeredCompanyName)}
-        prefillSource="your pharmacy's account"
-        send={async input => (isLocalPortalPreview ? { submittedAt: new Date().toISOString() } : submitBranchWorldpayForm(input))}
-        onClose={() => setWorldpayOpen(false)}
-        onSubmitted={result => {
+        owner={{ kind: 'branch' }}
+        onClose={() => {
           setWorldpayOpen(false);
-          update({ worldpaySubmittedAt: result.submittedAt });
           setChecklistVersion(version => version + 1);
-          dispatch({ type: 'ADD_TOAST', message: 'Worldpay form sent. Our team will pass it on to Worldpay.', toastType: 'success' });
+        }}
+        onChanged={change => {
+          if (change.status && change.status !== 'DRAFT') {
+            update({ worldpaySubmittedAt: new Date().toISOString() });
+            dispatch({ type: 'ADD_TOAST', message: 'Worldpay application sent. We have emailed you what happens next.', toastType: 'success' });
+          }
         }}
       />
     </div>

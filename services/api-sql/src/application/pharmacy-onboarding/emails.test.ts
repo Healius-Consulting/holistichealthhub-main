@@ -136,3 +136,14 @@ test('the on-hold email ignores any reason passed to it', () => {
   const rendered = renderEmailTemplate('pharmacy_onboarding_held', { pharmacyName: 'Shah Pharmacy', declineReason: 'Secret admin note' });
   assert.equal(`${rendered.subject}${rendered.text}${rendered.html}`.includes('Secret admin note'), false);
 });
+
+test('a demo pharmacy\'s Curaleaf application goes to HHH only, marked as a demo', async () => {
+  const { sent, repo } = capture();
+  await queuePharmacyApplicationEmails(repo, request, '2026-11-19T14:05:00.000Z', { demo: true });
+  const curaleaf = sent.find(row => row.templateCode === 'curaleaf_new_account_application')!;
+  const recipients = [...(curaleaf.toRecipients ?? []), ...(curaleaf.ccRecipients ?? [])];
+  assert.ok(recipients.length > 0);
+  assert.ok(recipients.every(address => !address.endsWith('@curaleaflaboratories.co.uk')), 'never to Curaleaf');
+  assert.match(renderEmailTemplate('curaleaf_new_account_application', curaleaf.payload).subject, /^DEMO, not sent to Curaleaf: /);
+});
+

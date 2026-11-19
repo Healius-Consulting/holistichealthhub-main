@@ -36,6 +36,7 @@ function termsView(row: PartnerTermsAcceptanceRecord) {
     termsVersion: row.termsVersion,
     signerName: row.signerName,
     signerRole: row.signerRole,
+    signerRoleOther: row.signerRoleOther,
     signerEmail: row.signerEmail,
     signerGphcNumber: row.signerGphcNumber,
     registeredCompanyName: row.registeredCompanyName,

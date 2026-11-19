@@ -1,3 +1,6 @@
+import { deleteDemoPharmacy, isDemoGphc } from '../../application/pharmacy-onboarding/demo-pharmacies.js';
+import { SqlDemoPharmacyRepository } from '../../repositories/sql/demo-pharmacy.sql.js';
+import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-application.sql.js';
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import Busboy from 'busboy';
 import { HttpError } from '../../domain/common/errors.js';
@@ -82,6 +85,8 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   const repo = new SqlPharmacyOnboardingRepository();
   const storage = new StorageProvider();
   const notificationRepo = new SqlNotificationRepository();
+  const content = new SqlPlatformContentRepository();
+  const demoRepo = new SqlDemoPharmacyRepository();
 
   router.post('/public/pharmacy-onboarding-requests', publicCuraleafFormLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -90,6 +95,11 @@ export function createPublicPharmacyOnboardingRouter(): Router {
         throw new HttpError(400, 'The controlled drug licence must be 4 MB or smaller.', 'LICENCE_TOO_LARGE');
       }
       const fields = pharmacyOnboardingFieldsSchema.parse(submission.fields);
+      // A demo pharmacy starts again: its previous run is wiped first (not on a retry of this same form).
+      if (await isDemoGphc(content, fields.gphcNumber) && !(await repo.findByIdempotencyKey(fields.idempotencyKey))) {
+        await deleteDemoPharmacy({ repo: demoRepo, content, storage }, fields.gphcNumber)
+          .catch(error => console.warn('Demo pharmacy reset skipped', error instanceof Error ? error.message : 'unknown'));
+      }
       const record = await submitPharmacyOnboardingRequest(repo, storage, {
         fields,
         licence: submission.licence && submission.licence.bytes.length > 0 ? submission.licence : null,
@@ -113,6 +123,7 @@ export function createPublicPharmacyOnboardingRouter(): Router {
         notificationRepo,
         termsVersion: partnerTermsVersion(),
         ticketSecret: pharmsmartTicketSecret(),
+        isDemo: gphc => isDemoGphc(content, gphc),
       }, input, { ipHash: ipHash(req) });
       await sqlClickupHooks().termsAccepted({
         gphcNumber: request.gphcNumber,

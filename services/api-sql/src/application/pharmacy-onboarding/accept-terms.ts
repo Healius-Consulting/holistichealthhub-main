@@ -19,6 +19,8 @@ export type AcceptPartnerTermsDeps = {
   termsVersion: string;
   /** Verifies the PharmSmart names ticket the welcome page carried. */
   ticketSecret: string;
+  /** A demo pharmacy's Curaleaf application goes to HHH only. */
+  isDemo?: (gphcNumber: string) => Promise<boolean>;
 };
 
 /**
@@ -37,7 +39,7 @@ export async function acceptPartnerTerms(
 
   const earlier = (await deps.repo.findTermsAcceptances(request.id)).find(row => row.source === 'signup');
   if (earlier) {
-    await queuePharmacyApplicationEmails(deps.notificationRepo, request, earlier.acceptedAt);
+    await queuePharmacyApplicationEmails(deps.notificationRepo, request, earlier.acceptedAt, { demo: await deps.isDemo?.(request.gphcNumber) ?? false });
     return { acceptance: earlier, request };
   }
   if (request.status !== 'PENDING') {
@@ -54,6 +56,7 @@ export async function acceptPartnerTerms(
     termsVersion: deps.termsVersion,
     signerName: input.signerName.trim(),
     signerRole: input.signerRole,
+    signerRoleOther: input.signerRole === 'OTHER' ? input.signerRoleOther?.trim() || null : null,
     signerEmail: input.signerEmail.trim().toLowerCase(),
     signerGphcNumber: signerRoleIsPharmacist(input.signerRole)
       ? normaliseGphcNumber(input.signerGphcNumber ?? '') || null
@@ -66,6 +69,6 @@ export async function acceptPartnerTerms(
   };
   const { organisationId: _organisationId, ...row } = acceptance;
   await deps.repo.insertTermsAcceptance(row);
-  await queuePharmacyApplicationEmails(deps.notificationRepo, request, acceptedAt);
+  await queuePharmacyApplicationEmails(deps.notificationRepo, request, acceptedAt, { demo: await deps.isDemo?.(request.gphcNumber) ?? false });
   return { acceptance, request };
 }

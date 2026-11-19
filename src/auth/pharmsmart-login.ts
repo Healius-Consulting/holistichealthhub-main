@@ -21,7 +21,6 @@ export const PHARMACY_ONBOARDING_PITCH = {
     'No cost to join',
     'No monthly fees or lock-in',
     'You keep the full margin',
-    'Prescribing liability sits with the clinic',
   ],
   steps: [
     { title: 'Intake', body: 'A patient fills in a short eligibility form through your pharmacy\'s own link or QR code.' },

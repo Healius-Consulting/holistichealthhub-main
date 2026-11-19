@@ -31,6 +31,7 @@ Operational pharmacy emails go to the pharmacy email, or the superintendent when
 - `pharmacy_order_dispatched` (order.dispatched): Sent when Curaleaf reports the consignment as dispatched (or partially dispatched) to the pharmacy.
 - `pharmacy_prescription_close_to_expiry` (order.near_expiry): Sent when a paid prescription is approaching its 28-day limit.
 - `pharmacy_collection_completed` (collection.completed): Sent when the pharmacy records a handout / collection.
+- `worldpay_application_confirmation` (worldpay_application.submitted): WP-02. Sent straight away to whoever submitted the Worldpay application and to the branch email, saying it has gone to Worldpay and what happens next. No attachment and no personal or bank details. Wording is edited in admin. Reply-To: `worldpay@holistichealthhub.live`.
 
 ## Staff login emails
 
@@ -48,3 +49,4 @@ Operational pharmacy emails go to the pharmacy email, or the superintendent when
 
 - `admin_new_enquiry_received` (enquiry.submitted): Sent to platform admins when a patient submits an eligibility enquiry.
 - `curaleaf_new_account_application` (pharmacy_onboarding.terms_accepted): One email to Curaleaf Laboratories (To) with partner success copied (CC), sent once the pharmacy accepts the Partner Terms, never at Curaleaf form submission alone. The filled Curaleaf account form is attached. Recipients are set in config. Reply-To: `onboarding@holistichealthhub.live`.
+- `worldpay_application_to_worldpay` (worldpay_application.submitted): WP-01. Sent straight away, from the Worldpay mailbox, to the recipients set in admin when a pharmacy submits its Worldpay application. The application PDF and spreadsheet are attached, plus the service information PDF when the pharmacy has no website. Subject and wording are edited in admin; no personal or bank details are written in the body. Reply-To: `worldpay@holistichealthhub.live`.

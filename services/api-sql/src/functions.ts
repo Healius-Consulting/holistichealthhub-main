@@ -1,3 +1,5 @@
+import { applyWorldpayRetention } from './application/worldpay-application/applications.js';
+import { sqlWorldpayDeps } from './application/worldpay-application/sql-deps.js';
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import {
@@ -113,6 +115,12 @@ export const applyDataRetentionLondon = onSchedule({
     }));
   } catch (error) {
     console.error('Onboarding visit pruning failed', error instanceof Error ? error.message : 'unknown');
+  }
+  // Worldpay applications: principals, bank details and files go 30 days after closing; stale drafts after 90.
+  try {
+    console.log('Worldpay application retention complete', await applyWorldpayRetention(sqlWorldpayDeps()));
+  } catch (error) {
+    console.error('Worldpay application retention failed', error instanceof Error ? error.message : 'unknown');
   }
 });
 
