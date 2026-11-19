@@ -723,7 +723,7 @@ async function fetchAdminFile(path: string, fallback: string) {
 
 // ---- Content packs (FB-20): Settings → Assets → Content packs -------------------------
 
-export type ContentPackGroupId = '0.1' | '0.2' | 'A.1' | 'A.2' | 'C.1' | 'C.2';
+export type ContentPackGroupId = '0.1' | '0.2' | 'A.1' | 'A.2' | 'B.1' | 'B.2' | 'C.1' | 'C.2';
 export interface PharmacyContentPackGroup {
   id: ContentPackGroupId;
   pack: '0' | 'A' | 'B' | 'C';
@@ -755,9 +755,20 @@ export function getContentPacks() {
   return apiRequest<{ cards: PharmacyContentPackCard[] }>('/v1/portal/content-packs', { skipGetCache: true });
 }
 
-/** The group's issued file, as a Blob (for a direct download, or for merging into C.1). */
-export function fetchContentPackFile(groupId: ContentPackGroupId, admin = false): Promise<Blob> {
-  return fetchFileBlob(`/v1/portal/${admin ? 'admin/' : ''}content-packs/groups/${encodeURIComponent(groupId)}/file`, 'This download could not be fetched. Try again.');
+/** A five-minute signed link to the group's file in Storage; files never pass through the API. */
+export function getContentPackDownloadLink(groupId: ContentPackGroupId, admin = false) {
+  return apiRequest<{ url: string; filename: string; sizeBytes: number }>(
+    `/v1/portal/${admin ? 'admin/' : ''}content-packs/groups/${encodeURIComponent(groupId)}/download`,
+    { skipGetCache: true },
+  );
+}
+
+/** The group's issued file as a Blob, for merging into C.1 (fetched from Storage, not the API). */
+export async function fetchContentPackFile(groupId: ContentPackGroupId, admin = false): Promise<Blob> {
+  const link = await getContentPackDownloadLink(groupId, admin);
+  const response = await fetch(link.url);
+  if (!response.ok) throw new ApiRequestError(response.status, 'DOWNLOAD_FAILED', 'This download could not be fetched. Try again.');
+  return response.blob();
 }
 
 export function getAdminContentPacks() {
@@ -771,11 +782,20 @@ export function saveContentPacksText(input: {
   return apiRequest<AdminContentPacksView>('/v1/portal/admin/content-packs', { method: 'PUT', body: JSON.stringify(input) });
 }
 
-export function issueContentPackFile(groupId: ContentPackGroupId, file: File, version: string) {
-  return apiRequest<AdminContentPacksView>(`/v1/portal/admin/content-packs/groups/${encodeURIComponent(groupId)}/file`, {
-    method: 'PUT',
-    body: file,
-    headers: { 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name), 'X-Version': encodeURIComponent(version) },
+/**
+ * Issue or re-issue a group: get a signed upload link, put the file straight into Storage,
+ * then ask the API to check it and make it the group's download. Any size up to 250 MB.
+ */
+export async function issueContentPackFile(groupId: ContentPackGroupId, file: File, input: { version: string | null; issuedOn: string | null }) {
+  const target = await apiRequest<{ uploadUrl: string; storagePath: string; contentType: string; filename: string }>(
+    `/v1/portal/admin/content-packs/groups/${encodeURIComponent(groupId)}/upload-url`,
+    { method: 'POST', body: JSON.stringify({ filename: file.name, sizeBytes: file.size }) },
+  );
+  const put = await fetch(target.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': target.contentType } });
+  if (!put.ok) throw new ApiRequestError(put.status, 'UPLOAD_FAILED', 'The file could not be uploaded. Check your connection and try again.');
+  return apiRequest<AdminContentPacksView>(`/v1/portal/admin/content-packs/groups/${encodeURIComponent(groupId)}/issue`, {
+    method: 'POST',
+    body: JSON.stringify({ storagePath: target.storagePath, filename: target.filename, version: input.version, issuedOn: input.issuedOn }),
   });
 }
 

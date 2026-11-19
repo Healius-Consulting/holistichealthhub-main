@@ -3,6 +3,7 @@ import { Download, ExternalLink, FileArchive } from 'lucide-react';
 import {
   describeApiError,
   fetchContentPackFile,
+  getContentPackDownloadLink,
   getContentPacks,
   isApiConfigured,
   type PharmacyContentPackCard,
@@ -71,11 +72,10 @@ export default function ContentPacks({
         await onWebsiteKit({ zip, libraryUrl: group.libraryUrl });
         notify(`${group.label} downloaded.`);
       } else {
-        const blob = await fetchContentPackFile(group.id);
-        const url = URL.createObjectURL(blob);
-        downloadDataUrl(url, group.filename ?? `${group.label}.zip`);
-        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        notify(`${group.label} downloaded.`);
+        // Straight from Storage: the link names the file, so the browser saves it, whatever its size.
+        const link = await getContentPackDownloadLink(group.id);
+        downloadDataUrl(link.url, link.filename);
+        notify(`${group.label} is downloading.`);
       }
     } catch (caught) {
       setError(describeApiError(caught, 'That download could not be made. Try again.'));

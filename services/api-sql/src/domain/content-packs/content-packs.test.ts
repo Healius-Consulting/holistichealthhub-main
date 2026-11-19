@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { looksRight } from '../../transport/portal/content-packs.router.js';
 import {
   applyContentPacksText,
+  belongsToGroup,
+  contentPackStoragePath,
+  issueDate,
   contentPacksTextSchema,
   contentTypeFor,
   issueGroup,
@@ -14,6 +18,26 @@ import {
 const file = (name: string) => ({ storagePath: `content-packs/x/${name}`, filename: name, contentType: 'application/zip', sizeBytes: 10 });
 
 describe('content packs (FB-20)', () => {
+  it('release 1: Pack B shows once B.1 or B.2 is issued, and a group can show a date with no version', () => {
+    const { config } = issueGroup(resolveContentPacks(null), 'B.2', { version: null, issuedAt: issueDate('2026-11-19', new Date()), file: file('B.2.zip') });
+    const card = pharmacyContentPacks(config).cards.find(entry => entry.id === 'B')!;
+    assert.equal(card.title, 'Pack B: Training');
+    assert.deepEqual(card.groups.map(group => [group.label, group.version, group.issuedAt]), [['B.2 Reference library', null, '2026-11-19T12:00:00.000Z']]);
+  });
+
+  it('dates and storage paths: an issue can only name a file under its own group', () => {
+    assert.equal(issueDate(null, new Date('2026-11-20T08:00:00Z')), '2026-11-20T08:00:00.000Z');
+    assert.equal(issueDate('2026-10-03', new Date()), '2026-10-03T12:00:00.000Z');
+    assert.throws(() => issueDate('3 Oct', new Date()));
+    const path = contentPackStoragePath('A.1', 'HHH A.1 SOPs.zip', '20261120', 'abc');
+    assert.equal(path, 'content-packs/A.1/20261120-abc-HHH-A.1-SOPs.zip');
+    assert.equal(belongsToGroup(path, 'A.1'), true);
+    assert.equal(belongsToGroup(path, 'A.2'), false);
+    assert.equal(belongsToGroup('content-packs/A.1/../../partner-terms/x.pdf', 'A.1'), false);
+    assert.equal(looksRight(Buffer.from('PK\u0003\u0004rest'), 'application/zip'), true);
+    assert.equal(looksRight(Buffer.from('%PDF-1.7'), 'application/zip'), false);
+  });
+
   it('starts with Shay’s four cards; only Marketing shows until files are issued, and Training never without a group', () => {
     const view = pharmacyContentPacks(resolveContentPacks(null));
     assert.deepEqual(view.cards.map(card => card.title), ['Pack C: Marketing']);

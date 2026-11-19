@@ -3,7 +3,7 @@ import { Upload } from 'lucide-react';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 import {
   describeApiError,
-  fetchContentPackFile,
+  getContentPackDownloadLink,
   getAdminContentPacks,
   issueContentPackFile,
   saveContentPacksText,
@@ -22,6 +22,7 @@ import { downloadDataUrl } from '../../utils/pharmacyResources';
  */
 
 const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short', year: 'numeric' }) : '');
+const todayLondon = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date());
 const size = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
 function localView(): AdminContentPacksView {
@@ -35,7 +36,8 @@ export function ContentPacksPanel() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [uploads, setUploads] = useState<Record<string, { file: File | null; version: string }>>({});
+  const [uploads, setUploads] = useState<Record<string, { file: File | null; version: string; issuedOn: string }>>({});
+  const pendingFor = (id: string) => uploads[id] ?? { file: null, version: '', issuedOn: todayLondon() };
   const [confirmWithdraw, setConfirmWithdraw] = useState<ContentPackGroupId | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
 
@@ -75,25 +77,23 @@ export function ContentPacksPanel() {
   }), 'Saved. Pharmacies see the new wording straight away.');
 
   const issue = (groupId: ContentPackGroupId) => {
-    const pending = uploads[groupId];
-    if (!pending?.file) { setError('Choose a file to issue.'); return; }
-    if (!pending.version.trim()) { setError('Give the version a name, such as v1.2.'); return; }
+    const pending = pendingFor(groupId);
+    if (!pending.file) { setError('Choose a file to issue.'); return; }
+    if (!pending.issuedOn) { setError('Choose the date to show beside the button.'); return; }
     const reissue = Boolean(view.groups.find(group => group.id === groupId)?.file);
-    void act(`issue:${groupId}`, () => issueContentPackFile(groupId, pending.file!, pending.version.trim()), reissue ? `Re-issued ${groupId}. Pharmacies now download the new file.` : `Issued ${groupId}. Pharmacies can download it now.`)
+    void act(`issue:${groupId}`, () => issueContentPackFile(groupId, pending.file!, { version: pending.version.trim() || null, issuedOn: pending.issuedOn }), reissue ? `Re-issued ${groupId}. Pharmacies now download the new file.` : `Issued ${groupId}. Pharmacies can download it now.`)
       .then(worked => {
         if (!worked) return;
         // Clear both the state and the file box, so neither still shows the file just issued.
-        setUploads(current => ({ ...current, [groupId]: { file: null, version: '' } }));
+        setUploads(current => ({ ...current, [groupId]: { file: null, version: '', issuedOn: todayLondon() } }));
         setFileInputKey(key => key + 1);
       });
   };
 
   const preview = async (groupId: ContentPackGroupId, filename: string) => {
     try {
-      const blob = await fetchContentPackFile(groupId, true);
-      const url = URL.createObjectURL(blob);
-      downloadDataUrl(url, filename);
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const link = await getContentPackDownloadLink(groupId, true);
+      downloadDataUrl(link.url, link.filename || filename);
     } catch (cause) {
       setError(describeApiError(cause, 'The file could not be downloaded.'));
     }
@@ -103,7 +103,7 @@ export function ContentPacksPanel() {
     <div className="onb-settings__panel packs-admin">
       {notice ? <p className="wpa-banner is-green" role="status">{notice}</p> : null}
       {error ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
-      <p className="onb-settings__when">Pharmacies see these under Settings → Assets → Content packs. A card shows once one of its groups has a file; Pack B stays hidden until it has a group.</p>
+      <p className="onb-settings__when">Pharmacies see these under Settings → Assets → Content packs. A card shows once one of its groups has a file. Files go straight to storage, so a group can be up to 250 MB.</p>
 
       {draft.cards.map((card, cardIndex) => (
         <section key={card.id} className="packs-admin__card">
@@ -144,17 +144,21 @@ export function ContentPacksPanel() {
                   <>
                     <p className="wpa-muted">
                       {group.file
-                        ? <>Current: <button type="button" className="wpa-link" onClick={() => void preview(group.id, group.file!.filename)}>{group.file.filename}</button> · {group.version} · issued {day(group.issuedAt)} · {size(group.file.sizeBytes)}</>
+                        ? <>Current: <button type="button" className="wpa-link" onClick={() => void preview(group.id, group.file!.filename)}>{group.file.filename}</button>{group.version ? ` · ${group.version}` : ''} · shown as {day(group.issuedAt)} · {size(group.file.sizeBytes)}</>
                         : group.source === 'website_kit' ? 'No kit issued: pharmacies get their own link, QR code and palette only.' : 'No file issued yet.'}
                     </p>
                     <div className="packs-admin__upload">
                       <label className="wpa-field">
-                        <span className="wpa-field__label">Version</span>
-                        <input className="input" value={uploads[group.id]?.version ?? ''} maxLength={40} placeholder="v1.0" onChange={event => setUploads(current => ({ ...current, [group.id]: { file: current[group.id]?.file ?? null, version: event.target.value } }))} />
+                        <span className="wpa-field__label">Version <em>Optional</em></span>
+                        <input className="input" value={pendingFor(group.id).version} maxLength={40} placeholder="v1.0" onChange={event => setUploads(current => ({ ...current, [group.id]: { ...pendingFor(group.id), version: event.target.value } }))} />
+                      </label>
+                      <label className="wpa-field">
+                        <span className="wpa-field__label">Date shown</span>
+                        <input className="input" type="date" value={pendingFor(group.id).issuedOn} max={todayLondon()} onChange={event => setUploads(current => ({ ...current, [group.id]: { ...pendingFor(group.id), issuedOn: event.target.value } }))} />
                       </label>
                       <label className="wpa-field">
                         <span className="wpa-field__label">{group.source === 'website_kit' ? 'Kit (.zip)' : 'File (.zip for several files)'}</span>
-                        <input key={`${group.id}-${fileInputKey}`} className="input" type="file" accept={group.source === 'website_kit' ? '.zip,application/zip' : '.zip,.pdf,.docx,.xlsx,.csv'} onChange={event => { const file = event.target.files?.[0] ?? null; setUploads(current => ({ ...current, [group.id]: { file, version: current[group.id]?.version ?? '' } })); }} />
+                        <input key={`${group.id}-${fileInputKey}`} className="input" type="file" accept={group.source === 'website_kit' ? '.zip,application/zip' : '.zip,.pdf,.docx,.xlsx,.pptx,.csv'} onChange={event => { const file = event.target.files?.[0] ?? null; setUploads(current => ({ ...current, [group.id]: { ...pendingFor(group.id), file } })); }} />
                       </label>
                       <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null || isLocalPortalPreview} onClick={() => issue(group.id)}>
                         <Upload size={13} /> {busy === `issue:${group.id}` ? 'Uploading…' : group.file ? 'Re-issue' : 'Issue'}

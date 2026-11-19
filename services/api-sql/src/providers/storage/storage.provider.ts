@@ -155,7 +155,8 @@ export class StorageProvider {
     }
   }
 
-  async generateDownloadUrl(storagePath: string, expiresInSeconds = 300): Promise<string> {
+  /** A short-lived read link. `attachmentName` makes the browser save it under that name. */
+  async generateDownloadUrl(storagePath: string, expiresInSeconds = 300, attachmentName?: string): Promise<string> {
     const bucket = this.storage.bucket(this.bucketName);
     const file = bucket.file(storagePath);
 
@@ -163,6 +164,7 @@ export class StorageProvider {
       version: 'v4',
       action: 'read',
       expires: Date.now() + expiresInSeconds * 1000,
+      ...(attachmentName ? { responseDisposition: `attachment; filename="${attachmentName.replace(/["\\\r\n]/g, '')}"` } : {}),
     });
 
     return downloadUrl;

@@ -21,12 +21,16 @@ import { z } from 'zod';
  */
 
 export const CONTENT_PACKS_KEY = 'onboarding.contentPacks';
-/** The same cap as Partner Terms uploads, which are proven through the /v1 proxy. */
-export const MAX_CONTENT_PACK_FILE_BYTES = 10 * 1024 * 1024;
+/**
+ * Files go straight between the browser and Storage through short-lived signed links, never
+ * through the API (which can't carry more than about 32 MB), so a group can be large: the
+ * B.2 reference library is about 57 MB.
+ */
+export const MAX_CONTENT_PACK_FILE_BYTES = 250 * 1024 * 1024;
 
 export const PACK_IDS = ['0', 'A', 'B', 'C'] as const;
 export type PackId = typeof PACK_IDS[number];
-export const GROUP_IDS = ['0.1', '0.2', 'A.1', 'A.2', 'C.1', 'C.2'] as const;
+export const GROUP_IDS = ['0.1', '0.2', 'A.1', 'A.2', 'B.1', 'B.2', 'C.1', 'C.2'] as const;
 export type GroupId = typeof GROUP_IDS[number];
 export type GroupSource = 'upload' | 'website_kit' | 'counter_print';
 
@@ -64,10 +68,10 @@ export interface ContentPacksConfig {
   groups: ContentPackGroup[];
 }
 
-const PACK_OF: Record<GroupId, PackId> = { '0.1': '0', '0.2': '0', 'A.1': 'A', 'A.2': 'A', 'C.1': 'C', 'C.2': 'C' };
-const SOURCE_OF: Record<GroupId, GroupSource> = { '0.1': 'upload', '0.2': 'upload', 'A.1': 'upload', 'A.2': 'upload', 'C.1': 'website_kit', 'C.2': 'counter_print' };
+const PACK_OF: Record<GroupId, PackId> = { '0.1': '0', '0.2': '0', 'A.1': 'A', 'A.2': 'A', 'B.1': 'B', 'B.2': 'B', 'C.1': 'C', 'C.2': 'C' };
+const SOURCE_OF: Record<GroupId, GroupSource> = { '0.1': 'upload', '0.2': 'upload', 'A.1': 'upload', 'A.2': 'upload', 'B.1': 'upload', 'B.2': 'upload', 'C.1': 'website_kit', 'C.2': 'counter_print' };
 
-/** Shay's release set and wording (19 Nov 2026). Pack B has no group yet, so it stays hidden. */
+/** Shay's release set and wording (release 1, 19 Nov 2026). A group shows once its file is issued. */
 export const CONTENT_PACK_DEFAULTS: ContentPacksConfig = {
   cards: [
     { id: '0', title: 'Pack 0: Onboarding', audience: 'Owner, superintendent', description: 'What you need to set up payments and your PMR.' },
@@ -80,6 +84,8 @@ export const CONTENT_PACK_DEFAULTS: ContentPacksConfig = {
     { id: '0.2', pack: '0', label: '0.2 PMR formulary', source: 'upload', version: null, issuedAt: null, file: null, libraryUrl: null },
     { id: 'A.1', pack: 'A', label: 'A.1 SOPs', source: 'upload', version: null, issuedAt: null, file: null, libraryUrl: null },
     { id: 'A.2', pack: 'A', label: 'A.2 Supplier licences', source: 'upload', version: null, issuedAt: null, file: null, libraryUrl: null },
+    { id: 'B.1', pack: 'B', label: 'B.1 Training session', source: 'upload', version: null, issuedAt: null, file: null, libraryUrl: null },
+    { id: 'B.2', pack: 'B', label: 'B.2 Reference library', source: 'upload', version: null, issuedAt: null, file: null, libraryUrl: null },
     { id: 'C.1', pack: 'C', label: 'C.1 Website kit', source: 'website_kit', version: null, issuedAt: null, file: null, libraryUrl: null },
     { id: 'C.2', pack: 'C', label: 'C.2 Counter print', source: 'counter_print', version: null, issuedAt: null, file: null, libraryUrl: null },
   ],
@@ -188,14 +194,14 @@ export function applyContentPacksText(config: ContentPacksConfig, input: z.infer
 export function issueGroup(
   config: ContentPacksConfig,
   groupId: GroupId,
-  issue: { version: string; issuedAt: string; file: ContentPackFile },
+  issue: { version: string | null; issuedAt: string; file: ContentPackFile },
 ): { config: ContentPacksConfig; replaced: ContentPackFile | null } {
   let replaced: ContentPackFile | null = null;
   const groups = config.groups.map(group => {
     if (group.id !== groupId) return group;
     if (group.source === 'counter_print') throw new Error('Counter print is built per pharmacy and takes no upload.');
     replaced = group.file;
-    return { ...group, version: issue.version, issuedAt: issue.issuedAt, file: issue.file };
+    return { ...group, version: issue.version?.trim() || null, issuedAt: issue.issuedAt, file: issue.file };
   });
   return { config: { ...config, groups }, replaced };
 }
@@ -221,6 +227,7 @@ const CONTENT_TYPES: Record<string, string> = {
   zip: 'application/zip',
   pdf: 'application/pdf',
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   csv: 'text/csv',
 };
@@ -229,4 +236,22 @@ const CONTENT_TYPES: Record<string, string> = {
 export function contentTypeFor(filename: string): string | null {
   const extension = filename.split('.').pop()?.toLowerCase() ?? '';
   return CONTENT_TYPES[extension] ?? null;
+}
+
+/** The date shown beside a group's button: the given day (noon UTC, so it reads the same in London), or now. */
+export function issueDate(issuedOn: string | null | undefined, now: Date): string {
+  if (!issuedOn) return now.toISOString();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(issuedOn)) throw new Error('Use a date like 2026-11-19.');
+  const date = new Date(`${issuedOn}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) throw new Error('Use a date like 2026-11-19.');
+  return date.toISOString();
+}
+
+/** Where a group's uploaded file lives: under that group, so an issue can only name its own file. */
+export function contentPackStoragePath(groupId: GroupId, filename: string, stamp: string, id: string) {
+  return `content-packs/${groupId}/${stamp}-${id}-${filename.replace(/\s+/g, '-')}`;
+}
+
+export function belongsToGroup(storagePath: string, groupId: GroupId) {
+  return storagePath.startsWith(`content-packs/${groupId}/`) && !storagePath.includes('..');
 }
