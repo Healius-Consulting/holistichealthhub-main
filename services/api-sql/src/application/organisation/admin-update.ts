@@ -59,9 +59,9 @@ export function resolveOrganisationStatusChange(
   current: OrganisationRecord['status'],
   requested: NonNullable<UpdateOrganisationInput['status']>,
 ): OrganisationRecord['status'] | null {
-  // Not available is set and cleared only through its own audited admin action.
-  if (current === 'NOT_AVAILABLE') {
-    throw new HttpError(409, 'Clear Not available on this pharmacy first.', 'NOT_AVAILABLE_ACTION_REQUIRED');
+  // A hold is set and lifted only on the branch's onboarding request (audited, emailed).
+  if (current === 'ON_HOLD') {
+    throw new HttpError(409, 'This pharmacy\'s onboarding is on hold. Lift the hold on its request first.', 'ON_HOLD_ACTION_REQUIRED');
   }
   if (requested === 'live' || requested === 'intake_live') {
     if (current.toLowerCase() === requested) return null;

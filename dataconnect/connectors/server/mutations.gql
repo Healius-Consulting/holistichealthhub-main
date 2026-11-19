@@ -557,19 +557,6 @@ mutation CreatePharmacyWorldpaySubmission(
   })
 }
 
-mutation ArchiveDeclinedOrganisation($id: UUID!, $archivedAt: Timestamp!, $pausedReason: String!) @auth(level: NO_ACCESS) {
-  organisation_update(
-    key: { id: $id }
-    data: {
-      status: PAUSED
-      intakeEnabled: false
-      pausedReason: $pausedReason
-      pausedAt: $archivedAt
-      archivedAt: $archivedAt
-    }
-  )
-}
-
 mutation ActivatePharmacyOnboardingRequest(
   $id: UUID!
   $organisationId: UUID!
@@ -589,25 +576,26 @@ mutation ActivatePharmacyOnboardingRequest(
 
 mutation HoldPharmacyOnboardingRequest(
   $id: UUID!
-  $declineReason: String!
-  $decidedAt: Timestamp!
+  $holdReason: OnboardingHoldReason!
+  $heldAt: Timestamp!
   $decidedByUid: String!
 ) @auth(level: NO_ACCESS) {
   pharmacyOnboardingRequest_update(
     key: { id: $id }
     data: {
       status: ON_HOLD
-      declineReason: $declineReason
-      decidedAt: $decidedAt
+      holdReason: $holdReason
+      heldAt: $heldAt
+      decidedAt: $heldAt
       decidedByUid: $decidedByUid
     }
   )
 }
 
-mutation UnholdPharmacyOnboardingRequest($id: UUID!) @auth(level: NO_ACCESS) {
+mutation UnholdPharmacyOnboardingRequest($id: UUID!, $status: PharmacyOnboardingRequestStatus!) @auth(level: NO_ACCESS) {
   pharmacyOnboardingRequest_update(
     key: { id: $id }
-    data: { status: PENDING }
+    data: { status: $status }
   )
 }
 

@@ -1,0 +1,17 @@
+/* The published Partner Terms inside the sign-up Terms step: a scrolling box of paragraphs. */
+
+.partner-terms-form__terms.is-published{
+  max-height: min(50vh, 440px);
+  overflow-y: auto;
+  border-style: solid;
+  color: var(--ink);
+}
+
+.partner-terms-form__paragraph{
+  white-space: pre-line;
+  line-height: 1.6;
+}
+
+.partner-terms-form__paragraph + .partner-terms-form__paragraph{
+  margin-top: 12px;
+}

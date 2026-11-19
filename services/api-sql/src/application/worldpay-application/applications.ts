@@ -29,8 +29,9 @@ import { applicationFileBase, renderApplicationPdf, renderApplicationXlsx } from
 /**
  * The Worldpay merchant application (spec 01). A branch, or an onboarding request
  * before its branch exists, has at most one live application. It is saved as a
- * draft while it is filled in, submitted once, emailed to Worldpay's route (WP-01)
- * with a confirmation to the pharmacy (WP-02), then moved through its statuses by admin.
+ * draft while it is filled in, submitted once, emailed to Worldpay's route (WP-01),
+ * then moved through its statuses by admin. The pharmacy gets no email about it (WP-02
+ * was dropped, 19 Nov 2026): the onboarding emails mention it where it matters.
  *
  * Nothing here writes answers into logs, ClickUp or email bodies: emails carry only
  * names, the reference and the contact, and the answers travel only as attachments.
@@ -282,25 +283,6 @@ export async function sendApplicationToWorldpay(deps: WorldpayDeps, record: Worl
   }
 }
 
-/** WP-02 to the submitter and the branch email. No attachment, no personal or bank details. */
-async function confirmToPharmacy(deps: WorldpayDeps, record: WorldpayApplicationRecord) {
-  const content = await readWorldpayContent(deps.content);
-  const fields = mergeFields(record);
-  const to = [...new Set([record.submitterEmail, record.answers.business.businessEmail].map(address => address?.trim().toLowerCase()).filter((address): address is string => Boolean(address)))];
-  if (to.length === 0) return;
-  try {
-    await deps.sendEmail({
-      templateCode: 'worldpay_application_confirmation',
-      to,
-      payload: { subject: mergeSubject(content.wp02.subject, fields), paragraphs: mergeTemplate(content.wp02.body, fields, {}) },
-      attachments: [],
-      idempotencyKey: `worldpay-application-confirmation:${record.id}`,
-    });
-  } catch (error) {
-    console.warn('Worldpay confirmation email failed', { applicationId: record.id, reason: error instanceof Error ? error.message.slice(0, 120) : 'unknown' });
-  }
-}
-
 export async function submitWorldpayApplication(
   deps: WorldpayDeps,
   owner: WorldpayOwner,
@@ -364,7 +346,6 @@ export async function submitWorldpayApplication(
 
   // WP-01 goes to the HHH admin inbox. Admin forwards it to Worldpay and then marks it With Worldpay.
   await sendApplicationToWorldpay(deps, record);
-  await confirmToPharmacy(deps, record);
   const latest = (await deps.repo.findById(record.id)) ?? record;
   await deps.hooks?.submitted?.(latest).catch(() => undefined);
   return latest;

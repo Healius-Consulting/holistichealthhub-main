@@ -20,7 +20,7 @@ test('submitting the onboarding form creates a request, never an organisation, a
 });
 
 test('the Partner Terms route accepts against the request with a hashed IP', () => {
-  const handler = publicSource.match(/router\.post\('\/public\/pharmacy-onboarding-terms',[\s\S]*?router\.post\('\/public\/pharmacy-onboarding-worldpay'/)?.[0];
+  const handler = publicSource.match(/router\.post\('\/public\/pharmacy-onboarding-terms',[\s\S]*?router\.get\('\/public\/pharmacy-onboarding-company/)?.[0];
   assert.ok(handler, 'terms handler is present');
   assert.match(handler, /partnerTermsAcceptanceSchema\.parse/);
   assert.match(handler, /acceptPartnerTerms/);

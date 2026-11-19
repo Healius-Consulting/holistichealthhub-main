@@ -3,22 +3,23 @@ import { AlertCircle, FileText } from 'lucide-react';
 import {
   activatePharmacyOnboardingRequest,
   describeApiError,
-  holdPharmacyOnboardingRequest,
   listPharmacyOnboardingRequests,
   openPharmacyOnboardingFile,
-  unholdPharmacyOnboardingRequest,
   type ActivatedPharmacyOnboarding,
   type PharmacyOnboardingRequestView,
 } from '../../shared/api';
 import { compactGphc, formatRequestDate, requestStatusLabel, requestTone } from './requestFormat';
 import { isLocalPortalPreview } from '../../dev/localPortalPreview';
 import { LOCAL_PREVIEW_PHARMACY_REQUESTS } from '../../dev/localPharmacyRequests';
+import { OnboardingEmailLog } from './OnboardingEmailLog';
+import { OnboardingHoldCard, OnboardingHoldPanel } from './OnboardingHold';
+import { holdReasonLabel, sendableEmailKinds } from './onboardingAdmin';
 
 /**
  * Pharmacy requests (Curaleaf account forms sent from the onboarding page) live
  * in the pharmacies overview. A request is not a pharmacy yet: HHH either
  * activates it (creating the pharmacy, after which the normal Manage options
- * apply) or holds it. A held request can be unheld back to new.
+ * apply) or puts it on hold with a reason. A hold can be lifted back to new.
  */
 
 function initials(name: string) {
@@ -135,13 +136,13 @@ export function PharmacyRequestRecord({
   onActivated: (organisation: ActivatedPharmacyOnboarding, request: PharmacyOnboardingRequestView) => void;
   onChanged: (request: PharmacyOnboardingRequestView) => void;
 }) {
-  const [busy, setBusy] = useState<null | 'activate' | 'hold' | 'unhold' | FileKind>(null);
+  const [busy, setBusy] = useState<null | 'activate' | FileKind>(null);
   const [error, setError] = useState<string | null>(null);
   const [holding, setHolding] = useState(false);
-  const [reason, setReason] = useState('');
+  // Bumped after a hold change so the send log shows the new Hold email.
+  const [emailsVersion, setEmailsVersion] = useState(0);
   const [preview, setPreview] = useState<{ url: string; kind: FileKind } | null>(null);
   const previewRef = useRef<string | null>(null);
-  const reasonRef = useRef<HTMLTextAreaElement>(null);
   const tone = requestTone(request.status);
   const pending = request.status === 'pending';
   const onHold = request.status === 'on_hold';
@@ -152,7 +153,6 @@ export function PharmacyRequestRecord({
   // A different request starts clean: no open hold box or file from the last one.
   useEffect(() => {
     setHolding(false);
-    setReason('');
     setError(null);
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
     previewRef.current = null;
@@ -162,10 +162,6 @@ export function PharmacyRequestRecord({
   useEffect(() => () => {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
   }, []);
-
-  useEffect(() => {
-    if (holding) reasonRef.current?.focus();
-  }, [holding]);
 
   const showFile = async (kind: FileKind) => {
     if (preview?.kind === kind) {
@@ -198,38 +194,10 @@ export function PharmacyRequestRecord({
     }
   };
 
-  const hold = async () => {
-    const note = reason.trim();
-    if (note.length < 2) {
-      setError('Enter a reason for the hold. Only HHH admins see it.');
-      reasonRef.current?.focus();
-      return;
-    }
-    setBusy('hold');
-    setError(null);
-    try {
-      const result = await holdPharmacyOnboardingRequest(request.id, note);
-      onChanged(result.request);
-      setHolding(false);
-      setReason('');
-    } catch (cause) {
-      setError(describeApiError(cause, 'The request could not be put on hold.'));
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const unhold = async () => {
-    setBusy('unhold');
-    setError(null);
-    try {
-      const result = await unholdPharmacyOnboardingRequest(request.id);
-      onChanged(result.request);
-    } catch (cause) {
-      setError(describeApiError(cause, 'The request could not be unheld.'));
-    } finally {
-      setBusy(null);
-    }
+  const holdChanged = (next: PharmacyOnboardingRequestView) => {
+    setHolding(false);
+    setEmailsVersion(version => version + 1);
+    onChanged(next);
   };
 
   return (
@@ -241,7 +209,7 @@ export function PharmacyRequestRecord({
             <div className="order-crm-record__titles">
               <strong id="admin-request-title">{request.pharmacyName}</strong>
               <span className="order-crm-record__ref">{request.registeredCompanyName} · GPhC {request.gphcNumber}</span>
-              <em>{onHold ? `On hold since ${formatRequestDate(request.decidedAt)}` : 'Not on the platform yet'}</em>
+              <em>{onHold ? `On hold since ${formatRequestDate(request.heldAt ?? request.decidedAt)}` : 'Not on the platform yet'}</em>
             </div>
           </div>
           <span className={`order-stage-pill order-tone--${tone}`}>{requestStatusLabel(request.status)}</span>
@@ -254,16 +222,9 @@ export function PharmacyRequestRecord({
           </div>
           {pending ? (
             <div className="order-crm-record__actions" role="group" aria-label="Request actions">
-              <button type="button" className="btn btn-sm" disabled={busy !== null} aria-expanded={holding} onClick={() => setHolding(open => !open)}>Hold</button>
+              <button type="button" className="btn btn-sm admin-decline-button" disabled={busy !== null} aria-expanded={holding} onClick={() => setHolding(open => !open)}>Hold</button>
               <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} onClick={() => void activate()}>
                 {busy === 'activate' ? 'Activating…' : 'Activate'}
-              </button>
-            </div>
-          ) : null}
-          {onHold ? (
-            <div className="order-crm-record__actions" role="group" aria-label="Request actions">
-              <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} onClick={() => void unhold()}>
-                {busy === 'unhold' ? 'Unholding…' : 'Unhold'}
               </button>
             </div>
           ) : null}
@@ -274,44 +235,16 @@ export function PharmacyRequestRecord({
         {error ? <div className="banner banner-amber" role="alert"><span>{error}</span></div> : null}
 
         {holding && pending ? (
-          <section className="admin-request-decline" aria-labelledby="admin-request-hold-title">
-            <h3 id="admin-request-hold-title">Put this request on hold</h3>
-            <p>
-              Only HHH admins see this reason. <strong>{request.pharmacyEmail}</strong> is emailed that the account could not be
-              created at this point and to contact onboarding@holistichealthhub.live. No workspace is created.
-            </p>
-            <textarea ref={reasonRef} className="input" rows={3} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} aria-label="Reason for the hold (admin only)" />
-            <div className="admin-request-decline__actions">
-              <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => { setHolding(false); setReason(''); }}>Cancel</button>
-              <button type="button" className="btn btn-sm btn-danger" disabled={busy !== null || reason.trim().length < 2} onClick={() => void hold()}>
-                {busy === 'hold' ? 'Holding…' : 'Hold request'}
-              </button>
-            </div>
-          </section>
+          <OnboardingHoldPanel request={request} onCancel={() => setHolding(false)} onHeld={holdChanged} />
         ) : null}
 
-        {onHold ? (
-          <section className="admin-activation admin-activation--stopped" aria-labelledby="admin-request-on-hold">
-            <header>
-              <span className="admin-activation__icon" aria-hidden="true"><AlertCircle size={18} /></span>
-              <span>
-                <small>On hold since {formatRequestDate(request.decidedAt)}</small>
-                <strong id="admin-request-on-hold">Not activated</strong>
-              </span>
-            </header>
-            {request.declineReason ? <blockquote className="admin-request-quote">{request.declineReason}</blockquote> : null}
-            <p className="admin-activation__body">
-              Only HHH admins see this reason. The pharmacy was told its account could not be created yet, and a new Curaleaf
-              form for GPhC {request.gphcNumber} is refused. <strong>Unhold</strong> moves it back to a new request without emailing the pharmacy.
-            </p>
-          </section>
-        ) : null}
+        {onHold ? <OnboardingHoldCard request={request} onChanged={next => holdChanged(next)} /> : null}
 
         {pending ? (
           <p className="admin-request-next">
-            Submitting the form does not create a pharmacy. <strong>Activate</strong> creates it in onboarding, where it waits for Curaleaf's
-            live credentials like any other, and emails the pharmacy that its account is active.
-            {request.declineReason ? <> Previously held: <em>{request.declineReason}</em></> : null}
+            Submitting the form does not create a pharmacy. <strong>Activate</strong> creates it in demonstration mode, where it waits for
+            Curaleaf's live credentials like any other, and emails the pharmacy that its account is ready to try.
+            {request.holdReason ? <> Previously on hold: <em>{holdReasonLabel(request.holdReason)}</em>{request.heldAt ? `, ${formatRequestDate(request.heldAt)}` : ''}.</> : null}
           </p>
         ) : null}
 
@@ -366,6 +299,12 @@ export function PharmacyRequestRecord({
           ) : null}
           {preview?.kind === 'licence' && !licenceIsPdf ? <img className="admin-request-preview" alt="Controlled drugs licence" src={preview.url} /> : null}
         </section>
+
+        <OnboardingEmailLog
+          requestId={request.id}
+          refreshKey={emailsVersion}
+          sendable={sendableEmailKinds({ termsAccepted: Boolean(request.termsAcceptances?.length), requestStatus: request.status, activated: Boolean(request.organisationId), live: false })}
+        />
 
         {terms ? (
           <section className="pharmacy-summary__card" aria-labelledby="admin-request-terms">

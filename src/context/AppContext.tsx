@@ -370,7 +370,7 @@ export interface PharmacyTenant {
   county?: string;
   postcode?: string;
   websiteDomains: string[];
-  status: 'live' | 'intake_live' | 'onboarding' | 'paused' | 'not_available';
+  status: 'live' | 'intake_live' | 'onboarding' | 'paused' | 'on_hold';
   testAccount?: boolean;
   gdprExempt?: boolean;
   workspaceClassification?: 'standard' | 'training' | 'allocation_holding';
@@ -2387,7 +2387,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const intakeDirectorySync = Boolean(
     currentOrganisation
     && currentOrganisation.intakeEnabled !== false
-    && currentOrganisation.status !== 'paused' && currentOrganisation.status !== 'not_available'
+    && currentOrganisation.status !== 'paused' && currentOrganisation.status !== 'on_hold'
     && !sandboxPharmacy
   );
   const syncPatientDirectory = livePharmacyWorkspace || intakeDirectorySync;

@@ -7,8 +7,9 @@ import {
   partnerTermsAcceptanceSchema,
   type PartnerTermsAcceptanceRecord,
 } from '../../domain/pharmacy-onboarding/terms.js';
-import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
+import { ONBOARDING_CONTENT_DEFAULTS } from '../../domain/pharmacy-onboarding/content.js';
 import { acceptPartnerTerms } from './accept-terms.js';
+import { acceptedPartnerTermsVersion, partnerTermsVersion } from './onboarding-config.js';
 
 const REQUEST_ID = '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11';
 const SECRET = 'terms-test-secret';
@@ -35,7 +36,8 @@ function request(status: PharmacyOnboardingStatus = 'PENDING'): PharmacyOnboardi
     licenceFilename: '',
     filledFormStoragePath: `pharmacy-onboarding/${REQUEST_ID}/curaleaf-account.pdf`,
     organisationId: null,
-    declineReason: null,
+    holdReason: null,
+    heldAt: null,
     decidedAt: null,
     decidedByUid: null,
     idempotencyKey: 'idempotency-key-1',
@@ -43,21 +45,10 @@ function request(status: PharmacyOnboardingStatus = 'PENDING'): PharmacyOnboardi
   };
 }
 
-function harness(status: PharmacyOnboardingStatus = 'PENDING', options: { failQueueOnce?: boolean } = {}) {
+function harness(status: PharmacyOnboardingStatus = 'PENDING', options: { emailThrowsOnce?: boolean; demo?: boolean } = {}) {
   const rows: PartnerTermsAcceptanceRecord[] = [];
-  const emails: Array<{ templateCode: string; idempotencyKey: string; toRecipients?: string[] | null }> = [];
-  let failQueue = options.failQueueOnce ?? false;
-  const notificationRepo = {
-    async enqueue(data: { templateCode: string; idempotencyKey: string; toRecipients?: string[] | null }) {
-      if (failQueue) {
-        failQueue = false;
-        throw new Error('outbox unavailable');
-      }
-      if (emails.some(row => row.idempotencyKey === data.idempotencyKey)) return { created: false };
-      emails.push(data);
-      return { created: true };
-    },
-  } as unknown as NotificationRepositoryPort;
+  const emails: Array<{ request: PharmacyOnboardingRequestRecord; demo: boolean }> = [];
+  let throwOnce = options.emailThrowsOnce ?? false;
   const deps = {
     repo: {
       findById: async (id: string) => (id === REQUEST_ID ? request(status) : null),
@@ -66,9 +57,18 @@ function harness(status: PharmacyOnboardingStatus = 'PENDING', options: { failQu
         rows.push({ ...row, organisationId: null });
       },
     },
-    notificationRepo,
+    emails: {
+      applicationReceived: async (input: { request: PharmacyOnboardingRequestRecord; demo: boolean }) => {
+        emails.push(input);
+        if (throwOnce) {
+          throwOnce = false;
+          throw new Error('outbox unavailable');
+        }
+      },
+    },
     termsVersion: 'v-test',
     ticketSecret: SECRET,
+    isDemo: async () => options.demo ?? false,
   };
   return { deps, rows, emails };
 }
@@ -85,7 +85,6 @@ function input(overrides: Record<string, unknown> = {}) {
   });
 }
 
-const curaleaf = <T extends { templateCode: string }>(emails: T[]) => emails.filter(row => row.templateCode === 'curaleaf_new_account_application');
 
 describe('Partner Terms validation', () => {
   it('requires the declaration to be ticked', () => {
@@ -141,32 +140,51 @@ describe('acceptPartnerTerms', () => {
     assert.equal(h.rows[0]!.signerGphcNumber, null);
   });
 
-  it('queues the Curaleaf application and the pharmacy receipt once, only after the Terms', async () => {
+  it('sends the Sent email and the Curaleaf application (applicationReceived) only after the Terms', async () => {
     const h = harness();
     assert.equal(h.emails.length, 0);
     await acceptPartnerTerms(h.deps, input(), { ipHash: null });
-    assert.equal(curaleaf(h.emails).length, 1);
-    assert.deepEqual(curaleaf(h.emails)[0]!.toRecipients, ['robbie.allison@curaleaflaboratories.co.uk', 'ellis.walters@curaleaflaboratories.co.uk']);
-    assert.deepEqual(h.emails.map(row => row.templateCode).sort(), ['curaleaf_new_account_application', 'pharmacy_onboarding_submitted']);
+    assert.equal(h.emails.length, 1);
+    assert.equal(h.emails[0]!.request.id, REQUEST_ID);
+    assert.equal(h.emails[0]!.demo, false);
   });
 
-  it('a retry writes no second row and sends nothing again', async () => {
+  it('marks a demo GPhC\'s application as demo', async () => {
+    const h = harness('PENDING', { demo: true });
+    await acceptPartnerTerms(h.deps, input(), { ipHash: null });
+    assert.deepEqual(h.emails.map(row => row.demo), [true]);
+  });
+
+  it('a retry writes no second row and asks for the same request\'s emails again (sent once per request)', async () => {
     const h = harness();
     const first = await acceptPartnerTerms(h.deps, input(), { ipHash: null });
     const second = await acceptPartnerTerms(h.deps, input({ signerName: 'Someone Else' }), { ipHash: null });
     assert.equal(h.rows.length, 1);
     assert.equal(second.acceptance.id, first.acceptance.id);
-    assert.equal(curaleaf(h.emails).length, 1);
-    assert.equal(h.emails.length, 2);
+    assert.deepEqual(h.emails.map(row => row.request.id), [REQUEST_ID, REQUEST_ID]);
   });
 
-  it('a retry after the outbox failed queues the Curaleaf email it missed', async () => {
-    const h = harness('PENDING', { failQueueOnce: true });
-    await assert.rejects(acceptPartnerTerms(h.deps, input(), { ipHash: null }), /outbox unavailable/);
+  it('keeps the acceptance when the emails fail, and a retry asks for them again', async () => {
+    const h = harness('PENDING', { emailThrowsOnce: true });
+    const originalError = console.error;
+    console.error = () => undefined;
+    try {
+      await acceptPartnerTerms(h.deps, input(), { ipHash: null });
+    } finally {
+      console.error = originalError;
+    }
     assert.equal(h.rows.length, 1);
     await acceptPartnerTerms(h.deps, input(), { ipHash: null });
     assert.equal(h.rows.length, 1);
-    assert.equal(curaleaf(h.emails).length, 1);
+    assert.equal(h.emails.length, 2);
+  });
+
+  it('records the published Partner Terms version once admin has published one, else the config default', () => {
+    const terms = ONBOARDING_CONTENT_DEFAULTS.partnerTerms;
+    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: terms }), partnerTermsVersion());
+    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: { ...terms, published: false, version: '2026-12' } }), partnerTermsVersion());
+    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: { ...terms, published: true, version: ' ' } }), partnerTermsVersion());
+    assert.equal(acceptedPartnerTermsVersion({ partnerTerms: { ...terms, published: true, version: '2026-12' } }), '2026-12');
   });
 
   it('refuses an unknown request and a request already decided, sending nothing', async () => {
@@ -198,7 +216,7 @@ describe('acceptPartnerTerms', () => {
     const mismatched = harness();
     await acceptPartnerTerms(mismatched.deps, input({ signerName: 'Jo Bloggs', pharmsmartTicket: ticket }), { ipHash: null });
     assert.equal(mismatched.rows[0]!.nameMatchesPharmsmart, false);
-    assert.equal(curaleaf(mismatched.emails).length, 1);
+    assert.equal(mismatched.emails.length, 1);
   });
 
   it('does not trust a forged ticket or one for another GPhC', async () => {

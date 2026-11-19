@@ -41,7 +41,8 @@ import { AuthContext, type AuthContextValue } from './AuthContext';
 import type { AuthState, AuthenticatedStaff, StaffRole } from './types';
 import { isLocalPortalPreview, localPreviewStaff } from '../dev/localPortalPreview';
 import { pharmsmartRedeemNext } from './pharmsmart-login';
-import { pharmacyAccountStateFromCode } from '../onboarding/branchOnboarding';
+import { holdMessageFromDetails, pharmacyAccountStateFromCode } from '../onboarding/branchOnboarding';
+import type { OnboardingHoldMessage } from '../shared/api';
 import { appPathPrefix, isCurrentSurfacePath, surfacePath } from './surface-path';
 
 const IDLE_LIMIT_MS = 15 * 60 * 1000;
@@ -63,9 +64,24 @@ function friendlyAuthError(error: unknown): string {
   return messages[error.code] || error.message;
 }
 
-/** A pharmacy HHH suspended or marked Not available: the sign-in page shows its status card. */
+/** A pharmacy HHH suspended or put on hold: the sign-in page shows its status instead. */
 function refusedAccountState(error: unknown) {
   return pharmacyAccountStateFromCode(error instanceof ApiRequestError ? error.code : null);
+}
+
+/**
+ * A sign-in (or any call) refused because the branch is on hold carries the message for
+ * its reason (`details: { hold }`). It goes in `accountHold`, so a password sign-in, a
+ * PharmSmart setup and a session ended mid-use all show the same hold page.
+ */
+function refusedSignIn(error: unknown): Pick<AuthState, 'accountState' | 'accountHold'> {
+  const accountState = refusedAccountState(error);
+  return {
+    accountState,
+    accountHold: accountState === 'on_hold'
+      ? holdMessageFromDetails<OnboardingHoldMessage>(error instanceof ApiRequestError ? error.rawDetails : null)
+      : null,
+  };
 }
 
 function hasTotp(user: User) {
@@ -231,7 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try { await finishFirebaseSignIn(user); }
-      catch (error) { setState({ phase: 'error', staff: null, error: friendlyAuthError(error), notice: null, accountState: refusedAccountState(error) }); }
+      catch (error) { setState({ phase: 'error', staff: null, error: friendlyAuthError(error), notice: null, ...refusedSignIn(error) }); }
     });
   }, [finishFirebaseSignIn, setAuthenticatedSession]);
 
@@ -247,14 +263,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
     const sessionEnded = (event: Event) => {
-      const code = (event as CustomEvent<{ code?: string }>).detail?.code;
+      const detail = (event as CustomEvent<{ code?: string; details?: unknown }>).detail;
+      const code = detail?.code;
       if (code === 'APP_CHECK_REQUIRED') return;
       const accountState = pharmacyAccountStateFromCode(code);
+      const accountHold = accountState === 'on_hold' ? holdMessageFromDetails<OnboardingHoldMessage>(detail?.details) : null;
       const notice = code === 'SESSION_IDLE_EXPIRED'
         ? 'Your session was locked after 15 minutes of inactivity.'
         : 'Your secure session ended. Sign in again to continue.';
       setApiCsrfToken(null);
-      setState({ phase: 'anonymous', staff: null, error: null, notice: accountState ? null : notice, accountState });
+      setState({ phase: 'anonymous', staff: null, error: null, notice: accountState ? null : notice, accountState, accountHold });
       channel.postMessage({ type: 'signed-out', reason: notice });
       redirectToLogin(true);
     };
@@ -355,7 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [setAuthenticatedSession]);
 
   const signInStaff = useCallback(async (email: string, password: string) => {
-    setState(current => ({ ...current, phase: 'loading', error: null, notice: null, accountState: null }));
+    setState(current => ({ ...current, phase: 'loading', error: null, notice: null, accountState: null, accountHold: null }));
     try {
       const credential = await signInWithEmailAndPassword(requireFirebaseAuth(), email.trim(), password);
       if (serverSessionAuth) await finishFirebaseSignIn(credential.user);
@@ -365,7 +383,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState({ phase: 'mfa-challenge', staff: null, error: null, notice: null });
         return;
       }
-      setState({ phase: 'anonymous', staff: null, error: friendlyAuthError(error), notice: null, accountState: refusedAccountState(error) });
+      setState({ phase: 'anonymous', staff: null, error: friendlyAuthError(error), notice: null, ...refusedSignIn(error) });
     }
   }, [finishFirebaseSignIn]);
 
@@ -440,7 +458,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       'EMAIL_IN_USE',
       'ACCOUNT_DISABLED',
       'PHARMACY_SUSPENDED',
-      'PHARMACY_NOT_AVAILABLE',
+      'PHARMACY_ON_HOLD',
       'EMAIL_NOT_VERIFIED',
       'ACCOUNT_INACTIVE',
     ].includes(error.code);
@@ -456,7 +474,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [establishServerSession]);
 
   const signInWithPharmsmart = useCallback(async (token: string) => {
-    setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Checking your PharmSmart sign-in.', pharmsmartSetup: null, pharmsmartWelcome: null, accountState: null }));
+    setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Checking your PharmSmart sign-in.', pharmsmartSetup: null, pharmsmartWelcome: null, accountState: null, accountHold: null }));
     try {
       const result = await redeemPharmsmartLogin(token);
       const next = pharmsmartRedeemNext(result);
@@ -473,7 +491,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await openPharmsmartSession(next.customToken);
     } catch (error) {
       await signOut(requireFirebaseAuth()).catch(() => undefined);
-      setState({ phase: 'anonymous', staff: null, error: pharmsmartFailure(error), notice: null, pharmsmartSetup: null, pharmsmartWelcome: null, accountState: refusedAccountState(error) });
+      setState({ phase: 'anonymous', staff: null, error: pharmsmartFailure(error), notice: null, pharmsmartSetup: null, ...refusedSignIn(error) });
     }
   }, [openPharmsmartSession]);
 
@@ -483,6 +501,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(current => ({ ...current, phase: 'loading', error: null, notice: 'Opening your pharmacy workspace from PharmSmart.' }));
     try {
       const result = await completePharmsmartSetup({ ticket, ...input });
+      const next = pharmsmartRedeemNext(result);
+      if (next.action === 'welcome') {
+        // An activated branch on hold gets its hold page here instead of a session.
+        await signOut(requireFirebaseAuth()).catch(() => undefined);
+        setState({ phase: 'anonymous', staff: null, error: null, notice: null, pharmsmartSetup: null, pharmsmartWelcome: next.welcome });
+        return;
+      }
       if (result.status !== 'ready') {
         setState(current => ({ ...current, phase: 'anonymous', error: 'Add the missing sign-in details.', notice: null }));
         return;
@@ -496,7 +521,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         staff: null,
         error: pharmsmartFailure(error),
         notice: null,
-        accountState: refusedAccountState(error),
+        // On hold: the hold page replaces the setup form. Any other failure keeps the form to correct.
+        ...(refusedAccountState(error) === 'on_hold' ? { pharmsmartSetup: null } : {}),
+        ...refusedSignIn(error),
       }));
     }
   }, [openPharmsmartSession, state.pharmsmartSetup?.ticket]);

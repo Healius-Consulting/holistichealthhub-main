@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normaliseGphcNumber } from '../identity/pharmsmart-sso.js';
+import { ONBOARDING_HOLD_REASONS, type OnboardingHoldReason } from './content.js';
 
 export const MAX_LICENCE_BYTES = 4_000_000;
 
@@ -46,8 +47,13 @@ export type PharmacyOnboardingRequestRecord = {
   licenceFilename: string;
   filledFormStoragePath: string;
   organisationId: string | null;
-  /** The hold reason. Admin-only: never shown or emailed to the pharmacy. */
-  declineReason: string | null;
+  /**
+   * Why it is (or last was) on hold. The pharmacy sees that reason's wording (Hold
+   * email and hold page). Kept after the hold is lifted, as history.
+   */
+  holdReason: OnboardingHoldReason | null;
+  /** When the current (or last) hold was set or its reason changed. */
+  heldAt: string | null;
   decidedAt: string | null;
   decidedByUid: string | null;
   idempotencyKey: string;
@@ -83,6 +89,13 @@ export function londonLongDate(now: Date) {
     month: 'long',
     year: 'numeric',
   }).format(now);
+}
+
+/** The refusal text when a held branch's staff sign in; the hold message itself goes in `details.hold`. */
+export const PHARMACY_ON_HOLD_MESSAGE = 'This pharmacy\'s Holistic Health Hub application is on hold.';
+
+export function isOnboardingHoldReason(value: unknown): value is OnboardingHoldReason {
+  return typeof value === 'string' && (ONBOARDING_HOLD_REASONS as readonly string[]).includes(value);
 }
 
 export function publicOnboardingStatus(status: PharmacyOnboardingStatus): 'pending' | 'on_hold' | 'activated' {

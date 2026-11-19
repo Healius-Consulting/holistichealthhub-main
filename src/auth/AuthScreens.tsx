@@ -8,6 +8,7 @@ import { requireFirebaseAuth } from './firebase';
 import { totpQrDataUrl } from './totpQr';
 import { pharmsmartLoginQuery } from './pharmsmart-login';
 import { PharmsmartWelcome } from './PharmsmartOnboardingGuide';
+import { OnboardingHoldPage } from '../onboarding/OnboardingHold';
 import { useAuth } from './useAuth';
 import HhhBrandMark from '../components/HhhBrandMark';
 
@@ -143,6 +144,8 @@ export function StaffLogin() {
 
   if (state.pharmsmartSetup) return <PharmsmartSetupForm />;
   if (state.pharmsmartWelcome) return <PharmsmartWelcome welcome={state.pharmsmartWelcome} onUseEmail={clearPharmsmartSetup} />;
+  // On hold: the message for its reason (the generic one if the API sent none), in place of the sign-in form.
+  if (state.accountState === 'on_hold') return <OnboardingHoldPage hold={state.accountHold ?? null} />;
 
   return (
     <AuthShell>

@@ -56,3 +56,5 @@ export const publicWebhookLimiter = publicLimiter(15 * 60 * 1000, 300);
 export const publicReferralResolveLimiter = publicLimiter(15 * 60 * 1000, 240);
 export const publicPostcodeSearchLimiter = publicLimiter(15 * 60 * 1000, 120);
 export const publicPharmsmartLoginLimiter = publicLimiter(15 * 60 * 1000, 20);
+/** The public Partner Terms page: a read, cached, so a generous allowance that still stops scraping loops. */
+export const publicPartnerTermsReadLimiter = publicLimiter(15 * 60 * 1000, 120);

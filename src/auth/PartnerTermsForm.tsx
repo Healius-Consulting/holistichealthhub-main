@@ -1,8 +1,11 @@
+import '../styles/partner-terms-form.css';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiRequestError, acceptPartnerTerms, describeApiError } from '../shared/api';
 import type { PharmsmartTermsRequest } from './types';
 import { Field, FormBottom, FormIntro, FormTop, PillChoice, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
+import { loadPartnerTerms } from '../onboarding/loadPartnerTerms';
+import type { PartnerTermsLoad } from '../onboarding/partnerTerms';
 
 const ROLES = [
   { id: 'SUPERINTENDENT_PHARMACIST', label: 'Superintendent pharmacist', pharmacist: true },
@@ -16,9 +19,9 @@ type RoleId = typeof ROLES[number]['id'];
 type Person = { name: string; email: string };
 
 /**
- * The Partner Terms step, between the Curaleaf form and Worldpay. The Terms text is a
- * placeholder block until the client's final layout and wording replace it as content.
- * Accepting is what sends the Curaleaf application.
+ * The Partner Terms step, between the Curaleaf form and Worldpay. Shows the Terms HHH
+ * published in admin, with their version; until they are published it keeps the
+ * placeholder block. Accepting is what sends the Curaleaf application.
  */
 export function PartnerTermsForm({
   open,
@@ -63,6 +66,15 @@ export function PartnerTermsForm({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   busyRef.current = busy;
+  const [terms, setTerms] = useState<PartnerTermsLoad>({ state: 'loading' });
+
+  // Fetched once the form opens; anything but published Terms keeps the placeholder.
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void loadPartnerTerms().then(result => { if (active) setTerms(result); });
+    return () => { active = false; };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -205,9 +217,15 @@ export function PartnerTermsForm({
             ) : (
               <>
                 <FormIntro title="Read and sign">Read the Partner Terms, then sign to accept them for {company}.</FormIntro>
-                <Section title="The terms" tone="quiet">
-                  <div className="partner-terms-form__terms" aria-label="Partner Terms text">
-                    <p>New item — to be updated here</p>
+                <Section title="The terms" description={terms.state === 'published' && terms.version ? `Version ${terms.version}` : undefined} tone="quiet">
+                  <div
+                    className={`partner-terms-form__terms${terms.state === 'published' ? ' is-published' : ''}`}
+                    aria-label="Partner Terms text"
+                    {...(terms.state === 'published' ? { role: 'region', tabIndex: 0 } : {})}
+                  >
+                    {terms.state === 'published'
+                      ? terms.paragraphs.map((paragraph, index) => <p key={index} className="partner-terms-form__paragraph">{paragraph}</p>)
+                      : <p>New item — to be updated here</p>}
                   </div>
                 </Section>
                 <SummaryCard title="Signing as" step={1} onEdit={() => setStep(1)}>

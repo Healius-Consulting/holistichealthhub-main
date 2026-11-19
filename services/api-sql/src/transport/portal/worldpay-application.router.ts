@@ -239,7 +239,7 @@ export function createPortalWorldpayApplicationRouter(depsFor: (context: Request
   router.put('/portal/admin/worldpay-content/:key', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const scope = assertPlatformScope(req.context!);
-      const key = z.enum(['recipients', 'wp01', 'wp02', 'pricingPanel', 'schemeAnswers', 's04Note']).parse(req.params.key) as Exclude<WorldpayContentKey, 'servicePdf'>;
+      const key = z.enum(['recipients', 'wp01', 'pricingPanel', 'schemeAnswers', 's04Note']).parse(req.params.key) as Exclude<WorldpayContentKey, 'servicePdf'>;
       const value = WORLDPAY_CONTENT_SCHEMAS[key].parse((req.body as { value?: unknown })?.value);
       await depsFor(req.context!).content.write(WORLDPAY_CONTENT_KEYS[key], value, scope.uid);
       res.setHeader('Cache-Control', 'private, no-store');

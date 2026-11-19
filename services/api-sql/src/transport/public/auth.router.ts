@@ -22,6 +22,7 @@ import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { toPortalOrganisation } from '../portal/pharmacy-contracts.js';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
+import { sqlHoldMessages } from '../../application/pharmacy-onboarding/hold-message.js';
 
 const sessionInputSchema = z.object({
   idToken: z.string().min(100).max(20_000),
@@ -66,6 +67,7 @@ export function createAuthRouter(): Router {
   const integrationRepo = new SqlIntegrationRepository();
   const notificationRepo = new SqlNotificationRepository();
   const onboardingRepo = new SqlPharmacyOnboardingRepository();
+  const holdMessages = sqlHoldMessages();
   const markPharmsmartAccount = async (input: {
     uid: string;
     organisationId: string;
@@ -137,6 +139,8 @@ export function createAuthRouter(): Router {
     audit: input => identityRepo.appendAudit(input),
     setupSecret: config.IP_HASH_SECRET ?? `${config.FIREBASE_PROJECT_ID}:pharmsmart-sso`,
     recordFirstVisit: sqlClickupHooks().firstVisit,
+    holdMessage: (reason, branchName) => holdMessages.forReason(reason, branchName),
+    branchHoldMessage: branch => holdMessages.forBranch(branch),
   });
 
   // GET /v1/auth/csrf - Issue or refresh CSRF token

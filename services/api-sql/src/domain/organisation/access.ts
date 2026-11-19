@@ -8,11 +8,11 @@ function isTrainingGphc(organisation: Pick<OrganisationRecord, 'gphcNumber'>): b
 }
 
 /**
- * Suspended (PAUSED) and Not available (an existing Curaleaf customer) pharmacies get
- * no access at all: staff are refused at sign-in and admission, intake is off.
+ * Suspended (PAUSED) pharmacies, and branches whose onboarding is on hold (ON_HOLD),
+ * get no access at all: staff are refused at sign-in and admission, intake is off.
  */
 export function isClosedToPharmacy(organisation: Pick<OrganisationRecord, 'status'>): boolean {
-  return organisation.status === 'PAUSED' || organisation.status === 'NOT_AVAILABLE';
+  return organisation.status === 'PAUSED' || organisation.status === 'ON_HOLD';
 }
 
 /** Public eligibility token and HHH intake queue — independent of pharmacy operational access. */

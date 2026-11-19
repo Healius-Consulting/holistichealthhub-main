@@ -11,9 +11,11 @@ import {
   type PharmsmartSetupGap,
   type PharmsmartStaffCandidate,
 } from '../../domain/identity/pharmsmart-sso.js';
-import { compactGphcNumber, type PharmacyOnboardingStatus } from '../../domain/pharmacy-onboarding/request.js';
+import { compactGphcNumber, PHARMACY_ON_HOLD_MESSAGE, type PharmacyOnboardingStatus } from '../../domain/pharmacy-onboarding/request.js';
 import { issuePharmsmartNamesTicket } from '../../domain/pharmacy-onboarding/terms.js';
 import type { AppendAuditInput } from '../../repositories/ports/identity.port.js';
+import type { OnboardingHoldReason } from '../../domain/pharmacy-onboarding/content.js';
+import type { OnboardingHoldMessage } from '../pharmacy-onboarding/onboarding-content.js';
 import { bestEffort, type ClickupHooks } from '../clickup/clickup-hooks.js';
 
 export type PharmsmartRedeemContext = {
@@ -25,6 +27,9 @@ type PharmacyLink = {
   id: string;
   gphcNumber: string;
   primaryContactUid?: string | null;
+  /** ON_HOLD: the branch's onboarding is on hold, so no session is opened. */
+  status?: string;
+  name?: string;
 };
 
 export type PharmsmartLoginResult =
@@ -52,6 +57,12 @@ export type PharmsmartLoginResult =
      * at the Terms step. Null shows the forms.
      */
     onboardingRequest: PharmsmartOnboardingRequestState;
+    /**
+     * The hold message for its reason, merged for the branch: set when the request is
+     * on hold, and when an activated branch on hold signs in. Shown instead of the
+     * forms or the account.
+     */
+    hold: OnboardingHoldMessage | null;
     /** The request to accept the Terms against, only when `terms_outstanding`. */
     termsRequest: { id: string; pharmacyName: string; registeredCompanyName: string } | null;
     /** Signed PharmSmart superintendent and manager names, for the Terms step's soft check. */
@@ -66,6 +77,7 @@ type LatestOnboardingRequest = {
   termsAccepted: boolean;
   pharmacyName: string;
   registeredCompanyName: string;
+  holdReason?: OnboardingHoldReason | null;
 };
 
 function onboardingRequestState(request: LatestOnboardingRequest | null | undefined): PharmsmartOnboardingRequestState {
@@ -96,6 +108,10 @@ export class PharmsmartSsoService {
     setupSecret: string;
     /** 2.11 stage-1 record and ClickUp Interest card (application/clickup). Best effort: never fails sign-in. */
     recordFirstVisit?: ClickupHooks['firstVisit'];
+    /** The hold page wording for a reason, merged with the branch name. */
+    holdMessage: (reason: OnboardingHoldReason | null, branchName: string) => Promise<OnboardingHoldMessage>;
+    /** The hold message for an activated branch on hold (its request's reason). */
+    branchHoldMessage: (branch: { id: string; name?: string | null }) => Promise<OnboardingHoldMessage>;
   }) {}
 
   async redeem(token: string, context: PharmsmartRedeemContext): Promise<PharmsmartLoginResult> {
@@ -126,6 +142,9 @@ export class PharmsmartSsoService {
         const request = gphcNumber ? await this.deps.findLatestOnboardingRequest(gphcNumber) : null;
         if (!request) await bestEffort('first visit', () => this.deps.recordFirstVisit?.({ gphcNumber, pharmsmartPharmacyId: info.pharmsmartPharmacyId, tradingName: info.prefill.pharmacyName }));
         const state = onboardingRequestState(request);
+        const hold = state === 'on_hold' && request
+          ? await this.deps.holdMessage(request.holdReason ?? null, request.pharmacyName)
+          : null;
         return {
           status: 'welcome',
           email: info.email,
@@ -135,20 +154,34 @@ export class PharmsmartSsoService {
           pharmsmartPharmacyId: info.pharmsmartPharmacyId,
           prefill: info.prefill,
           onboardingRequest: state,
+          hold,
           termsRequest: state === 'terms_outstanding' && request
             ? { id: request.id, pharmacyName: request.pharmacyName, registeredCompanyName: request.registeredCompanyName }
             : null,
-          pharmsmartTicket: issuePharmsmartNamesTicket({
-            gphcNumber: gphcNumber ?? info.gphcNumber,
-            people: [
-              { firstName: info.prefill.superintendentFirstName ?? null, lastName: info.prefill.superintendentLastName ?? null },
-              { firstName: info.prefill.managerFirstName ?? null, lastName: info.prefill.managerLastName ?? null },
-            ],
-          }, this.deps.setupSecret),
+          pharmsmartTicket: this.namesTicket(gphcNumber ?? info.gphcNumber, info.prefill),
         };
       }
       await this.refuse(null, matched.reason, context);
       throw new HttpError(403, 'This pharmacy is not on Holistic Health Hub yet. Sign in with the pharmacy account if it has already been invited.', 'PHARMACY_NOT_LINKED');
+    }
+
+    // A branch on hold: no account and no session, only its hold message.
+    const branch = pharmacies.find(pharmacy => pharmacy.id === matched.organisationId);
+    if (branch?.status === 'ON_HOLD') {
+      await this.refuse(branch.id, 'ON_HOLD', context);
+      return {
+        status: 'welcome',
+        email: info.email,
+        firstName: info.firstName,
+        lastName: info.lastName,
+        gphcNumber: info.gphcNumber,
+        pharmsmartPharmacyId: info.pharmsmartPharmacyId,
+        prefill: info.prefill,
+        onboardingRequest: 'on_hold',
+        hold: await this.deps.branchHoldMessage({ id: branch.id, name: branch.name ?? null }),
+        termsRequest: null,
+        pharmsmartTicket: this.namesTicket(compactGphcNumber(info.gphcNumber) ?? info.gphcNumber, info.prefill),
+      };
     }
 
     return this.openPerson(matched.organisationId, {
@@ -169,9 +202,16 @@ export class PharmsmartSsoService {
       throw new HttpError(401, 'This PharmSmart sign-in has expired. Open the link from PharmSmart again.', 'PHARMSMART_TOKEN_EXPIRED');
     }
     const pharmacies = await this.deps.listOrganisations();
-    if (!pharmacies.some(pharmacy => pharmacy.id === claims.organisationId)) {
+    const branch = pharmacies.find(pharmacy => pharmacy.id === claims.organisationId);
+    if (!branch) {
       await this.refuse(null, 'NOT_FOUND', context);
       throw new HttpError(403, 'This pharmacy is not on Holistic Health Hub yet. Sign in with the pharmacy account if it has already been invited.', 'PHARMACY_NOT_LINKED');
+    }
+    // Put on hold since the PharmSmart link was opened: refused like a password sign-in.
+    if (branch.status === 'ON_HOLD') {
+      await this.refuse(branch.id, 'ON_HOLD', context);
+      const hold = await this.deps.branchHoldMessage({ id: branch.id, name: branch.name ?? null }).catch(() => null);
+      throw new HttpError(403, PHARMACY_ON_HOLD_MESSAGE, 'PHARMACY_ON_HOLD', { hold });
     }
     const person: Person = {
       email: claims.email ?? input.email ?? null,
@@ -250,6 +290,16 @@ export class PharmsmartSsoService {
       details: { pharmsmartPharmacyId, account: 'pharmsmart-sso' },
     });
     return { status: 'ready', customToken: await this.deps.createCustomToken(uid, { pharmsmartSso: true }) };
+  }
+
+  private namesTicket(gphcNumber: string, prefill: PharmsmartPrefill) {
+    return issuePharmsmartNamesTicket({
+      gphcNumber,
+      people: [
+        { firstName: prefill.superintendentFirstName ?? null, lastName: prefill.superintendentLastName ?? null },
+        { firstName: prefill.managerFirstName ?? null, lastName: prefill.managerLastName ?? null },
+      ],
+    }, this.deps.setupSecret);
   }
 
   private async refuse(organisationId: string | null, reason: string, context: PharmsmartRedeemContext) {

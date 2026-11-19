@@ -11,18 +11,16 @@ import {
 } from '../../domain/pharmacy-onboarding/request.js';
 import { pharmacyOnboardingDeferralSchema } from '../../domain/pharmacy-onboarding/deferral.js';
 import { lookUpCompany } from '../../application/pharmacy-onboarding/companies-house.js';
-import { publicCompanyLookupLimiter, publicCuraleafFormLimiter, publicPartnerTermsLimiter, publicPharmacyOnboardingDeferralLimiter, publicWorldpayFormLimiter } from '../../security/public-limits.js';
+import { publicCompanyLookupLimiter, publicCuraleafFormLimiter, publicPartnerTermsLimiter, publicPharmacyOnboardingDeferralLimiter } from '../../security/public-limits.js';
 import { recordPharmacyOnboardingDeferral } from '../../application/pharmacy-onboarding/record-deferral.js';
-import { submitWorldpayForm } from '../../application/pharmacy-onboarding/submit-worldpay.js';
-import { sendEmailNow } from '../../application/workers/deliver-messages.js';
-import { worldpayFormSchema } from '../../domain/pharmacy-onboarding/worldpay.js';
-import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { submitPharmacyOnboardingRequest } from '../../application/pharmacy-onboarding/submit-request.js';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
 import { acceptPartnerTerms } from '../../application/pharmacy-onboarding/accept-terms.js';
-import { partnerTermsVersion, pharmsmartTicketSecret } from '../../application/pharmacy-onboarding/onboarding-config.js';
+import { acceptedPartnerTermsVersion, pharmsmartTicketSecret } from '../../application/pharmacy-onboarding/onboarding-config.js';
+import { readOnboardingContent } from '../../application/pharmacy-onboarding/onboarding-content.js';
+import { sqlOnboardingEmails } from '../../application/pharmacy-onboarding/onboarding-emails.service.js';
 import { partnerTermsAcceptanceSchema } from '../../domain/pharmacy-onboarding/terms.js';
 import { ipHash } from '../../security/session-utils.js';
 
@@ -84,7 +82,7 @@ export function createPublicPharmacyOnboardingRouter(): Router {
   const router = Router();
   const repo = new SqlPharmacyOnboardingRepository();
   const storage = new StorageProvider();
-  const notificationRepo = new SqlNotificationRepository();
+  const emails = sqlOnboardingEmails();
   const content = new SqlPlatformContentRepository();
   const demoRepo = new SqlDemoPharmacyRepository();
 
@@ -120,8 +118,8 @@ export function createPublicPharmacyOnboardingRouter(): Router {
       const input = partnerTermsAcceptanceSchema.parse(req.body);
       const { acceptance, request } = await acceptPartnerTerms({
         repo,
-        notificationRepo,
-        termsVersion: partnerTermsVersion(),
+        emails,
+        termsVersion: acceptedPartnerTermsVersion(await readOnboardingContent(content)),
         ticketSecret: pharmsmartTicketSecret(),
         isDemo: gphc => isDemoGphc(content, gphc),
       }, input, { ipHash: ipHash(req) });
@@ -134,18 +132,6 @@ export function createPublicPharmacyOnboardingRouter(): Router {
       });
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(201).json({ acceptedAt: acceptance.acceptedAt, termsVersion: acceptance.termsVersion });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  // POST /v1/public/pharmacy-onboarding-worldpay - the Worldpay form, emailed as a PDF and never stored
-  router.post('/public/pharmacy-onboarding-worldpay', publicWorldpayFormLimiter, async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const form = worldpayFormSchema.parse(req.body);
-      const note = await submitWorldpayForm(repo, email => sendEmailNow(email), form);
-      res.setHeader('Cache-Control', 'private, no-store');
-      res.status(201).json({ submittedAt: note.submittedAt });
     } catch (error) {
       next(error);
     }

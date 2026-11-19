@@ -1,4 +1,5 @@
 import { dataConnect } from '../../bootstrap/firebase.js';
+import { asUuid } from '../../domain/common/uuid.js';
 import type { NotificationOutboxRecord, NotificationRepositoryPort } from '../ports/notification.port.js';
 
 const OUTBOX_FIELDS = `
@@ -17,6 +18,27 @@ const OUTBOX_FIELDS = `
   status
   attemptCount
   createdAt
+`;
+
+/** The send log also needs when each message went or failed, and why. */
+const LOG_FIELDS = `
+  ${OUTBOX_FIELDS}
+  onboardingRequestId
+  sentAt
+  failedAt
+  failureCode
+`;
+
+const LIST_FOR_ONBOARDING_REQUEST_GQL = `
+  query ListNotificationsForOnboardingRequest($onboardingRequestId: UUID!, $limit: Int!) {
+    notificationOutboxes(
+      where: { onboardingRequestId: { eq: $onboardingRequestId } }
+      orderBy: [{ createdAt: DESC }]
+      limit: $limit
+    ) {
+      ${LOG_FIELDS}
+    }
+  }
 `;
 
 const FIND_BY_IDEMPOTENCY_GQL = `
@@ -62,6 +84,7 @@ const INSERT_GQL = `
     $payload: Any!
     $idempotencyKey: String!
     $nextAttemptAt: Timestamp
+    $onboardingRequestId: UUID
   ) {
     notificationOutbox_insert(data: {
       organisationId: $organisationId
@@ -76,6 +99,7 @@ const INSERT_GQL = `
       payload: $payload
       idempotencyKey: $idempotencyKey
       nextAttemptAt: $nextAttemptAt
+      onboardingRequestId: $onboardingRequestId
       status: PENDING
       attemptCount: 0
       version: 1
@@ -157,6 +181,7 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
     payload: unknown;
     idempotencyKey: string;
     nextAttemptAt?: string | null;
+    onboardingRequestId?: string | null;
   }): Promise<{ id?: string; created: boolean }> {
     const existing = await this.findByIdempotencyKey(data.idempotencyKey);
     if (existing) return { id: existing.id, created: false };
@@ -177,6 +202,7 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
             ccRecipients: data.ccRecipients?.length ? data.ccRecipients : null,
             payload: data.payload,
             idempotencyKey: data.idempotencyKey,
+            onboardingRequestId: data.onboardingRequestId ? asUuid(data.onboardingRequestId) : null,
           },
         },
       );
@@ -186,6 +212,14 @@ export class SqlNotificationRepository implements NotificationRepositoryPort {
       if (raced) return { id: raced.id, created: false };
       throw error;
     }
+  }
+
+  async listForOnboardingRequest(onboardingRequestId: string, limit = 200): Promise<NotificationOutboxRecord[]> {
+    const result = await dataConnect.executeGraphql<{ notificationOutboxes: NotificationOutboxRecord[] }, any>(
+      LIST_FOR_ONBOARDING_REQUEST_GQL,
+      { variables: { onboardingRequestId: asUuid(onboardingRequestId), limit } },
+    );
+    return result.data.notificationOutboxes ?? [];
   }
 
   async listPending(limit = 100): Promise<NotificationOutboxRecord[]> {

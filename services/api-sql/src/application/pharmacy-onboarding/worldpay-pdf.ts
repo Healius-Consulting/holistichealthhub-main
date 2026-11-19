@@ -1,10 +1,8 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import { londonLongDate } from '../../domain/pharmacy-onboarding/request.js';
-import { formatSortCode, type WorldpayForm } from '../../domain/pharmacy-onboarding/worldpay.js';
+import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib';
 
 /**
- * A readable A4 copy of the Worldpay card processing questionnaire, in the same
- * order as Worldpay's spreadsheet so it can be forwarded or copied across as is.
+ * A readable A4 questionnaire PDF (label and answer rows under banded headings), used
+ * for the Worldpay application (application/worldpay-application/documents.ts).
  */
 
 const PAGE = { width: 595.28, height: 841.89 };
@@ -44,99 +42,6 @@ function wrap(text: string, font: PDFFont, size: number, maxWidth: number) {
   }
   if (line) lines.push(line);
   return lines.length ? lines : ['Not given'];
-}
-
-const pct = (value: number) => `${value}%`;
-const money = (value: string) => {
-  const number = Number(value.replace(/[£,\s]/g, ''));
-  return Number.isFinite(number) && value.trim() !== ''
-    ? `£${number.toLocaleString('en-GB', { maximumFractionDigits: 2 })}`
-    : value;
-};
-const ukDate = (iso: string) => {
-  const [year, month, day] = iso.split('-');
-  return year && month && day ? `${day}/${month}/${year}` : iso;
-};
-
-export function worldpaySections(form: WorldpayForm): Section[] {
-  const principals = form.principals.map((person, index): Section => ({
-    title: form.principals.length > 1 ? `Principal ${index + 1}` : 'Principal',
-    rows: [
-      ['Title', person.title],
-      ['First name(s)', person.firstNames],
-      ['Surname', person.surname],
-      ['Date of birth', ukDate(person.dateOfBirth)],
-      ['Nationality', person.nationality],
-      ['Home address', person.homeAddress],
-      ['Country of residence', person.countryOfResidence],
-      ['Years at current address', person.yearsAtAddress],
-      ['Previous address', person.previousAddress],
-      ['Mobile number', person.mobile],
-      ['Email address', person.email],
-      ['Shareholding', person.shareholding.endsWith('%') ? person.shareholding : `${person.shareholding}%`],
-    ],
-  }));
-  return [
-    {
-      title: 'About your business',
-      rows: [
-        ['Legal name of business', form.legalName],
-        ['Trading name of business', form.tradingName],
-        ['Contact name', form.contactName],
-        ['Contact position', form.contactPosition],
-        ['Contact phone number', form.contactPhone],
-        ['Business type', form.businessType],
-        ['Registration no', form.registrationNumber],
-        ['Registered address', form.registeredAddress],
-        ['Nature of business', form.natureOfBusiness],
-        ['Pharmacy GPhC number', form.gphcNumber],
-        ['Trading address', form.tradingAddress],
-        ['Landline phone number', form.landline],
-        ['Mobile phone number', form.mobile],
-        ['Business email address', form.businessEmail],
-        ['Website address', form.website],
-        ['VAT registration no', form.vatNumber],
-        ['Date business commenced trading', form.tradingSince],
-      ],
-    },
-    ...principals,
-    {
-      title: 'Nature of transactions',
-      rows: [
-        ['Terminal connection', form.terminalConnection],
-        ['Face to face with customers', pct(form.faceToFacePercent)],
-        ['Over the phone with customers', pct(form.phonePercent)],
-        ['Via the internet (e-commerce)', pct(form.internetPercent)],
-        ['Pay and receive immediately', pct(form.immediatePercent)],
-        ['Pay and receive in 1-3 days', pct(form.oneToThreeDaysPercent)],
-        ['Pay and receive in 3-5 days', pct(form.threeToFiveDaysPercent)],
-        ['Pay and receive in 5+ days', pct(form.fivePlusDaysPercent)],
-      ],
-    },
-    {
-      title: 'Financials',
-      rows: [
-        ['Annual business turnover', money(form.annualTurnover)],
-        ['Annual card processing turnover', money(form.annualCardTurnover)],
-        ['Average transaction value', money(form.averageTransaction)],
-        ['Take AMEX', form.takeAmex],
-        ['Name of bank', form.bankName],
-        ['Name on account', form.accountName],
-        ['Account no', form.accountNumber],
-        ['Sort code', formatSortCode(form.sortCode)],
-      ],
-    },
-    {
-      title: 'Visa / Mastercard additional information',
-      rows: [
-        ['1. Sales limited to the UK only?', form.salesCountries],
-        ['2. No sales can be made to the U.S.', form.noUsSales],
-        ['3. Licensing and dispensing controls', form.complianceConfirmations],
-        ['4. Annual registration fees', form.registrationFees],
-        ['5. Online consultations', form.onlineConsultations],
-      ],
-    },
-  ];
 }
 
 /** Where a row's text and rule go. Points from the page bottom, as PDF draws them. */
@@ -210,14 +115,6 @@ export function layoutWorldpaySections(
     y -= 14;
   }
   return ops;
-}
-
-export async function renderWorldpayPdf(form: WorldpayForm, submittedAt: Date) {
-  return renderQuestionnairePdf({
-    title: `Worldpay card processing questionnaire - ${form.tradingName}`,
-    heading: form.tradingName,
-    subline: `Submitted to Holistic Health Hub on ${londonLongDate(submittedAt)} for Worldpay`,
-  }, worldpaySections(form));
 }
 
 /** Draws questionnaire sections (label and answer rows under banded headings) as an A4 PDF. */

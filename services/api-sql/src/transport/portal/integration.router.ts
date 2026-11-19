@@ -23,8 +23,9 @@ import { SqlCuraleafQuoteBankRepository } from '../../repositories/sql/curaleaf-
 import { SqlIntegrationRepository } from '../../repositories/sql/integration.sql.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
-import { applyCuraleafActivation } from '../../application/organisation/curaleaf-activation.js';
+import { applyCuraleafActivation, sendGoLiveEmail } from '../../application/organisation/curaleaf-activation.js';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
+import { sqlOnboardingEmails } from '../../application/pharmacy-onboarding/onboarding-emails.service.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { requirePharmacyOperationalWrites } from './require-operational-writes.js';
@@ -128,6 +129,7 @@ export function createPortalIntegrationRouter(): Router {
   const quoteBankRepo = new SqlCuraleafQuoteBankRepository();
   const organisationRepo = new SqlOrganisationRepository();
   const identityRepo = new SqlIdentityRepository();
+  const onboardingEmails = sqlOnboardingEmails();
 
   const status = (integration: IntegrationName) => async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -230,6 +232,7 @@ export function createPortalIntegrationRouter(): Router {
         }).catch(() => undefined);
       }
       if (organisation) await sqlClickupHooks().curaleafConnectionSaved({ organisation, pharCodeEntered: true, apiKeyEntered: true, wentLive: activation === 'went_live' });
+      await sendGoLiveEmail(onboardingEmails, organisationId, activation);
       res.status(200).json(curaleafStatusPayload(restored, {
         message: validation.message,
         checkedAt: validation.checkedAt,

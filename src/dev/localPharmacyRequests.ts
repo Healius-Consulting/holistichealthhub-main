@@ -1,12 +1,13 @@
 import type { PharmacyTenant } from '../context/AppContext';
-import type { PharmacyOnboardingRequestView } from '../shared/api';
+import type { OnboardingEmailLogEntry, PharmacyOnboardingRequestView } from '../shared/api';
 
 /** Sample requests for `?devPortal=admin` on localhost only. Never shipped data. */
 const base = {
   faxNumber: null,
   licenceFilename: '',
   organisationId: null,
-  declineReason: null,
+  holdReason: null,
+  heldAt: null,
   decidedAt: null,
 } satisfies Partial<PharmacyOnboardingRequestView>;
 
@@ -69,7 +70,8 @@ export const LOCAL_PREVIEW_PHARMACY_REQUESTS: PharmacyOnboardingRequestView[] = 
     signedOn: '2026-11-10',
     createdAt: '2026-11-10T14:30:00Z',
     decidedAt: '2026-11-11T10:00:00Z',
-    declineReason: 'This GPhC number belongs to a pharmacy that is already part of a group on the platform.',
+    holdReason: 'EXISTING_CURALEAF_CUSTOMER',
+    heldAt: '2026-11-11T10:00:00Z',
     worldpaySubmittedAt: null,
   },
   {
@@ -91,7 +93,82 @@ export const LOCAL_PREVIEW_PHARMACY_REQUESTS: PharmacyOnboardingRequestView[] = 
     createdAt: '2026-11-18T11:20:00Z',
     worldpaySubmittedAt: null,
   },
+  {
+    ...base,
+    id: 'preview-request-5',
+    status: 'on_hold',
+    organisationId: 'preview-new-pharmacy-3',
+    pharmacistName: 'Grace Lee',
+    pharmacyName: 'Riverside Pharmacy',
+    registeredCompanyName: 'Riverside Chemists Ltd',
+    invoiceAddress: '3 River Street, York, YO1 7AB',
+    deliveryAddress: '3 River Street, York, YO1 7AB',
+    gphcNumber: '1144668',
+    pharmacyEmail: 'riverside@example.com',
+    accountsEmail: 'accounts@riverside.example',
+    pharmacyPhone: '01904 000 333',
+    accountsPhone: '01904 000 334',
+    signatureName: 'Grace Lee',
+    signedOn: '2026-11-12',
+    createdAt: '2026-11-12T10:00:00Z',
+    decidedAt: '2026-11-17T15:30:00Z',
+    holdReason: 'MORE_INFORMATION_NEEDED',
+    heldAt: '2026-11-17T15:30:00Z',
+    worldpaySubmittedAt: '2026-11-12T10:30:00Z',
+  },
+  {
+    ...base,
+    id: 'preview-request-6',
+    status: 'activated',
+    organisationId: 'preview-live-pharmacy',
+    pharmacistName: 'Daniel Okafor',
+    pharmacyName: 'Meadowbank Pharmacy',
+    registeredCompanyName: 'Meadowbank Healthcare Ltd',
+    invoiceAddress: '27 Meadowbank Road, Manchester, M14 5LS',
+    deliveryAddress: '27 Meadowbank Road, Manchester, M14 5LS',
+    gphcNumber: '1077341',
+    pharmacyEmail: 'team@meadowbank.example',
+    accountsEmail: 'team@meadowbank.example',
+    pharmacyPhone: '0161 496 0123',
+    accountsPhone: '0161 496 0123',
+    signatureName: 'Daniel Okafor',
+    signedOn: '2026-10-01',
+    createdAt: '2026-10-01T09:00:00Z',
+    worldpaySubmittedAt: '2026-10-01T09:30:00Z',
+  },
 ];
+
+const sent = (id: string, kind: OnboardingEmailLogEntry['kind'], recipients: string[], at: string): OnboardingEmailLogEntry => ({
+  id, kind, recipients, status: 'SENT', queuedAt: at, sentAt: at, failedAt: null, failureCode: null,
+});
+
+/** Sample send logs for the preview requests, newest first; one failed send to show Resend. */
+export const LOCAL_PREVIEW_ONBOARDING_EMAILS: Record<string, OnboardingEmailLogEntry[]> = {
+  'preview-request-1': [
+    sent('pe-1c', 'activation', ['asha@kirkgate.example', 'shop@kirkgate.example'], '2026-11-16T10:00:00Z'),
+    sent('pe-1b', 'curaleafApplication', ['accounts@curaleaf.example', 'spatel@healiusconsulting.com'], '2026-11-15T09:12:30Z'),
+    sent('pe-1a', 'sent', ['asha@kirkgate.example', 'shop@kirkgate.example'], '2026-11-15T09:12:30Z'),
+  ],
+  'preview-request-2': [
+    { ...sent('pe-2b', 'curaleafApplication', ['accounts@curaleaf.example'], '2026-11-16T08:05:30Z'), status: 'FAILED', sentAt: null, failedAt: '2026-11-16T08:06:00Z', failureCode: 'SMTP_TIMEOUT' },
+    sent('pe-2a', 'sent', ['hello@harbourlane.example'], '2026-11-16T08:05:30Z'),
+  ],
+  'preview-request-3': [
+    sent('pe-3b', 'hold', ['northgate@example.com'], '2026-11-11T10:00:10Z'),
+    sent('pe-3a', 'sent', ['northgate@example.com'], '2026-11-10T14:30:30Z'),
+  ],
+  'preview-request-6': [
+    sent('pe-6d', 'live', ['team@meadowbank.example'], '2026-10-20T12:00:00Z'),
+    sent('pe-6c', 'activation', ['team@meadowbank.example'], '2026-10-02T09:00:00Z'),
+    sent('pe-6b', 'curaleafApplication', ['accounts@curaleaf.example', 'spatel@healiusconsulting.com'], '2026-10-01T09:00:30Z'),
+    sent('pe-6a', 'sent', ['team@meadowbank.example'], '2026-10-01T09:00:30Z'),
+  ],
+  'preview-request-5': [
+    { ...sent('pe-5c', 'hold', ['riverside@example.com'], '2026-11-17T15:30:10Z'), status: 'PENDING', sentAt: null },
+    sent('pe-5b', 'activation', ['riverside@example.com'], '2026-11-13T09:00:00Z'),
+    sent('pe-5a', 'sent', ['riverside@example.com'], '2026-11-12T10:00:30Z'),
+  ],
+};
 
 function newPharmacy(id: string, request: PharmacyOnboardingRequestView, logoText: string, primary: string): PharmacyTenant {
   return {
@@ -127,11 +204,14 @@ function withState(base: PharmacyTenant, state: Partial<PharmacyTenant>): Pharma
 
 /**
  * One preview pharmacy per state the overview shows: waiting with no Curaleaf
- * credentials, waiting on test credentials, and live. Held requests
- * appear through the on-hold request above; test pharmacies come from the demo data.
+ * credentials, waiting on test credentials, on hold after activation, and live.
+ * A request held before activation appears through the on-hold request above; test
+ * pharmacies come from the demo data.
  */
 export const LOCAL_PREVIEW_NEW_PHARMACIES: PharmacyTenant[] = [
   newPharmacy('preview-new-pharmacy-1', LOCAL_PREVIEW_PHARMACY_REQUESTS[0]!, 'KP', '#0f766e'),
+  // Activated, then put on hold (preview-request-5): staff see only the hold message.
+  newPharmacy('preview-new-pharmacy-3', LOCAL_PREVIEW_PHARMACY_REQUESTS[4]!, 'RP', '#b45309'),
   withState(newPharmacy('preview-new-pharmacy-2', LOCAL_PREVIEW_PHARMACY_REQUESTS[1]!, 'HL', '#1d4ed8'), {
     curaleafPharmacyCode: 'PHAR-TEST-2210',
     curaleafEnvironment: 'test',

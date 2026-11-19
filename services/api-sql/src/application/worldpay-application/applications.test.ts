@@ -148,7 +148,7 @@ describe('Worldpay application', () => {
     assert.equal(h.sent.length, 0);
   });
 
-  it('submits: a reference, both files, WP-01 to the admin route with attachments, WP-02 to the pharmacy', async () => {
+  it('submits: a reference, both files, WP-01 to the admin route with attachments, and nothing to the pharmacy', async () => {
     const h = harness();
     const answers = completeAnswers();
     answers.business.hasOwnWebsite = 'yes';
@@ -158,7 +158,8 @@ describe('Worldpay application', () => {
     assert.equal(record.reference, 'HHH-WP-2026-0001');
     assert.ok(record.sentAt);
     assert.equal(record.deliveryError, null);
-    const [wp01, wp02] = h.sent;
+    assert.equal(h.sent.length, 1, 'WP-02 was dropped: the pharmacy gets no Worldpay email');
+    const [wp01] = h.sent;
     assert.equal(wp01?.templateCode, 'worldpay_application_to_worldpay');
     assert.deepEqual(wp01?.to, ['admin@healiusconsulting.com']);
     assert.deepEqual(wp01?.attachments.map(a => a.filename), [
@@ -166,10 +167,6 @@ describe('Worldpay application', () => {
       'Worldpay-application_SHAH HEALTH LIMITED_HHH-WP-2026-0001.xlsx',
     ]);
     assert.equal(wp01?.payload.subject, 'Worldpay application — SHAH HEALTH LIMITED t/a Shah Pharmacy — HHH-WP-2026-0001');
-    assert.equal(wp02?.templateCode, 'worldpay_application_confirmation');
-    assert.deepEqual(wp02?.to, ['priya@example.test', 'shop@example.test']);
-    assert.match(String(wp02?.payload.subject), /HHH-WP-2026-0001/);
-    assert.match(String(wp02?.payload.paragraphs), /^Hello Priya,/);
     for (const email of h.sent) {
       const body = JSON.stringify(email.payload);
       for (const secret of SENSITIVE) assert.ok(!body.includes(secret), `${email.templateCode} body leaks ${secret}`);
@@ -208,7 +205,7 @@ describe('Worldpay application', () => {
     assert.equal(record.status, 'SUBMITTED');
     assert.equal(record.sentAt, null);
     assert.match(record.deliveryError ?? '', /service information PDF/);
-    assert.equal(missing.sent[0]?.templateCode, 'worldpay_application_confirmation', 'the pharmacy is still told it is received');
+    assert.equal(missing.sent.length, 0, 'nothing is sent until admin uploads the PDF and resends');
   });
 
   it('numbers references within the year and sends to the recipients set in admin, waiting for admin to forward it', async () => {

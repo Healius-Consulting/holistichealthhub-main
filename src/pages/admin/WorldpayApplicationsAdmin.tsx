@@ -262,14 +262,11 @@ function SettingsTab() {
         </label>
       </div>
 
-      {(['wp01', 'wp02'] as const).map(key => (
-        <div key={key}>
-          <h4>{key === 'wp01' ? 'WP-01 — application to Worldpay' : 'WP-02 — confirmation to the pharmacy'}</h4>
-          <label className="wpa-field"><span className="wpa-field__label">Subject</span><input className="input" value={content[key].subject} onChange={event => set(key, { ...content[key], subject: event.target.value })} /></label>
-          <label className="wpa-field"><span className="wpa-field__label">Body</span><textarea className="input" rows={12} value={content[key].body} onChange={event => set(key, { ...content[key], body: event.target.value })} /><span className="wpa-field__hint">{MERGE_HELP}</span></label>
-          {saveButton(key, key === 'wp01' ? 'WP-01' : 'WP-02')}
-        </div>
-      ))}
+      <h4>WP-01 — application to Worldpay</h4>
+      <p className="wpa-muted">The platform sends the pharmacy no email about its Worldpay application: Worldpay contact the pharmacy themselves.</p>
+      <label className="wpa-field"><span className="wpa-field__label">Subject</span><input className="input" value={content.wp01.subject} onChange={event => set('wp01', { ...content.wp01, subject: event.target.value })} /></label>
+      <label className="wpa-field"><span className="wpa-field__label">Body</span><textarea className="input" rows={12} value={content.wp01.body} onChange={event => set('wp01', { ...content.wp01, body: event.target.value })} /><span className="wpa-field__hint">{MERGE_HELP}</span></label>
+      {saveButton('wp01', 'WP-01')}
 
       <h4>What it costs (Before you start)</h4>
       <div className="wpa-grid">

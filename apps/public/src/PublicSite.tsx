@@ -8,6 +8,7 @@ import './public-site.css';
 import { posts } from './journalPosts';
 import { PublicHeader, PublicLink } from './PublicHeader';
 import { usePublicLocation } from './publicLocation';
+import PartnerTermsPage from './PartnerTermsPage';
 
 const MARK = '/holistic-health-hub-mark.png';
 const HERO_IMAGE = '/hhh-consultation-hero.jpg';
@@ -1722,13 +1723,19 @@ export default function PublicSite() {
             type: 'website',
             is404: false,
           },
+          '/partner-terms': {
+            title: 'Partner Terms | Holistic Health Hub',
+            description: 'The terms on which community pharmacies join Holistic Health Hub as partner pharmacies.',
+            type: 'website',
+            is404: false,
+          },
           '/costs': {
             title: 'Costs | Clinic Fees & Medicine Charges | Holistic Health Hub',
             description: 'What the specialist referral service costs: the eligibility check and referral are free; clinic consultations and medicine are charged separately.',
             type: 'website',
             is404: false,
           },
-        }[path as '/' | '/how-it-works' | '/conditions' | '/about' | '/faq' | '/blog' | '/privacy' | '/terms' | '/costs'] ?? {
+        }[path as '/' | '/how-it-works' | '/conditions' | '/about' | '/faq' | '/blog' | '/privacy' | '/terms' | '/partner-terms' | '/costs'] ?? {
           title: 'Page Not Found | Holistic Health Hub',
           description: 'The requested Holistic Health Hub page could not be found. Return to our homepage to continue.',
           type: 'website',
@@ -1856,6 +1863,7 @@ export default function PublicSite() {
   if (path === '/blog' || path.startsWith('/blog/categories/')) return <BlogPage />;
   if (path === '/privacy' || path === '/general-5-1') return <PrivacyPage />;
   if (path === '/terms') return <TermsPage />;
+  if (path === '/partner-terms') return <PageShell><PartnerTermsPage /></PageShell>;
   if (path === '/costs') return <CostsPage />;
   // /consent held the old combined consent-and-terms page. The approved pack splits
   // it into /terms and /privacy, so the retired path lands on the Terms of Use.

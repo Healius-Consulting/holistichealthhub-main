@@ -7,7 +7,7 @@ export type PublicListingOrganisation = {
   name: string;
   tradingName: string;
   classification: 'STANDARD' | 'TRAINING' | 'ALLOCATION_HOLDING';
-  status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED' | 'NOT_AVAILABLE';
+  status: 'ONBOARDING' | 'INTAKE_LIVE' | 'LIVE' | 'PAUSED' | 'ON_HOLD';
   archivedAt?: string | null;
 };
 

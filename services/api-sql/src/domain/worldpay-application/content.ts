@@ -12,7 +12,6 @@ import { z } from 'zod';
 export const WORLDPAY_CONTENT_KEYS = {
   recipients: 'worldpay.recipients',
   wp01: 'worldpay.wp01',
-  wp02: 'worldpay.wp02',
   pricingPanel: 'worldpay.pricingPanel',
   schemeAnswers: 'worldpay.schemeAnswers',
   s04Note: 'worldpay.s04Note',
@@ -54,7 +53,6 @@ const servicePdfSchema = z.object({
 export const WORLDPAY_CONTENT_SCHEMAS = {
   recipients: recipientsSchema,
   wp01: emailTemplateSchema,
-  wp02: emailTemplateSchema,
   pricingPanel: pricingPanelSchema,
   schemeAnswers: schemeAnswersSchema,
   s04Note: z.string().trim().min(1).max(1000),
@@ -64,7 +62,6 @@ export const WORLDPAY_CONTENT_SCHEMAS = {
 export type WorldpayContent = {
   recipients: z.infer<typeof recipientsSchema>;
   wp01: z.infer<typeof emailTemplateSchema>;
-  wp02: z.infer<typeof emailTemplateSchema>;
   pricingPanel: z.infer<typeof pricingPanelSchema>;
   schemeAnswers: z.infer<typeof schemeAnswersSchema>;
   s04Note: string;
@@ -83,18 +80,6 @@ export const WORLDPAY_CONTENT_DEFAULTS: WorldpayContent = {
       '[If own website]Website: [URL][/If]',
       '[If no website]This pharmacy does not have a website of its own. It takes card payments only by Worldpay payment link issued from the Holistic Health Hub platform, so the website given is https://www.holistichealthhub.live/. The attached Holistic Health Hub — service information for Worldpay sets out the transaction and money flows, the consumer journey, the terms and conditions, who provides which service, and the KYC/CDD checks on patients.[/If]',
       'Please send any questions on the application to the contact above.',
-      'Holistic Health Hub',
-    ].join('\n\n'),
-  },
-  wp02: {
-    subject: 'Your Worldpay application has been sent — [HHH reference]',
-    body: [
-      'Hello [submitter first name],',
-      'We have received your Worldpay application for [legal name] and passed it to Worldpay.',
-      'What happens next:',
-      '1. Worldpay may contact [contact name] with questions and will ask for photo ID and proof of address for each director and owner.\n2. Worldpay send you their agreement to sign. The contract is between your pharmacy and Worldpay.\n3. When the account is open, Worldpay send you login details for your Worldpay dashboard. Log in, find your API keys there, and paste them into Settings → Payments on Holistic Health Hub to complete the set-up.',
-      'Until then you can keep taking payment in the pharmacy and recording it on the platform as you do now.',
-      'If Worldpay ask you something you are unsure about, reply to this email.',
       'Holistic Health Hub',
     ].join('\n\n'),
   },
@@ -130,25 +115,4 @@ export function worldpayContentFrom(stored: Record<string, unknown>): WorldpayCo
   return out as WorldpayContent;
 }
 
-/**
- * Fills an admin-written template. `[field name]` is replaced from `fields` (unknown
- * names stay as typed, so a typo shows rather than vanishing); `[If flag]…[/If]` keeps
- * its text only when the flag is true. Returns paragraphs split on blank lines.
- */
-export function mergeTemplate(template: string, fields: Record<string, string>, flags: Record<string, boolean>): string[] {
-  const conditioned = template.replace(/\[If ([^\]]+)\]([\s\S]*?)\[\/If\]/gi, (_, flag: string, inner: string) => (flags[flag.trim().toLowerCase()] ? inner : ''));
-  const lookup = Object.fromEntries(Object.entries(fields).map(([key, value]) => [key.toLowerCase(), value]));
-  const merged = conditioned.replace(/\[([^\]\n]{1,60})\]/g, (whole, name: string) => {
-    const value = lookup[name.trim().toLowerCase()];
-    return value === undefined ? whole : value;
-  });
-  return merged
-    .replace(/\*\*/g, '')
-    .split(/\n\s*\n/)
-    .map(paragraph => paragraph.split('\n').map(lineText => lineText.trimEnd()).join('\n').trim())
-    .filter(Boolean);
-}
-
-export function mergeSubject(template: string, fields: Record<string, string>) {
-  return mergeTemplate(template, fields, {}).join(' ').replace(/\s+/g, ' ').trim();
-}
+export { mergeSubject, mergeTemplate } from '../common/content-template.js';

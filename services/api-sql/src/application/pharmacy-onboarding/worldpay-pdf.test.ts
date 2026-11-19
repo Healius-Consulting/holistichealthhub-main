@@ -1,43 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
-import { layoutWorldpaySections, renderWorldpayPdf, worldpaySections, type WorldpayLayoutOp } from './worldpay-pdf.js';
-import { WORLDPAY_DEFAULTS, worldpayFormSchema } from '../../domain/pharmacy-onboarding/worldpay.js';
+import { layoutWorldpaySections, renderQuestionnairePdf, type Section, type WorldpayLayoutOp } from './worldpay-pdf.js';
 
 const SIZE = 9.5;
 // Helvetica at 9.5pt: capitals reach about 7pt above the baseline, descenders about 2.5pt below.
 const CAP = 7;
 const DESCENT = 2.5;
 
-function sample(overrides: Record<string, unknown> = {}) {
-  return worldpayFormSchema.parse({
-    ...WORLDPAY_DEFAULTS,
-    legalName: 'TEST',
-    tradingName: 'TEST',
-    contactName: 'TEST',
-    contactPosition: 'DIRECTOR',
-    contactPhone: '1111111111',
-    businessType: 'Ltd Co',
-    registeredAddress: 'TEST1',
-    gphcNumber: '9012605',
-    tradingAddress: 'TEST1',
-    businessEmail: 'TEST1234@YOPMAIL.COM',
-    principals: [{
-      firstNames: 'TEST', surname: 'TEST', dateOfBirth: '2000-01-01', nationality: 'BRITISH',
-      homeAddress: 'TEST1', countryOfResidence: 'United Kingdom', yearsAtAddress: '4',
-      mobile: '11111111111', email: 'TEST@YOPMAIL.COM', shareholding: '100',
-    }],
-    annualTurnover: '1',
-    bankName: 'SSSSS',
-    accountName: 'TEST',
-    accountNumber: '11111111',
-    sortCode: '01-01-01',
-    idempotencyKey: 'worldpay-key-1',
-    ...overrides,
-  });
+/** Questionnaire-shaped sections: a few short sections and one long one that runs over a page. */
+function sample(longAnswer = ''): Section[] {
+  const row = (label: string, value: string): [string, string] => [label, value];
+  return [
+    { title: 'Business details', rows: [
+      row('Legal name', 'TEST'), row('Trading name', 'TEST'), row('Business email', 'TEST1234@YOPMAIL.COM'),
+      row('Registered address', 'TEST1'), row('GPhC number', '9012605'), row('Website', ''),
+    ] },
+    { title: 'Principals', rows: [
+      row('Name', 'TEST TEST'), row('Date of birth', '01/01/2000'), row('Nationality', 'BRITISH'), row('Shareholding', '100%'),
+    ] },
+    { title: 'Bank details', rows: [row('Bank', 'SSSSS'), row('Account name', 'TEST'), row('Sort code', '01-01-01')] },
+    { title: 'Scheme questions', rows: Array.from({ length: 30 }, (_, index) => row(`Question ${index + 1}`, `Confirmed. ${longAnswer}`.trim())) },
+  ];
 }
 
-async function layoutFor(form: ReturnType<typeof sample>, top = 841.89 - 48 - 64) {
+async function layoutFor(sections: Section[], top = 841.89 - 48 - 64) {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -51,7 +38,7 @@ async function layoutFor(form: ReturnType<typeof sample>, top = 841.89 - 48 - 64
     }
     return line ? [...lines, line] : lines;
   };
-  return layoutWorldpaySections(worldpaySections(form), { wrapLabel: wrapper(regular, 190), wrapValue: wrapper(bold, 595.28 - 48 - 250) }, top);
+  return layoutWorldpaySections(sections, { wrapLabel: wrapper(regular, 190), wrapValue: wrapper(bold, 595.28 - 48 - 250) }, top);
 }
 
 function crossings(ops: WorldpayLayoutOp[]) {
@@ -63,8 +50,8 @@ function crossings(ops: WorldpayLayoutOp[]) {
 
 test('no row rule runs through any text', async () => {
   // The submitted test form, and one with long wrapped answers.
-  for (const form of [sample(), sample({ registrationFees: 'Confirmed. However, Mastercard will not be used. Pharmacy GPhC registration number found above. '.repeat(3) })]) {
-    assert.deepEqual(crossings(await layoutFor(form)), []);
+  for (const sections of [sample(), sample('However, Mastercard will not be used. Pharmacy GPhC registration number found above. '.repeat(3))]) {
+    assert.deepEqual(crossings(await layoutFor(sections)), []);
   }
 });
 
@@ -113,7 +100,7 @@ test('nothing is laid out over the footer', async () => {
 });
 
 test('the rendered PDF still opens, with every answer in it', async () => {
-  const bytes = await renderWorldpayPdf(sample(), new Date('2026-11-18T12:00:00Z'));
+  const bytes = await renderQuestionnairePdf({ title: 'Questionnaire - TEST', heading: 'TEST', subline: 'Submitted on 18 November 2026' }, sample());
   const pdf = await PDFDocument.load(bytes);
   assert.ok(pdf.getPageCount() >= 1);
   const ops = await layoutFor(sample());

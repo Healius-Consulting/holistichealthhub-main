@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import type { PharmacyOnboardingRequestRecord, PharmacyOnboardingStatus } from '../../domain/pharmacy-onboarding/request.js';
-import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import { FakeClickupRepository, FakeVisitRepository } from '../../testing/clickup-fakes.js';
 import { PharmsmartSsoService } from '../identity/pharmsmart-sso.service.js';
 import { pharmacyRequestActions, type PharmacyRequestActionDeps } from '../pharmacy-onboarding/request-actions.js';
 import { clickupHooks } from './clickup-hooks.js';
 
-const REASON = 'Premises check failed against the register.';
 const id = '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11';
 
 function request(status: PharmacyOnboardingStatus): PharmacyOnboardingRequestRecord {
@@ -32,7 +30,8 @@ function request(status: PharmacyOnboardingStatus): PharmacyOnboardingRequestRec
     licenceFilename: '',
     filledFormStoragePath: '',
     organisationId: null,
-    declineReason: status === 'ON_HOLD' ? REASON : null,
+    holdReason: status === 'ON_HOLD' ? 'MORE_INFORMATION_NEEDED' : null,
+    heldAt: status === 'ON_HOLD' ? '2026-11-18T08:00:00.000Z' : null,
     decidedAt: null,
     decidedByUid: null,
     idempotencyKey: 'key-1',
@@ -47,14 +46,21 @@ function actions(status: PharmacyOnboardingStatus, clickup: PharmacyRequestActio
       findById: async () => ({ ...row }),
       listOrganisationGphcNumbers: async () => [],
       activate: async (_id, organisationId) => { row = { ...row, status: 'ACTIVATED', organisationId }; },
-      hold: async (_id, reason, decidedAt) => { row = { ...row, status: 'ON_HOLD', declineReason: reason, decidedAt }; },
-      unhold: async () => { row = { ...row, status: 'PENDING' }; },
+      hold: async (_id, reason, heldAt) => { row = { ...row, status: 'ON_HOLD', holdReason: reason, heldAt }; },
+      unhold: async (_id, next) => { row = { ...row, status: next }; },
       linkTermsAcceptances: async () => undefined,
     },
     organisations: { createOrganisation: async () => undefined } as unknown as PharmacyRequestActionDeps['organisations'],
     referralLinks: { ensureEligibilityLink: async () => ({ token: 'token-1' }) },
-    notificationRepo: { enqueue: async () => ({ created: true }) } as unknown as NotificationRepositoryPort,
+    revokeSessions: async () => undefined,
     audit: async () => undefined,
+    emails: {
+      applicationReceived: async () => undefined,
+      activated: async () => undefined,
+      held: async () => undefined,
+      wentLive: async () => undefined,
+      resend: async () => undefined,
+    },
     clickup,
   });
 }
@@ -78,21 +84,27 @@ describe('ClickUp wiring into the admin request actions', () => {
   it('activates, holds and unholds even when queueing for ClickUp throws', async () => {
     const activated = await actions('PENDING', throwing).activate({ id, actorUid: 'admin-1' });
     assert.equal(activated.request?.status, 'ACTIVATED');
-    const held = await actions('PENDING', throwing).hold({ id, reason: REASON, actorUid: 'admin-1' });
+    const held = await actions('PENDING', throwing).hold({ id, reason: 'CURALEAF_DECLINED', actorUid: 'admin-1' });
     assert.equal(held.status, 'ON_HOLD');
     const unheld = await actions('ON_HOLD', throwing).unhold({ id });
     assert.equal(unheld.status, 'PENDING');
   });
 
-  it('queues each action for the card, and never the admin-only hold reason', async () => {
+  it('queues each action for the card, with the hold reason named in a comment', async () => {
     const repo = new FakeClickupRepository();
     const hooks = clickupHooks({ clickupRepo: repo, visitRepo: new FakeVisitRepository() });
-    await actions('PENDING', hooks).hold({ id, reason: REASON, actorUid: 'admin-1' });
+    await actions('PENDING', hooks).hold({ id, reason: 'EXISTING_CURALEAF_CUSTOMER', actorUid: 'admin-1', now: new Date('2026-11-19T10:00:00Z') });
+    await actions('PENDING', hooks).hold({ id, reason: 'MORE_INFORMATION_NEEDED', actorUid: 'admin-1', now: new Date('2026-11-19T11:00:00Z') });
     await actions('ON_HOLD', hooks).unhold({ id });
     const result = await actions('PENDING', hooks).activate({ id, actorUid: 'admin-1' });
-    assert.deepEqual(repo.outbox.map(row => row.event), ['held', 'unheld', 'activated']);
-    assert.equal(repo.outbox[2]!.payload.branchId, result.organisation.id);
-    assert.equal(JSON.stringify(repo.outbox).includes(REASON), false);
+    assert.deepEqual(repo.outbox.map(row => row.event), ['held_existing_curaleaf', 'held', 'unheld', 'activated']);
+    assert.deepEqual(repo.outbox.map(row => row.payload.comment ?? null), [
+      'On hold: A. Existing Curaleaf customer',
+      'On hold: B. More information needed',
+      'Hold lifted',
+      null,
+    ]);
+    assert.equal(repo.outbox[3]!.payload.branchId, result.organisation.id);
   });
 });
 
@@ -122,6 +134,8 @@ function sso(recordFirstVisit: ConstructorParameters<typeof PharmsmartSsoService
     audit: async () => undefined,
     setupSecret: 'secret',
     recordFirstVisit,
+    holdMessage: async (reason, branchName) => ({ reason: reason ?? 'EXISTING_CURALEAF_CUSTOMER', heading: 'On hold', paragraphs: [branchName], footer: '' }),
+    branchHoldMessage: async () => ({ reason: 'EXISTING_CURALEAF_CUSTOMER', heading: 'On hold', paragraphs: [], footer: '' }),
   });
 }
 

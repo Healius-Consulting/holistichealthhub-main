@@ -80,17 +80,17 @@ describe('operational readiness', () => {
     assert.ok(paused.missingGates.includes('paused'));
     assert.equal(goLiveBlockedMessage(paused), 'Unpause this pharmacy before flipping the workspace to live.');
 
-    const notAvailable = buildOperationalStatus({
-      organisation: { ...organisation, status: 'NOT_AVAILABLE' },
+    const onHold = buildOperationalStatus({
+      organisation: { ...organisation, status: 'ON_HOLD' },
       tasks: loggedGoLiveTasks(),
       staff: [staff('ACTIVE', 'owner')],
       curaleaf: connection('CURALEAF', 'ACTIVE'),
       worldpay: null,
     });
-    assert.equal(notAvailable.goLiveReady, false);
-    assert.equal(notAvailable.intake.live, false);
-    assert.deepEqual(notAvailable.missingGates.filter(gate => gate === 'not_available' || gate === 'paused'), ['not_available']);
-    assert.equal(goLiveBlockedMessage(notAvailable), 'Clear Not available on this pharmacy before flipping the workspace to live.');
+    assert.equal(onHold.goLiveReady, false);
+    assert.equal(onHold.intake.live, false);
+    assert.deepEqual(onHold.missingGates.filter(gate => gate === 'on_hold' || gate === 'paused'), ['on_hold']);
+    assert.equal(goLiveBlockedMessage(onHold), 'This pharmacy\'s onboarding is on hold. Lift the hold on its request before flipping the workspace to live.');
 
     const platformTest = buildOperationalStatus({
       organisation: { ...organisation, id: '70913a30-71c3-4a41-952e-d532927af58c' },

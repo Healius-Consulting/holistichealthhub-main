@@ -8,8 +8,6 @@
 .pharmacy-account-status__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .pharmacy-account-status--being_set_up { border-left-color: var(--amber-500); }
 .pharmacy-account-status--being_set_up .pharmacy-account-status__icon { background: var(--amber-50); color: var(--amber-700); }
-.pharmacy-account-status--not_available { border-left-color: var(--tenant-secondary); }
-.pharmacy-account-status--not_available .pharmacy-account-status__icon { background: var(--tenant-secondary-soft); color: var(--tenant-secondary); }
 .pharmacy-account-status--suspended { border-left-color: var(--red-500); }
 .pharmacy-account-status--suspended .pharmacy-account-status__icon { background: var(--red-50); color: var(--red-700); }
 

@@ -4,6 +4,10 @@ import test from 'node:test';
 import {
   awaitingSetupBanner,
   formatOnboardingDate,
+  GENERIC_HOLD_MESSAGE,
+  holdMessageFromDetails,
+  holdMessageOrGeneric,
+  textWithEmailLinks,
   ONBOARDING_QUEUE,
   onboardingQueueItems,
   pharmacyAccountState,
@@ -25,25 +29,67 @@ const queue = (overrides: Partial<Parameters<typeof onboardingQueueItems>[0]> = 
 test('the status card has three states, and Live has none', () => {
   assert.equal(pharmacyAccountState('onboarding'), 'being_set_up');
   assert.equal(pharmacyAccountState('intake_live'), 'being_set_up');
-  assert.equal(pharmacyAccountState('not_available'), 'not_available');
+  assert.equal(pharmacyAccountState('on_hold'), 'on_hold');
   assert.equal(pharmacyAccountState('paused'), 'suspended');
   assert.equal(pharmacyAccountState('live'), null);
   assert.equal(pharmacyAccountState(undefined), null);
 });
 
-test('Not available uses the near-future wording and Suspended reuses PAUSED', () => {
-  assert.match(PHARMACY_ACCOUNT_STATE_COPY.not_available.body, /may be available to you in the near future/);
-  assert.equal(pharmacyAccountStateFromCode('PHARMACY_NOT_AVAILABLE'), 'not_available');
+test('the refusal codes map to on hold and suspended', () => {
+  assert.equal(pharmacyAccountStateFromCode('PHARMACY_ON_HOLD'), 'on_hold');
   assert.equal(pharmacyAccountStateFromCode('PHARMACY_SUSPENDED'), 'suspended');
   assert.equal(pharmacyAccountStateFromCode('SESSION_IDLE_EXPIRED'), null);
   assert.equal(pharmacyAccountStateFromCode(null), null);
+  assert.equal(PHARMACY_ACCOUNT_STATE_COPY.on_hold.title, 'Your application is on hold');
 });
 
-test('a Not available pharmacy is signed out wherever it is, like a suspended one', () => {
-  assert.equal(shouldDispatchSessionEnded(403, 'PHARMACY_NOT_AVAILABLE', '/patients'), true);
+test('a pharmacy on hold is signed out wherever it is, like a suspended one', () => {
+  assert.equal(shouldDispatchSessionEnded(403, 'PHARMACY_ON_HOLD', '/patients'), true);
   assert.equal(shouldDispatchSessionEnded(403, 'PHARMACY_SUSPENDED', '/orders'), true);
-  assert.equal(shouldDispatchSessionEnded(403, 'PHARMACY_NOT_AVAILABLE', '/login'), false);
+  assert.equal(shouldDispatchSessionEnded(403, 'PHARMACY_ON_HOLD', '/login'), false);
   assert.equal(shouldDispatchSessionEnded(403, 'FORBIDDEN', '/patients'), false);
+});
+
+const HOLD = {
+  reason: 'CURALEAF_DECLINED',
+  heading: 'Your application is on hold',
+  paragraphs: [
+    'Curaleaf Laboratories were not able to open an account for Shah Pharmacy, so we cannot set up your Holistic Health Hub account at the moment.',
+    'Healius Consulting will be in touch about what happens next. You do not need to do anything for now.',
+  ],
+  footer: 'Questions? Email onboarding@holistichealthhub.live',
+};
+
+test('the hold message is read from a PHARMACY_ON_HOLD refusal\'s details', () => {
+  assert.deepEqual(holdMessageFromDetails({ hold: HOLD }), HOLD);
+  assert.equal(holdMessageFromDetails(null), null);
+  assert.equal(holdMessageFromDetails([{ path: 'x', message: 'y' }]), null, 'field issues are not a hold');
+  assert.equal(holdMessageFromDetails({ hold: { ...HOLD, heading: '' } }), null);
+  assert.equal(holdMessageFromDetails({ hold: { ...HOLD, paragraphs: [1, 2] } }), null);
+});
+
+test('the page shows the reason\'s wording, or a generic message when the server sent none', () => {
+  const shown = holdMessageOrGeneric({ ...HOLD, paragraphs: [...HOLD.paragraphs, '  '] });
+  assert.equal(shown.heading, 'Your application is on hold');
+  assert.deepEqual(shown.paragraphs, HOLD.paragraphs, 'blank paragraphs are dropped');
+  assert.equal(holdMessageOrGeneric(null), GENERIC_HOLD_MESSAGE);
+  assert.equal(GENERIC_HOLD_MESSAGE.heading, 'Your application is on hold');
+  assert.equal(GENERIC_HOLD_MESSAGE.footer, 'Questions? Email onboarding@holistichealthhub.live');
+});
+
+test('the footer\'s email address becomes a link', () => {
+  assert.deepEqual(textWithEmailLinks('Questions? Email onboarding@holistichealthhub.live'), [
+    { kind: 'text', text: 'Questions? Email ' },
+    { kind: 'email', address: 'onboarding@holistichealthhub.live' },
+  ]);
+  assert.deepEqual(textWithEmailLinks('Email a@b.co or c@d.co.uk.'), [
+    { kind: 'text', text: 'Email ' },
+    { kind: 'email', address: 'a@b.co' },
+    { kind: 'text', text: ' or ' },
+    { kind: 'email', address: 'c@d.co.uk' },
+    { kind: 'text', text: '.' },
+  ]);
+  assert.deepEqual(textWithEmailLinks('No address here'), [{ kind: 'text', text: 'No address here' }]);
 });
 
 test('the banner shows while awaiting Curaleaf, with the submission date', () => {

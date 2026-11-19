@@ -1,0 +1,32 @@
+/* The on-hold message: the PharmSmart and sign-in hold page, and the status card. */
+
+.onboarding-hold__panel{
+  max-width: 760px;
+}
+
+.onboarding-hold__panel > p{
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.onboarding-hold__panel > p.onboarding-hold__footer{
+  margin-top: 6px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--green) 12%, transparent);
+  font-size: 15px;
+}
+
+.onboarding-hold__address{
+  color: var(--ink, var(--text-primary));
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.pharmacy-account-status--on_hold{ border-left-color: var(--tenant-secondary); }
+.pharmacy-account-status--on_hold .pharmacy-account-status__icon{ background: var(--tenant-secondary-soft); color: var(--tenant-secondary); }
+.pharmacy-account-status .onboarding-hold__footer{ margin-top: 4px; }

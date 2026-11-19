@@ -6,8 +6,6 @@ import { branchPartnerTermsAcceptanceSchema, type PartnerTermsAcceptanceRecord }
 import type { WorldpaySubmissionNote } from '../../domain/pharmacy-onboarding/worldpay.js';
 import type { OrganisationRecord } from '../../repositories/ports/organisation.port.js';
 import { acceptBranchPartnerTerms, branchOnboardingView, type BranchOnboardingRepo } from './branch-onboarding.js';
-import { submitWorldpayForm } from './submit-worldpay.js';
-import { WORLDPAY_DEFAULTS, worldpayFormSchema } from '../../domain/pharmacy-onboarding/worldpay.js';
 
 const BRANCH_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
@@ -41,10 +39,7 @@ const signer = branchPartnerTermsAcceptanceSchema.parse({
 function memory(input: { request?: PharmacyOnboardingRequestRecord | null; terms?: PartnerTermsAcceptanceRecord[]; worldpay?: WorldpaySubmissionNote[] } = {}) {
   const terms = [...(input.terms ?? [])];
   const worldpay = [...(input.worldpay ?? [])];
-  const repo: BranchOnboardingRepo & {
-    findWorldpaySubmissionByIdempotencyKey(key: string): Promise<WorldpaySubmissionNote | null>;
-    insertWorldpaySubmission(note: WorldpaySubmissionNote): Promise<void>;
-  } = {
+  const repo: BranchOnboardingRepo = {
     async findByOrganisationId(id) { return input.request && input.request.organisationId === id ? input.request : null; },
     async findTermsAcceptances(requestId) { return terms.filter(row => row.onboardingRequestId === requestId); },
     async findTermsAcceptancesForOrganisation(id) { return terms.filter(row => row.organisationId === id); },
@@ -55,8 +50,6 @@ function memory(input: { request?: PharmacyOnboardingRequestRecord | null; terms
       return worldpay.filter(note => note.organisationId === id || note.gphcNumber === gphc).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))[0] ?? null;
     },
     async insertTermsAcceptance(row) { terms.push({ organisationId: null, ...row }); },
-    async findWorldpaySubmissionByIdempotencyKey(key) { return worldpay.find(note => note.idempotencyKey === key) ?? null; },
-    async insertWorldpaySubmission(note) { worldpay.push(note); },
   };
   return { repo, terms, worldpay };
 }
@@ -107,29 +100,8 @@ test('a branch HHH added by hand has no submission date, no Terms and no Worldpa
   });
 });
 
-test('an older branch with no request accepts the Terms from its portal, then its Worldpay form goes through', async () => {
-  const { repo, terms, worldpay } = memory({ request: null });
-  const form = worldpayFormSchema.parse({
-    ...WORLDPAY_DEFAULTS,
-    legalName: 'Shah Health Ltd', tradingName: 'Shah Pharmacy', contactName: 'Asha Shah', contactPosition: 'Owner',
-    contactPhone: '07700 900123', businessType: 'Ltd Co', registeredAddress: '1 High Street, Leeds, LS1 1AA',
-    gphcNumber: '765 4321', tradingAddress: '1 High Street, Leeds, LS1 1AA', businessEmail: 'shop@shah.test',
-    principals: [{
-      firstNames: 'Asha', surname: 'Shah', dateOfBirth: '1980-04-02', nationality: 'British',
-      homeAddress: '2 Low Road, Leeds, LS2 2BB', countryOfResidence: 'United Kingdom', yearsAtAddress: '6',
-      mobile: '07700 900123', email: 'asha@shah.test', shareholding: '100',
-    }],
-    annualTurnover: '1200000', bankName: 'Example Bank', accountName: 'Shah Health Ltd', accountNumber: '12345678',
-    sortCode: '123456', idempotencyKey: 'portal-worldpay-1',
-  });
-  const forBranch = { organisationId: BRANCH_ID, gphcNumber: '765 4321' };
-  const send = async () => {};
-
-  await assert.rejects(
-    submitWorldpayForm(repo, send, form, new Date(), forBranch),
-    (error: unknown) => error instanceof HttpError && error.code === 'ONBOARDING_TERMS_REQUIRED',
-  );
-
+test('an older branch with no request accepts the Terms from its portal', async () => {
+  const { repo, terms } = memory({ request: null });
   const { acceptance: row, created } = await acceptBranchPartnerTerms(
     { repo, termsVersion: '2026-11-draft' },
     branch(),
@@ -146,11 +118,8 @@ test('an older branch with no request accepts the Terms from its portal, then it
   assert.equal(row.nameMatchesPharmsmart, null);
   assert.equal(terms.length, 1);
 
-  await submitWorldpayForm(repo, send, form, new Date('2026-11-20T09:05:00Z'), forBranch);
-  assert.equal(worldpay[0]!.organisationId, BRANCH_ID);
   const view = await branchOnboardingView(repo, branch());
   assert.equal(view.termsAccepted, true);
-  assert.equal(view.worldpaySubmittedAt, '2026-11-20T09:05:00.000Z');
 });
 
 test('a public-page pharmacy that left before the Terms accepts them against its request from the portal', async () => {
@@ -170,8 +139,8 @@ test('accepting again returns the Terms already there and writes nothing', async
   assert.equal(terms.length, 1);
 });
 
-test('a suspended or Not available branch cannot accept the Terms', async () => {
-  for (const status of ['PAUSED', 'NOT_AVAILABLE'] as const) {
+test('a suspended or held branch cannot accept the Terms', async () => {
+  for (const status of ['PAUSED', 'ON_HOLD'] as const) {
     const { repo, terms } = memory({ request: null });
     await assert.rejects(
       acceptBranchPartnerTerms({ repo, termsVersion: 'v1' }, branch({ status }), signer, { ipHash: null }),

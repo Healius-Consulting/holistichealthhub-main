@@ -1,3 +1,4 @@
+import type { OnboardingHoldMessage } from '../shared/api';
 export type StaffRole = 'hhh_admin' | 'pharmacy_staff';
 
 export interface AuthenticatedStaff {
@@ -63,6 +64,12 @@ export interface PharmsmartWelcome {
   prefill?: PharmsmartPrefill;
   /** Set when this GPhC already has a request waiting or on hold: the page shows that, not the forms. */
   onboardingRequest?: PharmsmartOnboardingRequestState;
+  /**
+   * Set when `onboardingRequest` is `on_hold`, and when an activated branch on hold
+   * signs in: the hold message for its reason, merged for the branch. Shown in place
+   * of the forms or the account.
+   */
+  hold?: OnboardingHoldMessage | null;
   /** The request whose Partner Terms are still to accept, when `onboardingRequest` is `terms_outstanding`. */
   termsRequest?: PharmsmartTermsRequest | null;
   /** Server-signed PharmSmart names, sent back with the Terms for the soft name check. */
@@ -82,6 +89,8 @@ export interface AuthState {
   sessionWarning?: boolean;
   pharmsmartSetup?: PharmsmartSetup | null;
   pharmsmartWelcome?: PharmsmartWelcome | null;
-  /** Set when sign-in was refused because the pharmacy is suspended or Not available. */
-  accountState?: 'not_available' | 'suspended' | null;
+  /** Set when sign-in was refused because the pharmacy is suspended or on hold. */
+  accountState?: 'on_hold' | 'suspended' | null;
+  /** With `accountState: 'on_hold'`: the hold message for its reason, when the API sent it. */
+  accountHold?: OnboardingHoldMessage | null;
 }

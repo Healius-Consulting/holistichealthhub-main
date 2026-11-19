@@ -119,6 +119,8 @@ test('the Curaleaf application goes as one email to every To and CC address, wit
     toRecipients: ['robbie.allison@curaleaflaboratories.co.uk', 'ellis.walters@curaleaflaboratories.co.uk'],
     ccRecipients: ['spatel@healiusconsulting.com'],
     payload: {
+      subject: 'New account application: Eastwood Health, GPhC 2078912',
+      paragraphs: ['Hello,', 'Please find attached a new account application from Eastwood Health.'],
       branchName: 'Eastwood Health',
       gphcNumber: '2078912',
       submittedAt: '2026-11-19T14:05:00.000Z',
@@ -171,4 +173,60 @@ test('a logo that cannot be read does not stop the message', async t => {
 
   assert.equal(summary.sent, 1);
   assert.doesNotMatch(bodies[0]!.html, /cid:email-header-logo/);
+});
+
+test('onboarding emails take their sender name and Reply-To from the payload; the From address never changes', async t => {
+  process.env.RESEND_API_KEY = 'test-key';
+  t.after(() => { delete process.env.RESEND_API_KEY; });
+
+  const { repo } = notificationRepoStub([
+    pendingRecord({
+      id: 'outbox-curaleaf',
+      organisationId: null,
+      templateCode: 'curaleaf_new_account_application',
+      encryptedRecipient: 'new@curaleaf.test',
+      toRecipients: ['new@curaleaf.test'],
+      payload: {
+        subject: 'New account application: Eastwood Health, GPhC 2078912',
+        paragraphs: ['Hello,', 'Please find attached a new account application.'],
+        fromName: 'Holistic Health Hub — Partner Onboarding',
+        replyTo: 'spatel@healiusconsulting.com',
+        filledFormStoragePath: 'pharmacy-onboarding/req/curaleaf-account.pdf',
+        filledFormFilename: 'Curaleaf-new-account_2078912_Eastwood Health_2026-11-19.pdf',
+      },
+    }),
+    pendingRecord({
+      id: 'outbox-sent',
+      organisationId: null,
+      templateCode: 'pharmacy_onboarding_submitted',
+      encryptedRecipient: 'shop@eastwood.test',
+      payload: {
+        subject: 'We have your application',
+        paragraphs: ['Hello Priya,', 'Thank you.'],
+        fromName: 'Evil" <x@evil.test>\r\nBcc: y@evil.test',
+        replyTo: 'not an address',
+      },
+    }),
+    pendingRecord({ id: 'outbox-patient', payload: { firstName: 'Avery', replyTo: 'attacker@evil.test', fromName: 'Someone else' } }),
+  ]);
+  const { storage } = storageStub([]);
+  const { bodies, fetchImpl } = resendCapture();
+
+  const summary = await deliverPatientMessages({ notificationRepo: repo, storage, fetchImpl });
+  assert.equal(summary.sent, 3);
+
+  const [curaleaf, sent, patient] = bodies;
+  assert.equal(curaleaf!.from, 'Holistic Health Hub — Partner Onboarding <onboarding@holistichealthhub.live>');
+  assert.equal(curaleaf!.reply_to, 'spatel@healiusconsulting.com');
+  assert.equal(curaleaf!.subject, 'New account application: Eastwood Health, GPhC 2078912');
+  const files = (curaleaf!.attachments as Array<{ filename: string }>).filter(file => !file.filename.endsWith('.png'));
+  assert.deepEqual(files.map(file => file.filename), ['Curaleaf-new-account_2078912_Eastwood Health_2026-11-19.pdf']);
+
+  // An unsafe name is cleaned and an invalid Reply-To falls back to the template's own.
+  assert.equal(sent!.from, '"Evil x@evil.testBcc: y@evil.test" <onboarding@holistichealthhub.live>');
+  assert.equal(sent!.reply_to, 'onboarding@holistichealthhub.live');
+
+  // Other templates ignore the payload entirely.
+  assert.equal(patient!.from, 'Holistic Health Hub <referrals@holistichealthhub.live>');
+  assert.equal(patient!.reply_to, 'referrals@holistichealthhub.live');
 });

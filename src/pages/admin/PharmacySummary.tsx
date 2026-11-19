@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import type { PharmacyTenant } from '../../context/AppContext';
 import { formatRequestDate } from './requestFormat';
+import { holdReasonLabel } from './onboardingAdmin';
+import type { OnboardingHoldReason } from '../../shared/api';
 import type { PerformancePeriod } from '../../utils/performancePeriod';
 
 /**
@@ -19,10 +21,20 @@ type AccountRow = {
   action?: { label: string; onClick: () => void };
 };
 
-function activationState(organisation: PharmacyTenant, testPharmacy: boolean): { value: string; tone: Tone; detail: string } {
+/** The branch's hold, when it is on hold: the reason from its onboarding request. */
+export type SummaryHold = { reason: OnboardingHoldReason | null; heldAt: string | null };
+
+function activationState(organisation: PharmacyTenant, testPharmacy: boolean, hold: SummaryHold | null): { value: string; tone: Tone; detail: string } {
   if (testPharmacy) return { value: 'Test pharmacy', tone: 'ok', detail: 'Always on, against the Curaleaf and Worldpay sandboxes.' };
   if (organisation.status === 'paused') return { value: 'Suspended', tone: 'stop', detail: 'Staff are locked out and the eligibility link is off until HHH lifts the suspension.' };
-  if (organisation.status === 'not_available') return { value: 'Not available', tone: 'stop', detail: 'An existing Curaleaf customer. Staff are locked out and see "may be available in the near future"; the eligibility link is off until HHH clears it.' };
+  if (hold) {
+    const since = formatRequestDate(hold.heldAt);
+    return {
+      value: 'On hold',
+      tone: 'stop',
+      detail: `${holdReasonLabel(hold.reason)}${since ? `, since ${since}` : ''}. Staff see only the hold message for this reason; the eligibility link is off until HHH lifts the hold.`,
+    };
+  }
   if (organisation.status === 'live') return { value: 'Live', tone: 'ok', detail: 'Live Curaleaf credentials are saved. Patients, orders and payments are real.' };
   return { value: 'Awaiting Curaleaf', tone: 'wait', detail: 'Eligibility is open; ordering and payments open when live Curaleaf credentials are saved, which takes it live.' };
 }
@@ -94,6 +106,7 @@ export function PharmacySummary({
   onOpenPanel,
   period,
   onPeriodChange,
+  hold = null,
 }: {
   organisation: PharmacyTenant;
   testPharmacy: boolean;
@@ -106,10 +119,12 @@ export function PharmacySummary({
   onOpenPanel: (panel: 'curaleaf' | 'staff' | 'identity') => void;
   period: PerformancePeriod;
   onPeriodChange: (period: PerformancePeriod) => void;
+  /** Set while the branch is on hold. */
+  hold?: SummaryHold | null;
 }) {
   const windowed = period !== 'all';
   const windowLabel = period === '1m' ? 'last month' : 'last 3 months';
-  const activation = activationState(organisation, testPharmacy);
+  const activation = activationState(organisation, testPharmacy, hold);
   const rows: AccountRow[] = [
     { label: 'Activation', ...activation },
     curaleafRow(organisation, testPharmacy, () => onOpenPanel('curaleaf')),
@@ -120,7 +135,7 @@ export function PharmacySummary({
       detail: intakeLive
         ? 'Patients can check eligibility through the pharmacy link and QR code.'
         : organisation.status === 'paused' ? 'Off while the pharmacy is suspended.'
-          : organisation.status === 'not_available' ? 'Off while the pharmacy is Not available.' : 'Off for this pharmacy.',
+          : hold ? 'Off while the pharmacy is on hold.' : 'Off for this pharmacy.',
     },
     worldpayRow(organisation, worldpayFormSentAt, testPharmacy),
   ];

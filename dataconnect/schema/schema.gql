@@ -26,8 +26,9 @@ enum OrganisationStatus {
   INTAKE_LIVE
   LIVE
   PAUSED
-  # Set by HHH admin for a pharmacy that is already a Curaleaf customer: no access, intake off.
-  NOT_AVAILABLE
+  # The branch's onboarding request is on hold (see PharmacyOnboardingRequest.holdReason):
+  # no access except the hold message, intake off. Lifting the hold returns it to ONBOARDING.
+  ON_HOLD
 }
 
 enum WorkspaceClassification {
@@ -1166,6 +1167,10 @@ type NotificationOutbox @table {
   orderId: UUID @index
   eligibilitySubmission: EligibilitySubmission @ref(fields: "eligibilitySubmissionId")
   eligibilitySubmissionId: UUID @index
+  # Partner onboarding emails (Sent, Activation, Hold, Live, application to Curaleaf):
+  # the request they belong to, so admin sees each branch's send log and can resend.
+  onboardingRequest: PharmacyOnboardingRequest @ref(fields: "onboardingRequestId")
+  onboardingRequestId: UUID @index
   channel: NotificationChannel!
   templateCode: String!
   recipientHash: String!
@@ -1267,13 +1272,24 @@ type CuraleafQuoteBankSync @table(key: ["environment"]) {
   updatedAt: Timestamp! @default(expr: "request.time")
 }
 
-# PENDING waits for HHH to Activate or Hold. ON_HOLD can go back to PENDING (Unhold).
-# DECLINED is retired: existing rows become ON_HOLD, then the value is dropped.
+# PENDING waits for HHH to Activate or Hold. ACTIVATED has a branch (demo until live).
+# ON_HOLD can be set from PENDING, or from ACTIVATED while the branch is not live yet;
+# lifting the hold returns it to whichever it came from (organisationId tells them apart).
 enum PharmacyOnboardingRequestStatus {
   PENDING
   ON_HOLD
   ACTIVATED
-  DECLINED
+}
+
+# Why HHH put a pharmacy's application on hold. The pharmacy sees the wording for the
+# reason, in the Hold email and on the onboarding page (content: onboarding.holdPage).
+enum OnboardingHoldReason {
+  # Curaleaf say the pharmacy already has an account with them.
+  EXISTING_CURALEAF_CUSTOMER
+  # Something on the application has to be checked or completed.
+  MORE_INFORMATION_NEEDED
+  # Curaleaf will not open an account, for another reason.
+  CURALEAF_DECLINED
 }
 
 # A pharmacy that is not on the platform yet, submitted from the public onboarding
@@ -1301,8 +1317,9 @@ type PharmacyOnboardingRequest @table {
   filledFormStoragePath: String!
   organisation: Organisation @ref(fields: "organisationId")
   organisationId: UUID @index
-  # The hold reason: admin-only, never shown or emailed to the pharmacy. Kept after Unhold.
-  declineReason: String
+  # Set while ON_HOLD (and kept after the hold is lifted, as history). Shown to the pharmacy.
+  holdReason: OnboardingHoldReason
+  heldAt: Timestamp
   # When and by whom the request was last held or activated.
   decidedAt: Timestamp
   decidedByUid: String

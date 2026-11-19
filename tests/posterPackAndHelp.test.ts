@@ -33,7 +33,7 @@ test('the poster pack is switched on in Settings', () => {
 
 test('posters are offered from Awaiting Curaleaf onwards, while the eligibility link works', () => {
   for (const status of ['onboarding', 'intake_live', 'live']) assert.equal(posterPackAvailable(status), true, status);
-  for (const status of ['paused', 'not_available', undefined, null]) assert.equal(posterPackAvailable(status), false, String(status));
+  for (const status of ['paused', 'on_hold', undefined, null]) assert.equal(posterPackAvailable(status), false, String(status));
 });
 
 test('the pack is HHH\'s A3 poster and two-sided A5 leaflet, stamped, at the templates\' own sizes', async () => {

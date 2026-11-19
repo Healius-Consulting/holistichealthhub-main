@@ -30,8 +30,8 @@ describe('pharmacy intake access', () => {
     assert.equal(canAcceptPublicIntake({ ...organisation, gphcNumber: 'TRAINING-PHARM1', status: 'LIVE' }), true);
   });
 
-  it('gives a Not available pharmacy no intake and no access, even with intake left on', () => {
-    const closed = { ...organisation, status: 'NOT_AVAILABLE' as const, intakeEnabled: true };
+  it('gives a branch on hold no intake and no access, even with intake left on', () => {
+    const closed = { ...organisation, status: 'ON_HOLD' as const, intakeEnabled: true };
     assert.equal(canAcceptPublicIntake(closed), false);
     assert.equal(canReceiveReferral(closed), false);
     assert.equal(canActivateReferredPatient(closed), false);

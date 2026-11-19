@@ -25,21 +25,18 @@ import {
 } from './pharmsmart-login';
 import { recordPharmacyOnboardingDeferral } from '../shared/api';
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
+import { OnboardingHoldPage } from '../onboarding/OnboardingHold';
 
 const BROCHURE = PHARMSMART_ONBOARDING_PACKETS.find(packet => packet.title === 'Brochure')!;
 
 const ONBOARDING_ADDRESS = 'onboarding@holistichealthhub.live';
 const onboardingMail = <a className="onb__address" href={`mailto:${ONBOARDING_ADDRESS}`}>{ONBOARDING_ADDRESS}</a>;
 
-/** What a GPhC with a request already in sees instead of the forms. */
+/** What a GPhC with a request already in sees instead of the forms. On hold has its own page. */
 const REQUEST_STATE_VIEWS = {
   pending: {
     title: 'Awaiting activation',
     body: <>Awaiting activation. Please check back in a few days, or contact {onboardingMail} for more details.</>,
-  },
-  on_hold: {
-    title: 'Your request',
-    body: <>Your account could not be created at this point in time. Please email us at {onboardingMail} for more details.</>,
   },
 } as const;
 
@@ -235,6 +232,10 @@ export function PharmsmartWelcome({
     : <button className="onb__signin" type="button" onClick={onUseEmail}>Sign in</button>;
 
   const requestState = requestStateView(welcome.onboardingRequest);
+  // On hold: only the message for the reason. No forms, demo, sign-in link or way into the account.
+  if (requestState === 'on_hold' || welcome.hold) {
+    return <OnboardingHoldPage hold={welcome.hold} person={knownName ? { name: knownName, gphcNumber: welcome.gphcNumber } : null} />;
+  }
   const requestView = requestState ? REQUEST_STATE_VIEWS[requestState] : null;
   if (requestView) {
     return (

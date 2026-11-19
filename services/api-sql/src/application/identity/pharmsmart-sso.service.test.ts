@@ -25,7 +25,7 @@ function info(overrides: Record<string, unknown> = {}, person: Record<string, un
 
 function service(
   body = info(),
-  pharmacies?: Array<{ id: string; gphcNumber: string; primaryContactUid?: string | null }>,
+  pharmacies?: Array<{ id: string; gphcNumber: string; primaryContactUid?: string | null; status?: string; name?: string }>,
   requests: Record<string, 'PENDING' | 'ON_HOLD' | 'ACTIVATED' | 'PENDING_NO_TERMS'> = {},
 ) {
   const lookedUp: string[] = [];
@@ -33,6 +33,7 @@ function service(
   const created: Array<{ email: string; displayName: string; organisationId: string }> = [];
   const adopted: string[] = [];
   const minted: string[] = [];
+  const branchHolds: Array<{ id: string; name?: string | null }> = [];
   const staff: PharmsmartStaffCandidate[] = [{
     uid: 'owner-uid',
     organisationId,
@@ -58,6 +59,7 @@ function service(
         termsAccepted: status !== 'PENDING_NO_TERMS',
         pharmacyName: 'Shah Pharmacy',
         registeredCompanyName: 'Shah Health Ltd',
+        holdReason: status === 'ON_HOLD' ? 'CURALEAF_DECLINED' as const : null,
       };
     },
     listStaff: async () => staff,
@@ -83,8 +85,13 @@ function service(
     },
     audit: async input => { audits.push(input); },
     setupSecret: 'test-secret',
+    holdMessage: async (reason, branchName) => ({ reason: reason ?? 'EXISTING_CURALEAF_CUSTOMER', heading: 'Your application is on hold', paragraphs: [`${branchName} is on hold`], footer: 'Questions?' }),
+    branchHoldMessage: async branch => {
+      branchHolds.push(branch);
+      return { reason: 'MORE_INFORMATION_NEEDED', heading: 'Your application is on hold', paragraphs: [`${branch.name} needs more information`], footer: 'Questions?' };
+    },
   });
-  return { sso, audits, created, adopted, minted, staff, lookedUp };
+  return { sso, audits, created, adopted, minted, staff, lookedUp, branchHolds };
 }
 
 describe('PharmSmart redemption', () => {
@@ -140,6 +147,7 @@ describe('PharmSmart redemption', () => {
       pharmsmartPharmacyId: '30',
       prefill: { pharmacyEmail: 'shop@pharmacy.test' },
       onboardingRequest: null,
+      hold: null,
       termsRequest: null,
     });
     assert.equal(created.length, 0);
@@ -195,10 +203,54 @@ describe('PharmSmart redemption', () => {
     assert.equal(readPharmsmartNamesTicket(result.pharmsmartTicket, 'another-secret'), null);
   });
 
-  it('returns the on-hold view for a GPhC whose request is on hold', async () => {
+  it('returns the on-hold view for a GPhC whose request is on hold, with its reason\'s hold message', async () => {
     const { sso } = service(info({ gphc: '5550001' }), undefined, { '5550001': 'ON_HOLD' });
     const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
     assert.equal(result.status === 'welcome' && result.onboardingRequest, 'on_hold');
+    assert.deepEqual(result.status === 'welcome' && result.hold, {
+      reason: 'CURALEAF_DECLINED',
+      heading: 'Your application is on hold',
+      paragraphs: ['Shah Pharmacy is on hold'],
+      footer: 'Questions?',
+    });
+  });
+
+  it('carries no hold message for a pending request', async () => {
+    const { sso } = service(info({ gphc: '5550001' }), undefined, { '5550001': 'PENDING' });
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status === 'welcome' && result.hold, null);
+  });
+
+  it('opens no session for a branch on hold: the welcome shows its hold message instead', async () => {
+    const { sso, created, adopted, minted, audits, branchHolds } = service(info(), [
+      { id: organisationId, gphcNumber: '1234471', primaryContactUid: 'owner-uid', status: 'ON_HOLD', name: 'Khan Pharmacy' },
+    ]);
+    const result = await sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(result.status, 'welcome');
+    if (result.status !== 'welcome') return;
+    assert.equal(result.onboardingRequest, 'on_hold');
+    assert.deepEqual(result.hold?.paragraphs, ['Khan Pharmacy needs more information']);
+    assert.equal(result.termsRequest, null);
+    assert.deepEqual(branchHolds, [{ id: organisationId, name: 'Khan Pharmacy' }]);
+    assert.deepEqual([created, adopted, minted], [[], [], []]);
+    assert.equal(audits.at(-1)?.organisationId, organisationId);
+    assert.deepEqual(audits.at(-1)?.details, { reason: 'ON_HOLD' });
+  });
+
+  it('refuses to finish PharmSmart setup for a branch put on hold meanwhile, with the hold message', async () => {
+    const first = service(info({}, { email: '' }));
+    const setup = await first.sso.redeem('opaque-token', { requestId: null, ipHash: null });
+    assert.equal(setup.status, 'setup');
+    if (setup.status !== 'setup') return;
+    const held = service(info(), [{ id: organisationId, gphcNumber: '1234471', status: 'ON_HOLD', name: 'Khan Pharmacy' }]);
+    await assert.rejects(
+      () => held.sso.completeSetup({ ticket: setup.ticket, email: 'amina.khan@pharmacy.test' }, { requestId: null, ipHash: null }),
+      (error: unknown) => error instanceof HttpError
+        && error.statusCode === 403
+        && error.code === 'PHARMACY_ON_HOLD'
+        && (error.details as { hold: { reason: string } }).hold.reason === 'MORE_INFORMATION_NEEDED',
+    );
+    assert.deepEqual(held.minted, []);
   });
 
   it('shows the forms when the latest request is not pending or on hold', async () => {

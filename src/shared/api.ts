@@ -1,5 +1,7 @@
 import { shouldDispatchSessionEnded } from './sessionEnded';
 import { assertNotDemoWrite } from './demoGuard';
+import type { OnboardingContent, OnboardingContentKey, OnboardingEmailKind, OnboardingHoldReason } from '../../services/api-sql/src/domain/pharmacy-onboarding/content.ts';
+import type { OnboardingEmailLogEntry } from '../../services/api-sql/src/application/pharmacy-onboarding/onboarding-emails.ts';
 import type { PharmsmartOnboardingRequestState, PharmsmartPrefill, PharmsmartTermsRequest } from '../auth/types';
 import type {
   CuraleafConnectionStatus,
@@ -97,12 +99,15 @@ export class ApiRequestError extends Error {
   readonly code: string;
   /** Field-level validation issues from the server, when it names them. */
   readonly details: ApiFieldIssue[];
+  /** The server's `details` as sent, for refusals that carry an object (PHARMACY_ON_HOLD sends `{ hold }`). */
+  readonly rawDetails: unknown;
 
-  constructor(status: number, code: string, message: string, details: ApiFieldIssue[] = []) {
+  constructor(status: number, code: string, message: string, details: ApiFieldIssue[] = [], rawDetails: unknown = undefined) {
     super(message);
     this.status = status;
     this.code = code;
     this.details = details;
+    this.rawDetails = rawDetails;
     this.name = 'ApiRequestError';
   }
 }
@@ -141,9 +146,9 @@ async function performApiRequest<T>(path: string, init?: RequestInit): Promise<T
       : null;
     const code = body?.code ?? 'REQUEST_FAILED';
     if (shouldDispatchSessionEnded(response.status, code, typeof window === 'undefined' ? '' : window.location.pathname)) {
-      window.dispatchEvent(new CustomEvent('hhh:session-ended', { detail: { code } }));
+      window.dispatchEvent(new CustomEvent('hhh:session-ended', { detail: { code, details: body?.details } }));
     }
-    throw new ApiRequestError(response.status, code, body?.message || rateMessage || `Request failed with status ${response.status}.`, fieldIssues(body?.details));
+    throw new ApiRequestError(response.status, code, body?.message || rateMessage || `Request failed with status ${response.status}.`, fieldIssues(body?.details), body?.details);
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
@@ -303,6 +308,8 @@ export type PharmsmartLoginResult =
     prefill?: PharmsmartPrefill;
     /** The GPhC's onboarding request still waiting or on hold: show that instead of the forms. */
     onboardingRequest?: PharmsmartOnboardingRequestState;
+    /** Set when on hold (a request, or an activated branch): the hold message, merged for the branch. */
+    hold?: OnboardingHoldMessage | null;
     termsRequest?: PharmsmartTermsRequest | null;
     pharmsmartTicket?: string | null;
   };
@@ -450,8 +457,10 @@ export type PharmacyOnboardingRequestView = {
   signedOn: string;
   licenceFilename: string;
   organisationId: string | null;
-  /** The hold reason. Admin-only: the pharmacy never sees it. Kept after Unhold. */
-  declineReason: string | null;
+  /** Why it is (or last was) on hold. The pharmacy sees that reason's wording. Kept after the hold is lifted. */
+  holdReason: OnboardingHoldReason | null;
+  /** When the current (or last) hold was set or its reason changed. */
+  heldAt: string | null;
   decidedAt: string | null;
   createdAt: string | null;
   /** When the Worldpay form was sent. The form itself is never stored. */
@@ -627,7 +636,6 @@ export interface AdminWorldpayApplicationRow {
 export interface WorldpayContentSettings {
   recipients: { to: string[]; cc: string[] };
   wp01: { subject: string; body: string };
-  wp02: { subject: string; body: string };
   pricingPanel: WorldpayPricingPanel;
   schemeAnswers: { s01: string; s02: string; s03: string; s04: string; s05: string };
   s04Note: string;
@@ -807,44 +815,75 @@ export function liftPharmacySuspension(organisationId: string) {
   );
 }
 
-/** An existing Curaleaf customer: staff lose access and the eligibility link goes off. */
-export function markPharmacyNotAvailable(organisationId: string, reason?: string) {
-  return apiRequest<{ status: 'not_available' }>(
-    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/not-available`,
-    { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) },
-  );
-}
-
-/** Clears Not available: back to awaiting Curaleaf (or live on live credentials), intake on. */
-export function clearPharmacyNotAvailable(organisationId: string) {
-  return apiRequest<{ status: 'live' | 'onboarding' | 'not_available' | 'paused' }>(
-    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/clear-not-available`,
-    { method: 'POST', body: '{}' },
-  );
-}
-
-/** Archives a new pharmacy (for example when Curaleaf rejects it) and emails the reason. */
-export function declineNewPharmacy(organisationId: string, reason: string) {
-  return apiRequest<{ organisationId: string; requestId: string | null; declinedAt: string }>(
-    `/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/decline`,
-    { method: 'POST', body: JSON.stringify({ reason }) },
-  );
-}
-
-/** Pending only. The reason stays with HHH admin; the pharmacy is emailed without it. */
-export function holdPharmacyOnboardingRequest(id: string, reason: string) {
+/**
+ * Puts a request on hold with a reason, or changes the reason of one already on hold.
+ * Works on a pending request, or an activated branch that is not live yet (its staff
+ * lose access and see the hold message). Sends the Hold email each time.
+ */
+export function holdPharmacyOnboardingRequest(id: string, reason: OnboardingHoldReason) {
   return apiRequest<{ request: PharmacyOnboardingRequestView }>(
     `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/hold`,
     { method: 'POST', body: JSON.stringify({ reason }) },
   );
 }
 
-/** On hold only: back to pending. No email. */
+/** Lifts a hold: back to pending, or to awaiting Curaleaf (demo) if it was activated. No email. */
 export function unholdPharmacyOnboardingRequest(id: string) {
   return apiRequest<{ request: PharmacyOnboardingRequestView }>(
     `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(id)}/unhold`,
     { method: 'POST', body: JSON.stringify({}) },
   );
+}
+
+// --- Partner onboarding emails and content (Shay's build pack, 19 Nov 2026) ---
+
+export type { OnboardingContent, OnboardingContentKey, OnboardingEmailKind, OnboardingHoldReason } from '../../services/api-sql/src/domain/pharmacy-onboarding/content.ts';
+export type { OnboardingEmailLogEntry } from '../../services/api-sql/src/application/pharmacy-onboarding/onboarding-emails.ts';
+
+/** A request's send log: every onboarding email, newest first. */
+export function listOnboardingEmails(requestId: string) {
+  return apiRequest<{ entries: OnboardingEmailLogEntry[] }>(
+    `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(requestId)}/emails`,
+    { skipGetCache: true },
+  );
+}
+
+/** Sends one of the request's onboarding emails again, as it would be sent now. */
+export function resendOnboardingEmail(requestId: string, kind: OnboardingEmailKind) {
+  return apiRequest<{ entries: OnboardingEmailLogEntry[] }>(
+    `/v1/portal/admin/pharmacy-onboarding-requests/${encodeURIComponent(requestId)}/emails/${encodeURIComponent(kind)}/resend`,
+    { method: 'POST', body: '{}' },
+  );
+}
+
+export interface OnboardingContentView {
+  content: OnboardingContent;
+  /** The merge fields and [If] flags each email is given. */
+  mergeHelp: Record<OnboardingEmailKind, { fields: string[]; flags: string[] }>;
+}
+
+export function getOnboardingContent() {
+  return apiRequest<OnboardingContentView>('/v1/portal/admin/onboarding-content', { skipGetCache: true });
+}
+
+export function saveOnboardingContent<K extends OnboardingContentKey>(key: K, value: OnboardingContent[K]) {
+  return apiRequest<OnboardingContentView>(`/v1/portal/admin/onboarding-content/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+}
+
+/** The hold message a pharmacy sees, already merged for its branch. */
+export interface OnboardingHoldMessage {
+  reason: OnboardingHoldReason;
+  heading: string;
+  paragraphs: string[];
+  footer: string;
+}
+
+/** The published Partner Terms; 404 while they are not published. */
+export function getPartnerTerms() {
+  return apiRequest<{ version: string; text: string }>('/v1/public/partner-terms');
 }
 
 export function completeReferralRecordsCheck(submissionId: string, input: { organisationId: string; notes: string }) {

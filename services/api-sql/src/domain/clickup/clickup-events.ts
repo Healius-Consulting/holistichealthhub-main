@@ -6,13 +6,14 @@ export const CLICKUP_EVENTS = [
   'interest',
   'submitted',
   'held',
+  'held_existing_curaleaf',
   'unheld',
+  'unheld_activated',
   'activated',
   'phar_code_entered',
   'api_key_entered',
   'live',
   'checklist_progress',
-  'not_available',
   'terms_accepted',
   'worldpay_submitted',
   'worldpay_validated',
@@ -53,7 +54,7 @@ export type ClickupCardFields = {
   termsVersion?: string | null;
   termsSigner?: string | null;
   checklistPercent?: number | null;
-  /** Not a custom field: posted as a comment on the card (Worldpay submission). No personal or bank data. */
+  /** Not a custom field: posted as a comment on the card (Worldpay submission, hold reason). No personal or bank data. */
   comment?: string | null;
 };
 
@@ -123,6 +124,11 @@ export function clickupStageFor(
       return 'awaiting_activation';
     case 'held':
       return 'on_hold';
+    case 'held_existing_curaleaf':
+      return 'existing_curaleaf_hold';
+    case 'unheld_activated':
+      // Back to where an activated branch sits: Setup once both Curaleaf details are in.
+      return card.pharCodeEntered && card.apiKeyEntered ? 'setup' : 'awaiting_curaleaf';
     case 'activated':
       return 'awaiting_curaleaf';
     case 'phar_code_entered':
@@ -131,8 +137,6 @@ export function clickupStageFor(
       return card.exists ? null : 'awaiting_curaleaf';
     case 'live':
       return 'live';
-    case 'not_available':
-      return 'existing_curaleaf_hold';
     case 'checklist_progress':
     case 'terms_accepted':
     case 'worldpay_submitted':

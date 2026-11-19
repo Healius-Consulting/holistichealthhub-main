@@ -134,7 +134,7 @@ export async function queueEmailToRecipients(
  * Use `queueEmailToRecipients` instead when each person should get their own email.
  */
 export async function queueSharedEmail(
-  notificationRepo: NotificationRepositoryPort,
+  notificationRepo: Pick<NotificationRepositoryPort, 'enqueue'>,
   input: {
     to: string[];
     cc?: string[];
@@ -142,6 +142,8 @@ export async function queueSharedEmail(
     payload: Record<string, unknown>;
     keyParts: Array<string | number | null | undefined>;
     organisationId?: string | null;
+    /** Partner onboarding emails: shows the message in that request's send log. */
+    onboardingRequestId?: string | null;
   },
 ) {
   const to = dedupeRecipients(input.to.map(email => ({ email }))).map(recipient => recipient.email);
@@ -162,6 +164,7 @@ export async function queueSharedEmail(
     payload: input.payload,
     idempotencyKey: messageIdempotencyKey(input.keyParts),
     nextAttemptAt: null,
+    ...(input.onboardingRequestId ? { onboardingRequestId: input.onboardingRequestId } : {}),
   });
   return { queued: outcome.created };
 }

@@ -79,18 +79,19 @@ describe('ClickUp hooks', () => {
   it('sends no personal or patient fields in any event', async () => {
     const { clickupRepo, hooks } = setup();
     await hooks.requestSubmitted(request);
-    await hooks.held({ ...request, decidedAt: '2026-11-18T11:00:00.000Z' });
+    await hooks.held({ ...request, reason: 'MORE_INFORMATION_NEEDED', heldAt: '2026-11-18T11:00:00.000Z' });
     await hooks.unheld(request);
     await hooks.activated({ requestId: request.id, organisation: branch });
     await hooks.curaleafConnectionSaved({ organisation: branch, pharCodeEntered: true, apiKeyEntered: true, wentLive: true });
     await hooks.checklistProgress({ organisation: branch, percent: 50 });
-    await hooks.notAvailable({ gphcNumber: '1234567', organisationId: branch.id });
+    await hooks.held({ ...request, organisationId: branch.id, reason: 'EXISTING_CURALEAF_CUSTOMER', heldAt: '2026-11-18T12:00:00.000Z' });
+    await hooks.unheld({ ...request, organisationId: branch.id });
     const json = JSON.stringify(clickupRepo.outbox.map(row => row.payload));
     for (const banned of ['shop@shah.test', 'owner@shah.test', '0113 000 0000', 'Asha Shah', 'High Street']) {
       assert.ok(!json.includes(banned), `${banned} must not reach ClickUp`);
     }
     assert.deepEqual(clickupRepo.outbox.map(row => row.event), [
-      'submitted', 'held', 'unheld', 'activated', 'phar_code_entered', 'api_key_entered', 'live', 'checklist_progress', 'not_available',
+      'submitted', 'held', 'unheld', 'activated', 'phar_code_entered', 'api_key_entered', 'live', 'checklist_progress', 'held_existing_curaleaf', 'unheld_activated',
     ]);
     const activated = clickupRepo.outbox.find(row => row.event === 'activated')!;
     assert.equal(activated.payload.branchId, branch.id);

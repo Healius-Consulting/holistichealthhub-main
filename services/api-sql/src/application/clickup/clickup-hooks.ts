@@ -7,6 +7,7 @@ import {
   type ClickupEvent,
 } from '../../domain/clickup/clickup-events.js';
 import { compactGphcNumber } from '../../domain/pharmacy-onboarding/request.js';
+import { HOLD_REASON_LABEL, type OnboardingHoldReason } from '../../domain/pharmacy-onboarding/content.js';
 import type { ClickupRepositoryPort, PharmacyOnboardingVisitRepositoryPort } from '../../repositories/ports/clickup.port.js';
 import { SqlClickupRepository, SqlPharmacyOnboardingVisitRepository } from '../../repositories/sql/clickup.sql.js';
 
@@ -28,8 +29,21 @@ export interface ClickupHooks {
     deliveryAddress: string;
     invoiceAddress: string;
   }): Promise<void>;
-  held(request: { id: string; gphcNumber: string; decidedAt?: string | null }): Promise<void>;
-  unheld(request: { id: string; gphcNumber: string }): Promise<void>;
+  /**
+   * A hold was set or its reason changed. Reason A (existing Curaleaf customer) goes to
+   * "Existing Curaleaf — hold", B and C to On hold; a comment names the reason.
+   */
+  held(input: {
+    id: string;
+    gphcNumber: string;
+    organisationId?: string | null;
+    reason: OnboardingHoldReason;
+    heldAt: string;
+    /** Set when this changes the reason of a hold already in place. */
+    previousReason?: OnboardingHoldReason | null;
+  }): Promise<void>;
+  /** The hold was lifted: back to Awaiting activation, or (with a branch) where an activated branch sits. */
+  unheld(input: { id: string; gphcNumber: string; organisationId?: string | null }): Promise<void>;
   /** Activate made the branch: Awaiting Curaleaf, and the branch id goes on the card. */
   activated(result: {
     requestId: string;
@@ -44,8 +58,6 @@ export interface ClickupHooks {
   }): Promise<void>;
   /** For the go-live checklist (Step 5) to call when an item is ticked. */
   checklistProgress(input: { organisation: Pick<BranchForClickup, 'id' | 'gphcNumber' | 'classification'>; percent: number }): Promise<void>;
-  /** For the Not available status (not built yet): Existing Curaleaf — hold. */
-  notAvailable(input: { gphcNumber: string; organisationId?: string | null; onboardingRequestId?: string | null }): Promise<void>;
   /** For Partner Terms acceptance (Step 3) to call: fills the Terms fields. */
   termsAccepted(input: {
     gphcNumber: string;
@@ -164,16 +176,23 @@ export function clickupHooks(deps: ClickupHooksDeps): ClickupHooks {
       });
     }),
 
-    held: request => bestEffort('hold', () => enqueue(
-      'held',
-      `${request.id}:${request.decidedAt ?? now().toISOString()}`,
-      { gphcNumber: request.gphcNumber, onboardingRequestId: request.id },
+    held: input => bestEffort('hold', () => enqueue(
+      input.reason === 'EXISTING_CURALEAF_CUSTOMER' ? 'held_existing_curaleaf' : 'held',
+      `${input.id}:${input.heldAt}`,
+      {
+        gphcNumber: input.gphcNumber,
+        onboardingRequestId: input.id,
+        branchId: input.organisationId,
+        comment: input.previousReason
+          ? `Hold reason changed to ${HOLD_REASON_LABEL[input.reason]} (was ${HOLD_REASON_LABEL[input.previousReason]})`
+          : `On hold: ${HOLD_REASON_LABEL[input.reason]}`,
+      },
     )),
 
-    unheld: request => bestEffort('unhold', () => enqueue(
-      'unheld',
-      `${request.id}:${now().toISOString()}`,
-      { gphcNumber: request.gphcNumber, onboardingRequestId: request.id },
+    unheld: input => bestEffort('unhold', () => enqueue(
+      input.organisationId ? 'unheld_activated' : 'unheld',
+      `${input.id}:${now().toISOString()}`,
+      { gphcNumber: input.gphcNumber, onboardingRequestId: input.id, branchId: input.organisationId, comment: 'Hold lifted' },
     )),
 
     activated: result => bestEffort('activation', () => enqueue('activated', result.requestId, {
@@ -194,12 +213,6 @@ export function clickupHooks(deps: ClickupHooksDeps): ClickupHooks {
       'checklist_progress',
       `${input.organisation.id}:${now().toISOString()}`,
       { gphcNumber: input.organisation.gphcNumber, branchId: input.organisation.id, checklistPercent: input.percent },
-    )),
-
-    notAvailable: input => bestEffort('not available', () => enqueue(
-      'not_available',
-      `${cardKey(input.gphcNumber)}:${now().toISOString()}`,
-      { gphcNumber: input.gphcNumber, branchId: input.organisationId, onboardingRequestId: input.onboardingRequestId },
     )),
 
     termsAccepted: input => bestEffort('Terms acceptance', () => enqueue(

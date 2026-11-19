@@ -130,13 +130,14 @@ describe('syncClickup', () => {
     await run();
     assert.equal(clickup.tasks.get('task-1')!.status, 'Awaiting activation');
 
-    await hooks.held({ ...request, decidedAt: '2026-11-18T12:05:00.000Z' });
+    await hooks.held({ ...request, reason: 'MORE_INFORMATION_NEEDED', heldAt: '2026-11-18T12:05:00.000Z' });
     await run();
     assert.equal(clickup.tasks.get('task-1')!.status, 'On hold');
 
     await hooks.unheld(request);
     await run();
     assert.equal(clickup.tasks.get('task-1')!.status, 'Awaiting activation');
+    assert.deepEqual(clickup.comments, [['task-1', 'On hold: B. More information needed'], ['task-1', 'Hold lifted']]);
 
     await hooks.activated({ requestId: request.id, organisation: branch });
     await run();
@@ -198,18 +199,52 @@ describe('syncClickup', () => {
     assert.equal(clickup.tasks.get('task-1')!.status, 'Awaiting Curaleaf');
   });
 
-  it('moves the Not available event to Existing Curaleaf — hold', async () => {
+  it('moves a hold to its column by reason, comments the reason on every hold or change', async () => {
     const { clickup, hooks, run } = setup();
     await hooks.requestSubmitted(request);
-    await hooks.notAvailable({ gphcNumber: '1234567', onboardingRequestId: request.id });
+    await hooks.held({ ...request, reason: 'EXISTING_CURALEAF_CUSTOMER', heldAt: '2026-11-18T12:00:00.000Z' });
     await run();
-    assert.equal(clickup.tasks.get('task-1')!.status, 'Existing Curaleaf — hold');
+    const task = clickup.tasks.get('task-1')!;
+    assert.equal(task.status, 'Existing Curaleaf — hold');
+    await hooks.held({ ...request, reason: 'CURALEAF_DECLINED', heldAt: '2026-11-18T13:00:00.000Z', previousReason: 'EXISTING_CURALEAF_CUSTOMER' });
+    await run();
+    assert.equal(task.status, 'On hold');
+    await hooks.held({ ...request, reason: 'MORE_INFORMATION_NEEDED', heldAt: '2026-11-18T14:00:00.000Z', previousReason: 'CURALEAF_DECLINED' });
+    await run();
+    assert.equal(task.status, 'On hold');
+    assert.deepEqual(clickup.comments.map(([, text]) => text), [
+      'On hold: A. Existing Curaleaf customer',
+      'Hold reason changed to C. Curaleaf declined (was A. Existing Curaleaf customer)',
+      'Hold reason changed to B. More information needed (was C. Curaleaf declined)',
+    ]);
+  });
+
+  it('lifts a pending hold back to Awaiting activation, and an activated branch\'s back to where it sat', async () => {
+    const { clickup, hooks, run } = setup();
+    await hooks.activated({ requestId: request.id, organisation: branch });
+    await hooks.held({ ...request, organisationId: branch.id, reason: 'MORE_INFORMATION_NEEDED', heldAt: '2026-11-18T12:00:00.000Z' });
+    await hooks.unheld({ ...request, organisationId: branch.id });
+    await run();
+    const task = clickup.tasks.get('task-1')!;
+    assert.equal(task.status, 'Awaiting Curaleaf');
+
+    // With both Curaleaf details in (test credentials, so not live) it was in Setup.
+    await hooks.curaleafConnectionSaved({ organisation: branch, pharCodeEntered: true, apiKeyEntered: true, wentLive: false });
+    await run();
+    assert.equal(task.status, 'Setup');
+    await hooks.held({ ...request, organisationId: branch.id, reason: 'EXISTING_CURALEAF_CUSTOMER', heldAt: '2026-11-18T13:00:00.000Z' });
+    await run();
+    assert.equal(task.status, 'Existing Curaleaf — hold');
+    await hooks.unheld({ ...request, organisationId: branch.id });
+    await run();
+    assert.equal(task.status, 'Setup');
+    assert.equal(clickup.comments.at(-1)?.[1], 'Hold lifted');
   });
 
   it('retries a ClickUp failure with backoff and holds the card\'s later events behind it', async () => {
     const { repo, clickup, hooks, run, setNow } = setup();
     await hooks.requestSubmitted(request);
-    await hooks.held({ ...request, decidedAt: '2026-11-18T12:05:00.000Z' });
+    await hooks.held({ ...request, reason: 'CURALEAF_DECLINED', heldAt: '2026-11-18T12:05:00.000Z' });
     clickup.failNext = 1;
     let summary = await run();
     assert.equal(summary.retried, 1);

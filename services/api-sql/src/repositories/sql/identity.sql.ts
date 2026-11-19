@@ -1,4 +1,5 @@
 import { dataConnect } from '../../bootstrap/firebase.js';
+import { asUuid } from '../../domain/common/uuid.js';
 import type {
   AppendAuditInput,
   CreateSessionInput,
@@ -238,6 +239,23 @@ const REVOKE_STAFF_SESSION_GQL = `
   }
 `;
 
+/** Signs every open session of a pharmacy out (its onboarding went on hold). */
+const REVOKE_ORGANISATION_SESSIONS_GQL = `
+  mutation RevokeOrganisationStaffSessions(
+    $organisationId: UUID!
+    $revokedAt: Timestamp!
+    $revokeReason: String!
+  ) {
+    staffSession_updateMany(
+      where: { organisationId: { eq: $organisationId }, revokedAt: { isNull: true } }
+      data: {
+        revokedAt: $revokedAt
+        revokeReason: $revokeReason
+      }
+    )
+  }
+`;
+
 const APPEND_AUDIT_LOG_GQL = `
   mutation AppendAuditLog(
     $organisationId: UUID
@@ -358,6 +376,12 @@ export class SqlIdentityRepository implements IdentityRepositoryPort {
   async revokeSession(sessionHash: string, revokedAt: string, reason: string): Promise<void> {
     await dataConnect.executeGraphql<any, any>(REVOKE_STAFF_SESSION_GQL, {
       variables: { sessionHash, revokedAt, revokeReason: reason },
+    });
+  }
+
+  async revokeOrganisationSessions(organisationId: string, revokedAt: string, reason: string): Promise<void> {
+    await dataConnect.executeGraphql<unknown, { organisationId: string; revokedAt: string; revokeReason: string }>(REVOKE_ORGANISATION_SESSIONS_GQL, {
+      variables: { organisationId: asUuid(organisationId), revokedAt, revokeReason: reason },
     });
   }
 

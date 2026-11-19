@@ -16,19 +16,19 @@ export function formatOnboardingDate(value: string | null | undefined): string {
 // ---------------------------------------------------------------------------
 // Account status: one card, three states.
 
-export type PharmacyAccountState = 'being_set_up' | 'not_available' | 'suspended';
+export type PharmacyAccountState = 'being_set_up' | 'on_hold' | 'suspended';
 
 /** The card for a branch's status. Live has none. */
 export function pharmacyAccountState(status: string | null | undefined): PharmacyAccountState | null {
   if (status === 'onboarding' || status === 'intake_live') return 'being_set_up';
-  if (status === 'not_available') return 'not_available';
+  if (status === 'on_hold') return 'on_hold';
   if (status === 'paused') return 'suspended';
   return null;
 }
 
-/** Suspended and Not available pharmacies are refused at sign-in; the code says which. */
+/** Suspended and on-hold pharmacies are refused at sign-in and on every API call; the code says which. */
 export function pharmacyAccountStateFromCode(code: string | null | undefined): Exclude<PharmacyAccountState, 'being_set_up'> | null {
-  if (code === 'PHARMACY_NOT_AVAILABLE') return 'not_available';
+  if (code === 'PHARMACY_ON_HOLD') return 'on_hold';
   if (code === 'PHARMACY_SUSPENDED') return 'suspended';
   return null;
 }
@@ -40,15 +40,76 @@ export const PHARMACY_ACCOUNT_STATE_COPY: Record<PharmacyAccountState, { title: 
     title: 'Your account is being set up',
     body: 'Curaleaf Laboratories are opening your account. Your eligibility link is already open, so eligible patients are added to your list. Ordering and payments open when your account goes live.',
   },
-  not_available: {
-    title: 'Not available yet',
-    body: `This service may be available to you in the near future. Contact ${ONBOARDING_EMAIL} for more details.`,
+  on_hold: {
+    title: 'Your application is on hold',
+    body: 'We will be in touch about what happens next. You do not need to apply again.',
   },
   suspended: {
     title: 'Account suspended',
     body: 'This pharmacy\'s account is suspended. Contact Holistic Health Hub to restore access.',
   },
 };
+
+// ---------------------------------------------------------------------------
+// On hold: the message for the hold reason, which the server sends already merged
+// for the branch. The pharmacy sees only this until HHH lifts the hold.
+
+/** What the hold page shows. The server's message also carries its reason. */
+export type HoldMessageView = { heading: string; paragraphs: string[]; footer: string };
+
+/** Shown when the server did not send the message for the reason (an older API, or a lost response). */
+export const GENERIC_HOLD_MESSAGE: HoldMessageView = {
+  heading: PHARMACY_ACCOUNT_STATE_COPY.on_hold.title,
+  paragraphs: [PHARMACY_ACCOUNT_STATE_COPY.on_hold.body],
+  footer: `Questions? Email ${ONBOARDING_EMAIL}`,
+};
+
+function isHoldMessage(value: unknown): value is HoldMessageView {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<HoldMessageView>;
+  return typeof candidate.heading === 'string'
+    && candidate.heading.trim().length > 0
+    && Array.isArray(candidate.paragraphs)
+    && candidate.paragraphs.every(paragraph => typeof paragraph === 'string')
+    && typeof candidate.footer === 'string';
+}
+
+/** The hold message from a PHARMACY_ON_HOLD refusal's `details: { hold }`, or null. */
+export function holdMessageFromDetails<T extends HoldMessageView = HoldMessageView>(details: unknown): T | null {
+  if (!details || typeof details !== 'object') return null;
+  const hold = (details as { hold?: unknown }).hold;
+  return isHoldMessage(hold) ? hold as T : null;
+}
+
+/** The message to show: the server's for the reason, or the generic one. Blank paragraphs are dropped. */
+export function holdMessageOrGeneric(hold: HoldMessageView | null | undefined): HoldMessageView {
+  if (!isHoldMessage(hold)) return GENERIC_HOLD_MESSAGE;
+  const paragraphs = hold.paragraphs.map(paragraph => paragraph.trim()).filter(Boolean);
+  return {
+    heading: hold.heading.trim(),
+    paragraphs: paragraphs.length ? paragraphs : GENERIC_HOLD_MESSAGE.paragraphs,
+    footer: hold.footer.trim() || GENERIC_HOLD_MESSAGE.footer,
+  };
+}
+
+export type TextPart = { kind: 'text'; text: string } | { kind: 'email'; address: string };
+
+/** Splits a line around the email addresses in it, so each can be a mailto link. */
+export function textWithEmailLinks(line: string): TextPart[] {
+  const parts: TextPart[] = [];
+  const pattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+  let last = 0;
+  for (const match of line.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    // A full stop straight after the address ends the sentence, not the address.
+    const address = match[0].replace(/\.+$/, '');
+    if (start > last) parts.push({ kind: 'text', text: line.slice(last, start) });
+    parts.push({ kind: 'email', address });
+    last = start + address.length;
+  }
+  if (last < line.length) parts.push({ kind: 'text', text: line.slice(last) });
+  return parts;
+}
 
 // ---------------------------------------------------------------------------
 // Pre-live: Curaleaf-dependent screens wait for go-live.

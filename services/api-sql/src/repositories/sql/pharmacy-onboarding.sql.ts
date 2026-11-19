@@ -1,10 +1,12 @@
 import { dataConnect } from '../../bootstrap/firebase.js';
 import { SqlWorldpayApplicationRepository } from './worldpay-application.sql.js';
 import { asUuid } from '../../domain/common/uuid.js';
-import type {
-  PharmacyOnboardingRequestRecord,
-  PharmacyOnboardingStatus,
+import {
+  isOnboardingHoldReason,
+  type PharmacyOnboardingRequestRecord,
+  type PharmacyOnboardingStatus,
 } from '../../domain/pharmacy-onboarding/request.js';
+import type { OnboardingHoldReason } from '../../domain/pharmacy-onboarding/content.js';
 import type { PharmacyOnboardingDeferralRecord } from '../../domain/pharmacy-onboarding/deferral.js';
 import type { WorldpaySubmissionNote } from '../../domain/pharmacy-onboarding/worldpay.js';
 import type { PartnerTermsAcceptanceRecord } from '../../domain/pharmacy-onboarding/terms.js';
@@ -30,23 +32,24 @@ const REQUEST_FIELDS = `
   licenceFilename
   filledFormStoragePath
   organisationId
-  declineReason
+  holdReason
+  heldAt
   decidedAt
   decidedByUid
   idempotencyKey
   createdAt
 `;
 
-type RawRequest = Omit<PharmacyOnboardingRequestRecord, 'status' | 'createdAt' | 'decidedAt'> & {
+type RawRequest = Omit<PharmacyOnboardingRequestRecord, 'status' | 'createdAt' | 'decidedAt' | 'holdReason' | 'heldAt'> & {
   status: string;
+  holdReason?: string | null;
+  heldAt?: string | null;
   createdAt?: string | null;
   decidedAt?: string | null;
 };
 
-/** A request declined before Hold existed reads as on hold until the one-off change moves it. */
 function asStatus(value: string): PharmacyOnboardingStatus {
   if (value === 'ACTIVATED' || value === 'ON_HOLD' || value === 'PENDING') return value;
-  if (value === 'DECLINED') return 'ON_HOLD';
   return 'PENDING';
 }
 
@@ -57,7 +60,8 @@ function toRecord(row: RawRequest | null | undefined): PharmacyOnboardingRequest
     status: asStatus(row.status),
     faxNumber: row.faxNumber ?? null,
     organisationId: row.organisationId ?? null,
-    declineReason: row.declineReason ?? null,
+    holdReason: isOnboardingHoldReason(row.holdReason) ? row.holdReason : null,
+    heldAt: row.heldAt ?? null,
     decidedAt: row.decidedAt ?? null,
     decidedByUid: row.decidedByUid ?? null,
     createdAt: row.createdAt ?? null,
@@ -74,36 +78,11 @@ const LIST_GPHC_GQL = `
   }
 `;
 
-const LIST_ARCHIVED_GPHC_GQL = `
-  query ListArchivedOrganisationGphcNumbers {
-    organisations(where: { archivedAt: { isNull: false } }) {
-      id
-      gphcNumber
-    }
-  }
-`;
-
 const BY_ORGANISATION_GQL = `
   query PharmacyOnboardingRequestByOrganisation($organisationId: UUID!) {
     pharmacyOnboardingRequests(where: { organisationId: { eq: $organisationId } }, limit: 1) {
       ${REQUEST_FIELDS}
     }
-  }
-`;
-
-/** Declining a new pharmacy archives it: it leaves the overview and its staff lose access. */
-const ARCHIVE_ORGANISATION_GQL = `
-  mutation ArchiveDeclinedOrganisation($id: UUID!, $archivedAt: Timestamp!, $pausedReason: String!) {
-    organisation_update(
-      key: { id: $id }
-      data: {
-        status: PAUSED
-        intakeEnabled: false
-        pausedReason: $pausedReason
-        pausedAt: $archivedAt
-        archivedAt: $archivedAt
-      }
-    )
   }
 `;
 
@@ -141,6 +120,7 @@ const LATEST_BY_GPHC_GQL = `
       status
       pharmacyName
       registeredCompanyName
+      holdReason
     }
   }
 `;
@@ -189,14 +169,6 @@ const WORLDPAY_FIELDS = `
   idempotencyKey
 `;
 
-const WORLDPAY_BY_IDEMPOTENCY_GQL = `
-  query PharmacyWorldpaySubmissionByIdempotency($idempotencyKey: String!) {
-    pharmacyWorldpaySubmissions(where: { idempotencyKey: { eq: $idempotencyKey } }, limit: 1) {
-      ${WORLDPAY_FIELDS}
-    }
-  }
-`;
-
 const LIST_WORLDPAY_GQL = `
   query ListPharmacyWorldpaySubmissions($limit: Int!) {
     pharmacyWorldpaySubmissions(orderBy: [{ submittedAt: DESC }], limit: $limit) {
@@ -215,26 +187,6 @@ const WORLDPAY_FOR_BRANCH_GQL = `
     ) {
       ${WORLDPAY_FIELDS}
     }
-  }
-`;
-
-const INSERT_WORLDPAY_GQL = `
-  mutation CreatePharmacyWorldpaySubmission(
-    $id: UUID!
-    $gphcNumber: String!
-    $organisationId: UUID
-    $tradingName: String!
-    $submittedAt: Timestamp!
-    $idempotencyKey: String!
-  ) {
-    pharmacyWorldpaySubmission_insert(data: {
-      id: $id
-      gphcNumber: $gphcNumber
-      organisationId: $organisationId
-      tradingName: $tradingName
-      submittedAt: $submittedAt
-      idempotencyKey: $idempotencyKey
-    })
   }
 `;
 
@@ -312,31 +264,36 @@ const ACTIVATE_GQL = `
   }
 `;
 
+/** Sets a hold, or changes the reason of one already set. organisationId is left alone. */
 const HOLD_GQL = `
   mutation HoldPharmacyOnboardingRequest(
     $id: UUID!
-    $declineReason: String!
-    $decidedAt: Timestamp!
+    $holdReason: OnboardingHoldReason!
+    $heldAt: Timestamp!
     $decidedByUid: String!
   ) {
     pharmacyOnboardingRequest_update(
       key: { id: $id }
       data: {
         status: ON_HOLD
-        declineReason: $declineReason
-        decidedAt: $decidedAt
+        holdReason: $holdReason
+        heldAt: $heldAt
+        decidedAt: $heldAt
         decidedByUid: $decidedByUid
       }
     )
   }
 `;
 
-/** Back to waiting. The hold reason stays on the row as history. */
+/**
+ * Lifts the hold: back to PENDING, or ACTIVATED when the request already has a branch.
+ * The reason and heldAt stay on the row as history.
+ */
 const UNHOLD_GQL = `
-  mutation UnholdPharmacyOnboardingRequest($id: UUID!) {
+  mutation UnholdPharmacyOnboardingRequest($id: UUID!, $status: PharmacyOnboardingRequestStatus!) {
     pharmacyOnboardingRequest_update(
       key: { id: $id }
-      data: { status: PENDING }
+      data: { status: $status }
     )
   }
 `;
@@ -478,24 +435,11 @@ export class SqlPharmacyOnboardingRepository {
     return result.data.organisations ?? [];
   }
 
-  async listArchivedOrganisationGphcNumbers(): Promise<Array<{ id: string; gphcNumber: string }>> {
-    const result = await dataConnect.executeGraphql<{
-      organisations: Array<{ id: string; gphcNumber: string }>;
-    }, Record<string, never>>(LIST_ARCHIVED_GPHC_GQL);
-    return result.data.organisations ?? [];
-  }
-
   async findByOrganisationId(organisationId: string): Promise<PharmacyOnboardingRequestRecord | null> {
     const result = await dataConnect.executeGraphql<{
       pharmacyOnboardingRequests: RawRequest[];
     }, { organisationId: string }>(BY_ORGANISATION_GQL, { variables: { organisationId: asUuid(organisationId) } });
     return toRecord(result.data.pharmacyOnboardingRequests?.[0]);
-  }
-
-  async archiveOrganisation(id: string, reason: string, archivedAt: string): Promise<void> {
-    await dataConnect.executeGraphql<unknown, { id: string; archivedAt: string; pausedReason: string }>(ARCHIVE_ORGANISATION_GQL, {
-      variables: { id: asUuid(id), archivedAt, pausedReason: `Declined: ${reason}`.slice(0, 500) },
-    });
   }
 
   async findByIdempotencyKey(idempotencyKey: string): Promise<PharmacyOnboardingRequestRecord | null> {
@@ -519,12 +463,13 @@ export class SqlPharmacyOnboardingRepository {
     status: PharmacyOnboardingStatus;
     pharmacyName: string;
     registeredCompanyName: string;
+    holdReason: OnboardingHoldReason | null;
   } | null> {
     const result = await dataConnect.executeGraphql<{
-      pharmacyOnboardingRequests: Array<{ id: string; status: string; pharmacyName: string; registeredCompanyName: string }>;
+      pharmacyOnboardingRequests: Array<{ id: string; status: string; pharmacyName: string; registeredCompanyName: string; holdReason?: string | null }>;
     }, { gphcNumber: string }>(LATEST_BY_GPHC_GQL, { variables: { gphcNumber } });
     const row = result.data.pharmacyOnboardingRequests?.[0];
-    return row ? { ...row, status: asStatus(row.status) } : null;
+    return row ? { ...row, status: asStatus(row.status), holdReason: isOnboardingHoldReason(row.holdReason) ? row.holdReason : null } : null;
   }
 
   async findById(id: string): Promise<PharmacyOnboardingRequestRecord | null> {
@@ -541,7 +486,7 @@ export class SqlPharmacyOnboardingRepository {
     return (result.data.pharmacyOnboardingRequests ?? []).map(row => toRecord(row)!);
   }
 
-  async insert(input: Omit<PharmacyOnboardingRequestRecord, 'status' | 'organisationId' | 'declineReason' | 'decidedAt' | 'decidedByUid' | 'createdAt'>): Promise<void> {
+  async insert(input: Omit<PharmacyOnboardingRequestRecord, 'status' | 'organisationId' | 'holdReason' | 'heldAt' | 'decidedAt' | 'decidedByUid' | 'createdAt'>): Promise<void> {
     await dataConnect.executeGraphql<unknown, typeof input>(INSERT_GQL, { variables: input });
   }
 
@@ -552,24 +497,11 @@ export class SqlPharmacyOnboardingRepository {
     return result.data.pharmacyOnboardingDeferrals?.[0] ?? null;
   }
 
-  async findWorldpaySubmissionByIdempotencyKey(idempotencyKey: string): Promise<WorldpaySubmissionNote | null> {
-    const result = await dataConnect.executeGraphql<{
-      pharmacyWorldpaySubmissions: WorldpaySubmissionNote[];
-    }, { idempotencyKey: string }>(WORLDPAY_BY_IDEMPOTENCY_GQL, { variables: { idempotencyKey } });
-    return result.data.pharmacyWorldpaySubmissions?.[0] ?? null;
-  }
-
   async listWorldpaySubmissions(limit = 500): Promise<WorldpaySubmissionNote[]> {
     const result = await dataConnect.executeGraphql<{
       pharmacyWorldpaySubmissions: WorldpaySubmissionNote[];
     }, { limit: number }>(LIST_WORLDPAY_GQL, { variables: { limit } });
     return result.data.pharmacyWorldpaySubmissions ?? [];
-  }
-
-  async insertWorldpaySubmission(note: WorldpaySubmissionNote): Promise<void> {
-    await dataConnect.executeGraphql<unknown, WorldpaySubmissionNote>(INSERT_WORLDPAY_GQL, {
-      variables: { ...note, id: asUuid(note.id), organisationId: note.organisationId ? asUuid(note.organisationId) : null },
-    });
   }
 
   async findWorldpaySubmissionForBranch(organisationId: string, gphcNumber: string): Promise<WorldpaySubmissionNote | null> {
@@ -598,19 +530,21 @@ export class SqlPharmacyOnboardingRepository {
     });
   }
 
-  async hold(id: string, reason: string, decidedAt: string, decidedByUid: string): Promise<void> {
+  async hold(id: string, reason: OnboardingHoldReason, heldAt: string, decidedByUid: string): Promise<void> {
     await dataConnect.executeGraphql<unknown, {
       id: string;
-      declineReason: string;
-      decidedAt: string;
+      holdReason: OnboardingHoldReason;
+      heldAt: string;
       decidedByUid: string;
     }>(HOLD_GQL, {
-      variables: { id: asUuid(id), declineReason: reason, decidedAt, decidedByUid },
+      variables: { id: asUuid(id), holdReason: reason, heldAt, decidedByUid },
     });
   }
 
-  async unhold(id: string): Promise<void> {
-    await dataConnect.executeGraphql<unknown, { id: string }>(UNHOLD_GQL, { variables: { id: asUuid(id) } });
+  async unhold(id: string, status: 'PENDING' | 'ACTIVATED'): Promise<void> {
+    await dataConnect.executeGraphql<unknown, { id: string; status: 'PENDING' | 'ACTIVATED' }>(UNHOLD_GQL, {
+      variables: { id: asUuid(id), status },
+    });
   }
 
   async findTermsAcceptances(onboardingRequestId: string): Promise<PartnerTermsAcceptanceRecord[]> {

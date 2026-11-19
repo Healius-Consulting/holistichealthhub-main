@@ -68,6 +68,31 @@ test('a welcome redemption carries a pending or on-hold request through to the p
   }
 });
 
+test('an on-hold welcome carries the merged hold message, and a missing or malformed one becomes null', () => {
+  const hold = {
+    reason: 'EXISTING_CURALEAF_CUSTOMER' as const,
+    heading: 'Your application is on hold',
+    paragraphs: ['Curaleaf Laboratories have told us that Shah Pharmacy already has an account with them.'],
+    footer: 'Questions? Email onboarding@holistichealthhub.live',
+  };
+  const welcome = (extra: Record<string, unknown>) => pharmsmartRedeemNext({
+    status: 'welcome',
+    firstName: 'Amina',
+    lastName: 'Khan',
+    email: 'amina@pharmacy.test',
+    onboardingRequest: 'on_hold',
+    ...extra,
+  } as Parameters<typeof pharmsmartRedeemNext>[0]);
+  const next = welcome({ hold });
+  assert.equal(next.action, 'welcome');
+  if (next.action !== 'welcome') return;
+  assert.deepEqual(next.welcome.hold, hold);
+  const missing = welcome({});
+  assert.equal(missing.action === 'welcome' && missing.welcome.hold, null);
+  const malformed = welcome({ hold: { heading: 'On hold', paragraphs: 'not a list', footer: '' } });
+  assert.equal(malformed.action === 'welcome' && malformed.welcome.hold, null);
+});
+
 test('a welcome redemption with the Terms outstanding carries the request to resume at', () => {
   const termsRequest = { id: '6c1c5a0e-1a1f-4f43-9d1b-6f7a6f3f0a11', pharmacyName: 'Shah Pharmacy', registeredCompanyName: 'Shah Health Ltd' };
   const next = pharmsmartRedeemNext({

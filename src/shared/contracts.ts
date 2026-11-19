@@ -916,7 +916,7 @@ export interface GoLiveReadiness {
   intakeReady: boolean;
   ready: boolean;
   curaleafTestAcknowledgementRequired?: boolean;
-  status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'not_available';
+  status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'on_hold';
   gates: {
     gdprEvidence: {
       passed: boolean;
@@ -1301,7 +1301,7 @@ export interface PharmacyOverview {
     /** The pharmacy's own name. `tradingName` is the owning company. */
     name: string;
     tradingName: string;
-    status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'not_available';
+    status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'on_hold';
     trainingMode: boolean;
     allocationHoldingMode: boolean;
   };
@@ -1608,7 +1608,7 @@ export interface PortalOrganisation {
   postcode?: string;
   websiteDomains?: string[];
   primaryColour: string;
-  status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'not_available';
+  status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'on_hold';
   referralToken?: string;
   portalName?: string;
   worldpayEnabled?: boolean;

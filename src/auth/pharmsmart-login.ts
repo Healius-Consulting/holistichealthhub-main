@@ -1,4 +1,5 @@
-import type { PharmsmartLoginResult } from '../shared/api';
+import type { OnboardingHoldMessage, PharmsmartLoginResult } from '../shared/api';
+import { holdMessageFromDetails } from '../onboarding/branchOnboarding';
 import type { PharmsmartWelcome } from './types';
 
 /**
@@ -73,6 +74,8 @@ export function pharmsmartRedeemNext(result: PharmsmartLoginResult):
         onboardingRequest: result.onboardingRequest ?? null,
         termsRequest: result.termsRequest ?? null,
         pharmsmartTicket: result.pharmsmartTicket ?? null,
+        // On hold (a request, or an activated branch): the message for the reason, merged for the branch.
+        hold: holdMessageFromDetails<OnboardingHoldMessage>(result),
       },
     };
   }

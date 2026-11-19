@@ -14,7 +14,7 @@ describe('ClickUp event to card status', () => {
       ['unheld', 'awaiting_activation'],
       ['activated', 'awaiting_curaleaf'],
       ['live', 'live'],
-      ['not_available', 'existing_curaleaf_hold'],
+      ['held_existing_curaleaf', 'existing_curaleaf_hold'],
     ];
     for (const [event, stage] of expected) assert.equal(clickupStageFor(event, fresh), stage, event);
   });

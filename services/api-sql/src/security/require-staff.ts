@@ -4,6 +4,9 @@ import { secureSessionCookies } from '../bootstrap/config.js';
 import { HttpError } from '../domain/common/errors.js';
 import { SqlIdentityRepository } from '../repositories/sql/identity.sql.js';
 import { validatePortalAdmission } from './admission.js';
+import { PHARMACY_ON_HOLD_MESSAGE } from '../domain/pharmacy-onboarding/request.js';
+import { sqlHoldMessages } from '../application/pharmacy-onboarding/hold-message.js';
+import type { OnboardingHoldMessage } from '../application/pharmacy-onboarding/onboarding-content.js';
 import type { PlatformScope, ProtectedSurface, RequestContext, TenantScope } from './request-context.js';
 import { parseCookies, SESSION_TOUCH_INTERVAL_MS, sha256 } from './session-utils.js';
 
@@ -21,7 +24,25 @@ declare global {
 const identityRepo = new SqlIdentityRepository();
 
 export const PHARMACY_SUSPENDED_MESSAGE = 'This pharmacy\'s account is suspended. Contact Holistic Health Hub to restore access.';
-export const PHARMACY_NOT_AVAILABLE_MESSAGE = 'This service may be available to you in the near future. Contact onboarding@holistichealthhub.live for more details.';
+
+/**
+ * The refusal for a branch on hold: 403 PHARMACY_ON_HOLD with `details.hold`, the hold
+ * message for its reason (null if the message could not be read), so the sign-in page
+ * can show it instead of the account.
+ */
+export async function pharmacyOnHoldError(
+  organisationId: string | null | undefined,
+  lookup: (organisationId: string) => Promise<OnboardingHoldMessage | null>,
+): Promise<HttpError> {
+  const hold = organisationId ? await lookup(organisationId).catch(() => null) : null;
+  return new HttpError(403, PHARMACY_ON_HOLD_MESSAGE, 'PHARMACY_ON_HOLD', { hold });
+}
+
+const sharedHoldMessages = lazyHoldMessages();
+function lazyHoldMessages() {
+  let messages: ReturnType<typeof sqlHoldMessages> | null = null;
+  return (organisationId: string) => (messages ??= sqlHoldMessages()).forBranch({ id: organisationId });
+}
 
 export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') {
 
@@ -52,6 +73,9 @@ export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') 
         surface: expectedSurface,
       });
 
+      if (failure?.code === 'PHARMACY_ON_HOLD') {
+        throw await pharmacyOnHoldError(admission.staff?.organisationId, sharedHoldMessages);
+      }
       if (failure) {
         // A 401 stays deliberately generic: the session itself is the thing in doubt.
         // A 403 is an authenticated staff member hitting a permission wall, and
@@ -59,11 +83,9 @@ export function requireStaff(expectedSurface: ProtectedSurface | 'any' = 'any') 
         // plain "your role cannot do this" that it actually is.
         const message = failure.code === 'PHARMACY_SUSPENDED'
           ? PHARMACY_SUSPENDED_MESSAGE
-          : failure.code === 'PHARMACY_NOT_AVAILABLE'
-            ? PHARMACY_NOT_AVAILABLE_MESSAGE
-            : failure.status === 403
-              ? 'Your staff role is not permitted to perform this action.'
-              : 'Session admission failed.';
+          : failure.status === 403
+            ? 'Your staff role is not permitted to perform this action.'
+            : 'Session admission failed.';
         throw new HttpError(failure.status, message, failure.code);
       }
 

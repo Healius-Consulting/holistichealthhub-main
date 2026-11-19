@@ -44,7 +44,7 @@ function lower(value: string) {
 /** Workspace lifecycle shown to staff. Intake is a separate flag from day 0. */
 function portalAccountStatus(status: OrganisationRecord['status']) {
   if (status === 'INTAKE_LIVE') return 'onboarding' as const;
-  return lower(status) as 'onboarding' | 'live' | 'paused' | 'not_available';
+  return lower(status) as 'onboarding' | 'live' | 'paused' | 'on_hold';
 }
 
 function snapshotRecord(snapshot: unknown): Record<string, unknown> {

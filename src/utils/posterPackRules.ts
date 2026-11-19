@@ -10,7 +10,7 @@ export const POSTER_TEMPLATES_READY = true;
 
 /**
  * The QR opens the eligibility form, which is open from Awaiting Curaleaf onwards. A
- * suspended or Not available pharmacy's link is off, so it gets no posters.
+ * suspended or on-hold pharmacy's link is off, so it gets no posters.
  */
 export function posterPackAvailable(status: string | null | undefined): boolean {
   return status === 'onboarding' || status === 'intake_live' || status === 'live';

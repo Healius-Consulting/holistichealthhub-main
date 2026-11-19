@@ -1,0 +1,69 @@
+/* Partner onboarding admin: hold, send log and the content screen (Shay's build pack, 19 Nov 2026). */
+
+/* Hold: reason choices and the confirm line. */
+.onb-hold__reasons{ display: grid; gap: 6px; }
+.onb-hold__reason{
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  cursor: pointer;
+}
+.onb-hold__reason:has(input:disabled){ cursor: default; opacity: .65; }
+.onb-hold__reason.is-selected{ border-color: #f87171; box-shadow: 0 0 0 2px #fee2e2; }
+.onb-hold__reason input{ margin: 3px 0 0; }
+.onb-hold__reason span{ display: grid; gap: 2px; min-width: 0; }
+.onb-hold__reason strong{ color: var(--text-primary); font-size: 13px; font-weight: 700; }
+.onb-hold__reason em{ color: var(--text-tertiary); font-style: normal; font-weight: 600; }
+.onb-hold__reason small{ color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.onb-hold .onb-hold__email, .onb-hold-card .onb-hold__email{ margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+.onb-hold__email strong{ color: #991b1b; }
+
+.onb-hold-card > header{ flex-wrap: wrap; }
+.onb-hold-card__actions{ display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.onb-hold-card__confirm{ display: grid; gap: 8px; padding: 12px; border: 1px solid #fecaca; border-radius: 10px; background: #fff; }
+
+/* The disabled Hold on a live branch, with why. */
+.onb-hold-hint{ align-self: center; color: var(--text-tertiary); font-size: 11.5px; }
+
+/* Send log. */
+.onb-email-log .pharmacy-summary__row{ grid-template-columns: 150px minmax(0, 1fr) auto; align-items: start; }
+.onb-email-log .pharmacy-summary__label{ display: inline-flex; align-items: center; gap: 6px; padding-top: 2px; }
+.onb-email-log .pharmacy-summary__value small{ overflow-wrap: anywhere; }
+.onb-email-log__row.is-failed{ margin: 0 -10px; padding-right: 10px; padding-left: 10px; border-radius: 8px; background: #fef2f2; box-shadow: inset 3px 0 0 #dc2626; }
+.onb-email-log__row.is-failed .pharmacy-summary__label{ color: #991b1b; }
+.onb-email-log__failed-count{ padding: 2px 8px; color: #991b1b; font-size: 11.5px; font-weight: 700; background: #fee2e2; border-radius: 999px; }
+.onb-email-log__alert{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 9px 12px; color: #7f1d1d; font-size: 12.5px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; }
+.onb-email-log__alert .btn{ margin-left: auto; }
+.onb-email-log__notice{ margin: 0; padding: 9px 12px; color: #0f5c48; font-size: 12.5px; background: #e5f5ee; border-radius: 8px; }
+.onb-email-log__muted{ margin: 0; color: var(--text-tertiary); font-size: 12.5px; }
+.onb-email-log__history summary{ color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.onb-email-log__history ul{ gap: 4px; margin-top: 6px; }
+.onb-email-log__history li{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.onb-email-log__history .pharmacy-summary__state{ font-size: 12px; }
+.onb-email-log__confirm{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; color: var(--text-primary); font-size: 12.5px; }
+.onb-email-log__confirm > span{ flex: 1 1 220px; }
+
+@container (max-width: 520px){
+  .onb-email-log .pharmacy-summary__row{ grid-template-columns: minmax(0, 1fr) auto; }
+  .onb-email-log .pharmacy-summary__label{ grid-column: 1 / -1; }
+}
+
+/* Partner onboarding content screen. */
+.onb-content__help{ display: grid; gap: 6px; margin: 4px 0 0; padding: 10px 12px; color: var(--ink-muted); font-size: 12.5px; line-height: 1.5; background: #f6f8f6; border-radius: 10px; }
+.onb-content__help strong{ color: var(--ink); font-weight: 600; }
+.onb-content__tokens{ display: flex; flex-wrap: wrap; gap: 4px; }
+.onb-content__tokens code{ padding: 1px 6px; color: #185fa5; font-size: 12px; background: #e9f2fb; border-radius: 6px; }
+.onb-content__tokens code.is-flag{ color: #7a520e; background: #fbf2e2; }
+.onb-content__save{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0 4px; }
+.onb-content__dirty{ color: #8a5a10; font-size: 12.5px; font-weight: 600; }
+.onb-content__toggle{ display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid #e8ebe7; border-radius: 12px; background: #fff; cursor: pointer; }
+.onb-content__toggle input{ margin: 4px 0 0; }
+.onb-content__toggle span{ display: grid; gap: 2px; }
+.onb-content__toggle small{ color: var(--ink-muted); font-size: 12.5px; }
+.onb-content__publish-warning{ margin: 10px 0; }
+.onb-content .wpa-field{ margin-bottom: 10px; }

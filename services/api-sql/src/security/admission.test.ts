@@ -46,9 +46,9 @@ describe('validatePortalAdmission', () => {
     assert.equal(failure, null);
   });
 
-  it('locks out staff of a suspended or Not available pharmacy, each with its own code', () => {
+  it('locks out staff of a suspended or held pharmacy, each with its own code', () => {
     const session = createSyntheticSession('test-cookie-closed', SYNTHETIC_STAFF_PHARMACY_A);
-    for (const [status, code] of [['PAUSED', 'PHARMACY_SUSPENDED'], ['NOT_AVAILABLE', 'PHARMACY_NOT_AVAILABLE']] as const) {
+    for (const [status, code] of [['PAUSED', 'PHARMACY_SUSPENDED'], ['ON_HOLD', 'PHARMACY_ON_HOLD']] as const) {
       const failure = validatePortalAdmission({
         claims: dummyClaims,
         admission: { session, staff: { ...SYNTHETIC_STAFF_PHARMACY_A, organisation: { status } } },
@@ -58,6 +58,17 @@ describe('validatePortalAdmission', () => {
       assert.equal(failure?.status, 403);
       assert.equal(failure?.code, code);
     }
+  });
+
+  it('shows a held branch its hold, not a sign-in error, after its sessions were revoked', () => {
+    const session = { ...createSyntheticSession('test-cookie-held', SYNTHETIC_STAFF_PHARMACY_A), revokedAt: new Date().toISOString(), revokeReason: 'onboarding_on_hold' };
+    const failure = validatePortalAdmission({
+      claims: dummyClaims,
+      admission: { session, staff: { ...SYNTHETIC_STAFF_PHARMACY_A, organisation: { status: 'ON_HOLD' } } },
+      sessionHash: session.sessionHash,
+      surface: 'pharmacy',
+    });
+    assert.equal(failure?.code, 'PHARMACY_ON_HOLD');
   });
 
   it('rejects when session record is missing in SQL (SEC-01)', () => {

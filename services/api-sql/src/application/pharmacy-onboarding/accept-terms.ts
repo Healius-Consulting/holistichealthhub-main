@@ -9,13 +9,14 @@ import {
   type PartnerTermsAcceptanceInput,
   type PartnerTermsAcceptanceRecord,
 } from '../../domain/pharmacy-onboarding/terms.js';
-import type { NotificationRepositoryPort } from '../../repositories/ports/notification.port.js';
 import type { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
-import { queuePharmacyApplicationEmails } from './emails.js';
+import type { OnboardingEmails } from './onboarding-emails.js';
 
 export type AcceptPartnerTermsDeps = {
   repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'findTermsAcceptances' | 'insertTermsAcceptance'>;
-  notificationRepo: NotificationRepositoryPort;
+  /** The "Sent" email to the pharmacy and the application to Curaleaf. Never throws. */
+  emails: Pick<OnboardingEmails, 'applicationReceived'>;
+  /** The version recorded on a new acceptance (acceptedPartnerTermsVersion). */
   termsVersion: string;
   /** Verifies the PharmSmart names ticket the welcome page carried. */
   ticketSecret: string;
@@ -25,9 +26,9 @@ export type AcceptPartnerTermsDeps = {
 
 /**
  * The pharmacy accepts the Partner Terms against its onboarding request (no branch
- * exists yet; Activate links the row later). The same step queues the Curaleaf
- * application email. A retry finds the row already there and queues again under the
- * same idempotency keys, so nothing is sent twice and a failed queue is recovered.
+ * exists yet; Activate links the row later). The same step sends the "Sent" email and
+ * the application to Curaleaf. A retry finds the row already there and asks again; the
+ * emails go once per request, so nothing is sent twice and a failed send is recovered.
  */
 export async function acceptPartnerTerms(
   deps: AcceptPartnerTermsDeps,
@@ -39,7 +40,7 @@ export async function acceptPartnerTerms(
 
   const earlier = (await deps.repo.findTermsAcceptances(request.id)).find(row => row.source === 'signup');
   if (earlier) {
-    await queuePharmacyApplicationEmails(deps.notificationRepo, request, earlier.acceptedAt, { demo: await deps.isDemo?.(request.gphcNumber) ?? false });
+    await sendApplicationEmails(deps, request);
     return { acceptance: earlier, request };
   }
   if (request.status !== 'PENDING') {
@@ -69,6 +70,16 @@ export async function acceptPartnerTerms(
   };
   const { organisationId: _organisationId, ...row } = acceptance;
   await deps.repo.insertTermsAcceptance(row);
-  await queuePharmacyApplicationEmails(deps.notificationRepo, request, acceptedAt, { demo: await deps.isDemo?.(request.gphcNumber) ?? false });
+  await sendApplicationEmails(deps, request);
   return { acceptance, request };
+}
+
+async function sendApplicationEmails(deps: AcceptPartnerTermsDeps, request: PharmacyOnboardingRequestRecord) {
+  const demo = await deps.isDemo?.(request.gphcNumber) ?? false;
+  try {
+    await deps.emails.applicationReceived({ request, demo });
+  } catch (error) {
+    // The port never throws; this only guards the acceptance already recorded.
+    console.error('Pharmacy onboarding application emails failed', error instanceof Error ? error.message : 'unknown');
+  }
 }

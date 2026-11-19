@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { brandedEmail, escapeHtml, resolveEmailHeader, safeHttpUrl } from './email-layout.js';
 import { enquiryDisplayFields } from './email-mask.js';
 import { keyContact, telHref, type KeyContact } from './key-contacts.js';
@@ -23,12 +24,10 @@ export const EMAIL_EVENT_NAMES = [
   'staff.password_reset',
   'staff.2fa_enabled',
   'staff.2fa_disabled',
-  'pharmacy_onboarding.submitted',
   'pharmacy_onboarding.terms_accepted',
   'pharmacy_onboarding.held',
   'pharmacy_onboarding.activated',
-  'pharmacy_onboarding.declined',
-  'pharmacy_onboarding.worldpay_submitted',
+  'pharmacy_onboarding.live',
   'worldpay_application.submitted',
 ] as const;
 
@@ -71,10 +70,8 @@ export const EMAIL_TEMPLATE_CODES = [
   'curaleaf_new_account_application',
   'pharmacy_onboarding_held',
   'pharmacy_onboarding_activated',
-  'pharmacy_onboarding_declined',
-  'admin_worldpay_form_submitted',
+  'pharmacy_onboarding_live',
   'worldpay_application_to_worldpay',
-  'worldpay_application_confirmation',
 ] as const;
 
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
@@ -92,11 +89,6 @@ export type EmailAlias = 'referrals' | 'IT' | 'support' | 'onboarding';
 
 export function emailAliasDomain() {
   return process.env.EMAIL_ALIAS_DOMAIN?.trim() || 'holistichealthhub.live';
-}
-
-/** Pharmacy onboarding mail is sent from, replied to and cites this one mailbox. */
-function onboardingAddress() {
-  return `onboarding@${emailAliasDomain()}`;
 }
 
 export function replyToFor(kind: EmailTemplateCode): string | null {
@@ -133,10 +125,8 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   curaleaf_new_account_application: 'onboarding',
   pharmacy_onboarding_held: 'onboarding',
   pharmacy_onboarding_activated: 'onboarding',
-  pharmacy_onboarding_declined: 'accounts',
-  admin_worldpay_form_submitted: 'onboarding',
+  pharmacy_onboarding_live: 'onboarding',
   worldpay_application_to_worldpay: 'onboarding',
-  worldpay_application_confirmation: 'onboarding',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -151,6 +141,49 @@ export const RETIRED_EMAIL_TEMPLATES = new Set<EmailTemplateCode>([
 
 export function fromAddressFor(kind: EmailTemplateCode): string {
   return `${FROM_ALIAS[kind]}@${emailAliasDomain()}`;
+}
+
+export const DEFAULT_FROM_NAME = 'Holistic Health Hub';
+
+/**
+ * The partner onboarding emails (Shay's build pack, 19 Nov 2026). Their sender name and
+ * Reply-To are admin content, merged into the payload when queued (`fromName`, `replyTo`).
+ * The From address itself never changes: it must stay a verified sending alias.
+ */
+export const SENDER_OVERRIDE_TEMPLATES: ReadonlySet<EmailTemplateCode> = new Set<EmailTemplateCode>([
+  'pharmacy_onboarding_submitted',
+  'curaleaf_new_account_application',
+  'pharmacy_onboarding_activated',
+  'pharmacy_onboarding_held',
+  'pharmacy_onboarding_live',
+]);
+
+const overrideAddress = z.string().trim().toLowerCase().email().max(254);
+
+/** A display name safe to put in a From header: no quotes, brackets, backslashes or line breaks. */
+function cleanDisplayName(raw: string) {
+  return raw.replace(/[\u0000-\u001f\u007f"<>\\]/g, '').replace(/\s+/g, ' ').trim().slice(0, 100);
+}
+
+/**
+ * Sender name and Reply-To for one message. Only SENDER_OVERRIDE_TEMPLATES read them
+ * from the payload, and only when they are valid; anything else gets the catalog's own.
+ */
+export function senderFor(kind: EmailTemplateCode, payload: unknown): { fromName: string; replyTo: string | null } {
+  const fallback = { fromName: DEFAULT_FROM_NAME, replyTo: replyToFor(kind) };
+  if (!SENDER_OVERRIDE_TEMPLATES.has(kind)) return fallback;
+  const replyTo = overrideAddress.safeParse(value(payload, 'replyTo'));
+  const fromName = cleanDisplayName(value(payload, 'fromName'));
+  return {
+    fromName: fromName || fallback.fromName,
+    replyTo: replyTo.success ? replyTo.data : fallback.replyTo,
+  };
+}
+
+/** `Name <address>`, quoting the name when it holds a character the header treats specially. */
+export function formatFromHeader(name: string, address: string) {
+  const clean = cleanDisplayName(name) || DEFAULT_FROM_NAME;
+  return /[()\[\]:;@,.]/.test(clean) ? `"${clean}" <${address}>` : `${clean} <${address}>`;
 }
 
 export type RenderedEmail = {
@@ -231,16 +264,6 @@ function longDate(value: string) {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(parsed);
 }
 
-/** "19 November 2026" and "14:05" in UK time, from an ISO instant. */
-function londonDateAndTime(iso: string) {
-  const at = new Date(iso);
-  if (!iso || Number.isNaN(at.getTime())) return { date: '', time: '' };
-  return {
-    date: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long', year: 'numeric' }).format(at),
-    time: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at),
-  };
-}
-
 function enquirySourceLabel(sourceType: string) {
   if (sourceType === 'GENERAL_HHH_WEBSITE') return 'Website';
   if (sourceType === 'PHARMACY_QR' || sourceType === 'LEGACY_PHARMACY_QR') return 'Pharmacy QR';
@@ -250,7 +273,6 @@ function enquirySourceLabel(sourceType: string) {
 export function emailUsesAdminHeader(kind: string, payload: unknown) {
   return kind === 'admin_new_enquiry_received'
     || kind === 'curaleaf_new_account_application'
-    || kind === 'admin_worldpay_form_submitted'
     || value(payload, 'pharmacyName') === 'HHH admin workspace';
 }
 
@@ -259,7 +281,7 @@ function isAdminAudience(kind: EmailTemplateCode, payload: unknown) {
 }
 
 function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
-  if (kind === 'curaleaf_new_account_application') return 'Partner onboarding';
+  if (SENDER_OVERRIDE_TEMPLATES.has(kind)) return 'Partner onboarding';
   if (admin) return 'Admin alert';
   if (
     kind === 'pharmacy_staff_invite'
@@ -272,6 +294,41 @@ function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
   return 'Pharmacy update';
 }
 
+function paragraphsOf(payload: unknown) {
+  const given = payload && typeof payload === 'object' ? (payload as { paragraphs?: unknown }).paragraphs : undefined;
+  return Array.isArray(given) ? given.filter((item): item is string => typeof item === 'string' && item.trim() !== '') : [];
+}
+
+/** A short one-line paragraph with no closing punctuation reads as a heading ("What happens next"). */
+function looksLikeHeading(paragraph: string, index: number) {
+  return index > 0 && !paragraph.includes('\n') && paragraph.length <= 60 && !/[.,:;!?)]$/.test(paragraph) && !paragraph.startsWith('-');
+}
+
+/**
+ * A partner onboarding email: subject and paragraphs merged from admin content when it
+ * was queued (application/pharmacy-onboarding/onboarding-emails.service.ts), with the
+ * Reply-To it was given. Every row is queued with both; `fallbackSubject` only keeps a
+ * malformed payload renderable.
+ */
+function onboardingEmail(kind: EmailTemplateCode, payload: unknown, fallbackSubject: string): RenderedEmail {
+  const subject = value(payload, 'subject') || fallbackSubject;
+  const given = paragraphsOf(payload);
+  const lines = given.length ? given : ['For anything about your Holistic Health Hub application, reply to this email.'];
+  return render({
+    kind,
+    payload,
+    subject,
+    preheader: lines.find((line, index) => index > 0 && !looksLikeHeading(line, index)) ?? lines[0] ?? subject,
+    title: subject.replace(/^DEMO, not sent to Curaleaf: /, ''),
+    text: lines.join('\n\n'),
+    paragraphs: lines.map((paragraph, index) => {
+      const html = escapeHtml(paragraph).replace(/\n/g, '<br>');
+      return looksLikeHeading(paragraph, index) ? `<strong>${html}</strong>` : html;
+    }),
+    replyTo: senderFor(kind, payload).replyTo,
+  });
+}
+
 /**
  * An email whose subject and paragraphs were written in admin and merged before
  * sending (the Worldpay application emails). The payload carries `subject` and
@@ -279,8 +336,7 @@ function eyebrowFor(kind: EmailTemplateCode, admin: boolean) {
  */
 function contentEmail(kind: EmailTemplateCode, payload: unknown, fallbackSubject: string, fallbackParagraph: string): RenderedEmail {
   const subject = value(payload, 'subject') || fallbackSubject;
-  const given = payload && typeof payload === 'object' ? (payload as { paragraphs?: unknown }).paragraphs : undefined;
-  const paragraphs = Array.isArray(given) ? given.filter((item): item is string => typeof item === 'string' && item.trim() !== '') : [];
+  const paragraphs = paragraphsOf(payload);
   const lines = paragraphs.length ? paragraphs : [fallbackParagraph];
   return render({
     kind,
@@ -307,6 +363,8 @@ function render(input: {
   details?: Array<{ label: string; value: string }>;
   nextSteps?: Array<string | { title: string; body?: string }>;
   footerNote?: string;
+  /** The Reply-To this message is sent with, when it is not the template's own. */
+  replyTo?: string | null;
 }): RenderedEmail {
   const admin = isAdminAudience(input.kind, input.payload);
   return {
@@ -324,7 +382,7 @@ function render(input: {
       nextSteps: input.nextSteps,
       footerNote: input.footerNote,
       // Keeps the footer honest about whether anyone reads a reply.
-      replyTo: replyToFor(input.kind),
+      replyTo: input.replyTo !== undefined ? input.replyTo : replyToFor(input.kind),
       header: resolveEmailHeader({
         audience: admin ? 'admin' : 'pharmacy',
         organisationId: value(input.payload, 'organisationId'),
@@ -1093,140 +1151,44 @@ export const EMAILS = {
     },
   },
   pharmacy_onboarding_submitted: {
-    audience: 'staff',
-    events: ['pharmacy_onboarding.submitted'],
+    audience: 'pharmacy_owner',
+    events: ['pharmacy_onboarding.terms_accepted'],
     schedule: 'immediate',
-    summary: 'Sent to the pharmacy email once it has sent the Curaleaf account form and accepted the Partner Terms (nothing is sent for the form alone). The request waits for HHH to activate or hold it; no account exists yet.',
+    summary: 'Sent: once per request, when the pharmacy accepts the Partner Terms (nothing is sent for the Curaleaf form alone). One email to the Terms signer and the request\'s pharmacy email (one address when they match). Wording, sender name and Reply-To are admin content (onboarding.email.sent); it mentions Worldpay by whether an application has been submitted, and links the Partner Terms only once they are published.',
     replyTo: 'onboarding',
-    render: (payload) => {
-      const contact = onboardingAddress();
-      const lines = [
-        "Thank you, we've received your request to join Holistic Health Hub. We'll review it and let you know our decision.",
-        `Please check back in a few days, or contact ${contact} for more details.`,
-      ];
-      return render({
-        kind: 'pharmacy_onboarding_submitted',
-        payload,
-        subject: "We've received your request",
-        preheader: "We'll review it and let you know our decision.",
-        title: 'Request received',
-        text: lines.join('\n\n'),
-        paragraphs: [
-          escapeHtml(lines[0]!),
-          `Please check back in a few days, or contact ${mailLink(contact)} for more details.`,
-        ],
-      });
-    },
+    render: (payload) => onboardingEmail('pharmacy_onboarding_submitted', payload, 'Your Holistic Health Hub application'),
   },
   pharmacy_onboarding_held: {
-    audience: 'staff',
+    audience: 'pharmacy_owner',
     events: ['pharmacy_onboarding.held'],
     schedule: 'immediate',
-    summary: "Sent to the pharmacy email when HHH puts its onboarding request on hold. Never includes the admin's reason.",
+    summary: 'Hold: each time HHH puts a request on hold or changes the hold reason (lifting a hold sends nothing). To the Terms signer and the pharmacy email. Carries only the chosen reason\'s paragraphs (A existing Curaleaf customer, B more information needed, C Curaleaf declined), plus a Worldpay line when an application has been submitted. Admin content: onboarding.email.hold.',
     replyTo: 'onboarding',
-    render: (payload) => {
-      const contact = onboardingAddress();
-      const line = 'Your account could not be created at this point in time.';
-      return render({
-        kind: 'pharmacy_onboarding_held',
-        payload,
-        subject: 'Update on your Holistic Health Hub request',
-        preheader: line,
-        title: 'Update on your request',
-        text: `${line} Please email ${contact} for more details.`,
-        paragraphs: [`${line} Please email ${mailLink(contact)} for more details.`],
-      });
-    },
+    render: (payload) => onboardingEmail('pharmacy_onboarding_held', payload, 'Your Holistic Health Hub application is on hold'),
   },
   pharmacy_onboarding_activated: {
-    audience: 'staff',
+    audience: 'pharmacy_owner',
     events: ['pharmacy_onboarding.activated'],
     schedule: 'immediate',
-    summary: 'Sent to the pharmacy email when HHH activates its onboarding request and the account is created.',
+    summary: 'Activation: once per request, when HHH activates it and the branch is created in demonstration mode ("ready to try"). To the Terms signer and the pharmacy email. Includes the training booking link when one is set. Admin content: onboarding.email.activation.',
     replyTo: 'onboarding',
-    render: (payload) => {
-      const contact = onboardingAddress();
-      const line = 'Your account has been activated.';
-      return render({
-        kind: 'pharmacy_onboarding_activated',
-        payload,
-        subject: 'Your Holistic Health Hub account is active',
-        preheader: line,
-        title: 'Account active',
-        text: `${line} You can sign in through PharmSmart, or contact us at ${contact} and we'll send an invite to your account.`,
-        paragraphs: [`${line} You can sign in through PharmSmart, or contact us at ${mailLink(contact)} and we'll send an invite to your account.`],
-      });
-    },
+    render: (payload) => onboardingEmail('pharmacy_onboarding_activated', payload, 'Your Holistic Health Hub account is ready to try'),
+  },
+  pharmacy_onboarding_live: {
+    audience: 'pharmacy_owner',
+    events: ['pharmacy_onboarding.live'],
+    schedule: 'immediate',
+    summary: 'Live: once per branch, the first time it goes live (Curaleaf PHAR code and API key saved); editing either later sends nothing. To the Terms signer and the pharmacy email. Gives the PHAR code (never the API key), how payment is taken (by whether live Worldpay credentials are validated) and the go-live checklist items still open at sending, each block left out when empty. Admin content: onboarding.email.live.',
+    replyTo: 'onboarding',
+    render: (payload) => onboardingEmail('pharmacy_onboarding_live', payload, 'You are live on Holistic Health Hub'),
   },
   curaleaf_new_account_application: {
     audience: 'admin',
     events: ['pharmacy_onboarding.terms_accepted'],
     schedule: 'immediate',
-    summary: 'One email to Curaleaf Laboratories (To) with partner success copied (CC), sent once the pharmacy accepts the Partner Terms, never at Curaleaf form submission alone. The filled Curaleaf account form is attached. Recipients are set in config.',
+    summary: 'One email to Curaleaf Laboratories (To) with partner success copied (CC), sent once per request when the pharmacy accepts the Partner Terms, never at Curaleaf form submission alone. Attached: the filled form as Curaleaf-new-account_[GPhC]_[Branch]_[YYYY-MM-DD].pdf and the controlled drug licence. A demo GPhC goes to the CC list only, marked DEMO. Recipients are set in config; wording, sender name and Reply-To (Healius) are admin content (onboarding.email.curaleafApplication).',
     replyTo: 'onboarding',
-    render: (payload) => {
-      const branch = value(payload, 'branchName') || 'A pharmacy';
-      const gphc = value(payload, 'gphcNumber');
-      const { date, time } = londonDateAndTime(value(payload, 'submittedAt'));
-      const intro = `Please find attached a new account application from ${branch}, submitted through the Holistic Health Hub partner platform on ${date} at ${time}.`;
-      const interim = `${branch} has applied under our interim arrangement, which covers pharmacies that are new to Curaleaf. If the pharmacy already holds a Curaleaf account, please tell us by replying to this email rather than opening a second account. We will then let the pharmacy know.`;
-      const once = 'Please provide us with the PHAR code, API key and referral-portal login.';
-      const questions = 'Send any questions about this application to us by replying to this email.';
-      return render({
-        kind: 'curaleaf_new_account_application',
-        payload,
-        subject: `${payload && typeof payload === 'object' && (payload as { demo?: unknown }).demo === true ? 'DEMO, not sent to Curaleaf: ' : ''}New account application: ${branch}, GPhC ${gphc}`,
-        preheader: `New account application from ${branch}.`,
-        title: 'New account application',
-        text: [
-          'Hello,',
-          intro,
-          interim,
-          'Once the account is open',
-          once,
-          questions,
-          'Kind regards,\nPartner Onboarding, Holistic Health Hub',
-        ].join('\n\n'),
-        paragraphs: [
-          'Hello,',
-          escapeHtml(intro),
-          escapeHtml(interim),
-          '<strong>Once the account is open</strong>',
-          escapeHtml(once),
-          escapeHtml(questions),
-          'Kind regards,<br>Partner Onboarding, Holistic Health Hub',
-        ],
-      });
-    },
-  },
-  admin_worldpay_form_submitted: {
-    audience: 'staff',
-    events: ['pharmacy_onboarding.worldpay_submitted'],
-    schedule: 'immediate',
-    summary: 'Sent straight away, not through the outbox, to the HHH admin inbox only when a pharmacy submits the Worldpay form. The filled form is attached as a PDF. Never sent to Worldpay. Its bank and identity details are never stored.',
-    render: (payload) => {
-      const plainName = value(payload, 'tradingName') || 'A pharmacy';
-      const gphc = value(payload, 'gphcNumber');
-      const line = `${plainName}${gphc ? ` (GPhC ${gphc})` : ''} submitted the Worldpay card processing form.`;
-      const htmlLine = `<strong>${escapeHtml(plainName)}</strong>${gphc ? ` (GPhC ${escapeHtml(gphc)})` : ''} submitted the Worldpay card processing form.`;
-      const advice = 'The filled form is attached. It holds bank and identity details, so forward it to Worldpay and keep it out of shared folders. The platform has not kept a copy.';
-      return render({
-        kind: 'admin_worldpay_form_submitted',
-        payload,
-        subject: `Worldpay form: ${plainName}`,
-        preheader: line,
-        title: 'Worldpay form submitted',
-        text: [line, advice].join('\n\n'),
-        paragraphs: [htmlLine, advice],
-        cta: { label: 'Open pharmacy requests', href: 'https://portal.holistichealthhub.live/admin/pharmacy-requests' },
-        detailsTitle: 'Submission',
-        details: [
-          { label: 'Pharmacy', value: plainName },
-          { label: 'GPhC', value: gphc },
-          { label: 'Contact', value: value(payload, 'contactName') },
-        ],
-      });
-    },
+    render: (payload) => onboardingEmail('curaleaf_new_account_application', payload, 'New account application'),
   },
   worldpay_application_to_worldpay: {
     audience: 'admin',
@@ -1235,39 +1197,6 @@ export const EMAILS = {
     summary: 'WP-01. Sent straight away to the HHH admin inbox (the recipients set in admin) when a pharmacy submits its Worldpay application, for admin to forward to Worldpay. The application PDF and spreadsheet are attached, plus the service information PDF when the pharmacy has no website. Subject and wording are edited in admin; no personal or bank details are written in the body.',
     replyTo: 'onboarding',
     render: (payload) => contentEmail('worldpay_application_to_worldpay', payload, 'Worldpay application', 'Please find attached a card processing application from a Holistic Health Hub partner pharmacy.'),
-  },
-  worldpay_application_confirmation: {
-    audience: 'pharmacy_owner',
-    events: ['worldpay_application.submitted'],
-    schedule: 'immediate',
-    summary: 'WP-02. Sent straight away to whoever submitted the Worldpay application and to the branch email, saying it has gone to Worldpay and what happens next. No attachment and no personal or bank details. Wording is edited in admin.',
-    replyTo: 'onboarding',
-    render: (payload) => contentEmail('worldpay_application_confirmation', payload, 'Your Worldpay application has been sent', 'We have received your Worldpay application and passed it to Worldpay. If Worldpay ask you something you are unsure about, reply to this email.'),
-  },
-  pharmacy_onboarding_declined: {
-    audience: 'staff',
-    events: ['pharmacy_onboarding.declined'],
-    schedule: 'immediate',
-    summary: 'Sent to the pharmacy email when HHH declines a pharmacy already created from the onboarding page (it is archived), for example when Curaleaf rejects the account.',
-    render: (payload) => {
-      const pharmacyName = escapeHtml(value(payload, 'pharmacyName') || 'the pharmacy');
-      const plainName = value(payload, 'pharmacyName') || 'the pharmacy';
-      const reason = value(payload, 'declineReason');
-      const contact = primaryAddress(keyContact('healius'));
-      return render({
-        kind: 'pharmacy_onboarding_declined',
-        payload,
-        subject: 'Pharmacy request not accepted',
-        preheader: 'This pharmacy was not accepted onto Holistic Health Hub.',
-        title: 'Request not accepted',
-        text: `We could not accept ${plainName} onto Holistic Health Hub.${reason ? `\n\n${reason}` : ''}\n\nIf you need to talk this through, email ${contact}.`,
-        paragraphs: [
-          `We could not accept <strong>${pharmacyName}</strong> onto Holistic Health Hub.`,
-          ...(reason ? [escapeHtml(reason)] : []),
-          `If you need to talk this through, email ${mailLink(contact)}.`,
-        ],
-      });
-    },
   },
   pharmacy_collection_completed: {
     audience: 'pharmacy_owner',

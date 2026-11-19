@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError } from '../../domain/common/errors.js';
 import { normaliseGphcNumber } from '../../domain/identity/pharmsmart-sso.js';
-import { onboardingLogoText, type PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
+import { isOnboardingHoldReason, onboardingLogoText, type PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
+import type { OnboardingHoldReason } from '../../domain/pharmacy-onboarding/content.js';
 import type { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
-import type { OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
+import type { OrganisationRecord, OrganisationRepositoryPort } from '../../repositories/ports/organisation.port.js';
 
 const DEFAULT_PRIMARY = '#0f766e';
 
@@ -91,45 +92,111 @@ export async function activatePharmacyOnboardingRequest(
   };
 }
 
-/** The admin's reason stays with HHH: the pharmacy is only told it could not be created yet. */
+export type HoldDeps = {
+  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'hold'>;
+  organisations: Pick<OrganisationRepositoryPort, 'findOrganisationById' | 'updateOrganisationStatus' | 'updateOrganisationIntakeEnabled'>;
+  /** Signs the branch's staff out. They see the hold message when they come back. */
+  revokeSessions: (organisationId: string, revokedAt: string) => Promise<void>;
+};
+
+export type HoldResult = {
+  request: PharmacyOnboardingRequestRecord;
+  /** The reason before this change, when the request was already on hold. */
+  previousReason: OnboardingHoldReason | null;
+  /** The branch closed by this hold, when the request was activated. */
+  organisationId: string | null;
+};
+
+/** A branch can be held only before it goes live; a live or suspended one is not. */
+const HOLDABLE_BRANCH = new Set<OrganisationRecord['status']>(['ONBOARDING', 'INTAKE_LIVE', 'ON_HOLD']);
+
+/**
+ * Puts a request on hold with one of the fixed reasons, or changes the reason of a
+ * hold already in place. A pending request just changes status. An activated branch
+ * that is not live yet is closed too: status ON_HOLD, intake off, its staff signed out.
+ * The pharmacy is told the reason (the caller sends the Hold email).
+ */
 export async function holdPharmacyOnboardingRequest(
-  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'hold'>,
-  input: { id: string; reason: string; actorUid: string; now?: Date },
-): Promise<PharmacyOnboardingRequestRecord> {
-  const reason = input.reason.trim();
-  if (reason.length < 2 || reason.length > 500) {
-    throw new HttpError(400, 'Enter a reason for the hold (2 to 500 characters). Only HHH admins see it.', 'INVALID_INPUT');
+  deps: HoldDeps,
+  input: { id: string; reason: OnboardingHoldReason; actorUid: string; now?: Date },
+): Promise<HoldResult> {
+  if (!isOnboardingHoldReason(input.reason)) {
+    throw new HttpError(400, 'Choose a reason for the hold.', 'INVALID_INPUT');
   }
-  const existing = await repo.findById(input.id);
-  if (existing?.status === 'ON_HOLD') {
-    throw new HttpError(409, 'This pharmacy request is already on hold.', 'ONBOARDING_REQUEST_ON_HOLD');
+  const request = await deps.repo.findById(input.id);
+  if (!request) throw new HttpError(404, 'Pharmacy request not found.', 'NOT_FOUND');
+  if (request.status === 'ON_HOLD' && request.holdReason === input.reason) {
+    throw new HttpError(409, 'This pharmacy request is already on hold for that reason.', 'ONBOARDING_REQUEST_ALREADY_ON_HOLD');
   }
-  const request = await requirePending(repo, input.id, existing);
-  const now = (input.now ?? new Date()).toISOString();
-  await repo.hold(request.id, reason, now, input.actorUid);
-  return { ...request, status: 'ON_HOLD', declineReason: reason, decidedAt: now, decidedByUid: input.actorUid };
+
+  const heldAt = (input.now ?? new Date()).toISOString();
+  let organisationId: string | null = null;
+  if (request.organisationId) {
+    const organisation = await deps.organisations.findOrganisationById(request.organisationId);
+    if (!organisation || organisation.archivedAt) {
+      throw new HttpError(409, 'This pharmacy request\'s branch could not be found.', 'ONBOARDING_BRANCH_MISSING');
+    }
+    if (!HOLDABLE_BRANCH.has(organisation.status)) {
+      throw new HttpError(
+        409,
+        'This pharmacy is already live. Only a pharmacy that is not live yet can be put on hold; suspend a live pharmacy instead.',
+        'ONBOARDING_BRANCH_LIVE',
+      );
+    }
+    // The branch first: if the request update then fails, a retry still finds it holdable.
+    if (organisation.status !== 'ON_HOLD') await deps.organisations.updateOrganisationStatus(organisation.id, 'ON_HOLD');
+    if (organisation.intakeEnabled) await deps.organisations.updateOrganisationIntakeEnabled(organisation.id, false);
+    await deps.revokeSessions(organisation.id, heldAt);
+    organisationId = organisation.id;
+  } else if (request.status !== 'PENDING' && request.status !== 'ON_HOLD') {
+    throw new HttpError(409, 'This pharmacy request cannot be put on hold.', 'ONBOARDING_REQUEST_DECIDED');
+  }
+
+  await deps.repo.hold(request.id, input.reason, heldAt, input.actorUid);
+  return {
+    request: { ...request, status: 'ON_HOLD', holdReason: input.reason, heldAt, decidedAt: heldAt, decidedByUid: input.actorUid },
+    previousReason: request.status === 'ON_HOLD' ? request.holdReason : null,
+    organisationId,
+  };
 }
 
-/** Back to waiting for a decision. No email; the hold reason is kept as history. */
+export type UnholdDeps = {
+  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'unhold'>;
+  organisations: Pick<OrganisationRepositoryPort, 'findOrganisationById' | 'updateOrganisationStatus' | 'updateOrganisationIntakeEnabled'>;
+};
+
+/**
+ * Lifts a hold: back to PENDING, or to ACTIVATED when the request already has a branch,
+ * whose status goes back to ONBOARDING (awaiting Curaleaf, demo) with intake on.
+ * No email; the reason is kept as history. Signed-out staff sign in again.
+ */
 export async function unholdPharmacyOnboardingRequest(
-  repo: Pick<SqlPharmacyOnboardingRepository, 'findById' | 'unhold'>,
+  deps: UnholdDeps,
   input: { id: string },
 ): Promise<PharmacyOnboardingRequestRecord> {
-  const request = await repo.findById(input.id);
+  const request = await deps.repo.findById(input.id);
   if (!request) throw new HttpError(404, 'Pharmacy request not found.', 'NOT_FOUND');
-  if (request.status !== 'ON_HOLD') {
+  const organisation = request.organisationId ? await deps.organisations.findOrganisationById(request.organisationId) : null;
+  // A branch can be ON_HOLD with its request still ACTIVATED if a hold failed half-way (branch updated first).
+  const branchHeld = organisation?.status === 'ON_HOLD';
+  if (request.status !== 'ON_HOLD' && !branchHeld) {
     throw new HttpError(409, 'Only a request on hold can be unheld.', 'ONBOARDING_REQUEST_NOT_ON_HOLD');
   }
-  await repo.unhold(request.id);
-  return { ...request, status: 'PENDING' };
+  // The branch first: if the request update then fails, a retry still finds the request on hold.
+  if (organisation && branchHeld) {
+    await deps.organisations.updateOrganisationStatus(organisation.id, 'ONBOARDING');
+    if (!organisation.intakeEnabled) await deps.organisations.updateOrganisationIntakeEnabled(organisation.id, true);
+  }
+  const status = request.organisationId ? 'ACTIVATED' : 'PENDING';
+  if (request.status !== status) await deps.repo.unhold(request.id, status);
+  return { ...request, status };
 }
 
 async function requirePending(
   repo: { findById(id: string): Promise<PharmacyOnboardingRequestRecord | null> },
   id: string,
-  loaded?: PharmacyOnboardingRequestRecord | null,
 ) {
-  const request = loaded !== undefined ? loaded : await repo.findById(id);
+  const request = await repo.findById(id);
   if (!request) throw new HttpError(404, 'Pharmacy request not found.', 'NOT_FOUND');
   if (request.status === 'ON_HOLD') {
     throw new HttpError(409, 'This pharmacy request is on hold. Unhold it first.', 'ONBOARDING_REQUEST_ON_HOLD');

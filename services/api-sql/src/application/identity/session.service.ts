@@ -1,4 +1,6 @@
-import { PHARMACY_NOT_AVAILABLE_MESSAGE, PHARMACY_SUSPENDED_MESSAGE } from '../../security/require-staff.js';
+import { PHARMACY_SUSPENDED_MESSAGE, pharmacyOnHoldError } from '../../security/require-staff.js';
+import { sqlHoldMessages } from '../pharmacy-onboarding/hold-message.js';
+import type { OnboardingHoldMessage } from '../pharmacy-onboarding/onboarding-content.js';
 import { auth } from '../../bootstrap/firebase.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { isPharmsmartSsoSignIn } from '../../domain/identity/pharmsmart-sso.js';
@@ -23,8 +25,29 @@ export interface CreateSessionResult {
   absoluteExpiresAt: string;
 }
 
+type HoldLookup = (organisationId: string) => Promise<OnboardingHoldMessage | null>;
+
+/**
+ * A pharmacy's staff cannot start a session while it is suspended or its onboarding
+ * is on hold. On hold carries the hold message (403 PHARMACY_ON_HOLD, details.hold).
+ */
+export async function assertPharmacyOpenForSession(
+  staff: { organisationId: string | null; organisation?: { status: string } | null },
+  holdMessage: HoldLookup,
+): Promise<void> {
+  if (staff.organisation?.status === 'PAUSED') {
+    throw new HttpError(403, PHARMACY_SUSPENDED_MESSAGE, 'PHARMACY_SUSPENDED');
+  }
+  if (staff.organisation?.status === 'ON_HOLD') {
+    throw await pharmacyOnHoldError(staff.organisationId, holdMessage);
+  }
+}
+
 export class SessionService {
-  constructor(private readonly identityRepo = new SqlIdentityRepository()) {}
+  constructor(
+    private readonly identityRepo = new SqlIdentityRepository(),
+    private readonly holdMessage: HoldLookup = organisationId => sqlHoldMessages().forBranch({ id: organisationId }),
+  ) {}
 
   async createSession(params: {
     idToken: string;
@@ -114,12 +137,7 @@ export class SessionService {
     if (rawRole === 'PHARMACY_STAFF' && !organisationId) {
       throw new HttpError(403, 'The account is not assigned to a pharmacy.', 'TENANT_REQUIRED');
     }
-    if (rawRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'PAUSED') {
-      throw new HttpError(403, PHARMACY_SUSPENDED_MESSAGE, 'PHARMACY_SUSPENDED');
-    }
-    if (rawRole === 'PHARMACY_STAFF' && staff.organisation?.status === 'NOT_AVAILABLE') {
-      throw new HttpError(403, PHARMACY_NOT_AVAILABLE_MESSAGE, 'PHARMACY_NOT_AVAILABLE');
-    }
+    if (rawRole === 'PHARMACY_STAFF') await assertPharmacyOpenForSession(staff, this.holdMessage);
 
     // 6. Create Firebase session cookie
     const sessionCookie = await auth.createSessionCookie(idToken, { expiresIn: SESSION_ABSOLUTE_MS });

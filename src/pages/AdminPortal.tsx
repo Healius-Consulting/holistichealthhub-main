@@ -15,6 +15,7 @@ import {
   
   LockKeyhole,
   Package,
+  Mail,
   MailPlus,
   LogOut,
   
@@ -54,8 +55,12 @@ import { isPlatformTestPharmacy, isTrainingDirectoryPharmacy, type AdminReferral
 import { PharmacyRequestRecord, PharmacyRequestRow, usePharmacyRequests } from './admin/PharmacyRequests';
 import { WorldpayApplicationsAdmin } from './admin/WorldpayApplicationsAdmin';
 import { DemoPharmaciesAdmin } from './admin/DemoPharmaciesAdmin';
+import { OnboardingContentAdmin } from './admin/OnboardingContentAdmin';
+import { OnboardingEmailLog } from './admin/OnboardingEmailLog';
+import { OnboardingHoldCard, OnboardingHoldPanel } from './admin/OnboardingHold';
+import { holdAvailability, isHeldOrganisationStatus, sendableEmailKinds } from './admin/onboardingAdmin';
 import { formatRequestDate } from './admin/requestFormat';
-import { ActivationChecklist, DeclinePharmacyPanel, NotAvailablePanel, SuspendPharmacyPanel } from './admin/PharmacyActivation';
+import { ActivationChecklist, SuspendPharmacyPanel } from './admin/PharmacyActivation';
 import { PharmacySummary } from './admin/PharmacySummary';
 import { GoLiveChecklistCard } from './admin/GoLiveChecklistCard';
 import { performancePeriodStart, type PerformancePeriod } from '../utils/performancePeriod';
@@ -999,9 +1004,10 @@ export default function AdminPortal() {
   const [overviewManageOpen, setOverviewManageOpen] = useState(false);
   const [overviewFilter, setOverviewFilter] = useState<OverviewFilter>(overviewFilterFromPath);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [declineOpen, setDeclineOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
-  const [notAvailableOpen, setNotAvailableOpen] = useState(false);
+  const [holdOpen, setHoldOpen] = useState(false);
+  // Bumped after a branch's hold changes so its send log shows the new Hold email.
+  const [branchEmailsVersion, setBranchEmailsVersion] = useState(0);
   const [activeSection, setActiveSection] = useState<OverviewManagePanel>('summary');
   // The section a click is scrolling to: the highlight follows the scroll, then settles here.
   const pendingSectionRef = useRef<OverviewManagePanel | null>(null);
@@ -1017,6 +1023,7 @@ export default function AdminPortal() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showWorldpayAdmin, setShowWorldpayAdmin] = useState(false);
   const [showDemoPharmacies, setShowDemoPharmacies] = useState(false);
+  const [showOnboardingContent, setShowOnboardingContent] = useState(false);
 
   const [showAdminDialog, setShowAdminDialog] = useState(false);
   const [adminDialogFocus, setAdminDialogFocus] = useState<AdminDialogFocus>('list');
@@ -1605,6 +1612,7 @@ export default function AdminPortal() {
     { label: 'Pharmacy requests', detail: 'New pharmacies waiting to be activated', group: 'Navigate', icon: <Building2 size={16} />, run: () => { setView('overview'); setOverviewFilter('requests'); setQuery(''); } },
     { label: 'Demo pharmacies', detail: 'GPhC numbers used to show onboarding: delete one to start again', group: 'Navigate', icon: <Building2 size={16} />, run: () => setShowDemoPharmacies(true) },
     { label: 'Worldpay applications', detail: 'Submitted merchant applications, emails and wording', group: 'Navigate', icon: <Building2 size={16} />, run: () => setShowWorldpayAdmin(true) },
+    { label: 'Partner onboarding content', detail: 'Onboarding emails, hold page, Reply-To addresses, training link and Partner Terms', keywords: 'emails wording hold terms reply-to training', group: 'Navigate', icon: <Mail size={16} />, run: () => setShowOnboardingContent(true) },
     { label: 'Invite admin', detail: 'Add another HHH administrator account', group: 'Actions', icon: <UserPlus size={16} />, run: () => { setAdminDialogFocus('invite'); setShowAdminDialog(true); } },
     { label: 'View admins', detail: 'HHH administrator accounts', group: 'Navigate', icon: <Users size={16} />, run: () => { setAdminDialogFocus('list'); setShowAdminDialog(true); } },
     { label: 'Onboard pharmacy (Legacy)', detail: 'Create a pharmacy by hand. New pharmacies now join from the onboarding page.', group: 'Actions', icon: <Plus size={16} />, run: () => { setView('overview'); setShowOnboarding(true); } },
@@ -1637,21 +1645,37 @@ export default function AdminPortal() {
    * link is open but ordering is not. Test pharmacies are always connected to the
    * sandbox and never wait.
    */
+  // A branch is on hold when its organisation says so, or when its onboarding request
+  // is on hold (the request is updated first, straight after admin acts).
+  const heldOrganisationIds = useMemo(
+    () => new Set(pharmacyRequests.onHold.map(request => request.organisationId).filter((id): id is string => Boolean(id))),
+    [pharmacyRequests.onHold],
+  );
+  const isHeldPharmacy = useCallback(
+    (org: PharmacyTenant) => isHeldOrganisationStatus(org.status) || heldOrganisationIds.has(org.id),
+    [heldOrganisationIds],
+  );
   const awaitingCuraleaf = useCallback(
-    (org: PharmacyTenant) => !isTrainingDirectoryPharmacy(org) && org.status !== 'live' && org.status !== 'paused' && org.status !== 'not_available' && org.curaleafEnvironment !== 'production',
-    [],
+    (org: PharmacyTenant) => !isTrainingDirectoryPharmacy(org) && org.status !== 'live' && org.status !== 'paused' && !isHeldPharmacy(org) && org.curaleafEnvironment !== 'production',
+    [isHeldPharmacy],
   );
   const overviewPharmacies = state.organisations.filter(org => {
     const matchesQuery = `${org.name} ${org.tradingName} ${org.gphcNumber}`.toLowerCase().includes(query.toLowerCase());
     if (!matchesQuery) return false;
     if (overviewFilter === 'requests') return awaitingCuraleaf(org);
-    if (overviewFilter === 'on_hold') return false;
-    if (overviewFilter === 'registered') return !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org);
+    if (overviewFilter === 'on_hold') return isHeldPharmacy(org);
+    if (overviewFilter === 'registered') return !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org) && !isHeldPharmacy(org);
     if (overviewFilter === 'training') return isTrainingDirectoryPharmacy(org);
     return true;
   });
-  // New requests wait for HHH to activate or hold them; held ones are listed only on
-  // their own On hold tab.
+  // New requests wait for HHH to activate or hold them; held ones are listed under
+  // On hold. A held branch that was already activated shows as its pharmacy instead,
+  // so admin works from the branch record.
+  const organisationIds = useMemo(() => new Set(state.organisations.map(organisation => organisation.id)), [state.organisations]);
+  const heldRequestsAll = useMemo(
+    () => pharmacyRequests.onHold.filter(request => !request.organisationId || !organisationIds.has(request.organisationId)),
+    [organisationIds, pharmacyRequests.onHold],
+  );
   const { overviewRequests, heldRequests } = useMemo(() => {
     const needle = query.toLowerCase();
     const matches = (request: { pharmacyName: string; registeredCompanyName: string; gphcNumber: string }) => (
@@ -1659,15 +1683,17 @@ export default function AdminPortal() {
     );
     return {
       overviewRequests: overviewFilter === 'all' || overviewFilter === 'requests' ? pharmacyRequests.pending.filter(matches) : [],
-      heldRequests: overviewFilter === 'on_hold' ? pharmacyRequests.onHold.filter(matches) : [],
+      heldRequests: overviewFilter === 'on_hold' || overviewFilter === 'all' ? heldRequestsAll.filter(matches) : [],
     };
-  }, [overviewFilter, pharmacyRequests.onHold, pharmacyRequests.pending, query]);
+  }, [heldRequestsAll, overviewFilter, pharmacyRequests.pending, query]);
   const selectedRequest = pharmacyRequests.records.find(request => request.id === selectedRequestId && request.status !== 'activated') ?? null;
   const overviewResultCount = overviewPharmacies.length + overviewRequests.length + heldRequests.length;
   const awaitingPharmacies = overviewPharmacies.filter(awaitingCuraleaf);
-  const closedToPharmacy = (org: PharmacyTenant) => org.status === 'paused' || org.status === 'not_available';
+  const closedToPharmacy = (org: PharmacyTenant) => org.status === 'paused' || isHeldPharmacy(org);
   const registeredPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org) && !closedToPharmacy(org));
-  const suspendedPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && closedToPharmacy(org));
+  const suspendedPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && org.status === 'paused' && !isHeldPharmacy(org));
+  const heldPharmacies = overviewPharmacies.filter(org => !isTrainingDirectoryPharmacy(org) && isHeldPharmacy(org));
+  const onHoldCount = heldRequestsAll.length + state.organisations.filter(org => !isTrainingDirectoryPharmacy(org) && isHeldPharmacy(org)).length;
   const trainingPharmacies = overviewPharmacies.filter(org => isTrainingDirectoryPharmacy(org));
   const awaitingCount = state.organisations.filter(awaitingCuraleaf).length + pharmacyRequests.pending.length;
   const requestForOrganisation = useCallback(
@@ -1699,17 +1725,18 @@ export default function AdminPortal() {
   const statusLabel = (status: PharmacyTenant['status']) => {
     if (status === 'live') return 'Live';
     if (status === 'paused') return 'Suspended';
-    if (status === 'not_available') return 'Not available';
+    if (isHeldOrganisationStatus(status)) return 'On hold';
     return 'Awaiting Curaleaf';
   };
-  const pharmacyTone = (status: PharmacyTenant['status']) => status === 'live' ? 'paid' : status === 'paused' || status === 'not_available' ? 'danger' : 'warning';
+  const pharmacyTone = (organisation: PharmacyTenant) => organisation.status === 'live' ? 'paid' : organisation.status === 'paused' || isHeldPharmacy(organisation) ? 'danger' : 'warning';
   /** A pharmacy is Test, Awaiting Curaleaf or Live; rejected ones leave the directory. */
   const pharmacyStageLabel = (organisation: PharmacyTenant) => {
     if (isTrainingDirectoryPharmacy(organisation)) return 'Test';
+    if (isHeldPharmacy(organisation)) return 'On hold';
     return awaitingCuraleaf(organisation) ? 'Awaiting Curaleaf' : statusLabel(organisation.status);
   };
   const intakeIsLive = (organisation: PharmacyTenant) => {
-    if (organisation.status === 'paused' || organisation.status === 'not_available') return false;
+    if (organisation.status === 'paused' || isHeldPharmacy(organisation)) return false;
     if (organisation.intakeEnabled === false) return false;
     return true;
   };
@@ -1829,14 +1856,14 @@ export default function AdminPortal() {
           ? 'Live'
           : selectedPharmacy?.status === 'paused'
             ? 'Suspended'
-            : selectedPharmacy?.status === 'not_available'
-              ? 'Not available'
+            : selectedPharmacy && isHeldPharmacy(selectedPharmacy)
+              ? 'On hold'
               : 'Awaiting Curaleaf';
     const formUrl = referralLink;
     const selectedIntakeLive = selectedPharmacy ? intakeIsLive(selectedPharmacy) : false;
 
     const renderPharmacyRow = (organisation: PharmacyTenant) => {
-      const tone = pharmacyTone(organisation.status);
+      const tone = pharmacyTone(organisation);
       const fees = feesByOrganisation.get(organisation.id);
       return (
         <button
@@ -1850,9 +1877,8 @@ export default function AdminPortal() {
               setOverviewManagePanel('summary');
                       }
             setSelectedRequestId(null);
-            setDeclineOpen(false);
             setSuspendOpen(false);
-            setNotAvailableOpen(false);
+            setHoldOpen(false);
             setOverviewPharmacyId(organisation.id);
             setOverviewManageOpen(false);
           }}
@@ -1861,7 +1887,7 @@ export default function AdminPortal() {
           <span className="order-crm-row__identity">
             <strong title={organisation.name}>{organisation.name}</strong>
             <span className={`order-stage-pill order-tone--${tone}`}>{pharmacyStageLabel(organisation)}</span>
-            {awaitingCuraleaf(organisation) ? (
+            {awaitingCuraleaf(organisation) || isHeldPharmacy(organisation) ? (
               <span className={`order-stage-pill ${pharmacyRequests.worldpayFor(organisation.gphcNumber) ? 'order-tone--paid' : 'order-tone--neutral'}`}>
                 {pharmacyRequests.worldpayFor(organisation.gphcNumber) ? 'Worldpay form sent' : 'Worldpay form not sent'}
               </span>
@@ -1870,7 +1896,7 @@ export default function AdminPortal() {
             )}
           </span>
           <span className="order-crm-row__position">
-            {awaitingCuraleaf(organisation) ? (
+            {awaitingCuraleaf(organisation) || isHeldPharmacy(organisation) ? (
               <strong>{formatRequestDate(requestForOrganisation(organisation.id)?.createdAt) || 'Added by HHH'}</strong>
             ) : (
               <strong>{financeReady ? referralFeeFormatter.format(fees?.total ?? 0) : '—'}</strong>
@@ -1896,13 +1922,15 @@ export default function AdminPortal() {
     const selectedWorldpayForm = selectedPharmacy ? pharmacyRequests.worldpayFor(selectedPharmacy.gphcNumber) : null;
     const selectedApplication = selectedPharmacy ? requestForOrganisation(selectedPharmacy.id) : null;
     const selectedAwaiting = Boolean(selectedPharmacy && awaitingCuraleaf(selectedPharmacy));
-    // Reject is for pharmacies still being set up, for example when Curaleaf turn the account down.
-    const selectedCanDecline = Boolean(selectedPharmacy && !isTrainingDirectoryPharmacy(selectedPharmacy) && selectedPharmacy.status !== 'live' && selectedPharmacy.status !== 'paused');
     const selectedCanSuspend = Boolean(selectedPharmacy && !isTrainingDirectoryPharmacy(selectedPharmacy) && selectedPharmacy.status === 'live');
     const selectedSuspended = Boolean(selectedPharmacy && selectedPharmacy.status === 'paused');
-    // Not available: an existing Curaleaf customer, found while the pharmacy awaits Curaleaf.
-    const selectedNotAvailable = Boolean(selectedPharmacy && selectedPharmacy.status === 'not_available');
-    const selectedCanMarkNotAvailable = Boolean(selectedPharmacy && selectedAwaiting && !isPlatformTestPharmacy(selectedPharmacy));
+    // On hold (one hold with a fixed reason) works on the branch's onboarding request,
+    // so it needs one: a pharmacy added by hand or a test pharmacy cannot be held.
+    const selectedHeld = Boolean(selectedPharmacy && isHeldPharmacy(selectedPharmacy));
+    const selectedHoldable = Boolean(selectedPharmacy && selectedApplication && !isTrainingDirectoryPharmacy(selectedPharmacy) && !isPlatformTestPharmacy(selectedPharmacy));
+    const selectedHold = selectedPharmacy && selectedApplication && !selectedHeld
+      ? holdAvailability({ requestStatus: selectedApplication.status, organisationStatus: selectedPharmacy.status })
+      : null;
 
     return (
       <div className="page-body order-crm patient-crm admin-overview-crm">
@@ -1970,17 +1998,20 @@ export default function AdminPortal() {
             <button type="button" className="btn btn-sm" onClick={() => setShowWorldpayAdmin(true)}>
               Worldpay applications
             </button>
+            <button type="button" className="btn btn-sm" onClick={() => setShowOnboardingContent(true)}>
+              Partner onboarding content
+            </button>
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowOnboarding(true)}>
               <Plus size={14} /> Onboard pharmacy (Legacy)
             </button>
           </div>
           <div className="order-crm-filters" role="group" aria-label="Filter pharmacies">
             {([
-              { key: 'all' as const, label: 'All', count: state.organisations.length + pharmacyRequests.pending.length },
+              { key: 'all' as const, label: 'All', count: state.organisations.length + pharmacyRequests.pending.length + heldRequestsAll.length },
               { key: 'requests' as const, label: 'Awaiting Curaleaf', count: awaitingCount },
-              { key: 'registered' as const, label: 'Live', count: state.organisations.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org)).length },
+              { key: 'registered' as const, label: 'Live', count: state.organisations.filter(org => !isTrainingDirectoryPharmacy(org) && !awaitingCuraleaf(org) && !isHeldPharmacy(org)).length },
               { key: 'training' as const, label: 'Testing', count: trainingCount },
-              ...(pharmacyRequests.onHold.length ? [{ key: 'on_hold' as const, label: 'On hold', count: pharmacyRequests.onHold.length }] : []),
+              ...(onHoldCount || overviewFilter === 'on_hold' ? [{ key: 'on_hold' as const, label: 'On hold', count: onHoldCount }] : []),
             ]).map(filter => (
               <button
                 type="button"
@@ -2051,16 +2082,17 @@ export default function AdminPortal() {
                         {awaitingPharmacies.map(organisation => renderPharmacyRow(organisation))}
                       </section>
                     ) : null}
-                    {heldRequests.length ? (
-                      <section className="order-crm-list-group" aria-label="Pharmacy requests on hold">
+                    {heldRequests.length || heldPharmacies.length ? (
+                      <section className="order-crm-list-group" aria-label="Pharmacies on hold">
                         <header>
                           <span>
                             <strong>On hold</strong>
-                            <small>Unhold to activate</small>
+                            <small>Change the reason or lift the hold</small>
                           </span>
-                          <b>{heldRequests.length}</b>
+                          <b>{heldRequests.length + heldPharmacies.length}</b>
                         </header>
                         {heldRequests.map(renderRequestRow)}
+                        {heldPharmacies.map(organisation => renderPharmacyRow(organisation))}
                       </section>
                     ) : null}
                     {registeredPharmacies.length ? (
@@ -2076,10 +2108,10 @@ export default function AdminPortal() {
                       </section>
                     ) : null}
                     {suspendedPharmacies.length ? (
-                      <section className="order-crm-list-group" aria-label="Suspended or not available pharmacies">
+                      <section className="order-crm-list-group" aria-label="Suspended pharmacies">
                         <header>
                           <span>
-                            <strong>Suspended or not available</strong>
+                            <strong>Suspended</strong>
                             <small>Staff locked out, eligibility link off</small>
                           </span>
                           <b>{suspendedPharmacies.length}</b>
@@ -2134,21 +2166,21 @@ export default function AdminPortal() {
                 <span>Account status and referral fees appear here. Use Manage on a selected pharmacy to review identity, staff, go live or Curaleaf.</span>
               </div>
             ) : (
-              <article className={`order-crm-record order-crm-record--${pharmacyTone(selectedPharmacy.status)}`}>
+              <article className={`order-crm-record order-crm-record--${pharmacyTone(selectedPharmacy)}`}>
                 <header className="order-crm-record__header">
                   <div className="order-crm-record__hero">
                     <div className="order-crm-record__identity">
-                      <span className={`order-crm-record__stage order-tone--${pharmacyTone(selectedPharmacy.status)}`} aria-hidden="true">{selectedPharmacy.logoText}</span>
+                      <span className={`order-crm-record__stage order-tone--${pharmacyTone(selectedPharmacy)}`} aria-hidden="true">{selectedPharmacy.logoText}</span>
                       <div className="order-crm-record__titles">
                         <strong>{selectedPharmacy.name}</strong>
                         <span className="order-crm-record__ref">{selectedPharmacy.tradingName && selectedPharmacy.tradingName !== selectedPharmacy.name ? `${selectedPharmacy.tradingName} · ` : ''}GPhC {selectedPharmacy.gphcNumber}</span>
                         <em>{workspaceLabel}</em>
                       </div>
                     </div>
-                    <span className={`order-stage-pill order-tone--${pharmacyTone(selectedPharmacy.status)}`}>{pharmacyStageLabel(selectedPharmacy)}</span>
+                    <span className={`order-stage-pill order-tone--${pharmacyTone(selectedPharmacy)}`}>{pharmacyStageLabel(selectedPharmacy)}</span>
                   </div>
                   <div className="order-crm-record__toolbar">
-                    {selectedAwaiting ? (
+                    {selectedAwaiting || selectedHeld ? (
                       <div className="order-crm-record__value">
                         <small>Joined</small>
                         <strong>{formatRequestDate(selectedApplication?.createdAt) || 'Added by HHH'}</strong>
@@ -2162,20 +2194,22 @@ export default function AdminPortal() {
                       </div>
                     )}
                     <div className="order-crm-record__actions" role="group" aria-label="Pharmacy actions">
-                      {selectedCanDecline ? (
-                        <button type="button" className="btn btn-sm admin-decline-button" aria-expanded={declineOpen} onClick={() => setDeclineOpen(open => !open)}>Reject</button>
+                      {selectedHoldable && selectedHold ? (
+                        selectedHold.allowed ? (
+                          <button type="button" className="btn btn-sm admin-decline-button" aria-expanded={holdOpen} onClick={() => setHoldOpen(open => !open)}>Hold</button>
+                        ) : selectedPharmacy.status === 'live' ? (
+                          <>
+                            <span id="admin-hold-why" className="onb-hold-hint">{selectedHold.why}</span>
+                            <button type="button" className="btn btn-sm" disabled aria-describedby="admin-hold-why">Hold</button>
+                          </>
+                        ) : null
                       ) : null}
                       {selectedCanSuspend || selectedSuspended ? (
                         <button type="button" className={`btn btn-sm${selectedSuspended ? '' : ' admin-decline-button'}`} aria-expanded={suspendOpen} onClick={() => setSuspendOpen(open => !open)}>
                           {selectedSuspended ? 'Lift suspension' : 'Suspend'}
                         </button>
                       ) : null}
-                      {selectedCanMarkNotAvailable || selectedNotAvailable ? (
-                        <button type="button" className={`btn btn-sm${selectedNotAvailable ? '' : ' admin-decline-button'}`} aria-expanded={notAvailableOpen} onClick={() => setNotAvailableOpen(open => !open)}>
-                          {selectedNotAvailable ? 'Clear Not available' : 'Not available'}
-                        </button>
-                      ) : null}
-                      {selectedAwaiting ? null : <button type="button" className="btn btn-sm" onClick={() => { setFinanceOrganisationId(selectedPharmacy.id); setView('finance'); }}>Open ledger</button>}
+                      {selectedAwaiting || selectedHeld ? null : <button type="button" className="btn btn-sm" onClick={() => { setFinanceOrganisationId(selectedPharmacy.id); setView('finance'); }}>Open ledger</button>}
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => goToSection('identity')}><Pencil size={13} /> Edit details</button>
                     </div>
                   </div>
@@ -2217,44 +2251,36 @@ export default function AdminPortal() {
                       }}
                     />
                   ) : null}
-                  {notAvailableOpen && (selectedCanMarkNotAvailable || selectedNotAvailable) ? (
-                    <NotAvailablePanel
-                      key={`${selectedPharmacy.id}-${selectedPharmacy.status}`}
-                      organisationId={selectedPharmacy.id}
-                      pharmacyName={selectedPharmacy.name}
-                      notAvailable={selectedNotAvailable}
-                      onCancel={() => setNotAvailableOpen(false)}
-                      onDone={status => {
-                        dispatch({
-                          type: 'UPDATE_ORGANISATION',
-                          organisationId: selectedPharmacy.id,
-                          updates: { status, intakeEnabled: status !== 'not_available' },
-                        });
-                        setNotAvailableOpen(false);
-                        dispatch({
-                          type: 'ADD_TOAST',
-                          toastType: 'success',
-                          message: status === 'not_available'
-                            ? `${selectedPharmacy.name} is Not available. Its staff are signed out and its eligibility link is off.`
-                            : `${selectedPharmacy.name} is no longer Not available. Its eligibility link is open again.`,
-                        });
+                  {holdOpen && selectedHoldable && selectedApplication && selectedHold?.allowed ? (
+                    <OnboardingHoldPanel
+                      request={selectedApplication}
+                      branchName={selectedPharmacy.name}
+                      onCancel={() => setHoldOpen(false)}
+                      onHeld={request => {
+                        pharmacyRequests.replace(request);
+                        dispatch({ type: 'UPDATE_ORGANISATION', organisationId: selectedPharmacy.id, updates: { intakeEnabled: false } });
+                        setHoldOpen(false);
+                        setBranchEmailsVersion(version => version + 1);
+                        dispatch({ type: 'ADD_TOAST', toastType: 'success', message: `${selectedPharmacy.name} is on hold. Its staff see only the hold message, and the Hold email is on its way.` });
                       }}
                     />
                   ) : null}
-                  {declineOpen && selectedCanDecline ? (
-                    <DeclinePharmacyPanel
-                      key={selectedPharmacy.id}
-                      organisationId={selectedPharmacy.id}
-                      pharmacyName={selectedPharmacy.name}
-                      email={selectedApplication?.pharmacyEmail || selectedPharmacy.pharmacyEmail || selectedPharmacy.mainContactEmail || null}
-                      onCancel={() => setDeclineOpen(false)}
-                      onDeclined={() => {
-                        const name = selectedPharmacy.name;
-                        dispatch({ type: 'SET_ORGANISATIONS', organisations: state.organisations.filter(organisation => organisation.id !== selectedPharmacy.id) });
-                        setDeclineOpen(false);
-                        setOverviewPharmacyId(null);
-                        void pharmacyRequests.reload();
-                        dispatch({ type: 'ADD_TOAST', message: `${name} was rejected and emailed the reason. It no longer appears in the overview.`, toastType: 'success' });
+                  {selectedHeld && selectedApplication ? (
+                    <OnboardingHoldCard
+                      request={selectedApplication}
+                      onChanged={(request, change) => {
+                        pharmacyRequests.replace(request);
+                        setBranchEmailsVersion(version => version + 1);
+                        if (change === 'lifted') {
+                          dispatch({ type: 'UPDATE_ORGANISATION', organisationId: selectedPharmacy.id, updates: { status: 'onboarding', intakeEnabled: true } });
+                        }
+                        dispatch({
+                          type: 'ADD_TOAST',
+                          toastType: 'success',
+                          message: change === 'lifted'
+                            ? `The hold on ${selectedPharmacy.name} is lifted. It is awaiting Curaleaf again. No email was sent.`
+                            : `${selectedPharmacy.name}'s hold reason is changed, and the Hold email is on its way.`,
+                        });
                       }}
                     />
                   ) : null}
@@ -2287,8 +2313,21 @@ export default function AdminPortal() {
                       onOpenPanel={goToSection}
                       period={performancePeriod}
                       onPeriodChange={setPerformancePeriod}
+                      hold={selectedHeld ? { reason: selectedApplication?.holdReason ?? null, heldAt: selectedApplication?.heldAt ?? null } : null}
                     />
                     <GoLiveChecklistCard key={selectedPharmacy.id} organisationId={selectedPharmacy.id} />
+                    {selectedApplication ? (
+                      <OnboardingEmailLog
+                        requestId={selectedApplication.id}
+                        refreshKey={branchEmailsVersion}
+                        sendable={sendableEmailKinds({
+                          termsAccepted: Boolean(selectedApplication.termsAcceptances?.length),
+                          requestStatus: selectedApplication.status,
+                          activated: Boolean(selectedApplication.organisationId),
+                          live: selectedPharmacy.status === 'live',
+                        })}
+                      />
+                    ) : null}
                   </section>
 
                   <section id="pharmacy-section-identity" className="pharmacy-dashboard__section admin-overview-manage-panel" aria-labelledby="pharmacy-heading-identity">
@@ -3233,6 +3272,7 @@ export default function AdminPortal() {
       </div>
       <WorldpayApplicationsAdmin open={showWorldpayAdmin} onClose={() => setShowWorldpayAdmin(false)} />
       <DemoPharmaciesAdmin open={showDemoPharmacies} onClose={() => setShowDemoPharmacies(false)} />
+      <OnboardingContentAdmin open={showOnboardingContent} onClose={() => setShowOnboardingContent(false)} />
       {showOnboarding && <OnboardPharmacy onClose={() => setShowOnboarding(false)} onCreated={id => { setShowOnboarding(false); openPharmacyOnOverview(id, 'identity'); }} />}
       {showAdminDialog ? <PlatformAdminDialog onClose={() => setShowAdminDialog(false)} focusInvite={adminDialogFocus === 'invite'} /> : null}
       {referralDialog && (

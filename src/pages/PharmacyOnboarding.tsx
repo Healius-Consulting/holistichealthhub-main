@@ -72,7 +72,9 @@ export default function PharmacyOnboarding() {
     <div className="page-body pharmacy-onboarding" data-tour="onboarding">
       {accountState ? (
         <PharmacyAccountStatus state={accountState}>
-          <button type="button" className="btn btn-sm" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'patients' })}>Open patients</button>
+          {accountState === 'being_set_up'
+            ? <button type="button" className="btn btn-sm" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'patients' })}>Open patients</button>
+            : null}
         </PharmacyAccountStatus>
       ) : null}
 
@@ -138,7 +140,7 @@ export default function PharmacyOnboarding() {
         onChanged={change => {
           if (change.status && change.status !== 'DRAFT') {
             update({ worldpaySubmittedAt: new Date().toISOString() });
-            dispatch({ type: 'ADD_TOAST', message: 'Worldpay application sent. We have emailed you what happens next.', toastType: 'success' });
+            dispatch({ type: 'ADD_TOAST', message: 'Worldpay application sent. Worldpay will contact you about the next steps.', toastType: 'success' });
           }
         }}
       />

@@ -405,7 +405,8 @@ query PharmacyOnboardingRequestByIdempotency($idempotencyKey: String!) @auth(lev
     licenceFilename
     filledFormStoragePath
     organisationId
-    declineReason
+    holdReason
+    heldAt
     decidedAt
     decidedByUid
     idempotencyKey
@@ -504,7 +505,8 @@ query GetPharmacyOnboardingRequest($id: UUID!) @auth(level: NO_ACCESS) {
     licenceFilename
     filledFormStoragePath
     organisationId
-    declineReason
+    holdReason
+    heldAt
     decidedAt
     decidedByUid
     idempotencyKey
@@ -534,7 +536,8 @@ query ListPharmacyOnboardingRequests($limit: Int!) @auth(level: NO_ACCESS) {
     licenceFilename
     filledFormStoragePath
     organisationId
-    declineReason
+    holdReason
+    heldAt
     decidedAt
     decidedByUid
     idempotencyKey

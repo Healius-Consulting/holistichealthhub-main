@@ -57,7 +57,7 @@ export interface GoLiveReadinessView {
   intakeReady: boolean;
   ready: boolean;
   curaleafTestAcknowledgementRequired: boolean;
-  status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'not_available';
+  status: 'onboarding' | 'intake_live' | 'live' | 'paused' | 'on_hold';
   gates: {
     gdprEvidence: {
       passed: boolean;
@@ -117,7 +117,7 @@ export function buildOperationalStatus(input: {
   const intakeLive = canAcceptPublicIntake(input.organisation);
   const workspaceMode = pharmacyWorkspaceMode(input.organisation, { curaleafProduction });
   const missingGates: string[] = [];
-  if (input.organisation.status === 'NOT_AVAILABLE') missingGates.push('not_available');
+  if (input.organisation.status === 'ON_HOLD') missingGates.push('on_hold');
   else if (workspaceMode === 'paused') missingGates.push('paused');
   if (!intakeCall) missingGates.push('intake_call');
 
@@ -219,8 +219,8 @@ export function buildGoLiveReadinessView(input: {
     ? 'live' as const
     : input.organisation.status === 'PAUSED'
       ? 'paused' as const
-      : input.organisation.status === 'NOT_AVAILABLE'
-        ? 'not_available' as const
+      : input.organisation.status === 'ON_HOLD'
+        ? 'on_hold' as const
         : 'onboarding' as const;
 
   return {
@@ -255,8 +255,8 @@ export function goLiveBlockedMessage(operational: PharmacyOperationalStatus): st
   if (operational.missingGates.includes('training_tenant')) {
     return 'Training example pharmacies cannot be flipped to Test or Live.';
   }
-  if (operational.missingGates.includes('not_available')) {
-    return 'Clear Not available on this pharmacy before flipping the workspace to live.';
+  if (operational.missingGates.includes('on_hold')) {
+    return 'This pharmacy\'s onboarding is on hold. Lift the hold on its request before flipping the workspace to live.';
   }
   if (operational.missingGates.includes('paused')) {
     return 'Unpause this pharmacy before flipping the workspace to live.';

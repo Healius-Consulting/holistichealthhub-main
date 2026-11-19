@@ -24,7 +24,7 @@ describe('public pharmacy listing', () => {
 
   it('hides paused, archived, training, and Holistic Health Hub Allocation workspaces', () => {
     assert.equal(isPubliclyListedPharmacy({ ...realPharmacy, status: 'PAUSED' }), false);
-    assert.equal(isPubliclyListedPharmacy({ ...realPharmacy, status: 'NOT_AVAILABLE' }), false);
+    assert.equal(isPubliclyListedPharmacy({ ...realPharmacy, status: 'ON_HOLD' }), false);
     assert.equal(isPubliclyListedPharmacy({ ...realPharmacy, archivedAt: '2026-08-19T00:00:00.000Z' }), false);
     assert.equal(isPubliclyListedPharmacy({ ...realPharmacy, classification: 'TRAINING' }), false);
     assert.equal(isPubliclyListedPharmacy({

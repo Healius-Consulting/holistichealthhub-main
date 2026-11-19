@@ -13,6 +13,8 @@ import { createPublicPharmacyOnboardingRouter } from '../transport/public/pharma
 import { createPublicWorldpayApplicationRouter } from '../transport/public/worldpay-application.router.js';
 import { createPortalWorldpayApplicationRouter } from '../transport/portal/worldpay-application.router.js';
 import { createPortalDemoPharmaciesRouter } from '../transport/portal/demo-pharmacies.router.js';
+import { createPortalOnboardingEmailsRouter } from '../transport/portal/onboarding-emails.router.js';
+import { createPublicPartnerTermsRouter } from '../transport/public/partner-terms.router.js';
 import { createPortalPrescriptionRouter } from '../transport/portal/prescription.router.js';
 import { createPortalOrderRouter } from '../transport/portal/order.router.js';
 import { createPublicPaymentRouter } from '../transport/public/payment.router.js';
@@ -94,6 +96,8 @@ export function createApp(): Express {
   app.use('/v1', createPublicWorldpayApplicationRouter());
   app.use('/v1', createPortalWorldpayApplicationRouter());
   app.use('/v1', createPortalDemoPharmaciesRouter());
+  app.use('/v1', createPortalOnboardingEmailsRouter());
+  app.use('/v1', createPublicPartnerTermsRouter());
   app.use('/v1', createPublicUnsubscribeRouter());
   app.use('/v1', createPortalPrescriptionRouter());
   app.use('/v1', createPortalOrderRouter());

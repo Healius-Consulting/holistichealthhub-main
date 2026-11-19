@@ -3,32 +3,30 @@ import { z } from 'zod';
 import { ReferralLinkService } from '../../application/referrals/referral-link.service.js';
 import { pharmacyRequestActions } from '../../application/pharmacy-onboarding/request-actions.js';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
-import { queuePharmacyDeclinedEmail } from '../../application/pharmacy-onboarding/emails.js';
-import { declineNewPharmacy } from '../../application/pharmacy-onboarding/decline-pharmacy.js';
+import { sqlOnboardingEmails } from '../../application/pharmacy-onboarding/onboarding-emails.service.js';
+import { readOnboardingContent } from '../../application/pharmacy-onboarding/onboarding-content.js';
 import { safeDownloadName } from '../../application/pharmacy-onboarding/licence-file.js';
 import { HttpError } from '../../domain/common/errors.js';
 import { compactGphcNumber, publicOnboardingStatus, type PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
 import type { PartnerTermsAcceptanceRecord } from '../../domain/pharmacy-onboarding/terms.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import { SqlIdentityRepository } from '../../repositories/sql/identity.sql.js';
-import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
+import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-application.sql.js';
+import { ONBOARDING_HOLD_REASONS } from '../../domain/pharmacy-onboarding/content.js';
 import { SqlOrganisationRepository } from '../../repositories/sql/organisation.sql.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope, assertTenantScope, type RequestContext } from '../../security/request-context.js';
 import { acceptBranchPartnerTerms, branchOnboardingView } from '../../application/pharmacy-onboarding/branch-onboarding.js';
-import { submitWorldpayForm } from '../../application/pharmacy-onboarding/submit-worldpay.js';
-import { partnerTermsVersion } from '../../application/pharmacy-onboarding/onboarding-config.js';
-import { sendEmailNow } from '../../application/workers/deliver-messages.js';
+import { acceptedPartnerTermsVersion } from '../../application/pharmacy-onboarding/onboarding-config.js';
 import { branchPartnerTermsAcceptanceSchema } from '../../domain/pharmacy-onboarding/terms.js';
-import { worldpayFormSchema } from '../../domain/pharmacy-onboarding/worldpay.js';
 import { ipHash } from '../../security/session-utils.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { uuidParam } from './uuid-param.js';
 
 const idSchema = uuidParam;
-/** Admin-only: the pharmacy never sees the hold reason. */
-const holdSchema = z.object({ reason: z.string().trim().min(2).max(500) });
+/** One of the fixed reasons; the pharmacy sees that reason's wording. */
+const holdSchema = z.object({ reason: z.enum(ONBOARDING_HOLD_REASONS) });
 
 /** What admin sees of a Partner Terms acceptance. The IP hash stays in the database. */
 function termsView(row: PartnerTermsAcceptanceRecord) {
@@ -69,7 +67,8 @@ function toView(
     signedOn: record.signedOn,
     licenceFilename: record.licenceFilename,
     organisationId: record.organisationId,
-    declineReason: record.declineReason,
+    holdReason: record.holdReason,
+    heldAt: record.heldAt,
     decidedAt: record.decidedAt,
     createdAt: record.createdAt,
     /** Only the date: the Worldpay form itself is emailed and never stored. */
@@ -95,7 +94,8 @@ export function createPortalPharmacyOnboardingRouter(): Router {
   const repo = new SqlPharmacyOnboardingRepository();
   const organisationRepo = new SqlOrganisationRepository();
   const identityRepo = new SqlIdentityRepository();
-  const notificationRepo = new SqlNotificationRepository();
+  const contentRepo = new SqlPlatformContentRepository();
+  const emails = sqlOnboardingEmails();
   const storage = new StorageProvider();
   const referralLinks = new ReferralLinkService(organisationRepo);
 
@@ -131,38 +131,6 @@ export function createPortalPharmacyOnboardingRouter(): Router {
     }
   });
 
-  // POST /v1/portal/admin/organisations/:id/decline - Curaleaf rejected a new pharmacy, or it should not be here
-  router.post('/portal/admin/organisations/:id/decline', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const scope = assertPlatformScope(req.context!);
-      const organisationId = idSchema.parse(req.params.id);
-      const { reason } = z.object({ reason: z.string() }).parse(req.body);
-      const result = await declineNewPharmacy({
-        findOrganisation: id => organisationRepo.findOrganisationById(id),
-        findRequestByOrganisation: id => repo.findByOrganisationId(id),
-        archiveOrganisation: (id, note, at) => repo.archiveOrganisation(id, note, at),
-        holdRequest: (id, note, at, actor) => repo.hold(id, note, at, actor),
-        emailPharmacy: input => queuePharmacyDeclinedEmail(notificationRepo, input),
-      }, { organisationId, reason, actorUid: scope.uid });
-      await identityRepo.appendAudit({
-        organisationId,
-        actorUid: scope.uid,
-        actorRole: scope.role,
-        event: 'organisation.declined',
-        recordType: 'Organisation',
-        recordId: organisationId,
-        requestId: scope.requestId,
-        sessionHashPrefix: scope.sessionHash.slice(0, 12),
-        surface: scope.surface,
-        details: { requestId: result.requestId },
-      });
-      res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json(result);
-    } catch (error) {
-      next(error);
-    }
-  });
-
   const actionsFor = (context: RequestContext) => {
     const scope = assertPlatformScope(context);
     return {
@@ -171,7 +139,8 @@ export function createPortalPharmacyOnboardingRouter(): Router {
         repo,
         organisations: organisationRepo,
         referralLinks,
-        notificationRepo,
+        revokeSessions: (organisationId, revokedAt) => identityRepo.revokeOrganisationSessions(organisationId, revokedAt, 'onboarding_on_hold'),
+        emails,
         clickup: sqlClickupHooks(),
         audit: input => identityRepo.appendAudit({
           ...input,
@@ -201,7 +170,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
     }
   });
 
-  // POST /v1/portal/admin/pharmacy-onboarding-requests/:id/hold - pending only; reason required, admin-only
+  // POST /v1/portal/admin/pharmacy-onboarding-requests/:id/hold - pending, or activated and not live; sets or changes the reason and emails it
   router.post('/portal/admin/pharmacy-onboarding-requests/:id/hold', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { scope, actions } = actionsFor(req.context!);
@@ -215,7 +184,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
     }
   });
 
-  // POST /v1/portal/admin/pharmacy-onboarding-requests/:id/unhold - on hold only; back to pending, no email
+  // POST /v1/portal/admin/pharmacy-onboarding-requests/:id/unhold - on hold only; back to pending or activated (branch to awaiting Curaleaf), no email
   router.post('/portal/admin/pharmacy-onboarding-requests/:id/unhold', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { actions } = actionsFor(req.context!);
@@ -253,7 +222,7 @@ export function createPortalPharmacyOnboardingRouter(): Router {
       const { scope, organisation } = await branchFor(req.context!);
       const input = branchPartnerTermsAcceptanceSchema.parse(req.body);
       const { acceptance, created } = await acceptBranchPartnerTerms(
-        { repo, termsVersion: partnerTermsVersion() },
+        { repo, termsVersion: acceptedPartnerTermsVersion(await readOnboardingContent(contentRepo)) },
         organisation,
         input,
         { ipHash: ipHash(req) },
@@ -282,22 +251,6 @@ export function createPortalPharmacyOnboardingRouter(): Router {
       }
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(201).json({ acceptedAt: acceptance.acceptedAt, termsVersion: acceptance.termsVersion });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  // POST /v1/portal/pharmacy/onboarding/worldpay - the Worldpay form from the portal, emailed and never stored
-  router.post('/portal/pharmacy/onboarding/worldpay', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { organisation } = await branchFor(req.context!);
-      const form = worldpayFormSchema.parse(req.body);
-      const note = await submitWorldpayForm(repo, email => sendEmailNow(email), form, new Date(), {
-        organisationId: organisation.id,
-        gphcNumber: organisation.gphcNumber,
-      });
-      res.setHeader('Cache-Control', 'private, no-store');
-      res.status(201).json({ submittedAt: note.submittedAt });
     } catch (error) {
       next(error);
     }
