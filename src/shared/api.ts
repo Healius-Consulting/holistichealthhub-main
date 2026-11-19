@@ -597,10 +597,17 @@ export interface WorldpayApplicationView<Answers = unknown> {
 /** Where the application belongs: the signed-in branch, or the onboarding request before the branch exists. */
 export type WorldpayApplicationOwner = { kind: 'branch' } | { kind: 'request'; onboardingRequestId: string };
 
-export function loadWorldpayApplication<Answers>(owner: WorldpayApplicationOwner) {
+export function loadWorldpayApplication<Answers>(owner: WorldpayApplicationOwner, options: { fresh?: boolean } = {}) {
   return owner.kind === 'branch'
-    ? apiRequest<WorldpayApplicationView<Answers>>('/v1/portal/pharmacy/worldpay-application', { skipGetCache: true })
-    : apiRequest<WorldpayApplicationView<Answers>>('/v1/public/worldpay-application/load', { method: 'POST', body: JSON.stringify({ onboardingRequestId: owner.onboardingRequestId }) });
+    ? apiRequest<WorldpayApplicationView<Answers>>(`/v1/portal/pharmacy/worldpay-application${options.fresh ? '?fresh=1' : ''}`, { skipGetCache: true })
+    : apiRequest<WorldpayApplicationView<Answers>>('/v1/public/worldpay-application/load', { method: 'POST', body: JSON.stringify({ onboardingRequestId: owner.onboardingRequestId, fresh: Boolean(options.fresh) }) });
+}
+
+/** FB-19: "Discard and start again" deletes the draft; a sent application is refused. */
+export function discardWorldpayApplication(owner: WorldpayApplicationOwner, id: string) {
+  return owner.kind === 'branch'
+    ? apiRequest<void>('/v1/portal/pharmacy/worldpay-application/discard', { method: 'POST', body: JSON.stringify({ id }) })
+    : apiRequest<void>('/v1/public/worldpay-application/discard', { method: 'POST', body: JSON.stringify({ onboardingRequestId: owner.onboardingRequestId, id }) });
 }
 
 export function saveWorldpayApplication(owner: WorldpayApplicationOwner, input: { id: string | null; version: number; answers: unknown }) {
@@ -679,6 +686,73 @@ async function fetchAdminFile(path: string, fallback: string) {
     throw new ApiRequestError(response.status, payload?.code ?? 'REQUEST_FAILED', payload?.message ?? fallback);
   }
   return URL.createObjectURL(await response.blob());
+}
+
+// ---- Content packs (FB-20): Settings → Assets → Content packs -------------------------
+
+export type ContentPackGroupId = '0.1' | '0.2' | 'A.1' | 'A.2' | 'C.1' | 'C.2';
+export interface PharmacyContentPackGroup {
+  id: ContentPackGroupId;
+  pack: '0' | 'A' | 'B' | 'C';
+  label: string;
+  source: 'upload' | 'website_kit' | 'counter_print';
+  version: string | null;
+  issuedAt: string | null;
+  hasFile: boolean;
+  filename: string | null;
+  sizeBytes: number | null;
+  libraryUrl: string | null;
+}
+export interface PharmacyContentPackCard {
+  id: '0' | 'A' | 'B' | 'C';
+  title: string;
+  audience: string;
+  description: string;
+  groups: PharmacyContentPackGroup[];
+}
+export interface AdminContentPacksView {
+  cards: Array<Omit<PharmacyContentPackCard, 'groups'>>;
+  groups: Array<Omit<PharmacyContentPackGroup, 'hasFile' | 'filename' | 'sizeBytes'> & {
+    file: { filename: string; contentType: string; sizeBytes: number } | null;
+    visible: boolean;
+  }>;
+}
+
+export function getContentPacks() {
+  return apiRequest<{ cards: PharmacyContentPackCard[] }>('/v1/portal/content-packs', { skipGetCache: true });
+}
+
+/** The group's issued file, as a Blob (for a direct download, or for merging into C.1). */
+export async function fetchContentPackFile(groupId: ContentPackGroupId, admin = false): Promise<Blob> {
+  const url = await fetchAdminFile(`/v1/portal/${admin ? 'admin/' : ''}content-packs/groups/${encodeURIComponent(groupId)}/file`, 'This download could not be fetched. Try again.');
+  try {
+    return await (await fetch(url)).blob();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export function getAdminContentPacks() {
+  return apiRequest<AdminContentPacksView>('/v1/portal/admin/content-packs', { skipGetCache: true });
+}
+
+export function saveContentPacksText(input: {
+  cards: Array<{ id: string; title: string; audience: string; description: string }>;
+  groups: Array<{ id: string; label: string; libraryUrl?: string }>;
+}) {
+  return apiRequest<AdminContentPacksView>('/v1/portal/admin/content-packs', { method: 'PUT', body: JSON.stringify(input) });
+}
+
+export function issueContentPackFile(groupId: ContentPackGroupId, file: File, version: string) {
+  return apiRequest<AdminContentPacksView>(`/v1/portal/admin/content-packs/groups/${encodeURIComponent(groupId)}/file`, {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': 'application/octet-stream', 'X-Filename': encodeURIComponent(file.name), 'X-Version': encodeURIComponent(version) },
+  });
+}
+
+export function withdrawContentPackFile(groupId: ContentPackGroupId) {
+  return apiRequest<AdminContentPacksView>(`/v1/portal/admin/content-packs/groups/${encodeURIComponent(groupId)}/file`, { method: 'DELETE' });
 }
 
 /** A blob URL for the application PDF or spreadsheet, while it is retained. */
@@ -1544,6 +1618,14 @@ export function updatePatientEmailVisibility(showEmailToPatients: boolean) {
 
 export function updateOrganisation(organisationId: string, input: UpdateOrganisationInput) {
   return apiRequest<PortalOrganisation>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+/** FB-17: the pharmacy's own brand colour and approved website domains. */
+export function updatePharmacyBrand(input: { primaryColour?: string; websiteDomains?: string[] }) {
+  return apiRequest<PortalOrganisation & { rejectedDomains: string[] }>('/v1/portal/organisation/brand', {
     method: 'PATCH',
     body: JSON.stringify(input),
   });

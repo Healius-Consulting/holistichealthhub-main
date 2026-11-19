@@ -176,3 +176,44 @@ export async function updateAdminOrganisationDetails(
 
   return { organisation: updated, changedFields };
 }
+
+/** FB-17: what a pharmacy may change about its own brand in Settings > Organisation. */
+export const pharmacyBrandInputSchema = z.object({
+  primaryColour: z.string().regex(/^#[0-9a-f]{6}$/i, 'Choose a colour.').optional(),
+  websiteDomains: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
+}).strict().refine(value => Object.keys(value).length > 0, { message: 'Choose a colour or enter a website.' });
+
+/**
+ * FB-17: the pharmacy's own brand colour (portal and eligibility form) and approved website
+ * domains. The same writes admin makes; logo text and portal name stay with admin.
+ */
+export async function updatePharmacyBrandSettings(
+  organisationId: string,
+  body: unknown,
+  deps: {
+    organisationRepo: Pick<
+      OrganisationRepositoryPort,
+      'findOrganisationById' | 'updateOrganisationBrand' | 'listOrganisationDomains' | 'deleteOrganisationDomain' | 'createOrganisationDomain'
+    >;
+    normaliseHostname: (input: string) => string;
+  },
+): Promise<{ organisation: OrganisationRecord; changedFields: string[]; rejectedDomains: string[] }> {
+  const input = pharmacyBrandInputSchema.parse(body);
+  const current = await deps.organisationRepo.findOrganisationById(organisationId);
+  if (!current) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+  if (input.primaryColour) {
+    await deps.organisationRepo.updateOrganisationBrand(organisationId, {
+      primaryColour: input.primaryColour.toLowerCase(),
+      logoText: current.logoText,
+      portalName: current.portalName,
+    });
+  }
+  let rejectedDomains: string[] = [];
+  if (input.websiteDomains) {
+    const result = await replaceOrganisationDomains(deps.organisationRepo, organisationId, input.websiteDomains.map(deps.normaliseHostname));
+    rejectedDomains = result.rejected;
+  }
+  const updated = await deps.organisationRepo.findOrganisationById(organisationId);
+  if (!updated) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+  return { organisation: updated, changedFields: Object.keys(input), rejectedDomains };
+}

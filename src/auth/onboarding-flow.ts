@@ -45,3 +45,15 @@ export function setupFinished(state: OnboardingSetupState) {
 export function requestStateView(state: PharmsmartWelcome['onboardingRequest']): 'pending' | 'on_hold' | null {
   return state === 'pending' || state === 'on_hold' ? state : null;
 }
+
+/**
+ * Where "Set up now" takes the visitor (FB-03): every click opens something.
+ * The first step not done opens its form ("Before you start" for the Curaleaf form);
+ * with every step done or skipped, it brings the set-up card into view.
+ */
+export function setUpNowTarget(state: OnboardingSetupState): 'curaleaf' | 'terms' | 'worldpay' | 'card' {
+  if (!state.termsRequest) return 'curaleaf';
+  if (state.termsRequired && !state.termsAccepted) return 'terms';
+  if (state.worldpay !== 'sent' && state.worldpay !== 'skipped') return 'worldpay';
+  return 'card';
+}

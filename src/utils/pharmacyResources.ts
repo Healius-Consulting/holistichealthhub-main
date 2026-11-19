@@ -50,12 +50,18 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
   anchor.click();
 }
 
-export async function downloadContentPack(org: PharmacyTenant, formUrl: string) {
+/**
+ * The pharmacy's own website files: its eligibility link, QR code, palette and notes.
+ * FB-20: this is group C.1 Website kit. When HHH has issued its kit zip, the kit comes
+ * first and these go in alongside it, in a folder of their own, with the block library link.
+ */
+export async function downloadContentPack(org: PharmacyTenant, formUrl: string, kit: { zip?: Blob | null; libraryUrl?: string | null } = {}) {
   const url = assertEligibilityUrl(formUrl);
   const qr = await qrDataUrl(url);
   const theme = deriveTenantTheme(org.brand.primary);
-  const zip = new JSZip();
-  const folder = zip.folder(`${org.slug}-hhh-content-pack`)!;
+  const zip = kit.zip ? await JSZip.loadAsync(kit.zip) : new JSZip();
+  const folder = zip.folder(kit.zip ? `${org.slug}-your-eligibility-link` : `${org.slug}-hhh-content-pack`)!;
+  if (kit.libraryUrl) folder.file('block-library.txt', `The live HHH block library, for your web developer:\n${kit.libraryUrl}\n`);
 
   folder.file('README.txt', `HHH hosted eligibility link and QR pack for ${org.name}\n\nThe eligibility form is hosted and maintained centrally by Holistic Health Hub, a trading name of Fit-Pharma Ltd (company no. 11950925), 124 City Road, London EC1V 2NX. Do not copy, recreate, iframe or embed the form on the pharmacy website.\n\nThe pharmacy website team may design any suitable information page or call-to-action, but its button/link must send patients to the exact hosted URL below. The QR image supplied in this pack points to the same URL and may be used on the website, leaflets, posters and other approved designs.\n\nEligibility URL:\n${url}\n\nDo not change or share the referral token between pharmacy organisations. Before publishing, HHH must approve the patient-facing copy.\n`);
   folder.file('eligibility-link.txt', `${url}\n`);
@@ -68,6 +74,6 @@ export async function downloadContentPack(org: PharmacyTenant, formUrl: string) 
 
   const blob = await zip.generateAsync({ type: 'blob' });
   const blobUrl = URL.createObjectURL(blob);
-  downloadDataUrl(blobUrl, `${org.slug}-hhh-content-pack.zip`);
+  downloadDataUrl(blobUrl, `${org.slug}-hhh-website-kit.zip`);
   setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
 }

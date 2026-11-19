@@ -7,6 +7,7 @@ import {
   resolveOrganisationStatusChange,
   updateAdminOrganisationDetails,
   updateOrganisationInputSchema,
+  updatePharmacyBrandSettings,
 } from './admin-update.js';
 
 const organisation: OrganisationRecord = {
@@ -240,5 +241,19 @@ describe('updateAdminOrganisationDetails', () => {
       () => updateAdminOrganisationDetails(organisation.id, { name: 'Missing Pharmacy Ltd' }, deps),
       (error: unknown) => error instanceof HttpError && error.code === 'NOT_FOUND' && error.statusCode === 404,
     );
+  });
+});
+
+describe('updatePharmacyBrandSettings (FB-17)', () => {
+  it('lets the pharmacy set its brand colour and website domains, and nothing else', async () => {
+    const repos = createRepos();
+    const result = await updatePharmacyBrandSettings(organisation.id, { primaryColour: '#AA3366', websiteDomains: ['Shop.Example'] }, repos);
+    assert.deepEqual(repos.brandUpdates, [{ primaryColour: '#aa3366', logoText: 'EP', portalName: 'Eligible Pharmacy' }]);
+    assert.deepEqual(repos.createdDomains, ['shop.example']);
+    assert.deepEqual(repos.deletedDomains, ['domain-1']);
+    assert.deepEqual(result.changedFields, ['primaryColour', 'websiteDomains']);
+    await assert.rejects(updatePharmacyBrandSettings(organisation.id, { logoText: 'XX' }, createRepos()), ZodError);
+    await assert.rejects(updatePharmacyBrandSettings(organisation.id, { status: 'live' }, createRepos()), ZodError);
+    await assert.rejects(updatePharmacyBrandSettings(organisation.id, {}, createRepos()), ZodError);
   });
 });

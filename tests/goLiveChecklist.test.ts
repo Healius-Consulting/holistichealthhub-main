@@ -108,3 +108,35 @@ test('Return to live, Reset demo and entering demo clear the demo checklist', ()
     assert.match(body, /clearDemoChecklist\(\)/, name);
   }
 });
+
+import { checklistDetailSegments, checklistDetailText, parseChecklistTarget } from '../src/shared/goLiveChecklist.ts';
+import { GO_LIVE_CHECKLIST as SERVER_ITEMS } from '../services/api-sql/src/domain/organisation/go-live-checklist.ts';
+import { settingsHref, settingsTargetFromSearch } from '../src/routing/settingsLink.ts';
+
+test('helper lines carry links to Settings, a content pack group or the training page (FB-12 to FB-16)', () => {
+  const segments = checklistDetailSegments('Turn on X in [Settings > Organisation > Pharmacy](settings:organisation#settings-card-pharmacy). Leave it.');
+  assert.deepEqual(segments, [
+    { text: 'Turn on X in ' },
+    { text: 'Settings > Organisation > Pharmacy', target: { kind: 'settings', section: 'organisation', anchor: 'settings-card-pharmacy' } },
+    { text: '. Leave it.' },
+  ]);
+  assert.deepEqual(parseChecklistTarget('pack:A.1'), { kind: 'pack', group: 'A.1' });
+  assert.deepEqual(parseChecklistTarget('training'), { kind: 'training' });
+  assert.equal(parseChecklistTarget('https://evil.example'), null);
+  assert.equal(parseChecklistTarget('settings:nowhere'), null);
+  // Every link in the real list resolves, and the words read the same without the links.
+  for (const item of SERVER_ITEMS) {
+    if (!item.detail) continue;
+    for (const match of item.detail.matchAll(/\]\(([^)]+)\)/g)) assert.ok(parseChecklistTarget(match[1]!), `${item.key}: ${match[1]}`);
+    assert.equal(checklistDetailText(item.detail).includes(']('), false);
+  }
+  assert.equal(checklistDetailText('Find the SOPs in [Pack A, Compliance, in Settings > Assets](pack:A.1).'), 'Find the SOPs in Pack A, Compliance, in Settings > Assets.');
+});
+
+test('Settings links round-trip through the address bar', () => {
+  const href = settingsHref({ section: 'assets', focus: 'content-pack-group-0.1' }, '/pharmacy');
+  assert.equal(href, '/pharmacy/settings?section=assets&focus=content-pack-group-0.1');
+  assert.deepEqual(settingsTargetFromSearch(href.slice(href.indexOf('?'))), { section: 'assets', focus: 'content-pack-group-0.1' });
+  assert.equal(settingsTargetFromSearch('?section=admin'), null);
+  assert.deepEqual(settingsTargetFromSearch('?section=organisation&focus=<script>'), { section: 'organisation', focus: null });
+});

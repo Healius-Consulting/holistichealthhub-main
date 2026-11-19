@@ -1,6 +1,7 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
+  discardWorldpayDraft,
   loadWorldpayApplication,
   readWorldpayContent,
   resendWorldpayApplication,
@@ -29,6 +30,7 @@ const saveSchema = z.object({
   version: z.number().int().min(0).default(0),
   answers: z.unknown(),
 });
+const discardSchema = z.object({ id: uuidInput });
 const submitSchema = z.object({
   id: uuidInput,
   version: z.number().int().min(1),
@@ -91,7 +93,8 @@ export function createPortalWorldpayApplicationRouter(depsFor: (context: Request
         onboardingRepo.findByOrganisationId(organisation.id),
         onboardingRepo.findTermsAcceptancesForOrganisation(organisation.id),
       ]);
-      const view = await loadWorldpayApplication(depsFor(req.context!), owner, worldpayPrefill({ organisation, request, terms: terms[0] ?? null }));
+      const fresh = req.query.fresh === '1';
+      const view = await loadWorldpayApplication(depsFor(req.context!), owner, worldpayPrefill({ organisation, request, terms: terms[0] ?? null }), { fresh });
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(view);
     } catch (error) {
@@ -107,6 +110,31 @@ export function createPortalWorldpayApplicationRouter(depsFor: (context: Request
       const saved = await saveWorldpayDraft(depsFor(req.context!), owner, input);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(saved);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/pharmacy/worldpay-application/discard - delete this branch's draft to start again (FB-19)
+  router.post('/portal/pharmacy/worldpay-application/discard', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { scope, organisation, owner } = await branchOwner(req.context!);
+      const input = discardSchema.parse(req.body);
+      await discardWorldpayDraft(depsFor(req.context!), owner, input.id);
+      await identityRepo.appendAudit({
+        organisationId: organisation.id,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'worldpay_application.draft_discarded',
+        recordType: 'WorldpayApplication',
+        recordId: input.id,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: {},
+      }).catch(() => undefined);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(204).end();
     } catch (error) {
       next(error);
     }

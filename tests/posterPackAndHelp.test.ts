@@ -28,7 +28,9 @@ test('the poster pack is switched on in Settings', () => {
   assert.equal(POSTER_TEMPLATES_READY, true);
   const settings = readFileSync(new URL('../src/pages/PharmacySettings.tsx', import.meta.url), 'utf8');
   assert.match(settings, /POSTER_TEMPLATES_READY \|\| isLocalPortalPreview/);
-  assert.match(settings, /An A3 poster and a two-sided A5 leaflet/);
+  // FB-20: the Poster pack is now group C.2 Counter print, in the content pack cards.
+  const packs = readFileSync(new URL('../src/components/ContentPacks.tsx', import.meta.url), 'utf8');
+  assert.match(packs, /An A3 poster and a two-sided A5 leaflet/);
 });
 
 test('posters are offered from Awaiting Curaleaf onwards, while the eligibility link works', () => {

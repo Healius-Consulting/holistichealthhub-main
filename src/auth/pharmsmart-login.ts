@@ -36,12 +36,15 @@ export const PHARMACY_ONBOARDING_PITCH = {
 export const PHARMSMART_LOGIN_URL = 'https://pharmsmart.co.uk/login.php';
 
 /**
- * The "In partnership with" logos under the hero (brief section 5). Placeholders until
- * HHH supplies the production files: replace the files at these paths, unaltered.
+ * The "In partnership with" logos under the hero (brief section 5; FB-01, FB-02).
+ * Curaleaf: the official vector wordmark, recoloured to the teal of Curaleaf's supplied
+ * reference file. Pharmsmart: HHH's supplied pharmsmart-logo.png, unaltered.
+ * Sizes differ on purpose: Curaleaf's thin lowercase wordmark is set larger than Pharmsmart's
+ * bold one so the two carry the same visual weight. Width and height stop the row shifting on load.
  */
 export const PARTNERSHIP_LOGOS = [
-  { src: '/partners/curaleaf.svg', alt: 'Curaleaf' },
-  { src: '/partners/pharmsmart.svg', alt: 'Pharmsmart' },
+  { src: '/partners/curaleaf.svg', alt: 'Curaleaf', width: 86, height: 30 },
+  { src: '/partners/pharmsmart.png', alt: 'Pharmsmart', width: 121, height: 22 },
 ] as const;
 
 export const PHARMACY_ONBOARDING_CHOICES = [

@@ -32,7 +32,6 @@ export const WHOLESALE_COST_LABEL = 'Wholesale cost (excl. VAT)';
 export const CURALEAF_DELIVERY_LABEL = 'Curaleaf delivery';
 export const PHARMACY_DELIVERY_LABEL = 'Delivery charge';
 export const MEDICINE_COST_LABEL = 'Medicine cost';
-export const DISPENSING_COST_LABEL = 'Dispensing charge';
 
 export type OrderPricingPence = {
   medicinePence: number;

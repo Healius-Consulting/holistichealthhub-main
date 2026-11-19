@@ -8,6 +8,9 @@ import {
   splitDob,
   stepNames,
   stepProblems,
+  resumeStep,
+  submitFailure,
+  WORLDPAY_HELP_LINE,
 } from '../src/worldpay/applicationLogic.ts';
 import { worldpayAnswersDraftSchema } from '../services/api-sql/src/domain/worldpay-application/answers.ts';
 import type { CompanyLookup } from '../src/shared/api.ts';
@@ -101,4 +104,35 @@ test('a failed autosave never loops: refusals stop, server and network failures 
   assert.deepEqual(nextSaveDelay({ status: 503 }, 2), { kind: 'retry', retryIn: 15_000 });
   assert.deepEqual(nextSaveDelay(null, 3), { kind: 'retry', retryIn: 60_000 });
   assert.deepEqual(nextSaveDelay(null, 4), { kind: 'retry', retryIn: null });
+});
+
+test('a refused submit never shows server text: only plain answer checks name fields (FB-11)', () => {
+  // The case Shay saw: request validation, with a technical detail.
+  assert.deepEqual(submitFailure({ status: 400, code: 'INVALID_INPUT', details: [{ path: 'id', message: 'Invalid UUID' }] }), { kind: 'help' });
+  assert.deepEqual(submitFailure({ status: 500, code: 'INTERNAL' }), { kind: 'help' });
+  assert.deepEqual(submitFailure(null), { kind: 'help' });
+  assert.equal(WORLDPAY_HELP_LINE.includes('Invalid UUID'), false);
+  assert.deepEqual(submitFailure({ status: 409, code: 'WORLDPAY_DRAFT_CONFLICT' }), { kind: 'conflict' });
+  const fields = submitFailure({
+    status: 422,
+    code: 'WORLDPAY_APPLICATION_INCOMPLETE',
+    details: [
+      { path: 'financials.sortCode', message: 'Enter the sort code.' },
+      { path: 'business.legalName', message: 'Enter the legal name of the business.' },
+      { path: 'mystery', message: 'ignored' },
+    ],
+  });
+  assert.equal(fields.kind, 'fields');
+  if (fields.kind === 'fields') {
+    assert.equal(fields.stepIndex, 1);
+    assert.deepEqual(fields.problems.map(problem => problem.path), ['business.legalName']);
+  }
+});
+
+test('a draft reopens at the screen the pharmacy reached (FB-10)', () => {
+  assert.equal(resumeStep({ existingAccount: 'no', lastStep: 3 }), 3);
+  assert.equal(resumeStep({ existingAccount: 'no' }), 0);
+  assert.equal(resumeStep({ existingAccount: '', lastStep: 3 }), 0);
+  assert.equal(resumeStep({ existingAccount: 'online', lastStep: 3 }), 0);
+  assert.equal(resumeStep({ existingAccount: 'no', lastStep: 9 }), 0);
 });

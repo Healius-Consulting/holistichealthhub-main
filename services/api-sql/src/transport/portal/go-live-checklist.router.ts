@@ -1,6 +1,7 @@
 import { partnerTermsState } from '../../application/pharmacy-onboarding/partner-terms.service.js';
 import { SqlPartnerTermsRepository } from '../../repositories/sql/partner-terms.sql.js';
 import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-application.sql.js';
+import { readOnboardingContent } from '../../application/pharmacy-onboarding/onboarding-content.js';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { sqlClickupHooks } from '../../application/clickup/clickup-hooks.js';
@@ -53,8 +54,13 @@ export function createPortalGoLiveChecklistRouter(): Router {
   router.get('/portal/go-live-checklist', requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
     try {
       const tenant = assertTenantScope(req.context!);
+      const [view, content] = await Promise.all([
+        loadGoLiveChecklist(deps, tenant.organisationId),
+        readOnboardingContent(new SqlPlatformContentRepository()).catch(() => null),
+      ]);
       res.setHeader('Cache-Control', 'private, no-store');
-      res.status(200).json(await loadGoLiveChecklist(deps, tenant.organisationId));
+      // FB-15: the training booking page, the same admin setting as the Ready to try email.
+      res.status(200).json({ ...view, links: { trainingBookingUrl: content?.links.trainingBookingUrl.trim() || null } });
     } catch (error) {
       next(error);
     }

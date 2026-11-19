@@ -316,13 +316,13 @@ function sandboxOrders(organisationId: string, patients: Record<PatientSlug, CRM
         patientDeltaPence: 1000,
       },
     }),
-    order(organisationId, patients, now, 109, 'sage', 3, payment(109, now, 'paid', 3, 'Curaleaf cancelled the purchase order. Refund or replace still needed.', TRAINING_PRODUCT.retail + 10 + 5), [
+    order(organisationId, patients, now, 109, 'sage', 3, payment(109, now, 'paid', 3, 'Curaleaf cancelled the purchase order. Refund or replace still needed.', TRAINING_PRODUCT.retail + 5), [
       placedRx(1091, 'cancelled', { allocated: 1, shipped: 0 }, {
         purchaseOrderState: 'CANCELLED',
         curaleafPrescriptionState: 'CANCELLED',
       }, now),
     ], {
-      dispensingFee: 10,
+      dispensingFee: 0,
       pharmacyDelivery: 5,
       pharmacyDeliveryAllowed: true,
       cancellation: {

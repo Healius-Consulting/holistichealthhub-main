@@ -5,6 +5,7 @@ import {
   afterTermsAccepted,
   initialSetupState,
   requestStateView,
+  setUpNowTarget,
   setupFinished,
   worldpayUnlocked,
 } from '../src/auth/onboarding-flow.ts';
@@ -46,4 +47,17 @@ test('pending and on-hold requests show their message instead of the forms', () 
   assert.equal(requestStateView('on_hold'), 'on_hold');
   assert.equal(requestStateView(null), null);
   assert.equal(requestStateView(undefined), null);
+});
+
+test('Set up now always opens something: the first step not done, then the set-up card', () => {
+  const start = initialSetupState({ onboardingRequest: null, termsRequest: null, termsRequired: true });
+  assert.equal(setUpNowTarget(start), 'curaleaf');
+  const sent = afterCuraleafSent(start, request);
+  assert.equal(setUpNowTarget(sent), 'terms');
+  const accepted = afterTermsAccepted(sent);
+  assert.equal(setUpNowTarget(accepted), 'worldpay');
+  assert.equal(setUpNowTarget({ ...accepted, worldpay: 'sent' }), 'card');
+  assert.equal(setUpNowTarget({ ...accepted, worldpay: 'skipped' }), 'card');
+  const noTerms = afterCuraleafSent(initialSetupState({ onboardingRequest: null, termsRequest: null, termsRequired: false }), request);
+  assert.equal(setUpNowTarget(noTerms), 'worldpay');
 });

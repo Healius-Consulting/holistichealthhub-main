@@ -9,7 +9,6 @@ import {
   CreditCard,
   Download,
   ExternalLink,
-  FileArchive,
   Link2,
   Mail,
   Pencil,
@@ -30,8 +29,11 @@ import WorldpayConnectionPanel from '../components/WorldpayConnectionPanel';
 import { WorldpayApplicationEntry } from '../worldpay/WorldpayApplicationEntry';
 import { downloadContentPack, downloadDataUrl, eligibilityUrl, qrDataUrl } from '../utils/pharmacyResources';
 import { isLocalPortalPreview } from '../dev/localPortalPreview';
+import { settingsTargetFromSearch, type SettingsLinkTarget } from '../routing/settingsLink';
 import { POSTER_TEMPLATES_READY, posterPackAvailable } from '../utils/posterPackRules';
 import PharmacyLogoCard from '../components/PharmacyLogoCard';
+import PharmacyBrandCard from '../components/PharmacyBrandCard';
+import ContentPacks from '../components/ContentPacks';
 import { requestWorkspaceTourReplay } from '../training/workspaceTourPersist';
 import { pharmacyWorkspaceStatusLabel } from '../training/workspace';
 import './PharmacySettings.css';
@@ -134,6 +136,45 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     const timer = window.setTimeout(stop, 2500);
     return () => { window.cancelAnimationFrame(frame); window.clearTimeout(listen); window.clearTimeout(timer); stop(); };
   }, [initialSection, goToSection]);
+
+  // Links from the go-live checklist (FB-12 to FB-16): open at a card, highlight it briefly.
+  const [linkTarget, setLinkTarget] = useState<SettingsLinkTarget | null>(() => settingsTargetFromSearch(window.location.search));
+  useEffect(() => {
+    const onLink = (event: Event) => setLinkTarget({ ...(event as CustomEvent<SettingsLinkTarget>).detail });
+    window.addEventListener('hhh:settings-link', onLink);
+    return () => window.removeEventListener('hhh:settings-link', onLink);
+  }, []);
+  useEffect(() => {
+    if (!linkTarget) return;
+    // The link has done its job; keep the address bar clean.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('section') || url.searchParams.has('focus')) {
+      url.searchParams.delete('section');
+      url.searchParams.delete('focus');
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+    let timer = 0;
+    let attempts = 0;
+    const go = () => {
+      const found = linkTarget.focus ? document.getElementById(linkTarget.focus) : null;
+      // Content packs load after the page: wait a moment for the group to appear.
+      if (!found && linkTarget.focus && attempts++ < 25) { timer = window.setTimeout(go, 120); return; }
+      const card = (found?.closest('.content-pack__group, .pharmacy-details__card') as HTMLElement | null) ?? found;
+      if (!card) { goToSection(linkTarget.section, true); return; }
+      setActiveSection(linkTarget.section);
+      const scroller = scrollParentOf(card);
+      const barHeight = navRef.current?.offsetHeight ?? 0;
+      const scrollerTop = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      scroller.scrollTo({ top: scroller.scrollTop + card.getBoundingClientRect().top - scrollerTop - barHeight - 16, behavior: reduce ? 'auto' : 'smooth' });
+      card.classList.remove('is-linked');
+      void card.offsetWidth;
+      card.classList.add('is-linked');
+      window.setTimeout(() => card.classList.remove('is-linked'), 2600);
+    };
+    timer = window.setTimeout(go, 80);
+    return () => window.clearTimeout(timer);
+  }, [linkTarget, goToSection]);
 
   // Highlight the section under the bar as staff scroll.
   useEffect(() => {
@@ -261,9 +302,9 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
     try {
       const { downloadPosterPack } = await import('../utils/posterPackDownload');
       await downloadPosterPack(organisation, formUrl, ownLogoUrl);
-      notify('Poster pack saved: an A3 poster and a two-sided A5 leaflet.');
+      notify('Counter print saved: an A3 poster and a two-sided A5 leaflet.');
     } catch {
-      dispatch({ type: 'ADD_TOAST', message: 'The poster pack could not be made. Try again.', toastType: 'error' });
+      dispatch({ type: 'ADD_TOAST', message: 'The counter print could not be made. Try again.', toastType: 'error' });
     } finally {
       setPostersBusy(false);
     }
@@ -589,6 +630,18 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                 </>
               )}
             </section>
+            {/* Brand and website (FB-17): the colour and websites HHH admin could set before, now the pharmacy's own. */}
+            <PharmacyBrandCard
+              colour={organisation.brand.primary}
+              domains={organisation.websiteDomains ?? []}
+              sandbox={sandboxPortal}
+              onSaved={next => dispatch({
+                type: 'UPDATE_ORGANISATION',
+                organisationId: organisation.id,
+                updates: { brand: { ...organisation.brand, primary: next.colour }, websiteDomains: next.domains },
+              })}
+              notify={(message, tone) => dispatch({ type: 'ADD_TOAST', message, toastType: tone })}
+            />
         </div>
         </fieldset>
       </section>
@@ -627,7 +680,12 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
               ) : (
                 <p className="pharmacy-details__note"><ShieldCheck size={14} aria-hidden="true" /> Worldpay is optional. Connect the merchant below when you are ready.</p>
               )}
-              {organisation.worldpay.status !== 'connected' && !sandboxPortal ? <WorldpayApplicationEntry /> : null}
+              {/* FB-19: the way into the Worldpay application never vanishes. Demo mode can't send it, so it says how to. */}
+              {organisation.worldpay.status !== 'connected' && !isLocalPortalPreview
+                ? state.demoMode
+                  ? <p className="pharmacy-details__note">Your Worldpay application is kept in live mode. Choose Return to live to apply, or to continue or check your application.</p>
+                  : <WorldpayApplicationEntry />
+                : null}
               {organisation.worldpay.status === 'connected' ? (
                 <div className="pharmacy-details__actions is-start">
                   <button type="button" className="btn btn-sm" disabled={!worldpayRefreshControl || worldpayRefreshControl.busy} onClick={() => worldpayRefreshControl?.refresh()}>
@@ -674,7 +732,7 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
                 {row('Customer ID', curaleafStatus?.customerId ?? '', curaleafStatus?.customerId ? undefined : 'Assigned by HHH once Curaleaf approve the account')}
                 {row('Estate', curaleafStatus ? curaleafCatalogueEstateLabel(curaleafStatus.environment) : 'Not yet checked')}
               </dl>
-              <p className="pharmacy-details__note">Curaleaf sets patient price and wholesale cost. You can add a dispensing charge, and Pharmacy Delivery if it is on, while building an order.</p>
+              <p className="pharmacy-details__note">Curaleaf sets the wholesale cost and the recommended patient price. You can edit each line’s patient price, up to RRP + 10%, and add Pharmacy Delivery if it is on, while building an order.</p>
               <button type="button" className="pharmacy-details__link" onClick={() => dispatch({ type: 'SET_SCREEN', screen: 'formulary' })}>Open Curaleaf catalogue</button>
             </section>
         </div>
@@ -726,46 +784,14 @@ export default function PharmacySettings({ initialSection }: { initialSection?: 
               onChange={setOwnLogoUrl}
               notify={notify}
             />
-            <section className="pharmacy-details__card is-wide" aria-labelledby="settings-card-packs">
-              <header>
-                <span className="pharmacy-details__icon" aria-hidden="true"><FileArchive size={16} /></span>
-                <h4 id="settings-card-packs">Content packs</h4>
-              </header>
-              <ul className="pharmacy-settings-page__packs">
-                <li className="pharmacy-details__switch-row">
-                  <span>
-                    <strong>Developer pack</strong>
-                    <small>Suggested page copy, the link, QR usage notes and the high-resolution image, zipped for your web developer.</small>
-                  </span>
-                  <button className="btn btn-sm" type="button" disabled={!formUrl} onClick={async () => { await downloadContentPack(organisation, formUrl); notify('Developer content pack created.'); }}>
-                    <Download size={13} /> Download .zip
-                  </button>
-                </li>
-                {postersOn ? (
-                  <li className="pharmacy-details__switch-row">
-                    <span>
-                      <strong>Poster pack</strong>
-                      <small>
-                        {postersOpen
-                          ? 'An A3 poster and a two-sided A5 leaflet with your logo and QR code, as print-ready PDFs to send to your printer.'
-                          : 'Available again once your eligibility link is back on.'}
-                      </small>
-                    </span>
-                    <button className="btn btn-sm" type="button" disabled={!formUrl || !postersOpen || postersBusy} onClick={() => void savePosterPack()}>
-                      <Download size={13} /> {postersBusy ? 'Making…' : 'Download .zip'}
-                    </button>
-                  </li>
-                ) : (
-                  <li className="pharmacy-details__switch-row is-muted">
-                    <span>
-                      <strong>Poster pack</strong>
-                      <small>An A3 poster and a two-sided A5 leaflet with your logo and QR code will appear here soon.</small>
-                    </span>
-                    <span className="pharmacy-details__tag">Coming soon</span>
-                  </li>
-                )}
-              </ul>
-            </section>
+            {/* FB-20: one card per pack, one download per group. C.1 and C.2 are built here for this pharmacy. */}
+            <ContentPacks
+              sandbox={sandboxPortal}
+              websiteKitReady={Boolean(formUrl)}
+              onWebsiteKit={kit => downloadContentPack(organisation, formUrl, kit)}
+              counterPrint={{ on: postersOn, open: postersOpen, busy: postersBusy, download: savePosterPack }}
+              notify={notify}
+            />
         </div>
       </section>
       <section id="settings-section-support" className="pharmacy-settings-page__section" aria-labelledby="settings-heading-support">

@@ -80,9 +80,10 @@ const ORDER_SAMPLE = {
   ...PATIENT_SAMPLE,
   orderNumber: 'ORD-MWDPQ7RK-6EDC74',
   currency: 'GBP',
-  amountPence: 14250,
+  amountPence: 13000,
   medicineTotalPence: 13000,
-  dispensingFeePence: 1250,
+  // The dispensing charge was retired on 26 Sep 2026 (CP-6); previews show none (FB-18).
+  dispensingFeePence: 0,
 };
 
 const CLOSURE_FLAGS = {

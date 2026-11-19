@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { updateAdminOrganisationDetails } from '../../application/organisation/admin-update.js';
+import { updateAdminOrganisationDetails, updatePharmacyBrandSettings } from '../../application/organisation/admin-update.js';
 import {
   authoriseBrandLogoUpload,
   completeBrandLogoUpload,
@@ -721,6 +721,33 @@ export function createPortalSetupRouter(): Router {
       }
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(await portalOrganisationView(organisation));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // PATCH /v1/portal/organisation/brand - the pharmacy's own brand colour and website domains (FB-17)
+  router.patch('/portal/organisation/brand', requireCsrf, requireStaff('pharmacy'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertTenantScope(req.context!);
+      const { organisation, changedFields, rejectedDomains } = await updatePharmacyBrandSettings(scope.organisationId, req.body, {
+        organisationRepo,
+        normaliseHostname,
+      });
+      await identityRepo.appendAudit({
+        organisationId: scope.organisationId,
+        actorUid: scope.uid,
+        actorRole: scope.role,
+        event: 'organisation.brand_updated',
+        recordType: 'Organisation',
+        recordId: scope.organisationId,
+        requestId: scope.requestId,
+        sessionHashPrefix: scope.sessionHash.slice(0, 12),
+        surface: scope.surface,
+        details: { changedFields, rejectedDomains },
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json({ ...(await portalOrganisationView(organisation)), rejectedDomains });
     } catch (error) {
       next(error);
     }

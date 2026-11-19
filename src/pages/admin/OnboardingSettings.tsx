@@ -40,6 +40,7 @@ import {
 } from '../../../services/api-sql/src/domain/notifications/email-copy.ts';
 import { DemoPharmaciesPanel } from './DemoPharmaciesPanel';
 import { PartnerTermsPanel } from './PartnerTermsPanel';
+import { ContentPacksPanel } from './ContentPacksPanel';
 import { WorldpayApplicationsPanel, WorldpayWordingPanel } from './WorldpayAdminPanels';
 import { flagLabel, newBlock, normalizeTemplate, parseTemplate, serializeTemplate, unknownFields, type TemplateBlock } from './templateBlocks';
 import { BlockEditor, EmailPreview, FieldChips, RenderedEmail, ScenarioSwitches, useInsertTarget, useServerPreview, type Scenario } from './settingsParts';
@@ -62,7 +63,8 @@ export type SettingsSection =
   | 'worldpayWording'
   | 'demo'
   | 'addresses'
-  | 'terms';
+  | 'terms'
+  | 'packs';
 
 type NavItem = { id: SettingsSection; label: string; keys: OnboardingContentKey[]; copy?: EditableEmailCode };
 
@@ -110,6 +112,7 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
       { id: 'demo', label: 'Demo pharmacies', keys: [] },
       { id: 'addresses', label: 'Addresses and links', keys: ['addresses', 'links'] },
       { id: 'terms', label: 'Partner Terms', keys: [] },
+      { id: 'packs', label: 'Content packs', keys: [] },
     ],
   },
 ];
@@ -729,6 +732,7 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
     if (section === 'worldpayWording') return <WorldpayWordingPanel />;
     if (section === 'demo') return <DemoPharmaciesPanel />;
     if (section === 'terms') return <PartnerTermsPanel />;
+    if (section === 'packs') return <ContentPacksPanel />;
     if (section.startsWith('copy:')) {
       const code = section.slice('copy:'.length) as EditableEmailCode;
       if (!copySaved) {
@@ -798,7 +802,7 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
             <label className="wpa-field"><span className="wpa-field__label">Curaleaf Reply-To</span><input className="input" type="email" value={addresses.curaleafReplyTo} onChange={event => set('addresses', { ...addresses, curaleafReplyTo: event.target.value })} /><span className="wpa-field__hint">Reply-To on the application to Curaleaf: their queries come back here.</span></label>
             <label className="wpa-field"><span className="wpa-field__label">Sender name</span><input className="input" value={addresses.displayName} onChange={event => set('addresses', { ...addresses, displayName: event.target.value })} /></label>
             <h3>Training booking link</h3>
-            <label className="wpa-field"><span className="wpa-field__label">Link</span><input className="input" type="url" value={links.trainingBookingUrl} placeholder="https://" onChange={event => set('links', { ...links, trainingBookingUrl: event.target.value })} /><span className="wpa-field__hint">Used in the Ready to try email. Leave blank to leave the booking sentence out.</span></label>
+            <label className="wpa-field"><span className="wpa-field__label">Link</span><input className="input" type="url" value={links.trainingBookingUrl} placeholder="https://" onChange={event => set('links', { ...links, trainingBookingUrl: event.target.value })} /><span className="wpa-field__hint">Used in the Ready to try email and the go-live checklist’s “Book a training session” link. Leave blank to leave both out.</span></label>
           </div>
           {saveBar(['addresses', 'links'], 'Addresses and links')}
         </>
@@ -853,7 +857,7 @@ export function OnboardingSettings({ open, section: requested, onClose }: { open
           </header>
           {error && view ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
           {copyError && section.startsWith('copy:') ? <p className="wpa-banner is-red" role="alert">{copyError}</p> : null}
-          {error && !view && !['worldpay', 'worldpayWording', 'demo', 'terms'].includes(section) ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
+          {error && !view && !['worldpay', 'worldpayWording', 'demo', 'terms', 'packs'].includes(section) ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
           <div className="onb-settings__content">{body()}</div>
         </section>
       </div>

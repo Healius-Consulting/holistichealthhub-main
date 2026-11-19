@@ -194,7 +194,8 @@ export const ONBOARDING_CONTENT_DEFAULTS: OnboardingContent = {
     displayName: 'Holistic Health Hub — Partner Onboarding',
   },
   links: {
-    trainingBookingUrl: 'https://calendly.com/spatel-72k/30min',
+    // FB-15: one setting for the Ready to try email and the go-live checklist.
+    trainingBookingUrl: 'https://calendly.com/spatel-72k/hhh-training',
   },
 };
 

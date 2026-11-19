@@ -14,6 +14,7 @@ import {
   afterTermsAccepted,
   initialSetupState,
   requestStateView,
+  setUpNowTarget,
   setupFinished,
   worldpayUnlocked,
 } from './onboarding-flow';
@@ -26,7 +27,7 @@ import {
   pharmsmartOnboardingBookingUrl,
   type PharmacyOnboardingChoice,
 } from './pharmsmart-login';
-import { getPartnerTermsRequirement, partnerTermsSignupFileUrl, recordPharmacyOnboardingDeferral } from '../shared/api';
+import { getPartnerTermsRequirement, loadWorldpayApplication, partnerTermsSignupFileUrl, recordPharmacyOnboardingDeferral } from '../shared/api';
 import type { PharmsmartWelcome as PharmsmartWelcomeDetails } from './types';
 import { OnboardingHoldPage } from '../onboarding/OnboardingHold';
 import { OnboardingAwaitingPage } from '../onboarding/OnboardingAwaiting';
@@ -104,12 +105,60 @@ export function PharmsmartWelcome({
   const deferralKey = useRef(crypto.randomUUID());
 
   const panelRef = useRef<HTMLDivElement>(null);
+  const setupHeadingRef = useRef<HTMLHeadingElement>(null);
+  // FB-04: the demo calendar starts loading once the visitor points at or focuses "Book a demo",
+  // never on arrival (Calendly sets cookies), and stays loaded after that.
+  const [calendarWanted, setCalendarWanted] = useState(false);
+  const [calendarLoaded, setCalendarLoaded] = useState(false);
+  // FB-19: a Worldpay application already started for this request (after a reload, say).
+  const [worldpayDraft, setWorldpayDraft] = useState(false);
+
+  /** FB-03: brings the set-up card into view and moves focus to its heading. */
+  const showSetupCard = () => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => {
+      panelRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+      setupHeadingRef.current?.focus({ preventScroll: true });
+    });
+  };
 
   const choose = (next: PharmacyOnboardingChoice) => {
     interacted.current = true;
     setChoice(next);
+    if (next === 'demo') setCalendarWanted(true);
     if (next === 'later') void recordNotYet();
+    if (next !== 'setup') return;
+    // FB-03: every click on "Set up now" opens the first step not done, or shows the card.
+    const target = setUpNowTarget(setup);
+    if (target === 'curaleaf') setQuickStartOpen(true);
+    else if (target === 'terms') setTermsOpen(true);
+    else if (target === 'worldpay' && worldpayReady) setWorldpayOpen(true);
+    else showSetupCard();
   };
+
+  // FB-04: open the connection to Calendly early. A preconnect sends no cookies and loads nothing.
+  useEffect(() => {
+    const href = 'https://calendly.com';
+    if (document.head.querySelector(`link[rel="preconnect"][href="${href}"]`)) return;
+    const link = Object.assign(document.createElement('link'), { rel: 'preconnect', href });
+    document.head.appendChild(link);
+  }, []);
+
+  // FB-19: after a reload, show "Continue application" for a started draft, or "Sent" for a sent one.
+  const requestId = setup.termsRequest?.id ?? null;
+  useEffect(() => {
+    if (!requestId) return;
+    let active = true;
+    void loadWorldpayApplication<{ existingAccount?: string }>({ kind: 'request', onboardingRequestId: requestId })
+      .then(view => {
+        if (!active) return;
+        if (view.status && view.status !== 'DRAFT') setSetup(current => ({ ...current, worldpay: 'sent' }));
+        else setWorldpayDraft(Boolean(view.id));
+      })
+      // After activation the public route sends the pharmacy to the portal; nothing to show here.
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [requestId, worldpayOpen]);
 
   // The chosen panel sits below the hero; bring it into view, mostly for phones.
   useEffect(() => {
@@ -189,6 +238,7 @@ export function PharmsmartWelcome({
             </span>
           </div>
           <div className="onb__account onb__account--routes">
+            <h2 className="onb__account-title">Already have an account?</h2>
             <p>Pharmsmart user? Open from your <a className="onb__signin" href={PHARMSMART_LOGIN_URL} target="_blank" rel="noopener noreferrer">Pharmsmart dashboard</a></p>
             <p>Not on Pharmsmart? {signIn}</p>
           </div>
@@ -202,7 +252,7 @@ export function PharmsmartWelcome({
             <p className="onb__partners">
               <span>In partnership with</span>
               <span className="onb__partner-logos">
-                {PARTNERSHIP_LOGOS.map(logo => <img key={logo.alt} src={logo.src} alt={logo.alt} height={24} />)}
+                {PARTNERSHIP_LOGOS.map(logo => <img key={logo.alt} src={logo.src} alt={logo.alt} width={logo.width} height={logo.height} />)}
               </span>
             </p>
             <ul className="onb__facts">
@@ -218,6 +268,8 @@ export function PharmsmartWelcome({
                   aria-pressed={choice === option.id}
                   aria-controls="onb-panel"
                   onClick={() => choose(option.id)}
+                  onPointerEnter={option.id === 'demo' ? () => setCalendarWanted(true) : undefined}
+                  onFocus={option.id === 'demo' ? () => setCalendarWanted(true) : undefined}
                 >
                   {option.label}
                 </button>
@@ -242,7 +294,7 @@ export function PharmsmartWelcome({
           {choice === 'setup' ? (
             <section className="onb__panel" aria-labelledby="onb-setup">
               <div className="onb__panel-head">
-                <h2 id="onb-setup">{finished ? 'You are all set' : setup.termsRequired ? 'Three steps to set up' : 'Two steps to set up'}</h2>
+                <h2 id="onb-setup" ref={setupHeadingRef} tabIndex={-1}>{finished ? 'You are all set' : setup.termsRequired ? 'Three steps to set up' : 'Two steps to set up'}</h2>
                 <span className="onb__progress">{Number(submitted) + (setup.termsRequired ? Number(termsAccepted) : 0) + Number(setup.worldpay === 'sent')} of {setup.termsRequired ? 3 : 2} done</span>
               </div>
               <p>
@@ -282,7 +334,7 @@ export function PharmsmartWelcome({
                       ? <p className="onb__done">Skipped</p>
                       : (
                         <span className="onb__actions">
-                          <button type="button" className="onb__button onb__button--primary" onClick={() => setWorldpayOpen(true)} disabled={!worldpayReady}>Fill in</button>
+                          <button type="button" className="onb__button onb__button--primary" onClick={() => setWorldpayOpen(true)} disabled={!worldpayReady}>{worldpayDraft ? 'Continue application' : 'Fill in'}</button>
                           {worldpayReady
                             ? <button type="button" className="onb__button onb__button--quiet" onClick={() => setSetup(current => ({ ...current, worldpay: 'skipped' }))}>Skip for now</button>
                             : null}
@@ -293,14 +345,17 @@ export function PharmsmartWelcome({
             </section>
           ) : null}
 
-          {choice === 'demo' ? (
-            <section className="onb__panel" aria-labelledby="onb-demo">
+          {choice === 'demo' || calendarWanted ? (
+            <section className="onb__panel" aria-labelledby="onb-demo" hidden={choice !== 'demo'}>
               <div className="onb__panel-head">
                 <h2 id="onb-demo">Book a 30-minute demo</h2>
                 <a href={bookingUrl} target="_blank" rel="noopener noreferrer">Open in a new tab</a>
               </div>
               <p>Pick a time with Shaylen Patel. You can set up afterwards from this page.</p>
-              <iframe className="onb__calendar" title="30-minute demo call with Shaylen Patel" src={embeddedBookingUrl} />
+              <div className="onb__calendar-wrap" aria-busy={!calendarLoaded}>
+                {calendarLoaded ? null : <p className="onb__calendar-loading" role="status">Loading calendar…</p>}
+                <iframe className="onb__calendar" title="30-minute demo call with Shaylen Patel" src={embeddedBookingUrl} onLoad={() => setCalendarLoaded(true)} />
+              </div>
             </section>
           ) : null}
 
@@ -395,6 +450,7 @@ export function PharmsmartWelcome({
               onClose={() => setWorldpayOpen(false)}
               onChanged={change => {
                 if (change.status && change.status !== 'DRAFT') setSetup(current => ({ ...current, worldpay: 'sent' }));
+                else setWorldpayDraft(change.status === 'DRAFT');
               }}
             />
           ) : null}

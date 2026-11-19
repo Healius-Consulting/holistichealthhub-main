@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   ApiRequestError,
   type CompanyLookup,
+  discardWorldpayApplication,
   loadWorldpayApplication,
   lookUpCompany,
   saveWorldpayApplication,
@@ -31,6 +32,9 @@ import {
   type WorldpayAnswers,
   type WorldpayPrincipalAnswers,
   type WorldpayProblem,
+  resumeStep,
+  submitFailure,
+  WORLDPAY_HELP_LINE,
 } from './applicationLogic';
 import { WorldpayApplicationStatusPanel } from './WorldpayApplicationStatus';
 import { Answered, Field, FormBottom, FormIntro, FormTop, OptionCards, RequiredKey, Row, Section, Stepper, SummaryCard } from '../components/OnboardingFormParts';
@@ -61,7 +65,7 @@ const SCHEME_QUESTIONS = [
 ] as const;
 
 type Declaration = { accurate: boolean; consent: boolean; signerName: string; signerPosition: string };
-type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'refused' | 'conflict';
+type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'stopped' | 'refused' | 'conflict';
 type LookupState =
   | { kind: 'idle' }
   | { kind: 'loading' }
@@ -80,8 +84,11 @@ export function WorldpayApplicationForm({
   onClose,
   onChanged,
   startWithCompany,
+  fresh = false,
 }: {
   open: boolean;
+  /** Start a new application beside a withdrawn or declined one (FB-19). */
+  fresh?: boolean;
   owner: WorldpayApplicationOwner;
   /** A Companies House lookup already run elsewhere (the Curaleaf form), applied to a new application. */
   startWithCompany?: CompanyLookup | null;
@@ -97,7 +104,12 @@ export function WorldpayApplicationForm({
   const [step, setStep] = useState(0);
   const [problems, setProblems] = useState<WorldpayProblem[]>([]);
   const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [saveMessage, setSaveMessage] = useState('');
+  const [closeWarning, setCloseWarning] = useState(false);
+  // FB-19: "Discard and start again" asks first, then reloads a fresh application.
+  const [discard, setDiscard] = useState<'idle' | 'asking' | 'working' | 'failed'>('idle');
+  const [reloadKey, setReloadKey] = useState(0);
+  const freshRef = useRef(fresh);
+  freshRef.current = fresh;
   const [declaration, setDeclaration] = useState<Declaration>({ accurate: false, consent: false, signerName: '', signerPosition: '' });
   const [lookup, setLookup] = useState<LookupState>({ kind: 'idle' });
   const [submitting, setSubmitting] = useState(false);
@@ -126,13 +138,14 @@ export function WorldpayApplicationForm({
     setLoadError(null);
     setProblems([]);
     setSaveState('idle');
-    setSaveMessage('');
+    setCloseWarning(false);
+    setDiscard('idle');
     failures.current = 0;
     conflicted.current = false;
     setSubmitError(null);
     setLookup({ kind: 'idle' });
     dirty.current = false;
-    loadWorldpayApplication<WorldpayAnswers>(ownerRef.current).then(loaded => {
+    loadWorldpayApplication<WorldpayAnswers>(ownerRef.current, { fresh: freshRef.current }).then(loaded => {
       if (cancelled) return;
       setView(loaded);
       ids.current = { id: loaded.id, version: loaded.version };
@@ -146,9 +159,9 @@ export function WorldpayApplicationForm({
           signerPosition: current.signerPosition || loaded.answers!.business.contactPosition,
         }));
       }
-      setStep(0);
-    }).catch(error => {
-      if (!cancelled) setLoadError(error instanceof ApiRequestError ? error.message : 'The Worldpay application could not be opened. Try again.');
+      setStep(loaded.answers && loaded.id ? resumeStep(loaded.answers) : 0);
+    }).catch(() => {
+      if (!cancelled) setLoadError('We couldn’t open your application. Close this and try again, or email IT@holistichealthhub.live.');
     });
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -158,7 +171,7 @@ export function WorldpayApplicationForm({
       retryTimer.current = null;
       document.body.style.overflow = previousOverflow;
     };
-  }, [open, ownerKey]);
+  }, [open, ownerKey, reloadKey]);
 
   /** Saves the latest answers; one save at a time, and the newest answers always win. */
   const save = useCallback(async () => {
@@ -185,11 +198,10 @@ export function WorldpayApplicationForm({
           conflicted.current = true;
           setSaveState('conflict');
         } else if (failure.kind === 'refused') {
-          setSaveMessage(failure.message);
           setSaveState('refused');
         } else {
-          setSaveMessage(failure.retryIn === null ? 'Not saved. Check your connection; any change you make will try again.' : '');
-          setSaveState('error');
+          // FB-09: after the last automatic retry, stop and offer "Try again".
+          setSaveState(failure.retryIn === null ? 'stopped' : 'error');
           if (failure.retryIn !== null) {
             retryTimer.current = window.setTimeout(() => { retryTimer.current = null; void saveRef.current().catch(() => undefined); }, failure.retryIn);
           }
@@ -222,9 +234,39 @@ export function WorldpayApplicationForm({
 
   const scrollTop = () => panelRef.current?.querySelector('.wpa-body')?.scrollTo({ top: 0, behavior: 'smooth' });
 
-  const close = async () => {
-    await save().catch(() => undefined);
+  const close = async (force = false) => {
+    let failed = false;
+    await save().catch(() => { failed = true; });
+    // FB-10: don't drop answers silently. A failed last save asks before closing.
+    if ((failed || (dirty.current && !conflicted.current)) && !force && !(view?.status && view.status !== 'DRAFT')) { setCloseWarning(true); return; }
+    setCloseWarning(false);
     onClose();
+  };
+
+  const discardDraft = async () => {
+    const id = ids.current.id;
+    if (!id) return;
+    setDiscard('working');
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    retryTimer.current = null;
+    dirty.current = false;
+    if (saving.current) await saving.current.catch(() => undefined);
+    try {
+      await discardWorldpayApplication(ownerRef.current, ids.current.id ?? id);
+      ids.current = { id: null, version: 0 };
+      onChangedRef.current?.({ status: null, existingAccount: '' });
+      setReloadKey(key => key + 1);
+    } catch {
+      setDiscard('failed');
+    }
+  };
+
+  /** FB-09: the pharmacy's own retry, after the automatic ones stop or a save is refused. */
+  const tryAgain = () => {
+    failures.current = 0;
+    dirty.current = true;
+    setCloseWarning(false);
+    void save().catch(() => undefined);
   };
 
   if (!open) return null;
@@ -237,6 +279,10 @@ export function WorldpayApplicationForm({
     setProblems([]);
     setSubmitError(null);
     setStep(index);
+    // FB-10: remember the screen, so the draft reopens here (saved with the next autosave).
+    if (answers && answers.lastStep !== index && answers.existingAccount && answers.existingAccount !== 'online') {
+      update(current => ({ ...current, lastStep: index }));
+    }
     scrollTop();
   };
 
@@ -302,18 +348,26 @@ export function WorldpayApplicationForm({
     try {
       dirty.current = true;
       await save();
-      if (!ids.current.id) throw new Error('The application could not be saved.');
+      if (!ids.current.id) throw new Error('not saved');
       await submitWorldpayApplication(ownerRef.current, { id: ids.current.id, version: ids.current.version, answers, declaration });
       const loaded = await loadWorldpayApplication<WorldpayAnswers>(ownerRef.current);
       setView(loaded);
       onChangedRef.current?.({ status: loaded.status, existingAccount: answers.existingAccount });
       scrollTop();
     } catch (error) {
-      if (error instanceof ApiRequestError && error.details.length) {
-        const serverProblems = error.details.map(detail => ({ step: 'declaration' as const, path: detail.path, message: detail.message }));
-        setSubmitError(`${error.message} ${serverProblems.map(problem => problem.message).join(' ')}`);
+      // FB-11: never the server's words. Answers it rejects go back to their step, named in plain words.
+      const failure = submitFailure(error instanceof ApiRequestError ? error : null);
+      if (failure.kind === 'fields') {
+        setStep(failure.stepIndex);
+        setProblems(failure.problems);
+        setSubmitError(failure.stepIndex === step ? null : `Some answers on “${names[failure.stepIndex]}” need attention.`);
+        scrollTop();
+      } else if (failure.kind === 'conflict') {
+        conflicted.current = true;
+        setSaveState('conflict');
+        setSubmitError('Someone else at your pharmacy changed this application. Close it and open it again to see their changes.');
       } else {
-        setSubmitError(error instanceof ApiRequestError ? error.message : 'The application could not be sent. Try again.');
+        setSubmitError(WORLDPAY_HELP_LINE);
       }
     } finally {
       setSubmitting(false);
@@ -324,8 +378,9 @@ export function WorldpayApplicationForm({
     idle: '',
     saving: 'Saving…',
     saved: 'Saved',
-    error: saveMessage || 'Not saved yet. Check your connection; we will try again.',
-    refused: `Not saved: ${saveMessage}`,
+    error: 'Not saved yet. Check your connection; we will try again.',
+    stopped: 'Not saved.',
+    refused: WORLDPAY_HELP_LINE,
     conflict: 'Someone else at your pharmacy changed this application. Close it and open it again to see their changes.',
   }[saveState];
   const ended = step === 0 && (!answers?.existingAccount || answers.existingAccount === 'online');
@@ -360,6 +415,26 @@ export function WorldpayApplicationForm({
                   </div>
                 ) : null}
                 {submitError ? <p className="wpa-alert" role="alert">{submitError}</p> : null}
+                {discard === 'asking' || discard === 'working' || discard === 'failed' ? (
+                  <div className="wpa-alert" role="alert">
+                    <strong>Discard this application and start again?</strong>
+                    <p>{discard === 'failed' ? WORLDPAY_HELP_LINE : 'Every answer you have saved will be deleted. This cannot be undone.'}</p>
+                    <p className="wpa-alert__actions">
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => void discardDraft()} disabled={discard === 'working'}>{discard === 'working' ? 'Discarding…' : 'Discard and start again'}</button>
+                      <button type="button" className="wpa-link" onClick={() => setDiscard('idle')} disabled={discard === 'working'}>Keep my answers</button>
+                    </p>
+                  </div>
+                ) : null}
+                {closeWarning ? (
+                  <div className="wpa-alert" role="alert">
+                    <strong>Your latest answers aren’t saved yet.</strong>
+                    <p>{WORLDPAY_HELP_LINE}</p>
+                    <p className="wpa-alert__actions">
+                      <button type="button" className="wpa-link" onClick={tryAgain}>Try again</button>
+                      <button type="button" className="wpa-link" onClick={() => void close(true)}>Close without saving</button>
+                    </p>
+                  </div>
+                ) : null}
 
                 {step === 0 ? <StartStep answers={answers} view={view} onChoose={chooseExisting} /> : null}
                 {step === 1 ? <BusinessStep answers={answers} update={update} problemFor={problemFor} warnFor={warnFor} lookup={lookup} onLookup={() => void runLookup()} /> : null}
@@ -375,8 +450,10 @@ export function WorldpayApplicationForm({
           <FormBottom
             status={(
               <>
-                <span className={saveState === 'conflict' || saveState === 'error' || saveState === 'refused' ? 'wpa-save is-bad' : saveState === 'saved' ? 'wpa-save is-good' : 'wpa-save'} aria-live="polite">{saveLabel}</span>
+                <span className={saveState === 'conflict' || saveState === 'error' || saveState === 'stopped' || saveState === 'refused' ? 'wpa-save is-bad' : saveState === 'saved' ? 'wpa-save is-good' : 'wpa-save'} aria-live="polite">{saveLabel}</span>
+                {saveState === 'stopped' || saveState === 'refused' ? <button type="button" className="wpa-link" onClick={tryAgain}>Try again</button> : null}
                 {step > 0 && saveState !== 'conflict' ? <button type="button" className="wpa-link" onClick={() => void close()}>Save and finish later</button> : null}
+                {(view?.id || ids.current.id) && saveState !== 'conflict' && discard === 'idle' ? <button type="button" className="wpa-link is-danger" onClick={() => { setDiscard('asking'); scrollTop(); }}>Discard and start again</button> : null}
               </>
             )}
           >
@@ -475,7 +552,7 @@ function BusinessStep({ answers, update, problemFor, warnFor, lookup, onLookup }
 
       <Section title="The company">
         <div className="wpa-grid">
-          <Field label="Business type" problem={problemFor('business.businessType')} fromCompaniesHouse={tagged('business.businessType')}>
+          <Field label="Business type" problem={problemFor('business.businessType')}>
             <select className="input" value={b.businessType} onChange={set('businessType')}>
               <option value="">Choose…</option>
               {BUSINESS_TYPES.map(type => <option key={type}>{type}</option>)}
@@ -498,10 +575,10 @@ function BusinessStep({ answers, update, problemFor, warnFor, lookup, onLookup }
               {lookupMessage()}
             </Field>
           ) : <span />}
-          <Field label="Legal name of business" problem={problemFor('business.legalName')} hint="Exactly as it appears on the company bank account." fromCompaniesHouse={tagged('business.legalName')}>
+          <Field label="Legal name of business" problem={problemFor('business.legalName')} hint="Exactly as it appears on the company bank account.">
             <input className="input" value={b.legalName} onChange={set('legalName')} autoComplete="organization" />
           </Field>
-          <Field label="Date the business started trading" problem={problemFor('business.tradingSince')} hint="If the pharmacy traded before the company was formed, keep the company’s date." fromCompaniesHouse={tagged('business.tradingSince')}>
+          <Field label="Date the business started trading" problem={problemFor('business.tradingSince')} hint="If the pharmacy traded before the company was formed, keep the company’s date.">
             <input className="input" type="date" value={b.tradingSince} onChange={set('tradingSince')} />
           </Field>
           <Field label="Registered address" problem={problemFor('business.registeredAddress')} fromCompaniesHouse={tagged('business.registeredAddress')}>

@@ -12,6 +12,36 @@ export function PdfPreview({ href }: { href: string }) {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(0);
   const [failed, setFailed] = useState(false);
+  // Redraw when the stage width or the screen's pixel density changes (window resize, zoom, moving screens).
+  const [layout, setLayout] = useState(0);
+  useEffect(() => {
+    let frame = 0;
+    const bump = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => setLayout(n => n + 1)); };
+    const stage = canvasRef.current?.parentElement;
+    // Only a change of width needs a redraw; the page's own height change must not loop.
+    let width = stage?.clientWidth ?? 0;
+    const onResize = () => {
+      const next = stage?.clientWidth ?? 0;
+      if (next === width) return;
+      width = next;
+      bump();
+    };
+    const observer = typeof ResizeObserver === 'undefined' || !stage ? null : new ResizeObserver(onResize);
+    if (observer && stage) observer.observe(stage);
+    let media: MediaQueryList | null = null;
+    const watchDensity = () => {
+      media?.removeEventListener('change', onDensity);
+      media = window.matchMedia?.(`(resolution: ${window.devicePixelRatio}dppx)`) ?? null;
+      media?.addEventListener('change', onDensity);
+    };
+    function onDensity() { watchDensity(); bump(); }
+    watchDensity();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      media?.removeEventListener('change', onDensity);
+    };
+  }, [pages]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,11 +83,14 @@ export function PdfPreview({ href }: { href: string }) {
       const stage = canvas.parentElement;
       const maxWidth = Math.max((stage?.clientWidth ?? 800) - 32, 280);
       const base = pdfPage.getViewport({ scale: 1 });
-      const viewport = pdfPage.getViewport({ scale: maxWidth / base.width });
+      // FB-06: draw at the screen's real pixel density, then show at CSS size, so text stays sharp.
+      const density = Math.min(Math.max(window.devicePixelRatio || 1, 1), 3);
+      const viewport = pdfPage.getViewport({ scale: (maxWidth / base.width) * density });
       const context = canvas.getContext('2d');
       if (!context) return;
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
+      canvas.style.maxWidth = `${Math.floor(viewport.width / density)}px`;
       const task = pdfPage.render({ canvasContext: context, canvas, viewport });
       cancelRender = () => task.cancel();
       await task.promise;
@@ -66,7 +99,7 @@ export function PdfPreview({ href }: { href: string }) {
       cancelled = true;
       try { cancelRender(); } catch { /* a finished page has nothing left to cancel */ }
     };
-  }, [page, pages]);
+  }, [page, pages, layout]);
 
   if (failed) return <p className="pharmsmart-guide__preview-status">This document could not be opened here. Download it instead.</p>;
   return (

@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import {
+  discardWorldpayDraft,
   loadWorldpayApplication,
   saveWorldpayDraft,
   submitWorldpayApplication,
@@ -19,7 +20,8 @@ import { partnerTermsState } from '../../application/pharmacy-onboarding/partner
 import { publicWorldpayDraftLimiter, publicWorldpayFormLimiter } from '../../security/public-limits.js';
 
 const requestId = uuidInput;
-const loadSchema = z.object({ onboardingRequestId: requestId });
+const loadSchema = z.object({ onboardingRequestId: requestId, fresh: z.boolean().optional().default(false) });
+const discardSchema = z.object({ onboardingRequestId: requestId, id: uuidInput });
 const saveSchema = z.object({
   onboardingRequestId: requestId,
   id: uuidInput.nullable().default(null),
@@ -68,7 +70,7 @@ export function createPublicWorldpayApplicationRouter(deps: () => WorldpayDeps =
     try {
       const input = loadSchema.parse(req.body);
       const { request, terms, owner } = await ownerFor(input.onboardingRequestId);
-      const view = await loadWorldpayApplication(deps(), owner, worldpayPrefill({ request, terms: terms[0] ?? null }));
+      const view = await loadWorldpayApplication(deps(), owner, worldpayPrefill({ request, terms: terms[0] ?? null }), { fresh: input.fresh });
       res.setHeader('Cache-Control', 'private, no-store');
       // A sent application's answers are never handed back on a public route.
       res.status(200).json(view.status && view.status !== 'DRAFT' ? { ...view, answers: null } : view);
@@ -85,6 +87,19 @@ export function createPublicWorldpayApplicationRouter(deps: () => WorldpayDeps =
       const saved = await saveWorldpayDraft(deps(), owner, input);
       res.setHeader('Cache-Control', 'private, no-store');
       res.status(200).json(saved);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/public/worldpay-application/discard - delete the request's draft to start again (FB-19)
+  router.post('/public/worldpay-application/discard', publicWorldpayDraftLimiter, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = discardSchema.parse(req.body);
+      const { owner } = await ownerFor(input.onboardingRequestId);
+      await discardWorldpayDraft(deps(), owner, input.id);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(204).end();
     } catch (error) {
       next(error);
     }

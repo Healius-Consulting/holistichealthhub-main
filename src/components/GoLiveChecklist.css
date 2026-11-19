@@ -17,6 +17,9 @@
 .go-live-checklist__text label, .go-live-checklist__text strong { color: var(--text-primary); font-size: 13px; font-weight: 600; cursor: default; }
 .go-live-checklist__text label { cursor: pointer; }
 .go-live-checklist__text small { color: var(--text-secondary); font-size: 11.5px; line-height: 1.45; }
+/* Helper-line links (FB-12 to FB-16): a place in Settings, or the training booking page. */
+.go-live-checklist__text small a { color: var(--green, #173f33); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.go-live-checklist__text small a svg { display: inline; vertical-align: -1px; }
 .go-live-checklist__meta { color: var(--text-tertiary) !important; }
 .go-live-checklist__hint { max-width: 160px; color: var(--text-tertiary); font-size: 11px; text-align: right; }
 .go-live-checklist__error { margin: 0; padding: 9px 11px; border-left: 3px solid var(--red-500); background: var(--red-50); color: var(--red-700); font-size: 12px; }

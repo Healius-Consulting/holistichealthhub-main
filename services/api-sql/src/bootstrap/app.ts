@@ -32,6 +32,7 @@ import { createPortalIntegrationRouter } from '../transport/portal/integration.r
 import { createPortalFinanceRouter } from '../transport/portal/finance.router.js';
 import { createPortalPharmacyOnboardingRouter } from '../transport/portal/pharmacy-onboarding.router.js';
 import { createPortalGoLiveChecklistRouter } from '../transport/portal/go-live-checklist.router.js';
+import { createPortalContentPacksRouter } from '../transport/portal/content-packs.router.js';
 
 export function isOriginPermitted(origin: string | undefined): boolean {
   return isPermittedWebOrigin(origin);
@@ -113,6 +114,7 @@ export function createApp(): Express {
   app.use('/v1', createPortalFinanceRouter());
   app.use('/v1', createPortalPharmacyOnboardingRouter());
   app.use('/v1', createPortalGoLiveChecklistRouter());
+  app.use('/v1', createPortalContentPacksRouter());
   app.use('/v2', createPublicIntakeV2Router());
   app.use('/v2', createPublicPostcodeSearchRouter());
   app.use('/v2', createPortalIntakeV2Router());

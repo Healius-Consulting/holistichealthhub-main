@@ -302,7 +302,7 @@ describe('onboarding emails: Activation and Hold', () => {
     assert.equal(row.templateCode, 'pharmacy_onboarding_activated');
     assert.equal(row.idempotencyKey, `onboarding-activation:${REQUEST_ID}`);
     assert.equal(row.onboardingRequestId, REQUEST_ID);
-    assert.match(text(row), /Train your team\. Book a place on a live session at https:\/\/calendly\.com\/spatel-72k\/30min, or use the training materials/);
+    assert.match(text(row), /Train your team\. Book a place on a live session at https:\/\/calendly\.com\/spatel-72k\/hhh-training, or use the training materials/);
 
     const noLink = harness({ content: { [ONBOARDING_CONTENT_KEYS.links]: { trainingBookingUrl: '' } } });
     await noLink.emails.activated({ request: request({ organisationId: ORG_ID }), organisationId: ORG_ID });

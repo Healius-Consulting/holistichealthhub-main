@@ -71,8 +71,10 @@ test('the Curaleaf, Terms and Worldpay forms show which fields the server refuse
   assert.match(curaleaf, /curaleafFormProblems\(fields\)/);
   assert.match(curaleaf, /curaleafProblemsFromServer\(cause\.details, fields\)/);
   assert.match(readFileSync(new URL('../src/auth/PartnerTermsForm.tsx', import.meta.url), 'utf8'), /describeApiError\(cause,/, 'PartnerTermsForm.tsx');
-  // The Worldpay application runs the server's own rules before each step, and lists the server's refusals.
+  // The Worldpay application runs the server's own rules before each step. A refused submit goes
+  // back to the step concerned with the server's plain answer checks, never its raw text (FB-11).
   const worldpay = readFileSync(new URL('../src/worldpay/WorldpayApplicationForm.tsx', import.meta.url), 'utf8');
   assert.match(worldpay, /stepProblems\(answers, step\)/);
-  assert.match(worldpay, /error\.details\.map\(/);
+  assert.match(worldpay, /submitFailure\(error instanceof ApiRequestError \? error : null\)/);
+  assert.doesNotMatch(worldpay, /error\.details\.map\(/);
 });

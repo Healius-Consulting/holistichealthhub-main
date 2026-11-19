@@ -12,6 +12,7 @@ import type {
 import type { ImmediateEmail } from '../workers/deliver-messages.js';
 import {
   applyWorldpayRetention,
+  discardWorldpayDraft,
   loadWorldpayApplication,
   resendWorldpayApplication,
   saveWorldpayDraft,
@@ -145,6 +146,42 @@ describe('Worldpay application', () => {
     const saved = await saveWorldpayDraft(h.deps, branch, { id: hyphenated, version: draft.version, answers: completeAnswers() });
     const record = await submitWorldpayApplication(h.deps, branch, { id: hyphenated, version: saved.version, answers: completeAnswers(), declaration, submitter });
     assert.equal(record.status, 'SUBMITTED');
+  });
+
+  it('discards a draft for a fresh start, but never a sent application (FB-19)', async () => {
+    const h = harness();
+    const draft = await saveWorldpayDraft(h.deps, branch, { id: null, version: 0, answers: { business: { legalName: 'Shah' } } });
+    await assert.rejects(discardWorldpayDraft(h.deps, branch, 'app-99'), (e: HttpError) => e.code === 'NOT_FOUND');
+    await discardWorldpayDraft(h.deps, branch, draft.id);
+    assert.equal(h.repo.rows.size, 0);
+    const record = await submitted(h);
+    await assert.rejects(discardWorldpayDraft(h.deps, branch, record.id), (e: HttpError) => e.code === 'WORLDPAY_APPLICATION_SUBMITTED');
+    assert.equal(h.repo.rows.get(record.id)?.status, 'SUBMITTED');
+  });
+
+  it('starts a new application after a withdrawn or declined one, and keeps the old one (FB-19)', async () => {
+    const h = harness();
+    const record = await submitted(h);
+    await setWorldpayApplicationStatus(h.deps, record.id, { status: 'DECLINED', note: null, byUid: 'admin-1' });
+    const kept = await loadWorldpayApplication(h.deps, branch, {});
+    assert.equal(kept.status, 'DECLINED');
+    const fresh = await loadWorldpayApplication(h.deps, branch, {}, { fresh: true });
+    assert.equal(fresh.id, null);
+    const draft = await saveWorldpayDraft(h.deps, branch, { id: null, version: 0, answers: { business: { legalName: 'Shah' } } });
+    assert.notEqual(draft.id, record.id);
+    assert.equal(h.repo.rows.get(record.id)?.status, 'DECLINED');
+    // A sent application that is still open cannot be replaced that way.
+    const h2 = harness();
+    await submitted(h2);
+    await assert.rejects(saveWorldpayDraft(h2.deps, branch, { id: null, version: 0, answers: {} }), (e: HttpError) => e.code === 'WORLDPAY_APPLICATION_SUBMITTED');
+  });
+
+  it('keeps the screen the pharmacy reached with the draft (FB-10)', async () => {
+    const h = harness();
+    const draft = await saveWorldpayDraft(h.deps, branch, { id: null, version: 0, answers: { existingAccount: 'no', lastStep: 3 } });
+    const view = await loadWorldpayApplication(h.deps, branch, {});
+    assert.equal(view.id, draft.id);
+    assert.equal(view.answers.lastStep, 3);
   });
 
   it('will not submit until every answer is in, and says where', async () => {

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { CheckCircle2, Circle, ExternalLink, Lock, X } from 'lucide-react';
 import { useAuth } from '../auth/useAuth';
 import { useApp } from '../context/AppContext';
 import { describeApiError, getGoLiveChecklist, loadWorldpayApplication, setGoLiveChecklistItem } from '../shared/api';
+import { settingsHref, contentPackGroupElementId, type SettingsLinkTarget } from '../routing/settingsLink';
+import { appPathPrefix } from '../auth/surface-path';
 import {
+  checklistDetailSegments,
   ownerLabel,
   sectionSummary,
   type ChecklistSection,
@@ -69,8 +72,45 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm, worldpayDraft }: {
+/**
+ * A helper line, with its links (FB-12 to FB-16). Settings links open Settings at that
+ * card, in this tab; the training link opens in a new tab. A link with nowhere to go
+ * (no training page set) is left out rather than shown dead.
+ */
+function ChecklistDetail({ detail, trainingUrl, onNavigate }: { detail: string; trainingUrl: string | null; onNavigate?: () => void }) {
+  const { dispatch } = useApp();
+  const openSettings = (target: SettingsLinkTarget) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+    event.preventDefault();
+    window.history.pushState(null, '', settingsHref(target, appPathPrefix));
+    onNavigate?.();
+    dispatch({ type: 'SET_SCREEN', screen: 'settings' });
+    // Already on Settings (the prompt can sit over it): tell it to go to the new place.
+    window.dispatchEvent(new CustomEvent('hhh:settings-link', { detail: target }));
+  };
+  return (
+    <small>
+      {checklistDetailSegments(detail).map((segment, index) => {
+        const target = segment.target;
+        if (!target) return <span key={index}>{segment.text}</span>;
+        if (target.kind === 'training') {
+          return trainingUrl
+            ? <a key={index} href={trainingUrl} target="_blank" rel="noopener noreferrer">{segment.text} <ExternalLink size={11} aria-hidden="true" /></a>
+            : null;
+        }
+        const place: SettingsLinkTarget = target.kind === 'pack'
+          ? { section: 'assets', focus: contentPackGroupElementId(target.group) }
+          : { section: target.section, focus: target.anchor };
+        return <a key={index} href={settingsHref(place, appPathPrefix)} onClick={openSettings(place)}>{segment.text}</a>;
+      })}
+    </small>
+  );
+}
+
+function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm, worldpayDraft, trainingUrl, onNavigate }: {
   item: GoLiveChecklistItem;
+  trainingUrl: string | null;
+  onNavigate?: () => void;
   saving: boolean;
   demo: boolean;
   onToggle: (done: boolean) => void;
@@ -99,7 +139,7 @@ function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm, worldpayDra
         {item.kind === 'self'
           ? <label htmlFor={id}>{item.label}</label>
           : <strong>{item.link === 'worldpay_form' && worldpayDraft ? 'Continue your Worldpay application' : item.label}</strong>}
-        {item.detail ? <small>{item.detail}</small> : null}
+        {item.detail ? <ChecklistDetail detail={item.detail} trainingUrl={trainingUrl} onNavigate={onNavigate} /> : null}
         <small className="go-live-checklist__meta">
           Owner: {ownerLabel(item.owners)}
           {item.kind === 'auto' ? ' · Ticks itself' : ''}
@@ -119,8 +159,10 @@ function ItemRow({ item, saving, demo, onToggle, onOpenWorldpayForm, worldpayDra
   );
 }
 
-export function GoLiveChecklistView({ checklist, saving, demo, onToggle, onOpenWorldpayForm, worldpayDraft }: {
+export function GoLiveChecklistView({ checklist, saving, demo, onToggle, onOpenWorldpayForm, worldpayDraft, onNavigate }: {
   checklist: Checklist;
+  /** A helper line's link moved to another screen (the login prompt closes). */
+  onNavigate?: () => void;
   saving: string | null;
   demo: boolean;
   onToggle: (itemKey: string, done: boolean) => void;
@@ -155,6 +197,8 @@ export function GoLiveChecklistView({ checklist, saving, demo, onToggle, onOpenW
                       onToggle={done => onToggle(item.key, done)}
                       onOpenWorldpayForm={onOpenWorldpayForm}
                       worldpayDraft={worldpayDraft}
+                      trainingUrl={checklist.links?.trainingBookingUrl ?? null}
+                      onNavigate={onNavigate}
                     />
                   ))}
                 </ul>
@@ -259,7 +303,7 @@ export function GoLiveChecklistPrompt({ onOpenWorldpayForm }: { onOpenWorldpayFo
           <button ref={closeButton} type="button" className="btn btn-sm" aria-label="Close the go-live checklist" onClick={dismiss}><X size={14} /></button>
         </header>
         {error ? <p className="go-live-checklist__error" role="alert">{error}</p> : null}
-        <GoLiveChecklistView checklist={checklist} saving={saving} demo={demo} onToggle={(itemKey, done) => void toggle(itemKey, done)} onOpenWorldpayForm={onOpenWorldpayForm} />
+        <GoLiveChecklistView checklist={checklist} saving={saving} demo={demo} onToggle={(itemKey, done) => void toggle(itemKey, done)} onOpenWorldpayForm={onOpenWorldpayForm} onNavigate={dismiss} />
         <footer>
           <button type="button" className="btn btn-primary btn-sm" onClick={dismiss}>Remind me next time</button>
         </footer>

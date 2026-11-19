@@ -224,3 +224,47 @@ export function nextSaveDelay(error: { status?: number; code?: string; message?:
   }
   return { kind: 'retry', retryIn: SAVE_RETRY_DELAYS_MS[failures - 1] ?? null };
 }
+
+/** FB-11: the one line a pharmacy reads when a save or submit fails. No server text, ever. */
+export const WORLDPAY_HELP_LINE = 'We couldn’t save your application. Try again, or email IT@holistichealthhub.live.';
+
+const STEP_FOR_PATH: Array<[prefix: string, step: WorldpayStep]> = [
+  ['business', 'business'],
+  ['existingAccount', 'business'],
+  ['principals', 'principals'],
+  ['financials', 'financials'],
+  ['completed', 'completed'],
+  ['declaration', 'declaration'],
+];
+
+/**
+ * What a refused submit shows (FB-11). Only the server's own answer checks (422, the same rules
+ * the form runs, written for pharmacies) name fields; they go back to the first step concerned.
+ * Anything else, including a 400 from request validation, is the one plain help line.
+ */
+export function submitFailure(error: { status?: number; code?: string; details?: Array<{ path: string; message: string }> } | null | undefined):
+  | { kind: 'fields'; problems: WorldpayProblem[]; stepIndex: number }
+  | { kind: 'conflict' }
+  | { kind: 'help' } {
+  const code = error?.code ?? '';
+  if (code === 'WORLDPAY_DRAFT_CONFLICT' || code === 'WORLDPAY_APPLICATION_CONFLICT') return { kind: 'conflict' };
+  if (code === 'WORLDPAY_APPLICATION_INCOMPLETE' && error?.details?.length) {
+    const problems: WorldpayProblem[] = [];
+    for (const detail of error.details) {
+      const step = STEP_FOR_PATH.find(([prefix]) => detail.path === prefix || detail.path.startsWith(`${prefix}.`))?.[1];
+      if (step) problems.push({ step, path: detail.path, message: detail.message });
+    }
+    if (problems.length) {
+      const stepIndex = Math.min(...problems.map(problem => STEP_KEYS.indexOf(problem.step)));
+      return { kind: 'fields', problems: problems.filter(problem => STEP_KEYS.indexOf(problem.step) === stepIndex), stepIndex };
+    }
+  }
+  return { kind: 'help' };
+}
+
+/** FB-10/FB-19: the screen to reopen at; a stored step out of range starts at "Before you start". */
+export function resumeStep(answers: Pick<WorldpayAnswers, 'existingAccount'> & { lastStep?: number | null }): number {
+  if (!answers.existingAccount || answers.existingAccount === 'online') return 0;
+  const step = answers.lastStep;
+  return typeof step === 'number' && Number.isInteger(step) && step >= 0 && step <= 5 ? step : 0;
+}

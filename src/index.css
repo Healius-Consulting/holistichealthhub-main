@@ -14357,6 +14357,11 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
 .pharmacy-details__actions.is-start{ justify-content: flex-start; }
 .pharmacy-details__actions .btn{ display: inline-flex; align-items: center; gap: 5px; }
 .pharmacy-details__error{ margin: 0; color: #b91c1c; font-size: 12px; }
+/* Settings → Organisation → Brand and website (FB-17). */
+.pharmacy-brand__colour{ display: flex; align-items: center; gap: 8px; }
+.pharmacy-brand__colour input[type="color"]{ flex: none; width: 40px; height: 36px; padding: 2px; background: #fff; border: 1px solid var(--border, #d8ded9); border-radius: 8px; cursor: pointer; }
+.pharmacy-brand__colour .input{ max-width: 120px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.pharmacy-brand__swatch{ display: inline-block; width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
 .pharmacy-details__note{ margin: 0; color: var(--text-secondary); font-size: 13px; }
 
 .pharmacy-details__url{
@@ -18928,6 +18933,17 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   overflow-wrap: anywhere;
 }
 
+.onb__calendar-wrap{ position: relative; }
+.onb__calendar-loading{
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 15px;
+  pointer-events: none;
+}
 .onb__calendar{
   display: block;
   width: 100%;
@@ -22316,6 +22332,8 @@ strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }
 .wpa-note.is-amber{ color: #7a520e; background: #fbf2e2; }
 .wpa-alert{ margin: 0 0 18px; padding: 14px 16px; color: #7f1d1d; background: #fff6f6; border: 1px solid #f2d3d3; border-left: 4px solid #c24141; border-radius: 12px; }
 .wpa-alert ul{ margin: 6px 0 0; padding-left: 18px; }
+.wpa-alert p{ margin: 6px 0 0; }
+.wpa-alert__actions{ display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 10px !important; }
 .wpa-banner{ display: grid; gap: 4px; margin: 0 0 12px; padding: 12px 15px; font-size: 13.5px; border-radius: 12px; }
 .wpa-banner ul{ margin: 4px 0 0; padding-left: 18px; }
 .wpa-banner small{ font-size: 12px; opacity: .85; }
@@ -22462,6 +22480,7 @@ strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }
 /* Pharmacy onboarding: the two sign-in routes and the partnership line (19 Nov 2026 brief). */
 .onb__account--routes{ display: grid; gap: 2px; justify-items: end; text-align: right; }
 .onb__account--routes p{ margin: 0; }
+.onb .onb__account-title{ margin: 0 0 2px; color: var(--ink); font-family: inherit; font-size: 15px; font-weight: 700; letter-spacing: 0; }
 @media (max-width: 640px){ .onb__account--routes{ justify-items: start; text-align: left; } }
 .onb__partners{
   display: flex;
@@ -22474,8 +22493,11 @@ strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }
   font-size: clamp(17px, 1.4vw, 19px);
   line-height: 1.55;
 }
-.onb__partner-logos{ display: inline-flex; flex-wrap: wrap; align-items: center; gap: 24px; }
-.onb__partner-logos img{ display: block; width: auto; height: 24px; }
+/* The wordmarks sit on the text's baseline, so their lowercase letters line up with the words
+   "In partnership with" (the Curaleaf leaf rises above, as it does in the logo). */
+.onb__partners:has(.onb__partner-logos){ align-items: baseline; }
+.onb__partner-logos{ display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 12px 28px; }
+.onb__partner-logos img{ display: block; flex: none; max-width: 100%; height: auto; }
 .staff-login-pharmsmart{ margin: 0 0 14px; color: var(--ink-muted, #506159); font-size: 14px; line-height: 1.5; }
 .staff-login-pharmsmart a{ color: var(--green, #173f33); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 
@@ -22489,3 +22511,29 @@ strong.has-fresh-dot > .row-fresh-dot{ margin: 0; }
 .wpa-required-key{ margin: 0; color: var(--ink-muted, #506159); font-size: 12.5px; }
 html[data-theme='dark'] .wpa-required.wpa-required{ color: #ff8a80; }
 html[data-theme='dark'] .wpa-optional.wpa-optional{ color: #c5d4cc; background: #254338; }
+
+/* Settings: the card a go-live checklist link opened (FB-12 to FB-16). */
+@keyframes settings-linked { 0%, 60% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--green, #173f33) 45%, transparent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.pharmacy-details__card.is-linked, .content-pack__group.is-linked { animation: settings-linked 2.6s ease-out; }
+@media (prefers-reduced-motion: reduce) { .pharmacy-details__card.is-linked, .content-pack__group.is-linked { animation: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--green, #173f33) 45%, transparent); } }
+
+/* Settings → Assets → Content packs (FB-20). */
+.content-pack__anchor{ position: relative; top: -12px; }
+.content-pack__audience{ display: block; margin-top: 4px; color: var(--ink-muted, #506159); font-size: 12px; }
+.content-pack__issued{ white-space: nowrap; }
+.content-pack__group small a{ color: var(--green, #173f33); font-weight: 600; }
+.content-pack__group small a svg{ display: inline; vertical-align: -1px; }
+.content-pack__group{ border-radius: 10px; }
+
+/* Admin → Onboarding settings → Content packs (FB-20). */
+.packs-admin{ display: grid; gap: 18px; }
+.packs-admin__card{ display: grid; gap: 12px; padding: 16px; background: #fff; border: 1px solid var(--border, #e3e8e4); border-radius: 14px; }
+.packs-admin__fields{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 14px; }
+.packs-admin__fields .is-wide{ grid-column: 1 / -1; }
+.packs-admin__groups{ display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.packs-admin__group{ display: grid; gap: 8px; padding: 12px; background: var(--surface-muted, #f6f8f6); border-radius: 10px; }
+.packs-admin__group-head{ display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px; }
+.packs-admin__group-head .wpa-field{ flex: 1 1 220px; }
+.packs-admin__upload{ display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.packs-admin__upload .wpa-field{ flex: 1 1 160px; }
+.packs-admin__save{ display: flex; justify-content: flex-end; gap: 10px; }

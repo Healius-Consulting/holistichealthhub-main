@@ -19,16 +19,16 @@ type Definition = Omit<GoLiveChecklistItem, 'done' | 'doneAt' | 'tickedByUid' | 
 export const DEMO_CHECKLIST_ITEMS: Definition[] = [
   { key: 'platform_live', section: 'required', group: 'platform_live', label: 'Curaleaf PHAR code and API key entered, platform live', detail: 'Ticks itself when HHH enters the live Curaleaf credentials.', owners: ['HHH', 'Curaleaf'], kind: 'auto', link: null, demoVisible: true },
   { key: 'partner_terms_accepted', section: 'required', group: 'platform_live', label: 'Partner Terms accepted', detail: 'Ticks itself once the Partner Terms are accepted.', owners: ['Pharmacy'], kind: 'auto', link: null, demoVisible: true },
-  { key: 'worldpay_credentials_validated', section: 'required', group: 'platform_live', label: 'Worldpay credentials validated', detail: 'Ticks itself when your live Worldpay credentials pass the check in Settings.', owners: ['Pharmacy'], kind: 'auto', link: null, demoVisible: false },
-  { key: 'sops_approved', section: 'required', group: 'service_live', label: 'SOPs approved by the superintendent', detail: null, owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
-  { key: 'formulary_uploaded', section: 'required', group: 'service_live', label: 'Formulary uploaded to PMR', detail: null, owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'worldpay_credentials_validated', section: 'required', group: 'platform_live', label: 'Worldpay credentials validated', detail: 'To connect your Worldpay account, see the guide in [Pack 0, Onboarding, in Settings > Assets](pack:0.1).', owners: ['Pharmacy'], kind: 'auto', link: null, demoVisible: false },
+  { key: 'sops_approved', section: 'required', group: 'service_live', label: 'SOPs approved by the superintendent', detail: 'Find the SOPs in [Pack A, Compliance, in Settings > Assets](pack:A.1).', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'formulary_uploaded', section: 'required', group: 'service_live', label: 'Formulary uploaded to PMR', detail: 'Find the Formulary in [Pack 0, Onboarding, in Settings > Assets](pack:0.2).', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
   { key: 'worldpay_setup', section: 'optional', group: null, label: 'Set up card payments with Worldpay', detail: 'Send the Worldpay form. Once it is sent, this moves to Required as "Worldpay credentials validated".', owners: ['Pharmacy'], kind: 'link', link: 'worldpay_form', demoVisible: true },
-  { key: 'staff_training', section: 'optional', group: null, label: 'Staff training completed', detail: 'HHH session attended or materials read.', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
-  { key: 'patientsmart_campaign', section: 'optional', group: null, label: 'PatientSmart campaign set up', detail: null, owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
-  { key: 'website_updated', section: 'optional', group: null, label: 'Website updated with the HHH kit', detail: null, owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
-  { key: 'posters_leaflets', section: 'optional', group: null, label: 'Posters/leaflets created and printed', detail: null, owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
-  { key: 'branding_details', section: 'optional', group: null, label: 'Details, colour scheme and logo added', detail: 'Website domain and contact details, used on the eligibility form.', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
-  { key: 'delivery_enabled', section: 'optional', group: null, label: 'Delivery enabled, if offering it', detail: null, owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'staff_training', section: 'optional', group: null, label: 'Staff training completed', detail: 'HHH session attended or materials read. [Book a training session](training)', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'patientsmart_campaign', section: 'optional', group: null, label: 'PatientSmart campaign set up', detail: 'Log in to PatientSmart from your Pharmsmart dashboard and set up your Holistic Health Hub campaign to tell your patients about the service.', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'website_updated', section: 'optional', group: null, label: 'Website updated with the HHH kit', detail: 'Download the Website kit from [Pack C, Marketing, in Settings > Assets](pack:C.1) and send it to your web developer.', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'posters_leaflets', section: 'optional', group: null, label: 'Posters/leaflets created and printed', detail: 'Add your logo in [Settings > Assets](settings:assets#settings-card-logo), then download Counter print from [Pack C, Marketing](pack:C.2), and send the print-ready PDFs to your printer.', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'branding_details', section: 'optional', group: null, label: 'Details, colour scheme and logo added', detail: 'Check your pharmacy and contact details, brand colour and website in [Settings > Organisation](settings:organisation), and upload your logo in [Settings > Assets](settings:assets#settings-card-logo).', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
+  { key: 'delivery_enabled', section: 'optional', group: null, label: 'Delivery enabled, if offering it', detail: 'Turn on Offer Pharmacy Delivery in [Settings > Organisation > Pharmacy](settings:organisation#settings-card-pharmacy). Leave this unticked if you offer collection only.', owners: ['Pharmacy'], kind: 'self', link: null, demoVisible: true },
 ];
 
 const DEMO_AUTO_DONE = new Set(['platform_live', 'partner_terms_accepted']);
@@ -106,6 +106,8 @@ export function demoChecklist(organisationId: string): GoLiveChecklist {
     percent: percentOf(items.filter(item => item.done).length, items.length),
     requiredComplete: items.filter(item => item.section === 'required').every(item => item.done),
     complete: items.every(item => item.done),
+    // Demo can't read admin settings; it links to the default training booking page.
+    links: { trainingBookingUrl: 'https://calendly.com/spatel-72k/hhh-training' },
   };
 }
 

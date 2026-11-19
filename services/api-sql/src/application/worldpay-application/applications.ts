@@ -172,9 +172,35 @@ function viewOf(record: WorldpayApplicationRecord | null, answers: WorldpayAnswe
   };
 }
 
-export async function loadWorldpayApplication(deps: WorldpayDeps, owner: WorldpayOwner, prefill: WorldpayPrefill): Promise<WorldpayApplicationView> {
-  const [record, content] = await Promise.all([findFor(deps.repo, owner), readWorldpayContent(deps.content)]);
+/** Statuses after which the pharmacy may start a new application (FB-19). */
+export const CLOSED_WORLDPAY_STATUSES: ReadonlyArray<WorldpayApplicationRecord['status']> = ['WITHDRAWN', 'DECLINED'];
+const isClosed = (record: WorldpayApplicationRecord | null) => Boolean(record && CLOSED_WORLDPAY_STATUSES.includes(record.status));
+
+export async function loadWorldpayApplication(
+  deps: WorldpayDeps,
+  owner: WorldpayOwner,
+  prefill: WorldpayPrefill,
+  options: { fresh?: boolean } = {},
+): Promise<WorldpayApplicationView> {
+  const [found, content] = await Promise.all([findFor(deps.repo, owner), readWorldpayContent(deps.content)]);
+  // A withdrawn or declined application stays on record; "fresh" opens a new one beside it.
+  const record = options.fresh && isClosed(found) ? null : found;
   return viewOf(record, record ? record.answers : startingAnswers(prefill, content), content);
+}
+
+/**
+ * FB-19: "Discard and start again". Only a draft can go; a sent application is a record
+ * HHH and Worldpay act on, so it stays.
+ */
+export async function discardWorldpayDraft(deps: Pick<WorldpayDeps, 'repo'>, owner: WorldpayOwner, id: string): Promise<void> {
+  const existing = await findFor(deps.repo, owner);
+  if (!existing || !sameUuid(existing.id, id)) {
+    throw new HttpError(404, 'There is no saved Worldpay application to discard.', 'NOT_FOUND');
+  }
+  if (existing.status !== 'DRAFT') {
+    throw new HttpError(409, 'This Worldpay application has already been sent, so it cannot be discarded.', 'WORLDPAY_APPLICATION_SUBMITTED');
+  }
+  await deps.repo.deleteDraft(existing.id);
 }
 
 export async function saveWorldpayDraft(
@@ -183,7 +209,9 @@ export async function saveWorldpayDraft(
   input: { id: string | null; version: number; answers: unknown },
 ): Promise<{ id: string; version: number }> {
   const answers = worldpayAnswersDraftSchema.parse(input.answers);
-  const existing = await findFor(deps.repo, owner);
+  const found = await findFor(deps.repo, owner);
+  // After a withdrawn or declined application, a save with no id starts a new one.
+  const existing = isClosed(found) && !input.id ? null : found;
   if (!existing) {
     const id = await deps.repo.create({
       organisationId: owner.kind === 'branch' ? owner.organisationId : null,

@@ -74,6 +74,8 @@ const principalDraft = z.object({
 
 export const worldpayAnswersDraftSchema = z.object({
   existingAccount: z.enum(['', ...EXISTING_ACCOUNT]).optional().default(''),
+  /** The screen the pharmacy last reached (0 is "Before you start"), so a draft reopens there. Not sent to Worldpay. */
+  lastStep: z.number().int().min(0).max(5).optional(),
   business: z.object({
     businessType: z.enum(['', ...BUSINESS_TYPES]).optional().default(''),
     legalName: text(160),
