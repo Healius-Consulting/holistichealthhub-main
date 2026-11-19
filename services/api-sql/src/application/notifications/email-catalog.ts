@@ -29,6 +29,7 @@ export const EMAIL_EVENT_NAMES = [
   'pharmacy_onboarding.activated',
   'pharmacy_onboarding.live',
   'worldpay_application.submitted',
+  'curaleaf_placement.prescriber_stuck',
 ] as const;
 
 export type EmailEventName = (typeof EMAIL_EVENT_NAMES)[number];
@@ -72,6 +73,7 @@ export const EMAIL_TEMPLATE_CODES = [
   'pharmacy_onboarding_activated',
   'pharmacy_onboarding_live',
   'worldpay_application_to_worldpay',
+  'admin_curaleaf_prescriber_stuck',
 ] as const;
 
 export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
@@ -127,6 +129,7 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_onboarding_activated: 'onboarding',
   pharmacy_onboarding_live: 'onboarding',
   worldpay_application_to_worldpay: 'onboarding',
+  admin_curaleaf_prescriber_stuck: 'orders',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -1197,6 +1200,13 @@ export const EMAILS = {
     summary: 'WP-01. Sent straight away to the HHH admin inbox (the recipients set in admin) when a pharmacy submits its Worldpay application, for admin to forward to Worldpay. The application PDF and spreadsheet are attached, plus the service information PDF when the pharmacy has no website. Subject and wording are edited in admin; no personal or bank details are written in the body.',
     replyTo: 'onboarding',
     render: (payload) => contentEmail('worldpay_application_to_worldpay', payload, 'Worldpay application', 'Please find attached a card processing application from a Holistic Health Hub partner pharmacy.'),
+  },
+  admin_curaleaf_prescriber_stuck: {
+    audience: 'admin',
+    events: ['curaleaf_placement.prescriber_stuck'],
+    schedule: 'immediate',
+    summary: 'Sent to the HHH admin inbox (CURALEAF_STUCK_ALERT_TO, default admin@holistichealthhub.live) when paid orders have waited 3 days for Curaleaf to verify their prescriber. One email per pharmacy and prescriber, listing the order numbers, repeated every 3 days while any are still waiting. Written for admin to forward to Curaleaf: pharmacy, Curaleaf customer ID, prescriber name, PIN, GMC/GPhC and Curaleaf prescriber ID. No patient details.',
+    render: (payload) => contentEmail('admin_curaleaf_prescriber_stuck', payload, 'Curaleaf prescriber verification needed', 'Paid orders are waiting for Curaleaf to verify their prescriber.'),
   },
   pharmacy_collection_completed: {
     audience: 'pharmacy_owner',

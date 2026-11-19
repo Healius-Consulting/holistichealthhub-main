@@ -225,7 +225,7 @@ export const pollCuraleafEventsLondon = onSchedule({
   // /v1/prescriber-events/), so paid orders still waiting are also checked directly.
   try {
     const summary = await retryWaitingCuraleafPlacementsSql(connections.filter(connection => connection.secretResourceName), deps);
-    if (summary && (summary.checked || summary.errors)) console.log('Curaleaf placement retry complete', summary);
+    if (summary && (summary.checked || summary.errors || summary.prescriberAlerts.sent || summary.prescriberAlerts.errors)) console.log('Curaleaf placement retry complete', summary);
   } catch (error) {
     console.error('Curaleaf placement retry failed', { error: error instanceof Error ? error.message : 'Unknown error' });
   }

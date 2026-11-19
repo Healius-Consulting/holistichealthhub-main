@@ -5,6 +5,8 @@ import { SqlWorkerEventRepository } from '../../repositories/sql/worker-event.sq
 import type { IntegrationConnectionRecord } from '../../repositories/ports/integration.port.js';
 import type { sqlWorkerDeps } from './deps.js';
 import { retryWaitingCuraleafPlacements, type PlacementRetryDeps } from './retry-curaleaf-placements.js';
+import { alertStuckPrescribers, type PrescriberAlertDeps } from './curaleaf-prescriber-alert.js';
+import { sendEmailNow } from './deliver-messages.js';
 
 const checkKey = (orderId: string) => `worker:curaleaf-placement-check:${orderId}`;
 
@@ -49,12 +51,42 @@ export function sqlPlacementRetryDeps(deps: ReturnType<typeof sqlWorkerDeps>): P
   };
 }
 
-/** The scheduled sweep: every paid, unplaced order of these active Curaleaf connections. */
+function sqlPrescriberAlertDeps(deps: ReturnType<typeof sqlWorkerDeps>): PrescriberAlertDeps {
+  const events = new SqlWorkerEventRepository();
+  return {
+    async lastSentAt(key) {
+      const row = await events.find(key);
+      return row?.transactionReference ?? row?.payloadHash ?? null;
+    },
+    async recordSent(key, organisationId, at) {
+      await events.upsertCursor({ eventKey: key, integration: 'CURALEAF', organisationId, cursorAt: at });
+    },
+    curaleafGet: (connection, path) => curaleafApiRequest(connection, path),
+    async pharmacy(organisationId) {
+      const organisation = await deps.organisationRepo.findOrganisationById(organisationId);
+      return organisation ? { name: organisation.name, gphcNumber: organisation.gphcNumber || null } : null;
+    },
+    send: ({ to, subject, paragraphs, idempotencyKey }) => sendEmailNow({
+      templateCode: 'admin_curaleaf_prescriber_stuck',
+      to,
+      payload: { subject, paragraphs },
+      attachments: [],
+      idempotencyKey,
+    }),
+  };
+}
+
+/**
+ * The scheduled sweep: every paid, unplaced order of these active Curaleaf connections
+ * is retried, then any left waiting 3 days on prescriber verification is reported to admin.
+ */
 export async function retryWaitingCuraleafPlacementsSql(
   connections: IntegrationConnectionRecord[],
   deps: ReturnType<typeof sqlWorkerDeps>,
 ) {
   if (!connections.length) return null;
   const orders = await deps.orderRepo.listPaidUnplacedOrders(500);
-  return retryWaitingCuraleafPlacements(connections, orders, sqlPlacementRetryDeps(deps));
+  const retry = await retryWaitingCuraleafPlacements(connections, orders, sqlPlacementRetryDeps(deps));
+  const alerts = await alertStuckPrescribers(connections, orders, sqlPrescriberAlertDeps(deps));
+  return { ...retry, prescriberAlerts: alerts };
 }
