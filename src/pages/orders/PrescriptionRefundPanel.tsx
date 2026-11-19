@@ -305,9 +305,16 @@ export function PrescriptionRefundDialog({ order, prescription, index, onClose }
                 <p className="order-refund-composer__empty" role="status">No medicine on {label} is still refundable.</p>
               )}
 
-              <p className="order-refund-composer__section-label">Shared pharmacy charges</p>
-              <ChargeControl label="Dispensing charge" charge={preview.dispensing} percent={dispensing} disabled={locked} onChange={setDispensing} />
-              <ChargeControl label="Delivery charge" charge={preview.delivery} percent={delivery} disabled={locked} onChange={setDelivery} />
+              {/* Only charges the order actually made. New orders have no dispensing charge (CP-6, FB-18). */}
+              {preview.dispensing.originalPence > 0 || preview.delivery.originalPence > 0 ? (
+                <p className="order-refund-composer__section-label">Shared pharmacy charges</p>
+              ) : null}
+              {preview.dispensing.originalPence > 0 ? (
+                <ChargeControl label="Dispensing charge" charge={preview.dispensing} percent={dispensing} disabled={locked} onChange={setDispensing} />
+              ) : null}
+              {preview.delivery.originalPence > 0 ? (
+                <ChargeControl label="Delivery charge" charge={preview.delivery} percent={delivery} disabled={locked} onChange={setDelivery} />
+              ) : null}
 
               {total > preview.availablePence ? (
                 <p className="order-refund-composer__error" role="alert">

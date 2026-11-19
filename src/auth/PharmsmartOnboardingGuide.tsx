@@ -149,11 +149,13 @@ export function PharmsmartWelcome({
   useEffect(() => {
     if (!requestId) return;
     let active = true;
+    // Only on arrival and when the form closes; the form loads the application itself when it opens.
+    if (worldpayOpen) return;
     void loadWorldpayApplication<{ existingAccount?: string }>({ kind: 'request', onboardingRequestId: requestId })
       .then(view => {
         if (!active) return;
         if (view.status && view.status !== 'DRAFT') setSetup(current => ({ ...current, worldpay: 'sent' }));
-        else setWorldpayDraft(Boolean(view.id));
+        else setWorldpayDraft(Boolean(view.id) && view.answers?.existingAccount !== 'online');
       })
       // After activation the public route sends the pharmacy to the portal; nothing to show here.
       .catch(() => undefined);
@@ -450,7 +452,7 @@ export function PharmsmartWelcome({
               onClose={() => setWorldpayOpen(false)}
               onChanged={change => {
                 if (change.status && change.status !== 'DRAFT') setSetup(current => ({ ...current, worldpay: 'sent' }));
-                else setWorldpayDraft(change.status === 'DRAFT');
+                else setWorldpayDraft(change.status === 'DRAFT' && change.existingAccount !== 'online');
               }}
             />
           ) : null}

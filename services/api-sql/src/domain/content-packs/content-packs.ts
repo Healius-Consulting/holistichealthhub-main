@@ -21,7 +21,8 @@ import { z } from 'zod';
  */
 
 export const CONTENT_PACKS_KEY = 'onboarding.contentPacks';
-export const MAX_CONTENT_PACK_FILE_BYTES = 25 * 1024 * 1024;
+/** The same cap as Partner Terms uploads, which are proven through the /v1 proxy. */
+export const MAX_CONTENT_PACK_FILE_BYTES = 10 * 1024 * 1024;
 
 export const PACK_IDS = ['0', 'A', 'B', 'C'] as const;
 export type PackId = typeof PACK_IDS[number];

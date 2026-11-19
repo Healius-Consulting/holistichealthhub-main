@@ -18933,6 +18933,8 @@ a.eligibility-brand__identity:focus-visible strong{ color: var(--green); }
   overflow-wrap: anywhere;
 }
 
+/* The warmed-up demo panel stays in the page but out of sight until chosen (FB-04). */
+.onb__panel[hidden]{ display: none; }
 .onb__calendar-wrap{ position: relative; }
 .onb__calendar-loading{
   position: absolute;

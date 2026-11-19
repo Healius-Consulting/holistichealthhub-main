@@ -255,8 +255,10 @@ export function submitFailure(error: { status?: number; code?: string; details?:
       if (step) problems.push({ step, path: detail.path, message: detail.message });
     }
     if (problems.length) {
-      const stepIndex = Math.min(...problems.map(problem => STEP_KEYS.indexOf(problem.step)));
-      return { kind: 'fields', problems: problems.filter(problem => STEP_KEYS.indexOf(problem.step) === stepIndex), stepIndex };
+      // The Worldpay account question is asked on "Before you start" (screen 0), not "Your business".
+      const screenOf = (problem: WorldpayProblem) => (problem.path === 'existingAccount' ? 0 : STEP_KEYS.indexOf(problem.step));
+      const stepIndex = Math.min(...problems.map(screenOf));
+      return { kind: 'fields', problems: problems.filter(problem => screenOf(problem) === stepIndex), stepIndex };
     }
   }
   return { kind: 'help' };

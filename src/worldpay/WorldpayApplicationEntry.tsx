@@ -48,6 +48,8 @@ export function WorldpayApplicationEntry({ onOpenPayments }: { onOpenPayments?: 
     );
   }
   if (!view) return null;
+  // A pharmacy that already takes online payments with Worldpay only needs its keys, below.
+  if (view.status === 'DRAFT' && view.answers?.existingAccount === 'online') return null;
   const draft = Boolean(view.id) && view.status === 'DRAFT';
   const sent = Boolean(view.status) && view.status !== 'DRAFT';
   const closed = CLOSED.includes(view.status);

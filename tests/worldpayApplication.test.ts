@@ -129,6 +129,11 @@ test('a refused submit never shows server text: only plain answer checks name fi
   }
 });
 
+test('a refused Worldpay account answer goes back to "Before you start"', () => {
+  const failure = submitFailure({ status: 422, code: 'WORLDPAY_APPLICATION_INCOMPLETE', details: [{ path: 'existingAccount', message: 'Choose an answer.' }, { path: 'business.legalName', message: 'Enter it.' }] });
+  assert.equal(failure.kind === 'fields' && failure.stepIndex, 0);
+});
+
 test('a draft reopens at the screen the pharmacy reached (FB-10)', () => {
   assert.equal(resumeStep({ existingAccount: 'no', lastStep: 3 }), 3);
   assert.equal(resumeStep({ existingAccount: 'no' }), 0);

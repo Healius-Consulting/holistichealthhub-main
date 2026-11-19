@@ -675,7 +675,8 @@ export function resendWorldpayApplication(id: string) {
   return apiRequest<{ record: AdminWorldpayApplicationRow }>(`/v1/portal/admin/worldpay-applications/${encodeURIComponent(id)}/resend`, { method: 'POST', body: '{}' });
 }
 
-async function fetchAdminFile(path: string, fallback: string) {
+/** A signed-in file download, as a Blob. */
+async function fetchFileBlob(path: string, fallback: string): Promise<Blob> {
   const securityHeaders = securityTokenProvider ? await securityTokenProvider() : {};
   const response = await fetch(`${apiBaseUrl()}${path}`, {
     credentials: 'include',
@@ -685,7 +686,11 @@ async function fetchAdminFile(path: string, fallback: string) {
     const payload = await response.json().catch(() => null) as { code?: string; message?: string } | null;
     throw new ApiRequestError(response.status, payload?.code ?? 'REQUEST_FAILED', payload?.message ?? fallback);
   }
-  return URL.createObjectURL(await response.blob());
+  return response.blob();
+}
+
+async function fetchAdminFile(path: string, fallback: string) {
+  return URL.createObjectURL(await fetchFileBlob(path, fallback));
 }
 
 // ---- Content packs (FB-20): Settings → Assets → Content packs -------------------------
@@ -723,13 +728,8 @@ export function getContentPacks() {
 }
 
 /** The group's issued file, as a Blob (for a direct download, or for merging into C.1). */
-export async function fetchContentPackFile(groupId: ContentPackGroupId, admin = false): Promise<Blob> {
-  const url = await fetchAdminFile(`/v1/portal/${admin ? 'admin/' : ''}content-packs/groups/${encodeURIComponent(groupId)}/file`, 'This download could not be fetched. Try again.');
-  try {
-    return await (await fetch(url)).blob();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+export function fetchContentPackFile(groupId: ContentPackGroupId, admin = false): Promise<Blob> {
+  return fetchFileBlob(`/v1/portal/${admin ? 'admin/' : ''}content-packs/groups/${encodeURIComponent(groupId)}/file`, 'This download could not be fetched. Try again.');
 }
 
 export function getAdminContentPacks() {

@@ -37,6 +37,7 @@ export function ContentPacksPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [uploads, setUploads] = useState<Record<string, { file: File | null; version: string }>>({});
   const [confirmWithdraw, setConfirmWithdraw] = useState<ContentPackGroupId | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const show = (next: AdminContentPacksView) => { setView(next); setDraft(structuredClone(next)); };
   const load = useCallback(() => {
@@ -46,6 +47,7 @@ export function ContentPacksPanel() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  /** Runs an admin action; true when it worked. */
   const act = async (label: string, work: () => Promise<AdminContentPacksView>, done: string) => {
     setBusy(label);
     setError(null);
@@ -53,8 +55,10 @@ export function ContentPacksPanel() {
     try {
       show(await work());
       setNotice(done);
+      return true;
     } catch (cause) {
       setError(describeApiError(cause, 'That did not work. Try again.'));
+      return false;
     } finally {
       setBusy(null);
     }
@@ -76,7 +80,12 @@ export function ContentPacksPanel() {
     if (!pending.version.trim()) { setError('Give the version a name, such as v1.2.'); return; }
     const reissue = Boolean(view.groups.find(group => group.id === groupId)?.file);
     void act(`issue:${groupId}`, () => issueContentPackFile(groupId, pending.file!, pending.version.trim()), reissue ? `Re-issued ${groupId}. Pharmacies now download the new file.` : `Issued ${groupId}. Pharmacies can download it now.`)
-      .then(() => setUploads(current => ({ ...current, [groupId]: { file: null, version: '' } })));
+      .then(worked => {
+        if (!worked) return;
+        // Clear both the state and the file box, so neither still shows the file just issued.
+        setUploads(current => ({ ...current, [groupId]: { file: null, version: '' } }));
+        setFileInputKey(key => key + 1);
+      });
   };
 
   const preview = async (groupId: ContentPackGroupId, filename: string) => {
@@ -145,7 +154,7 @@ export function ContentPacksPanel() {
                       </label>
                       <label className="wpa-field">
                         <span className="wpa-field__label">{group.source === 'website_kit' ? 'Kit (.zip)' : 'File (.zip for several files)'}</span>
-                        <input className="input" type="file" accept={group.source === 'website_kit' ? '.zip,application/zip' : '.zip,.pdf,.docx,.xlsx,.csv'} onChange={event => { const file = event.target.files?.[0] ?? null; setUploads(current => ({ ...current, [group.id]: { file, version: current[group.id]?.version ?? '' } })); }} />
+                        <input key={`${group.id}-${fileInputKey}`} className="input" type="file" accept={group.source === 'website_kit' ? '.zip,application/zip' : '.zip,.pdf,.docx,.xlsx,.csv'} onChange={event => { const file = event.target.files?.[0] ?? null; setUploads(current => ({ ...current, [group.id]: { file, version: current[group.id]?.version ?? '' } })); }} />
                       </label>
                       <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null || isLocalPortalPreview} onClick={() => issue(group.id)}>
                         <Upload size={13} /> {busy === `issue:${group.id}` ? 'Uploading…' : group.file ? 'Re-issue' : 'Issue'}
@@ -153,7 +162,7 @@ export function ContentPacksPanel() {
                       {group.file ? (
                         confirmWithdraw === group.id ? (
                           <span className="wpa-inline">
-                            <button type="button" className="btn btn-sm btn-danger" disabled={busy !== null} onClick={() => void act(`withdraw:${group.id}`, () => withdrawContentPackFile(group.id), `Withdrew ${group.id}.`).then(() => setConfirmWithdraw(null))}>Yes, withdraw</button>
+                            <button type="button" className="btn btn-sm btn-danger" disabled={busy !== null} onClick={() => void act(`withdraw:${group.id}`, () => withdrawContentPackFile(group.id), `Withdrew ${group.id}.`).then(worked => { if (worked) setConfirmWithdraw(null); })}>Yes, withdraw</button>
                             <button type="button" className="btn btn-sm" onClick={() => setConfirmWithdraw(null)}>Cancel</button>
                           </span>
                         ) : <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => setConfirmWithdraw(group.id)}>Withdraw</button>

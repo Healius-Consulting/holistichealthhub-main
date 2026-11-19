@@ -191,17 +191,24 @@ export function createPortalContentPacksRouter(depsFor: () => ContentPacksRouter
         if (groupId === 'C.1' && contentType !== 'application/zip') throw new HttpError(400, 'The website kit must be a .zip file.', 'INVALID_FILE');
         const bytes = requestRawBody(req);
         if (!bytes || bytes.length === 0) throw new HttpError(400, 'Choose a file to upload.', 'INVALID_INPUT');
-        if (bytes.length > MAX_CONTENT_PACK_FILE_BYTES) throw new HttpError(413, 'The file must be 25 MB or smaller.', 'FILE_TOO_LARGE');
+        if (bytes.length > MAX_CONTENT_PACK_FILE_BYTES) throw new HttpError(413, 'The file must be 10 MB or smaller.', 'FILE_TOO_LARGE');
         if (!looksRight(bytes, contentType)) throw new HttpError(400, `That file is not a real ${filename.split('.').pop()} file.`, 'INVALID_FILE');
         const issuedAt = now(deps).toISOString();
         const storagePath = `content-packs/${groupId}/${issuedAt.replace(/[^0-9]/g, '')}-${randomUUID()}-${filename.replace(/\s+/g, '-')}`;
         await deps.storage.saveObject(storagePath, bytes, contentType);
+        // Read the config after the (slow) upload, so the write starts from the latest version.
         const { config, replaced } = issueGroup(await read(deps), groupId, {
           version,
           issuedAt,
           file: { storagePath, filename, contentType, sizeBytes: bytes.length },
         });
-        await deps.content.write(CONTENT_PACKS_KEY, config, scope.uid);
+        try {
+          await deps.content.write(CONTENT_PACKS_KEY, config, scope.uid);
+        } catch (error) {
+          // Not issued after all: don't leave the new file behind in Storage.
+          await deps.storage.deleteFile(storagePath).catch(() => undefined);
+          throw error;
+        }
         if (replaced) await deps.storage.deleteFile(replaced.storagePath).catch(() => undefined);
         await deps.audit({ scope, event: replaced ? 'content_packs.group_reissued' : 'content_packs.group_issued', recordId: groupId, details: { version, filename, sizeBytes: bytes.length } }).catch(() => undefined);
         res.setHeader('Cache-Control', 'private, no-store');

@@ -303,7 +303,7 @@ export function GoLiveChecklistPrompt({ onOpenWorldpayForm }: { onOpenWorldpayFo
           <button ref={closeButton} type="button" className="btn btn-sm" aria-label="Close the go-live checklist" onClick={dismiss}><X size={14} /></button>
         </header>
         {error ? <p className="go-live-checklist__error" role="alert">{error}</p> : null}
-        <GoLiveChecklistView checklist={checklist} saving={saving} demo={demo} onToggle={(itemKey, done) => void toggle(itemKey, done)} onOpenWorldpayForm={onOpenWorldpayForm} onNavigate={dismiss} />
+        <GoLiveChecklistView checklist={checklist} saving={saving} demo={demo} onToggle={(itemKey, done) => void toggle(itemKey, done)} onOpenWorldpayForm={onOpenWorldpayForm} onNavigate={() => setDismissed(true)} />
         <footer>
           <button type="button" className="btn btn-primary btn-sm" onClick={dismiss}>Remind me next time</button>
         </footer>
