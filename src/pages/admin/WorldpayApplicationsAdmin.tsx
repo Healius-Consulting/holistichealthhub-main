@@ -6,9 +6,11 @@ import {
   getWorldpayContent,
   listWorldpayApplications,
   openWorldpayApplicationFile,
+  openWorldpayServicePdf,
   resendWorldpayApplication,
   saveWorldpayContent,
   setWorldpayApplicationStatus,
+  uploadWorldpayServicePdf,
   type AdminWorldpayApplicationRow,
   type WorldpayApplicationStatus,
   type WorldpayContentSettings,
@@ -17,8 +19,8 @@ import type { WorldpayAnswers } from '../../worldpay/applicationLogic';
 
 /**
  * HHH admin: Worldpay merchant applications (spec §3.5) and the content that can
- * change without a release (emails, recipients, pricing panel, scheme answers and
- * the S-04 note).
+ * change without a release (emails, recipients, pricing panel, scheme answers, the
+ * S-04 note and the service information PDF).
  */
 
 const STATUS_LABEL: Record<WorldpayApplicationStatus, string> = {
@@ -138,7 +140,7 @@ function ApplicationDetail({ row, onChanged }: { row: AdminWorldpayApplicationRo
       setBusy(null);
     }
   };
-  const file = async (kind: 'pdf' | 'xlsx') => {
+  const file = async (kind: 'pdf' | 'xlsx' | 'service') => {
     try { openBlob(await openWorldpayApplicationFile(row.id, kind)); } catch (cause) { setFeedback({ tone: 'red', text: message(cause, 'The file could not be opened.') }); }
   };
   const b = detail?.answers.business;
@@ -165,6 +167,7 @@ function ApplicationDetail({ row, onChanged }: { row: AdminWorldpayApplicationRo
         <div className="wpa-inline">
           <button type="button" className="btn btn-sm" onClick={() => void file('pdf')}>Open PDF</button>
           <button type="button" className="btn btn-sm" onClick={() => void file('xlsx')}>Download spreadsheet</button>
+          {row.usesHhhWebsite ? <button type="button" className="btn btn-sm" onClick={() => void file('service')}>Open service information PDF</button> : null}
           <button type="button" className="btn btn-sm" disabled={busy !== null} onClick={() => void act('resend', () => resendWorldpayApplication(row.id), 'WP-01 sent again.')}>{busy === 'resend' ? 'Sending…' : 'Resend WP-01'}</button>
         </div>
       )}
@@ -202,7 +205,7 @@ function SettingsTab() {
   if (error && !content) return <p className="wpa-banner is-red" role="alert">{error}</p>;
   if (!content) return <p className="wpa-muted">Loading…</p>;
 
-  const save = async <K extends keyof WorldpayContentSettings>(key: K, label: string) => {
+  const save = async <K extends Exclude<keyof WorldpayContentSettings, 'servicePdf'>>(key: K, label: string) => {
     setBusy(key);
     setError(null);
     setSaved(null);
@@ -217,21 +220,47 @@ function SettingsTab() {
   };
   const set = <K extends keyof WorldpayContentSettings>(key: K, value: WorldpayContentSettings[K]) => setContent(current => (current ? { ...current, [key]: value } : current));
   const list = (text: string) => text.split(/[\s,;]+/).map(item => item.trim()).filter(Boolean);
-  const saveButton = (key: keyof WorldpayContentSettings, label: string) => (
+  const saveButton = (key: Exclude<keyof WorldpayContentSettings, 'servicePdf'>, label: string) => (
     <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} onClick={() => void save(key, label)}>{busy === key ? 'Saving…' : `Save ${label.toLowerCase()}`}</button>
   );
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy('servicePdf');
+    setError(null);
+    setSaved(null);
+    try {
+      setContent(await uploadWorldpayServicePdf(file));
+      setSaved('Service information PDF replaced.');
+    } catch (cause) {
+      setError(message(cause, 'The PDF could not be uploaded.'));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="wpa-admin-settings">
       {saved ? <p className="wpa-banner is-green" role="status">{saved}</p> : null}
       {error ? <p className="wpa-banner is-red" role="alert">{error}</p> : null}
 
       <h4>WP-01 recipients</h4>
-      <p className="wpa-muted">Where submitted applications are emailed. All To addresses outside holistichealthhub.live count as Worldpay’s, and the application moves straight to “With Worldpay”.</p>
+      <p className="wpa-muted">Where submitted applications are emailed, with the PDF, the spreadsheet and (for a pharmacy with no website) the service information PDF. Forward it to Worldpay, then set the status to “With Worldpay”.</p>
       <div className="wpa-grid">
         <label className="wpa-field"><span className="wpa-field__label">To</span><input className="input" value={content.recipients.to.join(', ')} onChange={event => set('recipients', { ...content.recipients, to: list(event.target.value) })} /></label>
         <label className="wpa-field"><span className="wpa-field__label">Cc</span><input className="input" value={content.recipients.cc.join(', ')} onChange={event => set('recipients', { ...content.recipients, cc: list(event.target.value) })} /></label>
       </div>
       {saveButton('recipients', 'Recipients')}
+
+      <h4>Service information PDF</h4>
+      <p className="wpa-muted">Attached to WP-01 when the pharmacy has no website of its own, whose application gives holistichealthhub.live as the website. Until one is uploaded, those applications wait in this list with Resend.</p>
+      <div className="wpa-inline">
+        <span>{content.servicePdf ? `${content.servicePdf.filename} · uploaded ${day(content.servicePdf.uploadedAt)}` : 'None uploaded'}</span>
+        {content.servicePdf ? <button type="button" className="btn btn-sm" onClick={() => void openWorldpayServicePdf().then(openBlob).catch(cause => setError(message(cause, 'The PDF could not be opened.')))}>Open</button> : null}
+        <label className="btn btn-sm">
+          {busy === 'servicePdf' ? 'Uploading…' : content.servicePdf ? 'Replace PDF' : 'Upload PDF'}
+          <input type="file" accept="application/pdf" hidden onChange={event => { void upload(event.target.files?.[0]); event.target.value = ''; }} />
+        </label>
+      </div>
 
       {(['wp01', 'wp02'] as const).map(key => (
         <div key={key}>

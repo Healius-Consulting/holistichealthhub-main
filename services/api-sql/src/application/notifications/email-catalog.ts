@@ -88,7 +88,7 @@ export type EmailTemplateCode = (typeof EMAIL_TEMPLATE_CODES)[number];
  * Copy must never invite a reply unless the template names an alias here, or the
  * patient is writing to a mailbox nobody reads.
  */
-export type EmailAlias = 'referrals' | 'IT' | 'support' | 'onboarding' | 'worldpay';
+export type EmailAlias = 'referrals' | 'IT' | 'support' | 'onboarding';
 
 export function emailAliasDomain() {
   return process.env.EMAIL_ALIAS_DOMAIN?.trim() || 'holistichealthhub.live';
@@ -104,7 +104,7 @@ export function replyToFor(kind: EmailTemplateCode): string | null {
   return definition.replyTo ? `${definition.replyTo}@${emailAliasDomain()}` : null;
 }
 
-export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 'enquiries' | 'onboarding' | 'worldpay';
+export type EmailFromAlias = 'referrals' | 'payments' | 'orders' | 'accounts' | 'enquiries' | 'onboarding';
 
 const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   patient_enquiry_declined: 'referrals',
@@ -135,8 +135,8 @@ const FROM_ALIAS: Record<EmailTemplateCode, EmailFromAlias> = {
   pharmacy_onboarding_activated: 'onboarding',
   pharmacy_onboarding_declined: 'accounts',
   admin_worldpay_form_submitted: 'onboarding',
-  worldpay_application_to_worldpay: 'worldpay',
-  worldpay_application_confirmation: 'worldpay',
+  worldpay_application_to_worldpay: 'onboarding',
+  worldpay_application_confirmation: 'onboarding',
 };
 
 /** Retired 24 Sep 2026. Still in the catalog so old outbox rows can render, but never queued. */
@@ -1232,8 +1232,8 @@ export const EMAILS = {
     audience: 'admin',
     events: ['worldpay_application.submitted'],
     schedule: 'immediate',
-    summary: 'WP-01. Sent straight away, from the Worldpay mailbox, to the recipients set in admin when a pharmacy submits its Worldpay application. The application PDF and spreadsheet are attached. Subject and wording are edited in admin; no personal or bank details are written in the body.',
-    replyTo: 'worldpay',
+    summary: 'WP-01. Sent straight away to the HHH admin inbox (the recipients set in admin) when a pharmacy submits its Worldpay application, for admin to forward to Worldpay. The application PDF and spreadsheet are attached, plus the service information PDF when the pharmacy has no website. Subject and wording are edited in admin; no personal or bank details are written in the body.',
+    replyTo: 'onboarding',
     render: (payload) => contentEmail('worldpay_application_to_worldpay', payload, 'Worldpay application', 'Please find attached a card processing application from a Holistic Health Hub partner pharmacy.'),
   },
   worldpay_application_confirmation: {
@@ -1241,7 +1241,7 @@ export const EMAILS = {
     events: ['worldpay_application.submitted'],
     schedule: 'immediate',
     summary: 'WP-02. Sent straight away to whoever submitted the Worldpay application and to the branch email, saying it has gone to Worldpay and what happens next. No attachment and no personal or bank details. Wording is edited in admin.',
-    replyTo: 'worldpay',
+    replyTo: 'onboarding',
     render: (payload) => contentEmail('worldpay_application_confirmation', payload, 'Your Worldpay application has been sent', 'We have received your Worldpay application and passed it to Worldpay. If Worldpay ask you something you are unsure about, reply to this email.'),
   },
   pharmacy_onboarding_declined: {

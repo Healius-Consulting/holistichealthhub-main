@@ -216,11 +216,6 @@ export async function nextReference(repo: WorldpayApplicationRepository, now: Da
   return `${prefix}${String(Number.isFinite(number) ? number : 1).padStart(4, '0')}`;
 }
 
-/** Recipients that are all outside HHH's own domain are Worldpay's (or their agent's). */
-export function goesStraightToWorldpay(recipients: WorldpayContent['recipients']) {
-  return recipients.to.every(address => !address.endsWith('@holistichealthhub.live'));
-}
-
 function firstName(name: string) {
   return name.trim().split(/\s+/)[0] ?? '';
 }
@@ -243,8 +238,9 @@ function mergeFields(record: WorldpayApplicationRecord) {
 }
 
 /**
- * WP-01: the application to Worldpay's route, with the PDF and the spreadsheet. A
- * pharmacy with no website of its own gives the HHH website. Records the send
+ * WP-01: the application, emailed to the HHH admin inbox to forward to Worldpay, with
+ * the PDF, the spreadsheet and, for a pharmacy with no website of its own, the service
+ * information PDF. Records the send
  * or the failure; a failure leaves the application Submitted for admin to Resend.
  */
 export async function sendApplicationToWorldpay(deps: WorldpayDeps, record: WorldpayApplicationRecord, attempt = 'first'): Promise<boolean> {
@@ -260,6 +256,11 @@ export async function sendApplicationToWorldpay(deps: WorldpayDeps, record: Worl
       { filename: `${base}.pdf`, content: pdf.bytes, contentType: 'application/pdf' },
       { filename: `${base}.xlsx`, content: xlsx.bytes, contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
     ];
+    if (noWebsite) {
+      if (!content.servicePdf) throw new Error('No service information PDF is uploaded in admin, and this pharmacy has no website. Upload it, then press Resend.');
+      const pack = await deps.storage.downloadFile(content.servicePdf.storagePath);
+      attachments.push({ filename: content.servicePdf.filename, content: pack.bytes, contentType: 'application/pdf' });
+    }
     await deps.sendEmail({
       templateCode: 'worldpay_application_to_worldpay',
       to: content.recipients.to,
@@ -361,11 +362,8 @@ export async function submitWorldpayApplication(
   if (!record) throw new HttpError(404, 'This Worldpay application could not be found. Reload the page.', 'WORLDPAY_APPLICATION_NOT_FOUND');
   if (!submitted) return record;
 
-  const content = await readWorldpayContent(deps.content);
-  const sent = await sendApplicationToWorldpay(deps, record);
-  if (sent && goesStraightToWorldpay(content.recipients)) {
-    await deps.repo.setStatus(record.id, 'WITH_WORLDPAY', { note: null, byUid: null, at: now.toISOString() });
-  }
+  // WP-01 goes to the HHH admin inbox. Admin forwards it to Worldpay and then marks it With Worldpay.
+  await sendApplicationToWorldpay(deps, record);
   await confirmToPharmacy(deps, record);
   const latest = (await deps.repo.findById(record.id)) ?? record;
   await deps.hooks?.submitted?.(latest).catch(() => undefined);

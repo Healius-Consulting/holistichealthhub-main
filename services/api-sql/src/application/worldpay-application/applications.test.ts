@@ -154,13 +154,13 @@ describe('Worldpay application', () => {
     answers.business.hasOwnWebsite = 'yes';
     answers.business.website = 'https://shahpharmacy.example';
     const record = await submitted(h, answers);
-    assert.equal(record.status, 'SUBMITTED', 'the default route is HHH\'s own mailbox, so it waits for admin');
+    assert.equal(record.status, 'SUBMITTED', 'it goes to the HHH admin inbox, so it waits for admin to forward it');
     assert.equal(record.reference, 'HHH-WP-2026-0001');
     assert.ok(record.sentAt);
     assert.equal(record.deliveryError, null);
     const [wp01, wp02] = h.sent;
     assert.equal(wp01?.templateCode, 'worldpay_application_to_worldpay');
-    assert.deepEqual(wp01?.to, ['worldpay@holistichealthhub.live']);
+    assert.deepEqual(wp01?.to, ['admin@healiusconsulting.com']);
     assert.deepEqual(wp01?.attachments.map(a => a.filename), [
       'Worldpay-application_SHAH HEALTH LIMITED_HHH-WP-2026-0001.pdf',
       'Worldpay-application_SHAH HEALTH LIMITED_HHH-WP-2026-0001.xlsx',
@@ -187,14 +187,13 @@ describe('Worldpay application', () => {
     assert.match(await sheet.file('xl/worksheets/sheet2.xml')!.async('string'), /<c r="D5" s="57" t="inlineStr"><is><t xml:space="preserve">1234567<\/t>/);
   });
 
-  it('sends the PDF and spreadsheet only, giving the HHH website when the pharmacy has none', async () => {
-    const noSite = harness();
-    await submitted(noSite);
-    assert.equal(noSite.sent[0]?.templateCode, 'worldpay_application_to_worldpay');
-    assert.equal(noSite.sent[0]?.attachments.length, 2);
-    assert.match(String(noSite.sent[0]!.payload.paragraphs), /does not have a website/);
-    assert.doesNotMatch(String(noSite.sent[0]!.payload.paragraphs), /attached Holistic Health Hub|service information/);
-    assert.doesNotMatch(String(noSite.sent[0]!.payload.paragraphs), /Website: /);
+  it('adds the service information PDF for a pharmacy with no website, and fails safe without it', async () => {
+    const withPack = harness({ [WORLDPAY_CONTENT_KEYS.servicePdf]: { storagePath: 'worldpay/service-info.pdf', filename: 'HHH-service-information.pdf', uploadedAt: NOW.toISOString() } });
+    await submitted(withPack);
+    assert.equal(withPack.sent[0]?.attachments.length, 3);
+    assert.equal(withPack.sent[0]?.attachments[2]?.filename, 'HHH-service-information.pdf');
+    assert.match(String(withPack.sent[0]!.payload.paragraphs), /does not have a website/);
+    assert.doesNotMatch(String(withPack.sent[0]!.payload.paragraphs), /Website: /);
 
     const ownSite = harness();
     const answers = completeAnswers();
@@ -203,10 +202,17 @@ describe('Worldpay application', () => {
     await submitted(ownSite, answers);
     assert.equal(ownSite.sent[0]?.attachments.length, 2);
     assert.match(String(ownSite.sent[0]!.payload.paragraphs), /Website: https:\/\/shahpharmacy\.example/);
+
+    const missing = harness();
+    const record = await submitted(missing);
+    assert.equal(record.status, 'SUBMITTED');
+    assert.equal(record.sentAt, null);
+    assert.match(record.deliveryError ?? '', /service information PDF/);
+    assert.equal(missing.sent[0]?.templateCode, 'worldpay_application_confirmation', 'the pharmacy is still told it is received');
   });
 
-  it('numbers references within the year and goes straight to With Worldpay when admin sends to Worldpay', async () => {
-    const h = harness({ [WORLDPAY_CONTENT_KEYS.recipients]: { to: ['onboarding@worldpay-agent.example'], cc: ['worldpay@holistichealthhub.live'] } });
+  it('numbers references within the year and sends to the recipients set in admin, waiting for admin to forward it', async () => {
+    const h = harness({ [WORLDPAY_CONTENT_KEYS.recipients]: { to: ['ops@example.test'], cc: ['owner@example.test'] } });
     const answers = completeAnswers();
     answers.business.hasOwnWebsite = 'yes';
     answers.business.website = 'https://shahpharmacy.example';
@@ -215,9 +221,10 @@ describe('Worldpay application', () => {
       ...(await saveWorldpayDraft(h.deps, { kind: 'branch', organisationId: 'org-2', gphcNumber: '7654321' }, { id: null, version: 0, answers })),
       answers, declaration, submitter,
     });
-    assert.equal(first.status, 'WITH_WORLDPAY');
+    assert.equal(first.status, 'SUBMITTED');
     assert.equal(second.reference, 'HHH-WP-2026-0002');
-    assert.deepEqual(h.sent[0]?.cc, ['worldpay@holistichealthhub.live']);
+    assert.deepEqual(h.sent[0]?.to, ['ops@example.test']);
+    assert.deepEqual(h.sent[0]?.cc, ['owner@example.test']);
   });
 
   it('records a failed send for admin to resend, and resends', async () => {
