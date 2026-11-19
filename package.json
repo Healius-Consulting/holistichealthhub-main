@@ -13,7 +13,7 @@
     "packages/ui"
   ],
   "scripts": {
-    "test": "node --test tests/*.test.ts && npm test --workspace @hhh/api-sql",
+    "test": "tsx --test tests/*.test.ts && npm test --workspace @hhh/api-sql",
     "dev": "npm run dev:portal",
     "dev:portal": "HHH_SURFACE=portal npx vercel dev",
     "dev:eligibility": "vite --config vite.eligibility.config.ts",
@@ -62,6 +62,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "oxlint": "^1.69.0",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "vite": "^8.1.0"
   },
