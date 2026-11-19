@@ -159,7 +159,9 @@ export const reconcileWorldpayPaymentsLondon = onSchedule({
   retryCount: 0,
 }, async () => {
   const deps = sqlWorkerDeps();
-  await runEvery(WORLDPAY_SWEEP_MS, 50_000, async () => {
+  // 40 s of ticks inside the 55 s timeout: a slow last tick (a Worldpay query can take
+  // several seconds) still finishes, where a 50 s window overran into a 504 now and then.
+  await runEvery(WORLDPAY_SWEEP_MS, 40_000, async () => {
     const reconciliation = await reconcilePendingWorldpayPayments(deps);
     console.log('Worldpay reconciliation tick', { reconciliation });
   });

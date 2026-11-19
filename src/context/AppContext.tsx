@@ -2390,7 +2390,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     && currentOrganisation.status !== 'paused' && currentOrganisation.status !== 'on_hold'
     && !sandboxPharmacy
   );
-  const syncPatientDirectory = livePharmacyWorkspace || intakeDirectorySync;
+  // HHH admin works from its own admin routes. The pharmacy catalogue and patient directory are
+  // pharmacy-only (admin got 503 not-connected and 403 for them), so they are never fetched for admin.
+  const adminSession = state.staffSession?.role === 'admin';
+  const syncPatientDirectory = !adminSession && (livePharmacyWorkspace || intakeDirectorySync);
 
   // Demo changes last until Reset demo, Return to live or logout, refreshes included.
   useEffect(() => {
@@ -2431,6 +2434,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const useAuthenticatedPortal = !isLocalPortalPreview
       && isApiConfigured
       && Boolean(state.staffSession)
+      && !adminSession
       && Boolean(currentOrganisation);
     // Nothing to fetch yet (no session, no tenant, no API). Settle the spinner the
     // initial state optimistically raised instead of leaving it running forever.

@@ -133,6 +133,20 @@ describe('Worldpay application', () => {
     await assert.rejects(saveWorldpayDraft(h.deps, branch, { id: first.id, version: 1, answers: {} }), (e: HttpError) => e.code === 'WORLDPAY_DRAFT_CONFLICT');
   });
 
+  it('accepts the draft id back in either form (Data Connect hands it out without hyphens)', async () => {
+    const h = harness();
+    const compact = '0a1b2c3d4e5f40718293a4b5c6d7e8f9';
+    const draft = await saveWorldpayDraft(h.deps, branch, { id: null, version: 0, answers: completeAnswers() });
+    // Re-key the stored row the way the database returns it.
+    const row = h.repo.rows.get(draft.id)!;
+    h.repo.rows.delete(draft.id);
+    h.repo.rows.set(compact, { ...row, id: compact });
+    const hyphenated = '0a1b2c3d-4e5f-4071-8293-a4b5c6d7e8f9';
+    const saved = await saveWorldpayDraft(h.deps, branch, { id: hyphenated, version: draft.version, answers: completeAnswers() });
+    const record = await submitWorldpayApplication(h.deps, branch, { id: hyphenated, version: saved.version, answers: completeAnswers(), declaration, submitter });
+    assert.equal(record.status, 'SUBMITTED');
+  });
+
   it('will not submit until every answer is in, and says where', async () => {
     const h = harness();
     const answers = completeAnswers();

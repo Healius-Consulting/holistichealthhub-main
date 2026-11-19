@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { normaliseGphcNumber } from '../identity/pharmsmart-sso.js';
+import { uuidInput } from '../common/uuid.js';
 
 export const PARTNER_TERMS_SIGNER_ROLES = [
   'SUPERINTENDENT_PHARMACIST',
@@ -41,7 +42,7 @@ function requirePharmacistGphc(input: { signerRole: PartnerTermsSignerRole; sign
 }
 
 export const partnerTermsAcceptanceSchema = z.object({
-  onboardingRequestId: z.uuid(),
+  onboardingRequestId: uuidInput,
   ...signerFields,
   /** Signed by the PharmSmart welcome; carries PharmSmart's names for the soft check. */
   pharmsmartTicket: z.string().max(4000).optional().or(z.literal('')),

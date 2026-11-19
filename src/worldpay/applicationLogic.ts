@@ -199,3 +199,28 @@ export function withGphcShown(answer: string, gphcNumber: string) {
 export function shareTotal(answers: WorldpayAnswers) {
   return Math.round(answers.principals.reduce((sum, person) => sum + (person.shareholding ?? 0), 0) * 100) / 100;
 }
+
+/** Backoff between autosave retries after a server or network failure; then it waits for the next edit. */
+export const SAVE_RETRY_DELAYS_MS = [5_000, 15_000, 60_000];
+
+export type SaveFailure =
+  | { kind: 'conflict' }
+  /** The server refused these answers; retrying the same request cannot help. */
+  | { kind: 'refused'; message: string }
+  /** A server or network problem: try again after `retryIn`, or (null) only once the answers change. */
+  | { kind: 'retry'; retryIn: number | null };
+
+/**
+ * What a failed autosave should do next. `failures` counts the failed saves in a row, this one included.
+ * A refused save never loops: before this, every failure re-armed the 1.2 s autosave, so one
+ * rejected id produced a save every couple of seconds until the rate limiter stepped in.
+ */
+export function nextSaveDelay(error: { status?: number; code?: string; message?: string } | null | undefined, failures: number): SaveFailure {
+  const code = error?.code ?? '';
+  if (code === 'WORLDPAY_DRAFT_CONFLICT' || code === 'WORLDPAY_APPLICATION_CONFLICT') return { kind: 'conflict' };
+  const status = typeof error?.status === 'number' ? error.status : 0;
+  if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+    return { kind: 'refused', message: error?.message?.trim() || 'The answers could not be saved.' };
+  }
+  return { kind: 'retry', retryIn: SAVE_RETRY_DELAYS_MS[failures - 1] ?? null };
+}

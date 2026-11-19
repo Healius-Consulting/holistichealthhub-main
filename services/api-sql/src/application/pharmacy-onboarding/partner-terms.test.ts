@@ -63,6 +63,13 @@ describe('Partner Terms state', () => {
     assert.equal(on.document?.version, 'v1.0');
   });
 
+  it('reads a version id stored without hyphens (as Data Connect returns it) as the same version', async () => {
+    const compact = DOC.replaceAll('-', '');
+    const state = await partnerTermsState(stateDeps({ enabled: true, currentDocumentId: compact }, doc({ id: DOC })));
+    assert.equal(state.on, true, 'a compact id must not make the switch read as off');
+    assert.equal(owesSignature(state, { status: 'LIVE' }, [{ documentId: compact }]), false, 'a signature recorded with the compact id counts');
+  });
+
   it('asks activated branches without a signature for the current version, and nobody while off', async () => {
     const on = await partnerTermsState(stateDeps({ enabled: true, currentDocumentId: DOC }));
     const off = await partnerTermsState(stateDeps({ enabled: false, currentDocumentId: DOC }));

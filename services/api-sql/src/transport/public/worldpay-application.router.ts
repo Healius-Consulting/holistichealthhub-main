@@ -10,6 +10,7 @@ import {
 import { worldpayHooks } from '../../application/worldpay-application/hooks.js';
 import { sqlWorldpayDeps, worldpayPrefill } from '../../application/worldpay-application/sql-deps.js';
 import { HttpError } from '../../domain/common/errors.js';
+import { uuidInput } from '../../domain/common/uuid.js';
 import { SqlPharmacyOnboardingRepository } from '../../repositories/sql/pharmacy-onboarding.sql.js';
 import { SqlNotificationRepository } from '../../repositories/sql/notification.sql.js';
 import { SqlPartnerTermsRepository } from '../../repositories/sql/partner-terms.sql.js';
@@ -17,17 +18,17 @@ import { SqlPlatformContentRepository } from '../../repositories/sql/worldpay-ap
 import { partnerTermsState } from '../../application/pharmacy-onboarding/partner-terms.service.js';
 import { publicWorldpayDraftLimiter, publicWorldpayFormLimiter } from '../../security/public-limits.js';
 
-const requestId = z.string().uuid();
+const requestId = uuidInput;
 const loadSchema = z.object({ onboardingRequestId: requestId });
 const saveSchema = z.object({
   onboardingRequestId: requestId,
-  id: z.string().uuid().nullable().default(null),
+  id: uuidInput.nullable().default(null),
   version: z.number().int().min(0).default(0),
   answers: z.unknown(),
 });
 const submitSchema = z.object({
   onboardingRequestId: requestId,
-  id: z.string().uuid(),
+  id: uuidInput,
   version: z.number().int().min(1),
   answers: z.unknown(),
   declaration: z.unknown(),

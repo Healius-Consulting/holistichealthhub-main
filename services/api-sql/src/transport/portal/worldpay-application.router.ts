@@ -22,14 +22,15 @@ import { requireCsrf } from '../../security/csrf.js';
 import { assertPlatformScope, assertTenantScope, type RequestContext } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { uuidParam } from './uuid-param.js';
+import { uuidInput } from '../../domain/common/uuid.js';
 
 const saveSchema = z.object({
-  id: z.string().uuid().nullable().default(null),
+  id: uuidInput.nullable().default(null),
   version: z.number().int().min(0).default(0),
   answers: z.unknown(),
 });
 const submitSchema = z.object({
-  id: z.string().uuid(),
+  id: uuidInput,
   version: z.number().int().min(1),
   answers: z.unknown(),
   declaration: z.unknown(),

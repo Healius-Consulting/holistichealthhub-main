@@ -15,6 +15,7 @@ import {
 } from '../../application/pharmacy-onboarding/partner-terms.service.js';
 import { signedCopyFilename } from '../../application/pharmacy-onboarding/partner-terms-signing.js';
 import { HttpError } from '../../domain/common/errors.js';
+import { asUuid, sameUuid, uuidKey } from '../../domain/common/uuid.js';
 import { MAX_PARTNER_TERMS_PDF_BYTES, PROMPTED_BRANCH_STATUSES, type PartnerTermsDocumentRecord } from '../../domain/pharmacy-onboarding/partner-terms.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import type { PartnerTermsRepository } from '../../repositories/ports/partner-terms.port.js';
@@ -119,7 +120,7 @@ export function createPortalPartnerTermsRouter(depsFor: (context: RequestContext
 
   const adminView = async (deps: PartnerTermsRouterDeps) => {
     const [settings, documents] = await Promise.all([readPartnerTermsSettings(deps.content), deps.terms.listDocuments()]);
-    const current = documents.find(document => document.id === settings.currentDocumentId && isLiveDocument(document)) ?? null;
+    const current = documents.find(document => sameUuid(document.id, settings.currentDocumentId) && isLiveDocument(document)) ?? null;
     let pharmacies: Array<Record<string, unknown>> = [];
     if (current) {
       const [organisations, prompts, acceptances] = await Promise.all([
@@ -127,11 +128,11 @@ export function createPortalPartnerTermsRouter(depsFor: (context: RequestContext
         deps.terms.listPrompts(current.id),
         deps.acceptances.listTermsAcceptances(2000),
       ]);
-      const promptFor = new Map(prompts.map(prompt => [prompt.organisationId, prompt]));
-      const signedFor = new Map(acceptances.filter(row => row.documentId === current.id && row.organisationId).map(row => [row.organisationId!, row]));
+      const promptFor = new Map(prompts.map(prompt => [uuidKey(prompt.organisationId), prompt]));
+      const signedFor = new Map(acceptances.filter(row => sameUuid(row.documentId, current.id) && row.organisationId).map(row => [uuidKey(row.organisationId!), row]));
       pharmacies = promptedBranches(organisations).map(organisation => {
-        const prompt = promptFor.get(organisation.id) ?? null;
-        const signed = signedFor.get(organisation.id) ?? null;
+        const prompt = promptFor.get(uuidKey(organisation.id)) ?? null;
+        const signed = signedFor.get(uuidKey(organisation.id)) ?? null;
         return {
           organisationId: organisation.id,
           name: organisation.name,
@@ -147,11 +148,11 @@ export function createPortalPartnerTermsRouter(depsFor: (context: RequestContext
         };
       });
     }
-    const signedDocuments = new Set((await deps.acceptances.listTermsAcceptances(2000)).map(row => row.documentId).filter(Boolean));
+    const signedDocuments = new Set((await deps.acceptances.listTermsAcceptances(2000)).map(row => row.documentId).filter((id): id is string => Boolean(id)).map(uuidKey));
     return {
       settings,
       currentDocumentId: current?.id ?? null,
-      documents: documents.map(document => ({ ...document, storagePath: undefined, signed: signedDocuments.has(document.id) })),
+      documents: documents.map(document => ({ ...document, storagePath: undefined, signed: signedDocuments.has(uuidKey(document.id)) })),
       pharmacies,
     };
   };
@@ -236,7 +237,7 @@ export function createPortalPartnerTermsRouter(depsFor: (context: RequestContext
       const at = now(deps).toISOString();
       await deps.terms.publishDocument(document.id, at, scope.uid);
       const settings = await readPartnerTermsSettings(deps.content);
-      const next: PartnerTermsSettings = { ...settings, currentDocumentId: document.id };
+      const next: PartnerTermsSettings = { ...settings, currentDocumentId: asUuid(document.id) };
       await deps.content.write(PARTNER_TERMS_SETTINGS_KEY, next, scope.uid);
       await deps.audit({ scope, organisationId: null, event: 'partner_terms.published', recordType: 'PartnerTermsDocument', recordId: document.id, details: { version: document.version, enabled: next.enabled } }).catch(() => undefined);
       if (next.enabled) await queuePublishedComments(deps, document);
@@ -260,12 +261,12 @@ export function createPortalPartnerTermsRouter(depsFor: (context: RequestContext
       const at = now(deps).toISOString();
       await deps.terms.withdrawDocument(document.id, at, scope.uid);
       const settings = await readPartnerTermsSettings(deps.content);
-      if (settings.currentDocumentId === document.id) {
+      if (sameUuid(settings.currentDocumentId, document.id)) {
         // Back to the latest published version still standing, or none.
         const previous = (await deps.terms.listDocuments())
-          .filter(row => row.id !== document.id && isLiveDocument(row))
+          .filter(row => !sameUuid(row.id, document.id) && isLiveDocument(row))
           .sort((a, b) => String(b.publishedAt).localeCompare(String(a.publishedAt)))[0] ?? null;
-        await deps.content.write(PARTNER_TERMS_SETTINGS_KEY, { ...settings, currentDocumentId: previous?.id ?? null }, scope.uid);
+        await deps.content.write(PARTNER_TERMS_SETTINGS_KEY, { ...settings, currentDocumentId: previous ? asUuid(previous.id) : null }, scope.uid);
       }
       await deps.audit({ scope, organisationId: null, event: 'partner_terms.withdrawn', recordType: 'PartnerTermsDocument', recordId: document.id, details: { version: document.version } }).catch(() => undefined);
       res.setHeader('Cache-Control', 'private, no-store');
@@ -381,7 +382,7 @@ export function createPortalPartnerTermsRouter(depsFor: (context: RequestContext
     try {
       const { deps, organisation } = await branchFor(req);
       const id = uuidParam.parse(req.params.id);
-      const row = (await branchAcceptances(deps.acceptances, organisation)).find(item => item.id === id);
+      const row = (await branchAcceptances(deps.acceptances, organisation)).find(item => sameUuid(item.id, id));
       if (!row?.signedCopyPath) throw new HttpError(404, 'That signed copy could not be found.', 'NOT_FOUND');
       const file = await deps.storage.downloadFile(row.signedCopyPath);
       sendPdf(res, file.bytes, signedCopyFilename(row.termsVersion, organisation.name));

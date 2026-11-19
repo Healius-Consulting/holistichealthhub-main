@@ -24,6 +24,7 @@ import {
   splitDob,
   stepNames,
   stepProblems,
+  nextSaveDelay,
   tidyCompanyNumber,
   withGphcShown,
   worldpayWarnings,
@@ -60,7 +61,7 @@ const SCHEME_QUESTIONS = [
 ] as const;
 
 type Declaration = { accurate: boolean; consent: boolean; signerName: string; signerPosition: string };
-type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'refused' | 'conflict';
 type LookupState =
   | { kind: 'idle' }
   | { kind: 'loading' }
@@ -96,6 +97,7 @@ export function WorldpayApplicationForm({
   const [step, setStep] = useState(0);
   const [problems, setProblems] = useState<WorldpayProblem[]>([]);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [saveMessage, setSaveMessage] = useState('');
   const [declaration, setDeclaration] = useState<Declaration>({ accurate: false, consent: false, signerName: '', signerPosition: '' });
   const [lookup, setLookup] = useState<LookupState>({ kind: 'idle' });
   const [submitting, setSubmitting] = useState(false);
@@ -104,6 +106,9 @@ export function WorldpayApplicationForm({
   const dirty = useRef(false);
   const saving = useRef<Promise<void> | null>(null);
   const latest = useRef<WorldpayAnswers | null>(null);
+  const failures = useRef(0);
+  const retryTimer = useRef<number | null>(null);
+  const conflicted = useRef(false);
   latest.current = answers;
   const ownerKey = owner.kind === 'branch' ? 'branch' : owner.onboardingRequestId;
   const ownerRef = useRef(owner);
@@ -121,6 +126,9 @@ export function WorldpayApplicationForm({
     setLoadError(null);
     setProblems([]);
     setSaveState('idle');
+    setSaveMessage('');
+    failures.current = 0;
+    conflicted.current = false;
     setSubmitError(null);
     setLookup({ kind: 'idle' });
     dirty.current = false;
@@ -146,6 +154,8 @@ export function WorldpayApplicationForm({
     document.body.style.overflow = 'hidden';
     return () => {
       cancelled = true;
+      if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+      retryTimer.current = null;
       document.body.style.overflow = previousOverflow;
     };
   }, [open, ownerKey]);
@@ -154,31 +164,52 @@ export function WorldpayApplicationForm({
   const save = useCallback(async () => {
     if (saving.current) await saving.current.catch(() => undefined);
     const current = latest.current;
-    if (!current || !dirty.current) return;
+    if (!current || !dirty.current || conflicted.current) return;
+    if (retryTimer.current !== null) window.clearTimeout(retryTimer.current);
+    retryTimer.current = null;
     dirty.current = false;
     setSaveState('saving');
     const run = (async () => {
       try {
         const saved = await saveWorldpayApplication(ownerRef.current, { id: ids.current.id, version: ids.current.version, answers: current });
         ids.current = saved;
+        failures.current = 0;
         setSaveState('saved');
         onChangedRef.current?.({ status: 'DRAFT', existingAccount: current.existingAccount });
       } catch (error) {
+        // Still unsaved, so the next edit (or close) tries again; nothing here re-arms the autosave on its own.
         dirty.current = true;
-        setSaveState(error instanceof ApiRequestError && (error.code === 'WORLDPAY_DRAFT_CONFLICT' || error.code === 'WORLDPAY_APPLICATION_CONFLICT') ? 'conflict' : 'error');
+        failures.current += 1;
+        const failure = nextSaveDelay(error instanceof ApiRequestError ? error : null, failures.current);
+        if (failure.kind === 'conflict') {
+          conflicted.current = true;
+          setSaveState('conflict');
+        } else if (failure.kind === 'refused') {
+          setSaveMessage(failure.message);
+          setSaveState('refused');
+        } else {
+          setSaveMessage(failure.retryIn === null ? 'Not saved. Check your connection; any change you make will try again.' : '');
+          setSaveState('error');
+          if (failure.retryIn !== null) {
+            retryTimer.current = window.setTimeout(() => { retryTimer.current = null; void saveRef.current().catch(() => undefined); }, failure.retryIn);
+          }
+        }
         throw error;
       }
     })();
     saving.current = run;
     try { await run; } finally { if (saving.current === run) saving.current = null; }
   }, []);
+  const saveRef = useRef(save);
+  saveRef.current = save;
 
-  // Autosave a moment after the pharmacy stops typing.
+  // Autosave a moment after the pharmacy stops typing. Only new answers start it: a failed
+  // save waits for the next edit or its own backoff, never this timer.
   useEffect(() => {
-    if (!answers || !dirty.current || saveState === 'conflict') return;
+    if (!answers || !dirty.current || conflicted.current) return;
     const timer = window.setTimeout(() => { void save().catch(() => undefined); }, 1200);
     return () => window.clearTimeout(timer);
-  }, [answers, save, saveState]);
+  }, [answers, save]);
 
   const update = useCallback((change: (current: WorldpayAnswers) => WorldpayAnswers) => {
     dirty.current = true;
@@ -293,7 +324,8 @@ export function WorldpayApplicationForm({
     idle: '',
     saving: 'Saving…',
     saved: 'Saved',
-    error: 'Not saved yet. Check your connection; we will try again.',
+    error: saveMessage || 'Not saved yet. Check your connection; we will try again.',
+    refused: `Not saved: ${saveMessage}`,
     conflict: 'Someone else at your pharmacy changed this application. Close it and open it again to see their changes.',
   }[saveState];
   const ended = step === 0 && (!answers?.existingAccount || answers.existingAccount === 'online');
@@ -343,7 +375,7 @@ export function WorldpayApplicationForm({
           <FormBottom
             status={(
               <>
-                <span className={saveState === 'conflict' || saveState === 'error' ? 'wpa-save is-bad' : saveState === 'saved' ? 'wpa-save is-good' : 'wpa-save'} aria-live="polite">{saveLabel}</span>
+                <span className={saveState === 'conflict' || saveState === 'error' || saveState === 'refused' ? 'wpa-save is-bad' : saveState === 'saved' ? 'wpa-save is-good' : 'wpa-save'} aria-live="polite">{saveLabel}</span>
                 {step > 0 && saveState !== 'conflict' ? <button type="button" className="wpa-link" onClick={() => void close()}>Save and finish later</button> : null}
               </>
             )}

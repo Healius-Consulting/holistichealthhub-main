@@ -90,3 +90,15 @@ test('each step checks only its own answers, and names change for sole traders a
   assert.equal(stepNames({ ...answers, business: { ...answers.business, businessType: 'Sole trader' } })[2], 'Owner');
   assert.equal(stepNames({ ...answers, business: { ...answers.business, businessType: 'Partnership' } })[2], 'Partners');
 });
+
+test('a failed autosave never loops: refusals stop, server and network failures back off and then wait for an edit', async () => {
+  const { nextSaveDelay } = await import('../src/worldpay/applicationLogic.ts');
+  assert.deepEqual(nextSaveDelay({ status: 409, code: 'WORLDPAY_DRAFT_CONFLICT' }, 1), { kind: 'conflict' });
+  assert.deepEqual(nextSaveDelay({ status: 409, code: 'WORLDPAY_APPLICATION_CONFLICT' }, 1), { kind: 'conflict' });
+  assert.deepEqual(nextSaveDelay({ status: 400, code: 'VALIDATION_ERROR', message: 'Invalid UUID' }, 1), { kind: 'refused', message: 'Invalid UUID' });
+  assert.equal(nextSaveDelay({ status: 403, code: 'FORBIDDEN', message: '' }, 1).kind, 'refused');
+  assert.deepEqual(nextSaveDelay({ status: 429, code: 'RATE_LIMITED' }, 1), { kind: 'retry', retryIn: 5_000 });
+  assert.deepEqual(nextSaveDelay({ status: 503 }, 2), { kind: 'retry', retryIn: 15_000 });
+  assert.deepEqual(nextSaveDelay(null, 3), { kind: 'retry', retryIn: 60_000 });
+  assert.deepEqual(nextSaveDelay(null, 4), { kind: 'retry', retryIn: null });
+});

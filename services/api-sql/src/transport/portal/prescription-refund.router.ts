@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { assertTenantScope } from '../../security/request-context.js';
 import { requireStaff } from '../../security/require-staff.js';
 import { requireCsrf } from '../../security/csrf.js';
+import { uuidLike } from '../../domain/common/uuid.js';
 import { requirePharmacyOperationalWrites } from './require-operational-writes.js';
 import { SqlOrderRepository } from '../../repositories/sql/order.sql.js';
 import { SqlOrderLineRepository } from '../../repositories/sql/order-line.sql.js';
@@ -17,7 +18,7 @@ import { portalRefundFromSql } from '../../application/orders/paid-refund.js';
 const requestSchema = z.object({
   previewVersion: z.string().length(64),
   requestId: z.string().uuid(),
-  medicines: z.array(z.object({ orderLineId: z.string().uuid(), quantity: z.number().int().positive() })).max(80),
+  medicines: z.array(z.object({ orderLineId: uuidLike, quantity: z.number().int().positive() })).max(80),
   dispensingPercent: z.number().int(),
   deliveryPercent: z.number().int(),
 });

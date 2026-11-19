@@ -36,3 +36,11 @@ test('uploads are checked as PDFs within the size limit, a signed version cannot
   // The pharmacy's branch always comes from its session, never the request.
   assert.match(source, /assertTenantScope\(req\.context!\)[\s\S]{0,200}scope\.organisationId/);
 });
+
+test('Worldpay and Terms request ids accept the database form: no bare uuid() checks on ids that come back from Data Connect', () => {
+  const read = (path: string) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), path), 'utf8');
+  for (const path of ['worldpay-application.router.ts', '../public/worldpay-application.router.ts', '../public/partner-terms.router.ts']) {
+    assert.doesNotMatch(read(path), /\bid: z\.string\(\)\.uuid\(\)|request: z\.uuid\(\)|const requestId = z\.string\(\)\.uuid\(\)/, path);
+  }
+  assert.doesNotMatch(read('prescription-refund.router.ts'), /orderLineId: z\.string\(\)\.uuid\(\)/);
+});

@@ -1,4 +1,5 @@
 import { HttpError } from '../../domain/common/errors.js';
+import { sameUuid } from '../../domain/common/uuid.js';
 import {
   applicationWebsite,
   usesHhhWebsite,
@@ -193,7 +194,7 @@ export async function saveWorldpayDraft(
     });
     return { id, version: 1 };
   }
-  if (input.id && input.id !== existing.id) {
+  if (input.id && !sameUuid(input.id, existing.id)) {
     throw new HttpError(409, 'This pharmacy already has a Worldpay application. Reload to continue it.', 'WORLDPAY_APPLICATION_CONFLICT');
   }
   if (existing.status !== 'DRAFT') {
@@ -292,7 +293,7 @@ export async function submitWorldpayApplication(
   const answers = worldpayAnswersDraftSchema.parse(input.answers);
   const declaration = worldpayDeclarationSchema.parse(input.declaration);
   const existing = await findFor(deps.repo, owner);
-  if (!existing || existing.id !== input.id) throw new HttpError(404, 'This Worldpay application could not be found. Reload the page.', 'WORLDPAY_APPLICATION_NOT_FOUND');
+  if (!existing || !sameUuid(existing.id, input.id)) throw new HttpError(404, 'This Worldpay application could not be found. Reload the page.', 'WORLDPAY_APPLICATION_NOT_FOUND');
   if (existing.status !== 'DRAFT') return existing;
   if (answers.existingAccount === 'online') {
     throw new HttpError(409, 'This pharmacy already takes online payments with Worldpay, so there is nothing to send. Enter your API keys in Settings → Payments.', 'WORLDPAY_EXISTING_ACCOUNT');

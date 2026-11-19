@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { partnerTermsState, type PartnerTermsStateDeps } from '../../application/pharmacy-onboarding/partner-terms.service.js';
 import { HttpError } from '../../domain/common/errors.js';
+import { uuidInput } from '../../domain/common/uuid.js';
 import { StorageProvider } from '../../providers/storage/storage.provider.js';
 import type { PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
 import type { PartnerTermsAcceptanceRecord } from '../../domain/pharmacy-onboarding/terms.js';
@@ -27,7 +28,7 @@ function sqlDeps(): PublicPartnerTermsDeps {
   };
 }
 
-const requestQuery = z.object({ request: z.uuid() });
+const requestQuery = z.object({ request: uuidInput });
 
 /**
  * Sign-up's view of the Partner Terms. There is no public Terms page: the file is only

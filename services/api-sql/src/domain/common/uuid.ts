@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 
 const COMPACT_UUID = /^[0-9a-f]{32}$/i;
 
@@ -33,3 +34,13 @@ export function nameBasedUuid(...parts: string[]): string {
   hex[16] = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
   return asUuid(hex.join(''));
 }
+
+/**
+ * An id from a request (URL, body or query). Data Connect hands ids out without
+ * hyphens and the browser sends them back as given, so accept either form and pass
+ * the canonical hyphenated one on. Client-made keys (idempotency keys) stay z.uuid().
+ */
+export const uuidInput = z.string().trim().transform(asUuid).pipe(z.string().uuid());
+
+/** Either form of a UUID, kept exactly as sent (for ids compared against stored ones with sameUuid). */
+export const uuidLike = z.string().trim().refine(value => COMPACT_UUID.test(value.replaceAll('-', '')), 'Invalid UUID');

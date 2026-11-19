@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sameUuid, uuidInput } from '../../domain/common/uuid.js';
 import {
   emptyPrompt,
   PROMPTED_BRANCH_STATUSES,
@@ -23,7 +24,8 @@ export const PARTNER_TERMS_SETTINGS_KEY = 'onboarding.partnerTerms';
 
 export const partnerTermsSettingsSchema = z.object({
   enabled: z.boolean(),
-  currentDocumentId: z.uuid().nullable(),
+  // Ids come back from Data Connect without hyphens; either form is the same version.
+  currentDocumentId: uuidInput.nullable(),
 });
 export type PartnerTermsSettings = z.infer<typeof partnerTermsSettingsSchema>;
 
@@ -62,7 +64,7 @@ export async function partnerTermsState(deps: PartnerTermsStateDeps): Promise<Pa
 
 /** Whether these acceptances include one for the current version. */
 export function signedCurrent(state: PartnerTermsState, acceptances: Pick<PartnerTermsAcceptanceRecord, 'documentId'>[]) {
-  return Boolean(state.document && acceptances.some(row => row.documentId === state.document!.id));
+  return Boolean(state.document && acceptances.some(row => sameUuid(row.documentId, state.document!.id)));
 }
 
 /** An activated branch that can log in, while the Terms are on, without a signature for the current version. */

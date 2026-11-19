@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { HttpError } from '../../domain/common/errors.js';
+import { sameUuid, uuidKey } from '../../domain/common/uuid.js';
 import { normaliseGphcNumber } from '../../domain/identity/pharmsmart-sso.js';
 import { compactGphcNumber, type PharmacyOnboardingRequestRecord } from '../../domain/pharmacy-onboarding/request.js';
 import {
@@ -60,7 +61,7 @@ export async function branchAcceptances(repo: Pick<BranchOnboardingRepo, 'findBy
     ...(await repo.findTermsAcceptancesForOrganisation(branch.id)),
     ...(forRequest ? await repo.findTermsAcceptances(forRequest.id) : []),
   ];
-  const unique = [...new Map(rows.map(row => [row.id, row])).values()];
+  const unique = [...new Map(rows.map(row => [uuidKey(row.id), row])).values()];
   return unique.sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt));
 }
 
@@ -70,7 +71,7 @@ export async function branchOnboardingView(repo: BranchOnboardingRepo, branch: B
     branchAcceptances(repo, branch, request),
     repo.findWorldpaySubmissionForBranch(branch.id, branchGphc(branch)),
   ]);
-  const current = terms.document ? acceptances.find(row => row.documentId === terms.document!.id) ?? null : null;
+  const current = terms.document ? acceptances.find(row => sameUuid(row.documentId, terms.document!.id)) ?? null : null;
   return {
     live: branch.status === 'LIVE',
     submittedAt: request?.createdAt ?? null,
@@ -100,7 +101,7 @@ export async function acceptBranchPartnerTerms(
   }
   if (!deps.terms) throw new HttpError(409, 'The Partner Terms are not being asked for at the moment.', 'PARTNER_TERMS_OFF');
   const request = await deps.repo.findByOrganisationId(branch.id);
-  const earlier = (await branchAcceptances(deps.repo, branch, request)).find(row => row.documentId === deps.terms!.documentId);
+  const earlier = (await branchAcceptances(deps.repo, branch, request)).find(row => sameUuid(row.documentId, deps.terms!.documentId));
   if (earlier) return { acceptance: earlier, created: false };
 
   const acceptance: PartnerTermsAcceptanceRecord = {

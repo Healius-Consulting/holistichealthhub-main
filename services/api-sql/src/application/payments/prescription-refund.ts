@@ -1,3 +1,4 @@
+import { sameUuid, uuidKey } from '../../domain/common/uuid.js';
 import { createHash } from 'node:crypto';
 import { HttpError } from '../../domain/common/errors.js';
 import type { OrderRecord } from '../../repositories/ports/order.port.js';
@@ -80,7 +81,7 @@ export function prescriptionRefundPreview(input: {
     const unitPricePence = Number(line.fixedPatientPricePence);
     if (!Number.isSafeInteger(quantity) || !Number.isSafeInteger(shipped) || shipped > quantity || !Number.isSafeInteger(unitPricePence) || unitPricePence < 0
       || (line.lineMedicineRevenuePence != null && Number(line.lineMedicineRevenuePence) !== quantity * unitPricePence)) refundConflict('The original paid price or quantity needs reconciliation.');
-    const used = history.flatMap(row => refundBreakdown(row)!.medicines).filter(row => row.orderLineId === line.id).reduce((sum, row) => sum + row.quantity, 0);
+    const used = history.flatMap(row => refundBreakdown(row)!.medicines).filter(row => sameUuid(row.orderLineId, line.id)).reduce((sum, row) => sum + row.quantity, 0);
     if (used > quantity - shipped) refundConflict('Refund history exceeds the unfulfilled quantity.');
     return { orderLineId: line.id, label: line.formulaName || line.packId, quantity: quantity - shipped - used, unitPricePence };
   });
@@ -109,9 +110,9 @@ export function prescriptionRefundPreview(input: {
 export function composePrescriptionRefund(preview: ReturnType<typeof prescriptionRefundPreview>, input: PrescriptionRefundInput): PrescriptionRefundBreakdown {
   if (input.previewVersion !== preview.previewVersion) refundConflict('The refund balance changed. Review the refreshed breakdown.', 'REFUND_PREVIEW_STALE');
   if (preview.pendingRefundId) refundConflict('A refund on this payment is awaiting confirmation.', 'REFUND_ALREADY_OPEN');
-  if (new Set(input.medicines.map(row => row.orderLineId)).size !== input.medicines.length) refundConflict('Choose each medicine line once.');
+  if (new Set(input.medicines.map(row => uuidKey(row.orderLineId))).size !== input.medicines.length) refundConflict('Choose each medicine line once.');
   const medicines = input.medicines.map(selected => {
-    const line = preview.medicines.find(row => row.orderLineId === selected.orderLineId);
+    const line = preview.medicines.find(row => sameUuid(row.orderLineId, selected.orderLineId));
     if (!line || !Number.isSafeInteger(selected.quantity) || selected.quantity <= 0 || selected.quantity > line.quantity) refundConflict('The selected quantity is not refundable.');
     return { ...selected, label: line.label, unitPricePence: line.unitPricePence, amountPence: line.unitPricePence * selected.quantity };
   });
