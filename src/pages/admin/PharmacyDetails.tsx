@@ -9,6 +9,7 @@ import { EMAIL_LOGO_SPEC, normalisePharmacyLogo } from '../../utils/pharmacyLogo
 import { brandSwatchStyle, deriveTenantTheme } from '../../utils/tenantTheme';
 import { downloadContentPack } from '../../utils/pharmacyResources';
 import { splitPharmacyAddress } from './pharmacyAddress';
+import { WorldpayEmailCard } from './WorldpayEmailCard';
 
 /**
  * The pharmacy's details as four small cards. Each card edits in place and saves
@@ -422,6 +423,7 @@ export function PharmacyDetails({
       <BrandCard {...props} />
       <EligibilityCard organisation={organisation} link={link.url} loading={link.loading} error={link.error} onRetry={link.retry} onCopied={() => onToast('Eligibility link copied.')} />
       {curaleaf}
+      <WorldpayEmailCard organisationId={organisation.id} onToast={onToast} />
     </div>
   );
 }

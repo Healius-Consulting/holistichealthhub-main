@@ -591,6 +591,8 @@ export interface WorldpayApplicationView<Answers = unknown> {
   statusChangedAt: string | null;
   contactName: string;
   contactEmail: string;
+  /** The pharmacy sent its form by email and HHH admin recorded it. */
+  receivedByEmail?: boolean;
   content: { pricingPanel: WorldpayPricingPanel; s04Note: string };
 }
 
@@ -601,6 +603,30 @@ export function loadWorldpayApplication<Answers>(owner: WorldpayApplicationOwner
   return owner.kind === 'branch'
     ? apiRequest<WorldpayApplicationView<Answers>>(`/v1/portal/pharmacy/worldpay-application${options.fresh ? '?fresh=1' : ''}`, { skipGetCache: true })
     : apiRequest<WorldpayApplicationView<Answers>>('/v1/public/worldpay-application/load', { method: 'POST', body: JSON.stringify({ onboardingRequestId: owner.onboardingRequestId, fresh: Boolean(options.fresh) }) });
+}
+
+/** Admin: one branch's Worldpay application status, for its pharmacy page. */
+export interface AdminBranchWorldpayStatus {
+  status: WorldpayApplicationStatus | null;
+  submittedAt: string | null;
+  reference: string | null;
+  receivedByEmail: boolean;
+}
+
+export function getBranchWorldpayStatus(organisationId: string) {
+  return apiRequest<AdminBranchWorldpayStatus>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/worldpay-application`, { skipGetCache: true });
+}
+
+/** Admin: the pharmacy sent its Worldpay form by email; the platform stops offering the form. */
+export function markWorldpayFormReceivedByEmail(organisationId: string, receivedOn: string | null) {
+  return apiRequest<AdminBranchWorldpayStatus>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/worldpay-application/received-by-email`, {
+    method: 'POST',
+    body: JSON.stringify({ receivedOn }),
+  });
+}
+
+export function undoWorldpayFormReceivedByEmail(organisationId: string) {
+  return apiRequest<AdminBranchWorldpayStatus>(`/v1/portal/admin/organisations/${encodeURIComponent(organisationId)}/worldpay-application/received-by-email`, { method: 'DELETE' });
 }
 
 /** FB-19: "Discard and start again" deletes the draft; a sent application is refused. */
@@ -642,6 +668,8 @@ export interface AdminWorldpayApplicationRow {
   companyStatus: string | null;
   companyNameDiffers: boolean;
   cleared: boolean;
+  /** Recorded by admin from a form the pharmacy emailed: no reference, files or WP-01. */
+  receivedByEmail?: boolean;
 }
 
 export interface WorldpayContentSettings {

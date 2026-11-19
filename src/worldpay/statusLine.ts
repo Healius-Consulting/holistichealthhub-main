@@ -5,11 +5,13 @@ const londonDate = (iso: string | null) => (iso
   ? new Date(iso).toLocaleDateString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'long', year: 'numeric' })
   : '');
 
-export function worldpayStatusLine(view: Pick<WorldpayApplicationView, 'status' | 'submittedAt' | 'contactName' | 'contactEmail' | 'statusNote'>): string | null {
+export function worldpayStatusLine(view: Pick<WorldpayApplicationView, 'status' | 'submittedAt' | 'contactName' | 'contactEmail' | 'statusNote' | 'receivedByEmail'>): string | null {
   const contact = [view.contactName, view.contactEmail ? `at ${view.contactEmail}` : ''].filter(Boolean).join(' ');
   switch (view.status) {
     case 'SUBMITTED':
     case 'WITH_WORLDPAY':
+      // A form the pharmacy emailed, recorded by HHH admin.
+      if (view.receivedByEmail) return `We received your Worldpay form by email on ${londonDate(view.submittedAt)} and passed it to Worldpay.`;
       return `Application sent on ${londonDate(view.submittedAt)}. Worldpay will contact ${contact || 'your contact'}.`;
     case 'QUERY':
       return `Worldpay have asked a question about your application: ${view.statusNote ?? ''}`.trim();

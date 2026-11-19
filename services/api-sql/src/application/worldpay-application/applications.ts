@@ -151,6 +151,8 @@ export interface WorldpayApplicationView {
   /** Who Worldpay will contact, for the pharmacy's status line (B-16, and B-19 or B-13). */
   contactName: string;
   contactEmail: string;
+  /** The pharmacy sent its form by email and HHH admin recorded it: no reference or files. */
+  receivedByEmail: boolean;
   content: { pricingPanel: WorldpayContent['pricingPanel']; s04Note: string };
 }
 
@@ -168,6 +170,7 @@ function viewOf(record: WorldpayApplicationRecord | null, answers: WorldpayAnswe
     statusChangedAt: record?.statusChangedAt ?? null,
     contactName: answers.business.contactName,
     contactEmail: answers.business.contactEmail || answers.business.businessEmail,
+    receivedByEmail: isReceivedByEmail(record),
     content: { pricingPanel: content.pricingPanel, s04Note: content.s04Note },
   };
 }
@@ -186,6 +189,60 @@ export async function loadWorldpayApplication(
   // A withdrawn or declined application stays on record; "fresh" opens a new one beside it.
   const record = options.fresh && isClosed(found) ? null : found;
   return viewOf(record, record ? record.answers : startingAnswers(prefill, content), content);
+}
+
+/** Marks an application HHH admin recorded from a form the pharmacy emailed. */
+export const RECEIVED_BY_EMAIL = 'Received by email';
+
+export function isReceivedByEmail(record: Pick<WorldpayApplicationRecord, 'submitterName' | 'reference' | 'status'> | null | undefined) {
+  return Boolean(record && record.status !== 'DRAFT' && record.submitterName === RECEIVED_BY_EMAIL && !record.reference);
+}
+
+/**
+ * A pharmacy sent its Worldpay form by email instead of through the platform. HHH admin
+ * records it, so the platform stops offering the form: the branch's application becomes
+ * With Worldpay, dated when the form arrived. A draft it had started is kept as that record;
+ * a withdrawn or declined application stays beside it. Refused when an open application exists.
+ */
+export async function markWorldpayReceivedByEmail(
+  deps: Pick<WorldpayDeps, 'repo' | 'now'>,
+  branch: { organisationId: string; gphcNumber: string; name: string },
+  input: { receivedOn: string | null; byUid: string | null },
+): Promise<WorldpayApplicationRecord> {
+  const now = deps.now?.() ?? new Date();
+  const receivedAt = input.receivedOn ? new Date(`${input.receivedOn}T12:00:00.000Z`) : now;
+  if (Number.isNaN(receivedAt.getTime()) || receivedAt.getTime() > now.getTime() + 24 * 60 * 60 * 1000) {
+    throw new HttpError(400, 'Choose the date the form arrived, today or earlier.', 'INVALID_INPUT');
+  }
+  const found = await deps.repo.findForOrganisation(branch.organisationId);
+  let id = found?.status === 'DRAFT' ? found.id : null;
+  if (found && found.status !== 'DRAFT' && !isClosed(found)) {
+    throw new HttpError(409, isReceivedByEmail(found)
+      ? 'This pharmacy’s Worldpay form is already recorded as received by email.'
+      : 'This pharmacy already has a Worldpay application on the platform.', 'WORLDPAY_APPLICATION_EXISTS');
+  }
+  if (!id) {
+    const answers = worldpayAnswersDraftSchema.parse({ business: { tradingName: branch.name } });
+    id = await deps.repo.create({ organisationId: branch.organisationId, onboardingRequestId: null, gphcNumber: branch.gphcNumber, answers, ...summaryOf(answers) });
+  }
+  const marked = await deps.repo.markReceivedByEmail(id, { receivedAt: receivedAt.toISOString(), byUid: input.byUid, marker: RECEIVED_BY_EMAIL });
+  if (!marked) throw new HttpError(409, 'The pharmacy changed its application at the same moment. Try again.', 'WORLDPAY_DRAFT_CONFLICT');
+  return (await deps.repo.findById(id))!;
+}
+
+/** Undo a mistaken "received by email": the record goes back to a draft, or away if it holds no answers. */
+export async function undoWorldpayReceivedByEmail(deps: Pick<WorldpayDeps, 'repo'>, organisationId: string): Promise<void> {
+  const found = await deps.repo.findForOrganisation(organisationId);
+  if (!found || !isReceivedByEmail(found)) {
+    throw new HttpError(404, 'This pharmacy has no Worldpay form recorded as received by email.', 'NOT_FOUND');
+  }
+  if (found.status !== 'WITH_WORLDPAY') {
+    throw new HttpError(409, 'This application has moved on since it was recorded, so it can no longer be undone.', 'WORLDPAY_APPLICATION_MOVED_ON');
+  }
+  const reverted = await deps.repo.revertReceivedByEmail(found.id, RECEIVED_BY_EMAIL);
+  if (!reverted) throw new HttpError(409, 'This application changed at the same moment. Reload and try again.', 'WORLDPAY_DRAFT_CONFLICT');
+  const empty = !found.answers.business.legalName.trim() && found.answers.principals.length === 0 && !found.answers.existingAccount;
+  if (empty) await deps.repo.deleteDraft(found.id);
 }
 
 /**
@@ -416,6 +473,7 @@ export async function resendWorldpayApplication(deps: WorldpayDeps, id: string) 
   if (!record) throw new HttpError(404, 'Worldpay application not found.', 'WORLDPAY_APPLICATION_NOT_FOUND');
   if (record.status === 'DRAFT') throw new HttpError(409, 'A draft has not been submitted yet.', 'WORLDPAY_APPLICATION_DRAFT');
   if (record.sensitiveDeletedAt) throw new HttpError(410, 'This application has been cleared under the retention rules, so it cannot be resent.', 'WORLDPAY_APPLICATION_CLEARED');
+  if (isReceivedByEmail(record)) throw new HttpError(409, 'This form came to HHH by email, so there is nothing to resend from the platform.', 'WORLDPAY_RECEIVED_BY_EMAIL');
   const sent = await sendApplicationToWorldpay(deps, record, `resend-${Date.now()}`);
   const updated = (await deps.repo.findById(id)) ?? record;
   if (!sent) throw new HttpError(502, updated.deliveryError ?? 'The email could not be sent.', 'WORLDPAY_SEND_FAILED');

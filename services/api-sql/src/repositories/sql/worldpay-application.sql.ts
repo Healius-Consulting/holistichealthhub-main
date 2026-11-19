@@ -126,6 +126,44 @@ const LAST_REFERENCE_GQL = `
   }
 `;
 
+const RECEIVED_BY_EMAIL_GQL = `
+  mutation MarkWorldpayReceivedByEmail($id: UUID!, $receivedAt: Timestamp!, $byUid: String, $marker: String!) {
+    marked: worldpayApplication_updateMany(
+      where: { id: { eq: $id }, status: { eq: DRAFT } }
+      data: {
+        status: WITH_WORLDPAY
+        version_update: [{ inc: 1 }]
+        submittedAt: $receivedAt
+        submittedByUid: $byUid
+        submitterName: $marker
+        statusNote: null
+        statusChangedAt: $receivedAt
+        statusChangedByUid: $byUid
+        updatedAt_expr: "request.time"
+      }
+    )
+  }
+`;
+
+const REVERT_RECEIVED_BY_EMAIL_GQL = `
+  mutation RevertWorldpayReceivedByEmail($id: UUID!, $marker: String!) {
+    reverted: worldpayApplication_updateMany(
+      where: { id: { eq: $id }, submitterName: { eq: $marker }, reference: { isNull: true } }
+      data: {
+        status: DRAFT
+        version_update: [{ inc: 1 }]
+        submittedAt: null
+        submittedByUid: null
+        submitterName: null
+        statusNote: null
+        statusChangedAt: null
+        statusChangedByUid: null
+        updatedAt_expr: "request.time"
+      }
+    )
+  }
+`;
+
 const RECORD_SENT_GQL = `
   mutation RecordWorldpaySent($id: UUID!, $sentAt: Timestamp!) {
     worldpayApplication_update(key: { id: $id }, data: { sentAt: $sentAt, deliveryError: null, updatedAt_expr: "request.time" })
@@ -330,6 +368,20 @@ export class SqlWorldpayApplicationRepository implements WorldpayApplicationRepo
 
   async deleteDraft(id: string) {
     await dataConnect.executeGraphql(DELETE_DRAFT_GQL, { variables: { id: asUuid(id) } });
+  }
+
+  async markReceivedByEmail(id: string, input: { receivedAt: string; byUid: string | null; marker: string }) {
+    const result = await dataConnect.executeGraphql<{ marked: number }, Record<string, unknown>>(RECEIVED_BY_EMAIL_GQL, {
+      variables: { id: asUuid(id), receivedAt: input.receivedAt, byUid: input.byUid, marker: input.marker },
+    });
+    return result.data.marked === 1;
+  }
+
+  async revertReceivedByEmail(id: string, marker: string) {
+    const result = await dataConnect.executeGraphql<{ reverted: number }, Record<string, unknown>>(REVERT_RECEIVED_BY_EMAIL_GQL, {
+      variables: { id: asUuid(id), marker },
+    });
+    return result.data.reverted === 1;
   }
 }
 

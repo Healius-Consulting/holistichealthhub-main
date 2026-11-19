@@ -2,7 +2,10 @@ import express, { Router, type NextFunction, type Request, type Response } from 
 import { z } from 'zod';
 import {
   discardWorldpayDraft,
+  isReceivedByEmail,
   loadWorldpayApplication,
+  markWorldpayReceivedByEmail,
+  undoWorldpayReceivedByEmail,
   readWorldpayContent,
   resendWorldpayApplication,
   saveWorldpayDraft,
@@ -31,6 +34,7 @@ const saveSchema = z.object({
   answers: z.unknown(),
 });
 const discardSchema = z.object({ id: uuidInput });
+const receivedSchema = z.object({ receivedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().default(null) });
 const submitSchema = z.object({
   id: uuidInput,
   version: z.number().int().min(1),
@@ -63,6 +67,7 @@ export function adminRow(record: WorldpayApplicationRecord) {
     companyStatus: record.companyStatus,
     companyNameDiffers: Boolean(record.companyName && record.legalName && record.companyName.trim().toLowerCase() !== record.legalName.trim().toLowerCase()),
     cleared: Boolean(record.sensitiveDeletedAt),
+    receivedByEmail: isReceivedByEmail(record),
   };
 }
 
@@ -170,6 +175,75 @@ export function createPortalWorldpayApplicationRouter(depsFor: (context: Request
   });
 
   // --- Admin -----------------------------------------------------------------------
+
+  /** One branch's Worldpay application, for its admin page: status only, never answers. */
+  const branchApplicationView = (record: WorldpayApplicationRecord | null) => (record && record.status !== 'DRAFT'
+    ? { status: record.status, submittedAt: record.submittedAt, reference: record.reference, receivedByEmail: isReceivedByEmail(record) }
+    : { status: record ? 'DRAFT' as const : null, submittedAt: null, reference: null, receivedByEmail: false });
+
+  const auditAdmin = async (req: Request, organisationId: string, event: string, recordId: string, details: Record<string, unknown>) => {
+    const scope = assertPlatformScope(req.context!);
+    await identityRepo.appendAudit({
+      organisationId,
+      actorUid: scope.uid,
+      actorRole: scope.role,
+      event,
+      recordType: 'WorldpayApplication',
+      recordId,
+      requestId: scope.requestId,
+      sessionHashPrefix: scope.sessionHash.slice(0, 12),
+      surface: scope.surface,
+      details,
+    }).catch(() => undefined);
+  };
+
+  // GET /v1/portal/admin/organisations/:id/worldpay-application - the branch's application status
+  router.get('/portal/admin/organisations/:id/worldpay-application', requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      assertPlatformScope(req.context!);
+      const record = await depsFor(req.context!).repo.findForOrganisation(uuidParam.parse(req.params.id));
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(branchApplicationView(record));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // POST /v1/portal/admin/organisations/:id/worldpay-application/received-by-email - the pharmacy emailed its form
+  router.post('/portal/admin/organisations/:id/worldpay-application/received-by-email', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const scope = assertPlatformScope(req.context!);
+      const organisationId = uuidParam.parse(req.params.id);
+      const input = receivedSchema.parse(req.body ?? {});
+      const organisation = await organisationRepo.findOrganisationById(organisationId);
+      if (!organisation) throw new HttpError(404, 'Pharmacy record not found.', 'NOT_FOUND');
+      const record = await markWorldpayReceivedByEmail(depsFor(req.context!), {
+        organisationId: organisation.id,
+        gphcNumber: organisation.gphcNumber,
+        name: organisation.tradingName || organisation.name,
+      }, { receivedOn: input.receivedOn, byUid: scope.uid });
+      await auditAdmin(req, organisation.id, 'worldpay_application.received_by_email', record.id, { receivedOn: input.receivedOn });
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(branchApplicationView(record));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // DELETE /v1/portal/admin/organisations/:id/worldpay-application/received-by-email - undo a mistaken record
+  router.delete('/portal/admin/organisations/:id/worldpay-application/received-by-email', requireCsrf, requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      assertPlatformScope(req.context!);
+      const organisationId = uuidParam.parse(req.params.id);
+      const deps = depsFor(req.context!);
+      await undoWorldpayReceivedByEmail(deps, organisationId);
+      await auditAdmin(req, organisationId, 'worldpay_application.received_by_email_undone', organisationId, {});
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.status(200).json(branchApplicationView(await deps.repo.findForOrganisation(organisationId)));
+    } catch (error) {
+      next(error);
+    }
+  });
 
   // GET /v1/portal/admin/worldpay-applications - every submitted application
   router.get('/portal/admin/worldpay-applications', requireStaff('admin'), async (req: Request, res: Response, next: NextFunction) => {

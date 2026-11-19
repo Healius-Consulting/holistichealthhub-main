@@ -13,6 +13,8 @@ import type { ImmediateEmail } from '../workers/deliver-messages.js';
 import {
   applyWorldpayRetention,
   discardWorldpayDraft,
+  markWorldpayReceivedByEmail,
+  undoWorldpayReceivedByEmail,
   loadWorldpayApplication,
   resendWorldpayApplication,
   saveWorldpayDraft,
@@ -73,7 +75,19 @@ class MemoryRepo implements WorldpayApplicationRepository {
   async clearSensitive(id: string, answers: WorldpayApplicationRecord['answers'], at: string) {
     Object.assign(this.rows.get(id)!, { answers, pdfStoragePath: null, xlsxStoragePath: null, sensitiveDeletedAt: at });
   }
-  async deleteDraft(id: string) { this.rows.delete(id); }
+  async deleteDraft(id: string) { if (this.rows.get(id)?.status === 'DRAFT') this.rows.delete(id); }
+  async markReceivedByEmail(id: string, input: { receivedAt: string; byUid: string | null; marker: string }) {
+    const row = this.rows.get(id);
+    if (!row || row.status !== 'DRAFT') return false;
+    Object.assign(row, { status: 'WITH_WORLDPAY', version: row.version + 1, submittedAt: input.receivedAt, submittedByUid: input.byUid, submitterName: input.marker, statusChangedAt: input.receivedAt });
+    return true;
+  }
+  async revertReceivedByEmail(id: string, marker: string) {
+    const row = this.rows.get(id);
+    if (!row || row.submitterName !== marker || row.reference) return false;
+    Object.assign(row, { status: 'DRAFT', version: row.version + 1, submittedAt: null, submittedByUid: null, submitterName: null, statusChangedAt: null });
+    return true;
+  }
 }
 
 class MemoryContent implements PlatformContentRepository {
@@ -174,6 +188,40 @@ describe('Worldpay application', () => {
     const h2 = harness();
     await submitted(h2);
     await assert.rejects(saveWorldpayDraft(h2.deps, branch, { id: null, version: 0, answers: {} }), (e: HttpError) => e.code === 'WORLDPAY_APPLICATION_SUBMITTED');
+  });
+
+  it('records a form received by email, so the platform stops offering the form, and undoes it', async () => {
+    const h = harness();
+    const branchInfo = { organisationId: 'org-1', gphcNumber: '1234567', name: 'Shah Pharmacy' };
+    const record = await markWorldpayReceivedByEmail(h.deps, branchInfo, { receivedOn: '2026-11-10', byUid: 'admin-1' });
+    assert.equal(record.status, 'WITH_WORLDPAY');
+    assert.equal(record.submittedAt, '2026-11-10T12:00:00.000Z');
+    assert.equal(record.reference, null);
+    const view = await loadWorldpayApplication(h.deps, branch, {});
+    assert.equal(view.receivedByEmail, true);
+    assert.equal(view.status, 'WITH_WORLDPAY');
+    // No second record, no resend, no future date.
+    await assert.rejects(markWorldpayReceivedByEmail(h.deps, branchInfo, { receivedOn: null, byUid: null }), (e: HttpError) => e.code === 'WORLDPAY_APPLICATION_EXISTS');
+    await assert.rejects(resendWorldpayApplication(h.deps, record.id), (e: HttpError) => e.code === 'WORLDPAY_RECEIVED_BY_EMAIL');
+    await assert.rejects(markWorldpayReceivedByEmail(harness().deps, branchInfo, { receivedOn: '2027-01-01', byUid: null }), (e: HttpError) => e.code === 'INVALID_INPUT');
+    // Undo: an empty record goes away entirely.
+    await undoWorldpayReceivedByEmail(h.deps, 'org-1');
+    assert.equal(h.repo.rows.size, 0);
+  });
+
+  it('keeps a started draft as the email record, and gives it back as a draft on undo', async () => {
+    const h = harness();
+    const draft = await saveWorldpayDraft(h.deps, branch, { id: null, version: 0, answers: { existingAccount: 'no', business: { legalName: 'Shah Health Ltd' } } });
+    const record = await markWorldpayReceivedByEmail(h.deps, { organisationId: 'org-1', gphcNumber: '1234567', name: 'Shah' }, { receivedOn: null, byUid: null });
+    assert.equal(record.id, draft.id);
+    assert.equal(record.answers.business.legalName, 'Shah Health Ltd');
+    await undoWorldpayReceivedByEmail(h.deps, 'org-1');
+    assert.equal(h.repo.rows.get(draft.id)?.status, 'DRAFT');
+    // A real platform submission is never treated as an email record.
+    const h2 = harness();
+    await submitted(h2);
+    await assert.rejects(undoWorldpayReceivedByEmail(h2.deps, 'org-1'), (e: HttpError) => e.code === 'NOT_FOUND');
+    await assert.rejects(markWorldpayReceivedByEmail(h2.deps, { organisationId: 'org-1', gphcNumber: '1234567', name: 'Shah' }, { receivedOn: null, byUid: null }), (e: HttpError) => e.code === 'WORLDPAY_APPLICATION_EXISTS');
   });
 
   it('keeps the screen the pharmacy reached with the draft (FB-10)', async () => {

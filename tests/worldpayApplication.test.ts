@@ -141,3 +141,11 @@ test('a draft reopens at the screen the pharmacy reached (FB-10)', () => {
   assert.equal(resumeStep({ existingAccount: 'online', lastStep: 3 }), 0);
   assert.equal(resumeStep({ existingAccount: 'no', lastStep: 9 }), 0);
 });
+
+import { worldpayStatusLine } from '../src/worldpay/statusLine.ts';
+
+test('a form recorded as received by email reads as that to the pharmacy', () => {
+  const base = { status: 'WITH_WORLDPAY' as const, submittedAt: '2026-11-10T12:00:00.000Z', contactName: '', contactEmail: '', statusNote: null };
+  assert.equal(worldpayStatusLine({ ...base, receivedByEmail: true }), 'We received your Worldpay form by email on 10 November 2026 and passed it to Worldpay.');
+  assert.match(worldpayStatusLine({ ...base, receivedByEmail: false })!, /^Application sent on 10 November 2026/);
+});

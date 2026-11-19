@@ -78,7 +78,7 @@ function ApplicationsTab() {
         <tbody>
           {rows.map(row => (
             <tr key={row.id} className={row.id === selected ? 'is-selected' : undefined} onClick={() => setSelected(row.id)} tabIndex={0} onKeyDown={event => { if (event.key === 'Enter') setSelected(row.id); }}>
-              <td>{row.reference ?? '—'}</td>
+              <td>{row.receivedByEmail ? 'By email' : row.reference ?? '—'}</td>
               <td>{row.legalName ?? '—'}{row.companyNameDiffers ? <span className="wpa-tag is-amber" title="The submitted legal name differs from the Companies House name">Name differs</span> : null}</td>
               <td>{row.tradingName ?? '—'}</td>
               <td>{row.websiteRoute}</td>
@@ -127,7 +127,7 @@ function ApplicationDetail({ row, onChanged }: { row: AdminWorldpayApplicationRo
   const b = detail?.answers.business;
   return (
     <section className="wpa-card wpa-summary">
-      <div className="wpa-summary__head"><strong>{row.reference} · {row.legalName}</strong><span className="wpa-pill is-info">{STATUS_LABEL[row.status]}</span></div>
+      <div className="wpa-summary__head"><strong>{row.receivedByEmail ? 'Received by email' : row.reference} · {row.legalName || row.tradingName}</strong><span className="wpa-pill is-info">{STATUS_LABEL[row.status]}</span></div>
       {feedback ? <p className={`wpa-banner is-${feedback.tone}`} role="status">{feedback.text}</p> : null}
       {row.deliveryError ? <p className="wpa-banner is-red">WP-01 was not sent: {row.deliveryError}</p> : null}
       <table>
@@ -144,7 +144,7 @@ function ApplicationDetail({ row, onChanged }: { row: AdminWorldpayApplicationRo
           <Pair label="Sent">{day(row.sentAt)}</Pair>
         </tbody>
       </table>
-      {row.cleared ? <p className="wpa-muted">Directors’ and bank details and the files were deleted under the retention rules.</p> : (
+      {row.receivedByEmail ? <p className="wpa-muted">The pharmacy sent this form by email, so there are no files or WP-01 on the platform. Undo it from the pharmacy’s page if it was recorded by mistake.</p> : row.cleared ? <p className="wpa-muted">Directors’ and bank details and the files were deleted under the retention rules.</p> : (
         <div className="wpa-inline">
           <button type="button" className="btn btn-sm" onClick={() => void file('pdf')}>Open PDF</button>
           <button type="button" className="btn btn-sm" onClick={() => void file('xlsx')}>Download spreadsheet</button>

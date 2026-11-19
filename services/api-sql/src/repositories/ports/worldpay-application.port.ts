@@ -83,6 +83,13 @@ export interface WorldpayApplicationRepository {
   listForRetention(closedBefore: string, draftBefore: string): Promise<WorldpayApplicationRecord[]>;
   clearSensitive(id: string, answers: WorldpayAnswers, at: string): Promise<void>;
   deleteDraft(id: string): Promise<void>;
+  /**
+   * A form the pharmacy sent by email, recorded by HHH admin: the draft becomes With Worldpay,
+   * with no reference or files. False when it is no longer a draft.
+   */
+  markReceivedByEmail(id: string, input: { receivedAt: string; byUid: string | null; marker: string }): Promise<boolean>;
+  /** Undo a mistaken email record: back to a draft. False when it was not an email record. */
+  revertReceivedByEmail(id: string, marker: string): Promise<boolean>;
 }
 
 export interface PlatformContentRepository {
